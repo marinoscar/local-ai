@@ -113,6 +113,11 @@ func (o mgRun) withTerm(lines ...string) mgRun {
 	return o
 }
 
+func (o mgRun) setStdin(s string) mgRun {
+	o.stdin = s
+	return o
+}
+
 func (o mgRun) lang(l string) mgRun {
 	if o.env == nil {
 		o.env = map[string]string{}
