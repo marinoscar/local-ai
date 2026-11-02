@@ -42,7 +42,7 @@ func (o *Orchestrator) presetIDs(in Inputs) []string {
 // something, and a default change alone never does. A change that cannot be written (the generator
 // fails) is undone in state and answered 500 LAI-LLM-007.
 func (o *Orchestrator) SetDefault(ctx context.Context, id string, actor audit.Actor) (res DefaultResult, err error) {
-	defer func() { o.auditWrite(audit.ActionModelSetDefault, actor, id, "", err) }()
+	defer func() { o.auditWrite(ctx, audit.ActionModelSetDefault, actor, id, "", err) }()
 	o.defaultMu.Lock()
 	defer o.defaultMu.Unlock()
 

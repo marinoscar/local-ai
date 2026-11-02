@@ -81,3 +81,17 @@ func TestLoadFailedDetails(t *testing.T) {
 		t.Error("restored must be an empty list, not null")
 	}
 }
+
+func TestOpErrorTextFollowsTheLanguageOnlyWhenThereIsASpanishText(t *testing.T) {
+	r := reasonGraphics(9000, 8192)
+	e := errNotLoadable("m", &r)
+	if e.Text("es-CR") == e.Text("en") || e.Text("es") != r.MessageES || e.Text("en") != r.Message || e.Text("fr") != r.Message {
+		t.Errorf("es %q en %q", e.Text("es"), e.Text("en"))
+	}
+	if n := errNotFound("m"); n.MessageES != "" || n.Text("es") != n.Message {
+		t.Errorf("an error without a Spanish text must answer English: %+v", n)
+	}
+	if e := errNoRoom("m", reasonNoRoom()); e.MessageES == "" {
+		t.Error("no-room carries its Spanish text")
+	}
+}

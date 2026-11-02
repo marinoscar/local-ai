@@ -52,11 +52,11 @@ func (o *Orchestrator) UnloadWith(ctx context.Context, req UnloadRequest) (Unloa
 	m, inCatalog := findModel(in.Catalog, req.ID)
 	if inCatalog && m.Engine != "llama" {
 		err := errNotLlama(req.ID, m.Engine)
-		o.auditWrite(audit.ActionModelUnload, req.Actor, req.ID, "", err)
+		o.auditWrite(ctx, audit.ActionModelUnload, req.Actor, req.ID, "", err)
 		return UnloadResult{}, err
 	}
 	fail := func(err error) (UnloadResult, error) {
-		o.auditWrite(audit.ActionModelUnload, req.Actor, req.ID, "", err)
+		o.auditWrite(ctx, audit.ActionModelUnload, req.Actor, req.ID, "", err)
 		return UnloadResult{}, err
 	}
 	if err := o.opt.Router.Health(ctx); err != nil {
@@ -82,7 +82,7 @@ func (o *Orchestrator) UnloadWith(ctx context.Context, req UnloadRequest) (Unloa
 		res, rerr = o.runUnload(opctx, in, req, hold.OpID, inCatalog)
 		unsup()
 		hold.Release()
-		o.auditWrite(audit.ActionModelUnload, req.Actor, req.ID, hold.OpID, rerr)
+		o.auditWrite(ctx, audit.ActionModelUnload, req.Actor, req.ID, hold.OpID, rerr)
 	}()
 	select {
 	case <-done:

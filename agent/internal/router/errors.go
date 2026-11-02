@@ -3,6 +3,7 @@ package router
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 )
@@ -39,6 +40,9 @@ type OpError struct {
 	Code    Code
 	Status  int
 	Message string
+	// MessageES is the Spanish text of a message built from the situation (the reason a model does
+	// not fit, with its sizes); empty when the code's own text in the doctor table says it.
+	MessageES string
 	// Details is the error body's details. It is never nil. Typical keys: op_id, rolled_back,
 	// restored, exit_code, cause.
 	Details map[string]any
@@ -53,6 +57,16 @@ func (e *OpError) Error() string {
 		s += ": " + e.Err.Error()
 	}
 	return s
+}
+
+// Text returns the message in the given language ("es" and region variants give Spanish when there
+// is a Spanish text; anything else English).
+func (e *OpError) Text(lang string) string {
+	l := strings.ToLower(lang)
+	if (l == "es" || strings.HasPrefix(l, "es-") || strings.HasPrefix(l, "es_")) && e.MessageES != "" {
+		return e.MessageES
+	}
+	return e.Message
 }
 
 // Unwrap lets errors.Is and errors.As reach the cause.
@@ -88,7 +102,9 @@ func errBusy(b *BusyError) *OpError {
 }
 
 func errNotLoadable(id string, r *Reason) *OpError {
-	return opErr(r.Code, http.StatusUnprocessableEntity, r.Message, map[string]any{"model": id}, nil)
+	e := opErr(r.Code, http.StatusUnprocessableEntity, r.Message, map[string]any{"model": id}, nil)
+	e.MessageES = r.MessageES
+	return e
 }
 
 func errNotLlama(id, engine string) *OpError {
@@ -96,7 +112,9 @@ func errNotLlama(id, engine string) *OpError {
 }
 
 func errNoRoom(id string, r Reason) *OpError {
-	return opErr(CodeNoRoom, http.StatusConflict, r.Message, map[string]any{"model": id}, nil)
+	e := opErr(CodeNoRoom, http.StatusConflict, r.Message, map[string]any{"model": id}, nil)
+	e.MessageES = r.MessageES
+	return e
 }
 
 // errRouter maps a failed router call to 502 with LAI-LLM-004 (not answering) or LAI-LLM-005 (our

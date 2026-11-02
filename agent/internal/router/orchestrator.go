@@ -201,6 +201,20 @@ func NewOrchestrator(opt OrchestratorOptions) (*Orchestrator, error) {
 	return o, nil
 }
 
+type reqIDKey struct{}
+
+// WithReqID returns a context that carries the id of the HTTP request that asked for an operation;
+// the orchestrator writes it into the audit line (agent.md section 4.11). A caller with no request
+// (the mode engine, a cloud job) does not set it.
+func WithReqID(ctx context.Context, reqID string) context.Context {
+	return context.WithValue(ctx, reqIDKey{}, reqID)
+}
+
+func reqIDFrom(ctx context.Context) string {
+	s, _ := ctx.Value(reqIDKey{}).(string)
+	return s
+}
+
 // Lock returns modelOpsMu, for the callers that must hold it themselves (key rotation, llama
 // restart, the Generator's reload).
 func (o *Orchestrator) Lock() *OpLock { return o.lock }
@@ -396,11 +410,11 @@ func (o *Orchestrator) publish(typ, opID string, data any) {
 	}
 }
 
-func (o *Orchestrator) auditWrite(action string, actor audit.Actor, id, opID string, err error) {
+func (o *Orchestrator) auditWrite(ctx context.Context, action string, actor audit.Actor, id, opID string, err error) {
 	if o.opt.Audit == nil {
 		return
 	}
-	ev := audit.Event{Action: action, Result: audit.ResultOK, Actor: actor, Target: map[string]string{"model": id}, OpID: opID}
+	ev := audit.Event{Action: action, Result: audit.ResultOK, Actor: actor, Target: map[string]string{"model": id}, OpID: opID, ReqID: reqIDFrom(ctx)}
 	if err != nil {
 		ev.Result = audit.ResultFail
 		var oe *OpError

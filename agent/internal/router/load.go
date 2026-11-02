@@ -106,7 +106,7 @@ func (o *Orchestrator) LoadWith(ctx context.Context, req LoadRequest) (LoadResul
 		if early != nil {
 			res = *early
 		}
-		o.auditWrite(audit.ActionModelLoad, req.Actor, req.ID, res.OpID, err)
+		o.auditWrite(ctx, audit.ActionModelLoad, req.Actor, req.ID, res.OpID, err)
 		return res, err
 	}
 
@@ -120,7 +120,7 @@ func (o *Orchestrator) LoadWith(ctx context.Context, req LoadRequest) (LoadResul
 		defer close(done)
 		res, rerr = op.run(opctx)
 		op.release()
-		o.auditWrite(audit.ActionModelLoad, req.Actor, req.ID, op.opID, rerr)
+		o.auditWrite(opctx, audit.ActionModelLoad, req.Actor, req.ID, op.opID, rerr)
 		if !req.Wait && req.OnDone != nil {
 			req.OnDone(res, rerr)
 		}
