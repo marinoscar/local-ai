@@ -1,0 +1,6 @@
+== stdout ==
+MODEL                    SIZE  STATUS  NOTES
+qwen3.5-9b-q4km        5.9 GB  loaded  default · chat, reasoning, coder
+small-vlm-q4km         3.2 GB  stored  vision
+qwen3.6-35b-a3b-q4km  19.0 GB  absent  does not fit: needs 11.0 GB of graphic...
+whisper-small          466 MB  stored

@@ -1,0 +1,3 @@
+== stderr ==
+✗ The agent sent an answer aictl does not understand.  [LAI-CLI-009]
+  request: req_ABCDEFGHIJKL

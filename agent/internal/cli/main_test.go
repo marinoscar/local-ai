@@ -32,6 +32,7 @@ type runOpts struct {
 	stdin string
 	out   io.Writer // replaces stdout (a broken pipe)
 	h     *harness  // client hooks from a harness (sleeper, token reads)
+	term  Terminal  // the person at the keyboard; nil is a non-interactive stdin
 }
 
 func runCLI(t *testing.T, reg *Registry, o runOpts, args ...string) runResult {
@@ -49,6 +50,9 @@ func runCLI(t *testing.T, reg *Registry, o runOpts, args ...string) runResult {
 		Geteuid:     func() int { return o.euid },
 		StdoutIsTTY: o.tty,
 		Version:     "0.0.0-dev",
+	}
+	if o.term != nil {
+		env.Terminal = o.term
 	}
 	if o.h != nil {
 		env.ClientConfig = func(c *Config) {
@@ -457,7 +461,7 @@ func TestAPIErrorsArePrintedInPlainWords(t *testing.T) {
 	if r.code != ExitRefused {
 		t.Fatalf("exit %d, stderr %q", r.code, r.errOut)
 	}
-	for _, want := range []string{"Another operation is running.  [" + api.CodeBusy + "]", "→ Fix: Wait for it to finish."} {
+	for _, want := range []string{"Another operation is running.  [" + api.CodeBusy + "]", "-> Fix: Wait for it to finish."} {
 		if !strings.Contains(r.errOut, want) {
 			t.Errorf("stderr lacks %q:\n%s", want, r.errOut)
 		}

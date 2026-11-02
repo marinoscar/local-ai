@@ -5,6 +5,7 @@
 package fake
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net"
@@ -181,6 +182,7 @@ func (a *Agent) Count(path string) int {
 func (a *Agent) handler(via string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(body)) // handlers may read the body again
 		rel := strings.TrimPrefix(r.URL.RequestURI(), api.BasePath)
 		a.mu.Lock()
 		a.reqs = append(a.reqs, Request{Via: via, Method: r.Method, Path: rel, Host: r.Host, Header: r.Header.Clone(), Body: string(body)})

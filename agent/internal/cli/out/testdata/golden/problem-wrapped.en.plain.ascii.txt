@@ -1,0 +1,8 @@
+== stderr ==
+[x] The model qwen3.6-35b-a3b-q4km failed to start. The previous model was
+    started again.  [LAI-LLM-009]
+  -> Fix: Run `aictl logs --unit llama` to see why, or choose a smaller model
+          with `aictl models --loadable`.
+[!] This message is exactly long enough that the code has to move to its own
+    line below.  [LAI-HW-005]
+  -> Fix: Nothing to do.

@@ -1,0 +1,9 @@
+== stderr ==
+i You stopped waiting.  [LAI-CLI-010]
+  → Fix: Check with `aictl status`.
+! Running on battery.  [LAI-HW-012]
+  → Fix: Plug in the charger.
+✗ Unknown option --x.  [LAI-CLI-005]
+✗ The battery is almost empty.  [LAI-AGT-004]
+  → Fix: Plug in the charger now.
+✗ No code on this one.

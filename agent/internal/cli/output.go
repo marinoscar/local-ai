@@ -1,35 +1,23 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
 	"syscall"
+
+	"github.com/marinoscar/local-ai/agent/internal/cli/out"
 )
 
-// This file is the minimal problem output the framework needs for its own errors and warnings
-// (aictl.md section 3.3 "How a problem is shown", section 3.5 for --json). The full output layer
-// (colour, tables, sizes and times, confirmations) is AICTL-02 and replaces the printing here
-// without changing reporter's callers.
-
-// problem is an error or warning ready to show: the fields of the agent's envelope plus the request
-// id.
-type problem struct {
-	Severity  string
-	Code      string
-	Message   string
-	Fix       string
-	Details   map[string]any
-	RequestID string
-}
+// This file connects the framework to the output layer (package out, aictl.md sections 3.3 and
+// 3.5): it turns the errors a command returns into out.Problem values and decides what to show when
+// a command ends.
 
 // problemOf describes err. An unexpected error (not an *APIError or *CLIError) shows its text with
 // no code; commands should return typed errors.
-func problemOf(err error) problem {
+func problemOf(err error) out.Problem {
 	var ae *APIError
 	if errors.As(err, &ae) {
-		return problem{Severity: sevError, Code: ae.Code, Message: ae.Message, Fix: ae.Fix, Details: ae.Details, RequestID: ae.RequestID}
+		return out.Problem{Severity: sevError, Code: ae.Code, Message: ae.Message, Fix: ae.Fix, Details: ae.Details,
+			RequestID: ae.RequestID, RetryAfter: ae.RetryAfter, ShowRequestID: ae.Code == CodeBadResponse}
 	}
 	var ce *CLIError
 	if errors.As(err, &ce) {
@@ -37,98 +25,45 @@ func problemOf(err error) problem {
 		if info, ok := codeTable[ce.Code]; ok {
 			sev = info.Severity
 		}
-		return problem{Severity: sev, Code: ce.Code, Message: ce.Message, Fix: ce.Fix, Details: ce.Details, RequestID: ce.RequestID}
+		return out.Problem{Severity: sev, Code: ce.Code, Message: ce.Message, Fix: ce.Fix, Details: ce.Details,
+			RequestID: ce.RequestID, ShowRequestID: ce.Code == CodeBadResponse}
 	}
-	return problem{Severity: sevError, Message: err.Error()}
+	return out.Problem{Severity: sevError, Message: err.Error()}
 }
 
-// envelope is the error document of --json mode: the agent's shape, built by the CLI when the
-// failure is its own.
-func (p problem) envelope() []byte {
-	d := p.Details
-	if d == nil {
-		d = map[string]any{}
-	}
-	b, _ := json.Marshal(map[string]any{"error": map[string]any{
-		"code": p.Code, "message": p.Message, "fix": p.Fix, "details": d,
-	}})
-	return b
-}
-
-// reporter prints the framework's problems.
+// reporter prints what the framework itself reports (errors a command returned, queued warnings,
+// usage mistakes) through the Printer.
 type reporter struct {
-	env Env
+	p   *out.Printer
 	g   Global
+	env Env
 }
 
-func (r reporter) utf8() bool {
-	for _, k := range []string{"LC_ALL", "LANG"} {
-		if v := strings.ToUpper(r.env.Getenv(k)); v != "" {
-			return strings.Contains(v, "UTF-8") || strings.Contains(v, "UTF8")
-		}
-	}
-	return false
-}
-
-func (r reporter) symbol(sev string) string {
-	u := r.utf8()
-	switch sev {
-	case sevWarning:
-		if u {
-			return "!"
-		}
-		return "[!]"
-	case sevInfo:
-		if u {
-			return "i"
-		}
-		return "[i]"
-	}
-	if u {
-		return "✗"
-	}
-	return "[x]"
-}
-
-// show prints one problem in the layout of section 3.3.
-func (r reporter) show(p problem) {
-	w := r.env.Stderr
-	line := r.symbol(p.Severity) + " " + p.Message
-	if p.Code != "" {
-		line += "  [" + p.Code + "]"
-	}
-	fmt.Fprintln(w, line)
-	if p.Fix != "" {
-		label := "→ Fix:"
-		if r.g.Lang == LangES {
-			label = "→ Solución:"
-		}
-		fmt.Fprintf(w, "  %s %s\n", label, p.Fix)
-	}
-	if r.g.Verbose && len(p.Details) > 0 {
-		if b, err := json.Marshal(p.Details); err == nil {
-			fmt.Fprintf(w, "  details: %s\n", b)
-		}
-	}
-	if p.RequestID != "" && (r.g.Verbose || p.Code == CodeBadResponse) {
-		fmt.Fprintf(w, "  request: %s\n", p.RequestID)
-	}
+// newPrinter builds the Printer of one run from the global flags and the environment: colour by
+// out.ColorEnabled (already folded into g.NoColor), symbols by the locale.
+func newPrinter(env Env, g Global) *out.Printer {
+	return out.New(out.Options{
+		Stdout: env.Stdout, Stderr: env.Stderr, Lang: g.Lang,
+		Color: !g.NoColor, UTF8: out.UTF8Enabled(env.Getenv),
+		Quiet: g.Quiet, Verbose: g.Verbose, JSON: g.JSON,
+	})
 }
 
 // fail reports err and returns its exit code. An *ExitError and a broken pipe print nothing. With
-// --json the envelope goes to stdout and stderr stays empty.
+// --json the envelope goes to stdout and stderr stays empty; if the command already wrote its
+// document, stdout keeps that one document and only the exit code reports the failure.
 func (r reporter) fail(err error) int {
 	code := ExitFor(err)
 	var ee *ExitError
 	if errors.As(err, &ee) || errors.Is(err, syscall.EPIPE) {
 		return code
 	}
-	p := problemOf(err)
 	if r.g.JSON {
-		fmt.Fprintf(r.env.Stdout, "%s\n", p.envelope())
+		// Whatever its severity, a failure in --json mode is the envelope on stdout.
+		_ = r.p.JSON().Error(problemOf(err))
 		return code
 	}
-	r.show(p)
+	r.p.Problem(problemOf(err))
 	return code
 }
 
@@ -139,6 +74,6 @@ func (r reporter) warn(ws []*CLIError, failed bool) {
 		return
 	}
 	for _, w := range ws {
-		r.show(problemOf(w))
+		r.p.Problem(problemOf(w))
 	}
 }
