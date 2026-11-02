@@ -1,0 +1,17 @@
+name: release-tooling
+# Tests the signing script (scripts/release-sign.sh) with throwaway keys. No secrets are used.
+on:
+  pull_request:
+    paths: ['scripts/release-sign.sh', 'scripts/tests/test-release-sign.sh', '.github/workflows/release-*.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/release-sign.sh', 'scripts/tests/test-release-sign.sh', '.github/workflows/release-*.yml']
+permissions:
+  contents: read
+jobs:
+  sign-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+      - run: scripts/tests/test-release-sign.sh

@@ -171,7 +171,7 @@ Only `docs/`, `scripts/` and the root files exist today.
 | Folder | Contents |
 |---|---|
 | [docs/runbooks/](docs/runbooks/README.md) | Step-by-step operator procedures in plain language |
-| [docs/architecture/](docs/architecture/overview.md) | Overview (**canonical names**), [modes](docs/architecture/modes.md), [security model](docs/architecture/security-model.md), [lab inventory](docs/architecture/lab-inventory.md) |
+| [docs/architecture/](docs/architecture/overview.md) | Overview (**canonical names**), [modes](docs/architecture/modes.md), [security model](docs/architecture/security-model.md), [lab inventory](docs/architecture/lab-inventory.md), [release signing](docs/architecture/release-signing.md) |
 | [docs/specs/](docs/README.md#specs) | One contract per component, plus the [doctor-code registry](docs/specs/doctor-codes.md) |
 | [docs/decisions/](docs/decisions/README.md) | Architecture decision records (ADRs) |
 | [docs/source/](docs/README.md) | Redacted archive of the original gists. History only |

@@ -3,7 +3,7 @@
 | Folder | What's in it | Audience |
 |---|---|---|
 | [runbooks/](runbooks/) | Step-by-step operator procedures in plain language | Anyone operating a node or the lab |
-| [architecture/](architecture/) | [overview](architecture/overview.md) (**canonical names**), [modes](architecture/modes.md), [security model](architecture/security-model.md), [lab inventory](architecture/lab-inventory.md) | Maintainers, coding agents |
+| [architecture/](architecture/) | [overview](architecture/overview.md) (**canonical names**), [modes](architecture/modes.md), [security model](architecture/security-model.md), [lab inventory](architecture/lab-inventory.md), [release signing](architecture/release-signing.md) | Maintainers, coding agents |
 | [specs/](specs/) | Component contracts that code is built against | Coding agents |
 | [decisions/](decisions/) | ADRs | Maintainers |
 | [source/](source/) | Redacted archive of the original gists and infra doc. History only; **don't follow these for new work** | Reference |

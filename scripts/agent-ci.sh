@@ -8,6 +8,8 @@
 # While agent/go.mod does not exist yet (before AGENT-01), every command prints a notice and exits 0.
 # Env: SKIP_STATICCHECK=1 skips staticcheck (hermetic tests); OUT_DIR overrides agent/dist.
 #      STATICCHECK_VERSION pins the tool (default below).
+#      AGENT_VERSION (e.g. 0.1.0) injects Version, Commit and BuiltAt into internal/app via -ldflags -X
+#      (AGENT-01 layout). BuiltAt comes from SOURCE_DATE_EPOCH, else the last commit time, never the clock.
 set -euo pipefail
 
 STATICCHECK_VERSION="${STATICCHECK_VERSION:-2025.1.1}"
@@ -52,11 +54,20 @@ do_build() {
   [[ -d cmd/aiagent ]] || { echo "ERROR agent/cmd/aiagent not found: nothing to build" >&2; exit 1; }
   local mod_flag=()
   [[ -d vendor ]] && mod_flag=(-mod=vendor)
+  local ldflags="-s -w -buildid="
+  if [[ -n "${AGENT_VERSION:-}" ]]; then
+    local modpath epoch built commit
+    modpath="$(go list -m)"
+    epoch="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
+    built="$(date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ)"
+    commit="$(git -C "$root" rev-parse --short=7 HEAD)"
+    ldflags+=" -X $modpath/internal/app.Version=$AGENT_VERSION -X $modpath/internal/app.Commit=$commit -X $modpath/internal/app.BuiltAt=$built"
+  fi
   for arch in "${ARCHES[@]}"; do
     local bin="$out/aiagent-linux-$arch"
     echo "== build linux/$arch (CGO_ENABLED=0)"
     CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build "${mod_flag[@]}" -trimpath -buildvcs=false \
-      -ldflags "-s -w -buildid=" -o "$bin" ./cmd/aiagent
+      -ldflags "$ldflags" -o "$bin" ./cmd/aiagent
     # Static assertion: `file` works for both arches; ldd only for the one this machine can run.
     if ! file "$bin" | grep -q 'statically linked'; then
       echo "ERROR $bin is not statically linked: $(file -b "$bin")" >&2

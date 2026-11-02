@@ -1,0 +1,77 @@
+name: release-node
+# Tag node-vX.Y.Z -> build static agent binaries, SHA256SUMS, minisign signature, DRAFT GitHub release.
+# Trust root and the owner's key setup: docs/architecture/release-signing.md. Layout consumed by the
+# agent's self-update: docs/specs/agent.md section 4.10. The release stays a draft until the owner publishes it.
+on:
+  push:
+    tags: ['node-v*']
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {fetch-depth: 0}
+      - name: Validate the tag and that it is on main
+        id: tag
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if ! [[ "$tag" =~ ^node-v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+            echo "::error::tag '$tag' is not node-v<semver>"; exit 1
+          fi
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$tag does not point at a commit on main"; exit 1; }
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          # group 2 is the semver pre-release part (e.g. -rc.1); the "node-" prefix also has a hyphen
+          if [[ -n "${BASH_REMATCH[2]}" ]]; then echo "prerelease=--prerelease" >> "$GITHUB_OUTPUT"; else echo "prerelease=" >> "$GITHUB_OUTPUT"; fi
+      - name: Require the agent module, the signing secrets and the public key
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [ -f agent/go.mod ] && [ -d agent/cmd/aiagent ] || { echo "::error::agent/ does not exist yet (AGENT-01): nothing to release"; exit 1; }
+          [ -n "$MINISIGN_SECRET_KEY" ] && [ -n "$MINISIGN_PASSWORD" ] || { echo "::error::secrets MINISIGN_SECRET_KEY / MINISIGN_PASSWORD are not set (owner action: docs/architecture/release-signing.md)"; exit 1; }
+          [ -f agent/internal/update/minisign.pub ] || { echo "::error::agent/internal/update/minisign.pub is not committed (owner action: docs/architecture/release-signing.md)"; exit 1; }
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: Checks (vet, tests, staticcheck, vendor current)
+        run: scripts/agent-ci.sh check
+      - name: Static builds with the release version
+        env:
+          AGENT_VERSION: ${{ steps.tag.outputs.version }}
+          OUT_DIR: ${{ runner.temp }}/release
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          scripts/agent-ci.sh build
+      - name: Install minisign
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+      - name: SHA256SUMS, sign, verify with the committed public key
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          REL: ${{ runner.temp }}/release
+        run: |
+          set -euo pipefail
+          scripts/release-sign.sh sums "$REL" aiagent-linux-amd64 aiagent-linux-arm64
+          scripts/release-sign.sh sign "$REL"
+          scripts/release-sign.sh verify "$REL"
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REL: ${{ runner.temp }}/release
+          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes $PRERELEASE \
+            --title "Agent ${GITHUB_REF_NAME#node-v}" \
+            "$REL/aiagent-linux-amd64" "$REL/aiagent-linux-arm64" "$REL/SHA256SUMS" "$REL/SHA256SUMS.minisig"

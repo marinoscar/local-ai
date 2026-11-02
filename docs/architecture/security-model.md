@@ -57,7 +57,7 @@
 - **Commands are jobs.** Each command type has a strict schema. The agent's allowlist (`node.yaml: cloud.allow`) defaults to:
   `[status.refresh, model.load, model.unload, model.set_default, model.download, model.delete, ark.sync, ark.verify, mode.offline, key.rotate, service.restart, logs.tail, catalog.refresh, agent.update]`.
   An operator can remove entries, for example `model.delete` or `agent.update` on the ark laptops.
-- `agent.update` downloads a release binary from GitHub Releases. The agent verifies its sha256 against the `SHA256SUMS` signed in the release, and verifies the minisign signature with the public key embedded in the agent ([agent.md](../specs/agent.md) §4.10). The agent keeps the previous binary and rolls back if the new one fails its health check within 60 s.
+- `agent.update` downloads a release binary from GitHub Releases. The agent verifies its sha256 against the `SHA256SUMS` signed in the release, and verifies the minisign signature with the public key embedded in the agent ([agent.md](../specs/agent.md) §4.10). The agent keeps the previous binary and rolls back if the new one fails its health check within 60 s. Who holds the signing key, how releases are made and how the key is rotated: [release-signing.md](release-signing.md).
 
 ## 5. Redaction (public repo)
 - **Forbidden in git:** every value in `inventory.local.yaml`, all credentials, and any address in the Tailscale CGNAT range (100.64/10). That covers:
