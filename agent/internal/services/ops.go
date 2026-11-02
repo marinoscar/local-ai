@@ -142,9 +142,12 @@ func (c *Controller) classify(ctx context.Context, svc Service, action Action, e
 	e := &ActionError{Service: svc, Action: action, State: st, Err: err}
 	var je *JobError
 	var ce *CommandError
+	var ve *ViolationError
 	switch {
 	case errors.Is(err, context.Canceled) && ctx.Err() == context.Canceled:
 		return err
+	case errors.As(err, &ve):
+		return err // a bug in the caller, not a service problem: the API answers it as internal
 	case errors.Is(err, ErrTimeout), errors.Is(err, context.DeadlineExceeded):
 		e.Reason = ReasonTimeout
 	case errors.As(err, &je), errors.As(err, &ce):
