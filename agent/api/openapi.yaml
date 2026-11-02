@@ -3047,6 +3047,24 @@ components:
               in_profile: {type: boolean}
               size_bytes: {type: integer, minimum: 0}
               status: {type: string}
+        profiles:
+          description: "Every profile of the installed catalog and the ids it includes (catalog.md section 4). `aictl profile set` shows them, with sizes from `models` and `content`, before it asks."
+          type: array
+          items:
+            type: object
+            required: [id, display_name, include, budget_bytes]
+            additionalProperties: false
+            properties:
+              id: {type: string}
+              display_name: {type: string}
+              include:
+                type: object
+                required: [models, content]
+                additionalProperties: false
+                properties:
+                  models: {type: array, items: {type: string}}
+                  content: {type: array, items: {type: string}}
+              budget_bytes: {type: integer, minimum: 0}
 
     CatalogRefresh:
       type: object
