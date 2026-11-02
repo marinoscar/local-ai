@@ -1,0 +1,4 @@
+== stdout ==
+i This node is not linked to a cloud app. That is fine: everything works without
+  it.
+== exit 0 ==

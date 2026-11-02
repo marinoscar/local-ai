@@ -1,0 +1,25 @@
+== stdout ==
+✗ The agent cannot write its state.  [LAI-AGT-004]
+  → Fix: Free disk space on the system disk.
+  details: {"path":"/var/lib/localai"}
+  check: agt.state
+✗ The AI model service is not running.  [LAI-LLM-001]
+  → Fix: Run `aictl restart llama`. If it fails again, run
+         `aictl logs --unit llama`.
+  check: llm.router_health
+! Running on battery.  [LAI-HW-012]
+  → Fix: Plug in the charger. A laptop server stops when the battery runs out.
+  details: {"battery_percent":64}
+  check: hw.battery
+i The internet has been unreachable for a while.  [LAI-NET-011]
+  → Fix: Nothing to do, or switch to survival mode with `aictl mode survival`.
+  check: net.cloud_reach
+
+✓ agt.config
+✓ llm.router_health
+✓ net.loopback_only
+
+41 checks passed · 1 notice · 1 warning · 1 error · 1 critical problem
+== stderr ==
+via socket
+== exit 9 ==

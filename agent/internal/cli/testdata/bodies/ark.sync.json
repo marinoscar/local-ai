@@ -1,0 +1,2 @@
+{"run_id": "run-1", "trigger": "scheduled", "state": "done", "started_at": "{{ago:13h}}", "finished_at": "{{ago:12h}}", "roots": ["internal"],
+ "totals": {"items": 31, "done": 31, "skipped": 0, "failed": 0, "bytes_total": 0, "bytes_done": 0}, "active": []}

@@ -1,0 +1,4 @@
+{"ran_at": "2026-11-02T15:04:05Z", "duration_ms": 900,
+ "summary": {"ok": 41, "info": 0, "warning": 1, "error": 0, "critical": 0},
+ "results": [{"check": "hw.battery", "code": "LAI-HW-012", "severity": "warning", "title": "Running on battery", "fix": "Plug in the charger. A laptop server stops when the battery runs out.", "details": {"battery_percent": 64}}],
+ "passed": ["agt.config"]}

@@ -1,0 +1,3 @@
+{"enrolled": true, "url": "https://cloud.example.test", "state": "linked", "server_node_id": "00000000-0000-4000-8000-000000000000", "name": "ai-n3",
+ "since": "{{ago:30h}}", "last_heartbeat_at": "{{ago:2m}}", "last_claim_at": "{{ago:3m}}", "last_error": null, "credential": "{{masked}}",
+ "eligible_types": ["localai.status.refresh"], "server_features": ["node_host_vitals"], "state_transport": "endpoint", "inflight": null, "key_synced": true}

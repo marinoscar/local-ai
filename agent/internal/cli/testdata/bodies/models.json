@@ -1,0 +1,19 @@
+{"models_max": 1, "default": "qwen3.5-9b-q4km", "models": [
+  {"id": "qwen3.5-9b-q4km", "display_name": "Qwen 3.5 9B", "engine": "llama", "roles": ["chat", "reasoning", "coder"],
+   "in_profile": true, "size_bytes": 5868826976, "present": true, "verified": true,
+   "locations": [{"root": "/srv/localai", "complete": true, "verified_at": "{{ago:30h}}"}],
+   "loadable": true, "loadable_reason": null, "status": "loaded", "loaded": true, "default": true, "aliases": ["qwen3.5-9b"],
+   "requirements": {"backends": ["cuda", "vulkan", "cpu"], "min_vram_mib": 6400, "min_ram_mib": 8192}, "last_load_ms": 7100},
+  {"id": "small-vlm-q4km", "display_name": "Small VLM", "engine": "llama", "roles": ["vision"], "in_profile": true,
+   "size_bytes": 3200000000, "present": true, "verified": true, "loadable": true, "status": "stored", "loaded": false, "default": false, "locations": [], "loadable_reason": null, "aliases": []},
+  {"id": "tiny-fallback-q4km", "display_name": "Tiny Fallback", "engine": "llama", "roles": ["chat"], "in_profile": true,
+   "size_bytes": 2100000000, "present": true, "verified": true, "loadable": true, "status": "stored", "loaded": false, "default": false, "locations": [], "loadable_reason": null, "aliases": []},
+  {"id": "qwen3.6-35b-a3b-q4km", "display_name": "Qwen 3.6 35B A3B", "engine": "llama", "in_profile": true,
+   "size_bytes": 19000000000, "present": false, "verified": false, "locations": [],
+   "loadable": false, "loadable_reason": {"code": "LAI-CAT-005", "message": "Needs 11.0 GB of graphics memory; this computer has 8.0 GB."},
+   "status": "absent", "loaded": false, "default": false, "aliases": []},
+  {"id": "whisper-small", "display_name": "Whisper Small", "engine": "whisper", "roles": ["speech-to-text"], "in_profile": true,
+   "size_bytes": 466000000, "present": true, "verified": true, "loadable": true, "status": "stored", "loaded": false, "default": false, "locations": [], "loadable_reason": null, "aliases": []},
+  {"id": "other-catalog-model", "display_name": "Other Model", "engine": "llama", "roles": ["chat"], "in_profile": false,
+   "size_bytes": 7000000000, "present": false, "verified": false, "loadable": true, "status": "absent", "loaded": false, "default": false, "locations": [], "loadable_reason": null, "aliases": []}
+]}

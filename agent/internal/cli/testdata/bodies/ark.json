@@ -1,0 +1,15 @@
+{"roots": [{
+  "schema_version": 1, "generated_at": "{{ago:12h}}",
+  "root": {"id": "internal", "kind": "internal", "path": "/srv/localai", "profile": "small-8gb", "fs_total_bytes": 502000000000,
+           "fs_free_bytes": 273000000000, "budget_bytes": 220000000000, "used_bytes": 180000000000, "trash_bytes": 0, "read_only": false},
+  "overall": "yellow", "survival_capable": true,
+  "last_sync": {"run_id": "run-1", "trigger": "scheduled", "finished_at": "{{ago:12h}}", "state": "done", "age_days": 0},
+  "counts": {"verified": 41, "stale": 0, "missing": 2, "skipped": 7, "failed": 0, "quarantined": 0, "orphan": 3},
+  "items": [
+    {"id": "qwen3.5-9b-q4km", "kind": "model", "status": "verified", "bytes": 5870000000},
+    {"id": "wikipedia-es-nopic", "kind": "kiwix", "status": "missing", "bytes": 12000000000},
+    {"id": "osm-central-america", "kind": "maps", "status": "missing", "bytes": 2500000000},
+    {"id": "old-thing", "kind": "kiwix", "status": "orphan", "bytes": 100}
+  ],
+  "problems": [{"code": "LAI-SYN-031", "severity": "warning", "item": "wikipedia-es-nopic", "title": "An update couldn't be downloaded. The older copy is still here and works."}]
+}]}

@@ -1,0 +1,8 @@
+== stdout ==
+Perfil           small-8gb — Small GPU laptop (8 GB VRAM)
+Sugerido         ✓ el mismo
+Ajustes propios  ark_budget_gb
+Modelos          qwen3.5-9b-q4km, small-vlm-q4km
+Contenido        wikipedia-en-nopic, osm-north-america
+Plan de disco    180 GB previstos de 220 GB de presupuesto
+== exit 0 ==

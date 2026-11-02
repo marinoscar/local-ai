@@ -195,7 +195,7 @@ The **AI-ARK drive** is the portable copy of everything. It is **not encrypted**
 
 ## Part 7. Leaving Survival mode (when the emergency is over)
 
-38. Leaving Survival mode needs the **admin PIN**. In the Local AI app, open the dashboard and choose **Online**, then type the PIN. Or, in a terminal:
+38. Leaving Survival mode needs the **admin PIN**. In the Local AI app, open the dashboard and choose **Online**, then type the PIN. Or, in a terminal (a user who belongs to the `localai-operators` group, as the desktop user does on a lab computer, is not asked for the PIN; anyone else is):
 
    ```
    aictl mode online
@@ -470,7 +470,7 @@ El **disco AI-ARK** es la copia portátil de todo. **No está cifrado**, así qu
 
 ## Parte 7. Salir del modo supervivencia (cuando pase la emergencia)
 
-38. Salir del modo supervivencia requiere el **PIN de administrador**. En la aplicación Local AI, abra el panel y elija **Online / En línea**, y escriba el PIN. O en una terminal:
+38. Salir del modo supervivencia requiere el **PIN de administrador**. En la aplicación Local AI, abra el panel y elija **Online / En línea**, y escriba el PIN. O en una terminal (a un usuario del grupo `localai-operators`, como el usuario del escritorio en un computador del laboratorio, no se le pide el PIN; a los demás sí):
 
    ```
    aictl mode online

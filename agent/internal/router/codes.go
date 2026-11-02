@@ -1,6 +1,7 @@
 package router
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -26,6 +27,17 @@ const (
 	// CodeRouterDown: the router does not answer. Never produced here; the API layer sets it as the
 	// loadable_reason when it cannot reach the router (agent.md section 3.8.7).
 	CodeRouterDown Code = doctor.LLM004
+	// CodeKeyRejected: the router answers 401 to this node's own key (the key file and the unit's
+	// credential disagree). Raised by the watcher.
+	CodeKeyRejected Code = doctor.LLM005
+	// CodeModelFailed: a model failed to start or stopped unexpectedly (the router reports
+	// failed: true). Raised by the watcher.
+	CodeModelFailed Code = doctor.LLM009
+	// CodeCacheModels: ids that are not in the preset (LLAMA_CACHE models) are visible. Raised by
+	// the watcher.
+	CodeCacheModels Code = doctor.LLM024
+	// CodeTooManyLoaded: more models are loaded than models_max allows. Raised by the watcher.
+	CodeTooManyLoaded Code = doctor.LLM028
 	// CodeOthersVRAM: other programs hold a lot of graphics memory; the load goes ahead anyway.
 	CodeOthersVRAM Code = doctor.HW005
 	// CodeRAMLow: other programs hold most of the RAM; the load goes ahead anyway.
@@ -135,4 +147,16 @@ func reasonRAMLow() Reason {
 		Message:   "Other programs are using most of the memory; this model may run slower.",
 		MessageES: "Otros programas usan casi toda la memoria; este modelo puede funcionar más lento.",
 	}
+}
+
+// CodeOf maps an error of the client to the doctor code a caller raises or returns for it: router
+// down or not answering (LAI-LLM-004), or our key rejected (LAI-LLM-005). Any other error gives "".
+func CodeOf(err error) Code {
+	switch {
+	case errors.Is(err, ErrUnauthorized):
+		return CodeKeyRejected
+	case errors.Is(err, ErrDown):
+		return CodeRouterDown
+	}
+	return ""
 }

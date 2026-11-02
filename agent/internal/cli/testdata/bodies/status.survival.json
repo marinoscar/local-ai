@@ -1,0 +1,20 @@
+{
+  "node": {"id": "ai-n3", "display_name": "ai-n3", "hostname": "hp-linux", "profile": "small-8gb", "agent_version": "0.0.0-dev", "backend": "cpu",
+           "llama_mode": "router", "llama_build": null, "catalog_version": null, "uptime_s": 10800, "time": "2026-11-02T15:04:05Z"},
+  "mode": {"value": "survival", "since": "{{ago:3h}}", "transition": null},
+  "connectivity": {"value": "not_checked", "checked_at": null, "none_since": null},
+  "hardware": {"gpu": "", "vram_total_mib": 0, "vram_used_mib": 0, "ram_total_mib": 14336, "ram_available_mib": 9000,
+               "gpu_temp_c": null, "cpu_temp_c": 55, "power": {"source": "ac", "battery_percent": 100, "charging": true}},
+  "services": [
+    {"name": "llama", "unit": "localai-llama.service", "active": "active", "sub": "running", "since": "{{ago:3h}}", "restarts": 1, "healthy": true},
+    {"name": "kiwix", "unit": "localai-kiwix.service", "active": "active", "sub": "running", "since": "{{ago:3h}}", "restarts": 0, "healthy": false},
+    {"name": "whisper", "unit": "localai-whisper.service", "active": "inactive", "sub": "dead", "since": null, "restarts": 0, "healthy": false}
+  ],
+  "models": {"default": "tiny-fallback-q4km", "loaded": [], "loading": [], "present": 2, "loadable": 2, "models_max": 1},
+  "ark": {"roots": [{"path": "/srv/localai", "kind": "internal", "status": "complete", "ready_pct": 100, "updated_at": "{{ago:30h}}"},
+                    {"path": "/media/user/AI-ARK/localai", "kind": "drive", "status": "partial", "ready_pct": 93, "updated_at": "{{ago:30h}}"}],
+          "drive": {"mounted": true}, "sync": {"state": "idle", "last_success_at": null}},
+  "cloud": {"enrolled": true, "state": "stopped", "url": "https://cloud.example.test", "last_heartbeat_at": null},
+  "tailscale": {"manage": false, "pattern": "B", "applied": false, "backend_state": "Stopped"},
+  "alerts": []
+}

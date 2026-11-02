@@ -1,0 +1,7 @@
+{"drives": [
+  {"root_id": "ark-3f9c0a12", "device": "/dev/sdb1", "mount": "/media/user/AI-ARK", "fstype": "ext4", "label": "AI-ARK",
+   "size_bytes": 2000398934016, "free_bytes": 900000000000, "state": "ready", "read_only": false, "fs_errors": 0, "initialized": true,
+   "profile": "ark-drive-full", "ready": {"overall": "green", "generated_at": "{{ago:30h}}"}, "problems": []},
+  {"root_id": null, "device": "/dev/sdc1", "mount": "/media/user/AI-ARK1", "fstype": "exfat", "label": "AI-ARK", "state": "unusable",
+   "problems": [{"code": "LAI-ARK-002", "title": "This drive is not formatted as ext4"}]}
+]}

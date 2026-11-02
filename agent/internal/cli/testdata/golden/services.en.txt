@@ -1,0 +1,6 @@
+== stdout ==
+SERVICE  STATE    HEALTH  SINCE
+llama    running  ✓       8 hours ago
+kiwix    running  ✓       8 hours ago
+whisper  stopped  ✗       —            last exit code 1
+== exit 0 ==

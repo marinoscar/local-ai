@@ -1,0 +1,16 @@
+== stdout ==
+Node ai-n3 · HP ZBook (ai-n3) · profile small-8gb
+Mode      online      (since 17 hours ago)
+Internet  ✓ full      (cloud reachable)
+Brain     ✓ Qwen 3.5 9B (qwen3.5-9b-q4km) — default, loaded
+Graphics  6.6 GB / 8.0 GB used · 61 °C
+Memory    5.0 GB free of 14.0 GB
+Power     ! on battery · battery 64%
+Services  ✓ llama   ✓ kiwix   ✓ whisper
+Ark       ! internal 82% ready · last sync 12 hours ago · no ark drive
+Cloud     ✓ linked to https://cloud.example.test · last heartbeat 2 minutes ago
+Tailnet   ✓ published (pattern B)
+
+! Running on battery.  [LAI-HW-012]
+  → Fix: Plug in the charger. A laptop server stops when the battery runs out.
+== exit 0 ==

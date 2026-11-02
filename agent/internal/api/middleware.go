@@ -272,7 +272,9 @@ func (s *Server) allowedMethods(r *http.Request) []string {
 	probe := r.WithContext(r.Context())
 	for method, mux := range s.methodMux {
 		probe.Method = method
-		if _, pattern := mux.Handler(probe); pattern != "" {
+		// "/" is the SPA catch-all (a registered absolute "/" route): it matches every path, so it
+		// says nothing about which methods a route accepts.
+		if _, pattern := mux.Handler(probe); pattern != "" && pattern != "/" {
 			out = append(out, method)
 			if method == http.MethodGet {
 				out = append(out, http.MethodHead)
