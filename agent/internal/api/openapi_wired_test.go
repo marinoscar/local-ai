@@ -12,8 +12,10 @@ import (
 	apispec "github.com/marinoscar/local-ai/agent/api"
 	"github.com/marinoscar/local-ai/agent/internal/api"
 	"github.com/marinoscar/local-ai/agent/internal/auth"
-	"github.com/marinoscar/local-ai/agent/internal/auth/fake"
+	authfake "github.com/marinoscar/local-ai/agent/internal/auth/fake"
 	"github.com/marinoscar/local-ai/agent/internal/events"
+	"github.com/marinoscar/local-ai/agent/internal/hardware"
+	hwfake "github.com/marinoscar/local-ai/agent/internal/hardware/fake"
 )
 
 func spec(t *testing.T) *apispec.Spec {
@@ -44,8 +46,10 @@ func implementedRoutes(t *testing.T) []api.Route {
 	}
 	routes = append(routes, ev)
 
-	svc := auth.New(auth.Config{Groups: fake.NewGroups().Add(auth.OperatorsGroup, 990)})
+	svc := auth.New(auth.Config{Groups: authfake.NewGroups().Add(auth.OperatorsGroup, 990)})
 	routes = append(routes, svc.Routes()...)
+
+	routes = append(routes, hardware.Route(hwfake.New(hardware.Snapshot{}), hardware.HandlerOptions{}))
 	return routes
 }
 
@@ -85,7 +89,7 @@ func TestPlannedOperations(t *testing.T) {
 		issue, _ := op.Raw["x-localai-issue"].(string)
 		byIssue[issue] = append(byIssue[issue], op.Key())
 	}
-	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify"} {
+	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware"} {
 		if !implementedKeys[key] {
 			t.Errorf("%s must be implemented", key)
 		}
