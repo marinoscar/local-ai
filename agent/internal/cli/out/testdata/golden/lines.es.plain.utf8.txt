@@ -1,0 +1,12 @@
+== stdout ==
+✓ The model is loaded.
+i Nothing to do.
+qwen3.5-9b-q4km  /srv/localai
+
+essential result
+== stderr ==
+! The disk is almost full.
+… Loading Qwen 3.5 9B
+✗ Something went wrong.
+✗ Something went very wrong.
+! Esta es la clave secreta de este nodo. No la pegue en chats ni correos.

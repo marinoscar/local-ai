@@ -1,0 +1,12 @@
+== stdout ==
+\e[32m✓\e[0m The model is loaded.
+\e[34mi\e[0m Nothing to do.
+\e[2mqwen3.5-9b-q4km  /srv/localai\e[0m
+
+essential result
+== stderr ==
+\e[33m!\e[0m The disk is almost full.
+\e[36m…\e[0m Loading Qwen 3.5 9B
+\e[31m✗\e[0m Something went wrong.
+\e[1;31m✗\e[0m Something went very wrong.
+\e[33m!\e[0m This is the secret key for this node. Do not paste it in chats or emails.

@@ -1,0 +1,8 @@
+== stderr ==
+\e[31m[x]\e[0m The model qwen3.6-35b-a3b-q4km failed to start. The previous model was
+    started again.  \e[2m[LAI-LLM-009]\e[0m
+  -> Solución: Run `aictl logs --unit llama` to see why, or choose a smaller
+               model with `aictl models --loadable`.
+\e[33m[!]\e[0m This message is exactly long enough that the code has to move to its own
+    line below.  \e[2m[LAI-HW-099]\e[0m
+  -> Solución: Nothing to do.

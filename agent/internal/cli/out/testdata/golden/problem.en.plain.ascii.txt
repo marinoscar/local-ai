@@ -1,0 +1,4 @@
+== stderr ==
+[x] The AI model service is not running.  [LAI-LLM-001]
+  -> Fix: Run `aictl restart llama`. If it fails again, run
+          `aictl logs --unit llama`.
