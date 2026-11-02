@@ -49,6 +49,10 @@ type Model struct {
 	// readyAt and failOnLoad drive a load in progress.
 	readyAt    time.Time
 	failOnLoad int
+	// stuck makes unload requests succeed without stopping the child; rejectLoad makes load
+	// requests answer with that HTTP status.
+	stuck      bool
+	rejectLoad int
 }
 
 // Request is one entry of the request log. HasAuth tells whether an Authorization header was sent
@@ -182,6 +186,27 @@ func (r *Router) FailLoad(id string, exitCode int) {
 	})
 }
 
+// Stick makes the model ignore unload requests: the router answers success and the child keeps
+// running, like a child that hangs on shutdown. Stick(id, false) ends it. Set and Restart end it too
+// (they replace the child).
+func (r *Router) Stick(id string, on bool) {
+	r.with(func() {
+		if m := r.find(id); m != nil {
+			m.stuck = on
+		}
+	})
+}
+
+// RejectLoad makes POST /models/load of the model answer with this HTTP status and an error body;
+// 0 ends it.
+func (r *Router) RejectLoad(id string, status int) {
+	r.with(func() {
+		if m := r.find(id); m != nil {
+			m.rejectLoad = status
+		}
+	})
+}
+
 // SetMemory sets the memory object of a model (raw JSON); nil removes it.
 func (r *Router) SetMemory(id string, raw string) {
 	r.with(func() {
@@ -200,7 +225,7 @@ func (r *Router) SetMemory(id string, raw string) {
 func (r *Router) Restart() {
 	r.with(func() {
 		for _, m := range r.models {
-			m.Status, m.Failed, m.ExitCode, m.readyAt = Unloaded, false, 0, time.Time{}
+			m.Status, m.Failed, m.ExitCode, m.readyAt, m.stuck = Unloaded, false, 0, time.Time{}, false
 			if m.LoadOnStartup {
 				m.Status, m.readyAt = Loading, r.now().Add(r.loadFor)
 			}
@@ -498,12 +523,16 @@ func (r *Router) serveAct(w http.ResponseWriter, body []byte, load bool) {
 		r.settle(m)
 		running := m.Status == Loaded || m.Status == Loading || m.Status == Sleeping
 		switch {
+		case load && m.rejectLoad != 0:
+			writeErr(w, m.rejectLoad, "load refused", "server_error")
 		case load && running:
 			writeErr(w, 400, "model is already running", "invalid_request_error")
 		case !load && !running:
 			writeErr(w, 400, "model is not running", "invalid_request_error")
 		case load:
 			m.Status, m.Failed, m.ExitCode, m.readyAt = Loading, false, 0, r.now().Add(r.loadFor)
+			writeJSON(w, 200, map[string]any{"success": true})
+		case m.stuck:
 			writeJSON(w, 200, map[string]any{"success": true})
 		default:
 			m.Status, m.Failed, m.ExitCode, m.readyAt = Unloaded, false, 0, time.Time{}
