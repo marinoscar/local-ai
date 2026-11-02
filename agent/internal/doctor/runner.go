@@ -165,17 +165,15 @@ func (r *Registry) runOne(ctx context.Context, c Check) []Result {
 
 	done := make(chan []Result, 1)
 	go func() {
-		defer func() {
-			r.mu.Lock()
-			delete(r.running, c.ID)
-			r.mu.Unlock()
-		}()
-		defer func() {
-			if p := recover(); p != nil {
-				done <- []Result{problem(c.ID, "panic: "+firstLine(fmt.Sprint(p)))}
-			}
-		}()
-		done <- c.Run(cctx)
+		res := safeRun(cctx, c)
+		// Unmark the check BEFORE the result is delivered. The caller may start the next run the
+		// moment it has the result; if the mark were still set it would take a finished check for a
+		// stuck one and report LAI-AGT-099 (#207). An abandoned run unmarks itself here when it
+		// finally returns.
+		r.mu.Lock()
+		delete(r.running, c.ID)
+		r.mu.Unlock()
+		done <- res
 	}()
 
 	select {
@@ -188,6 +186,16 @@ func (r *Registry) runOne(ctx context.Context, c Check) []Result {
 		}
 		return []Result{problem(c.ID, reason)}
 	}
+}
+
+// safeRun runs c and turns a panic into the LAI-AGT-099 result of a panicking check.
+func safeRun(ctx context.Context, c Check) (res []Result) {
+	defer func() {
+		if p := recover(); p != nil {
+			res = []Result{problem(c.ID, "panic: "+firstLine(fmt.Sprint(p)))}
+		}
+	}()
+	return c.Run(ctx)
 }
 
 // problem is the LAI-AGT-099 result of a check that did not finish properly.
