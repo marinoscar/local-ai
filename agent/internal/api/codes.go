@@ -29,12 +29,20 @@ const (
 	CodeUnauthenticated = "LAI-SEC-001"
 	// CodeAdminRequired: the action needs the admin PIN.
 	CodeAdminRequired = "LAI-SEC-002"
+	// CodeWrongPIN: the admin PIN is wrong.
+	CodeWrongPIN = "LAI-SEC-003"
 	// CodeRateLimited: too many wrong PIN or login-code attempts.
 	CodeRateLimited = "LAI-SEC-004"
+	// CodeNoPIN: no admin PIN has been set (or its file cannot be used).
+	CodeNoPIN = "LAI-SEC-005"
 	// CodeBadHost: the Host header is not the agent's own address (DNS rebinding defence).
 	CodeBadHost = "LAI-SEC-006"
 	// CodeBadOrigin: the request came from another website.
 	CodeBadOrigin = "LAI-SEC-007"
+	// CodeBadLoginCode: the login (UI) code is wrong, used or expired.
+	CodeBadLoginCode = "LAI-SEC-008"
+	// CodeSessionExpired: the session cookie names a session that has expired.
+	CodeSessionExpired = "LAI-SEC-012"
 	// CodePeerNotOperator: the socket peer is not in localai-operators.
 	CodePeerNotOperator = "LAI-SEC-013"
 

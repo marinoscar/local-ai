@@ -300,11 +300,11 @@ func (s *Server) serveRoute(rt *Route, w http.ResponseWriter, r *http.Request) {
 
 	// Steps 5 to 7: principal, PIN grant, auth decision (the AGENT-06 seam).
 	p, err := s.auth.Authenticate(r, rt)
+	info.Principal = p // set before a refusal, so the access log and audit know the caller
 	if err != nil {
 		WriteError(w, r, err)
 		return
 	}
-	info.Principal = p
 	if !p.Satisfies(rt.Auth) {
 		// A correct Authenticator never gets here: it refuses with the right code first. Fail closed.
 		switch p.Kind {
