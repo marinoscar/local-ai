@@ -43,6 +43,9 @@ type proberRig struct {
 	tail   *fakeTailnet
 	p      *modes.ConnectivityProber
 	online atomic.Bool
+	// onlineCalls counts the loop's policy checks: it moves once per loop iteration, which is the
+	// signal that a tick was consumed even when the iteration then skips its pass.
+	onlineCalls atomic.Int32
 
 	mu  sync.Mutex
 	set modes.ProberSettings
@@ -55,7 +58,7 @@ func newProberRig(t *testing.T, cloud string, mods ...func(*modes.ProberOptions)
 	t.Cleanup(func() { _ = r.st.Close() })
 	r.online.Store(true)
 	o := modes.ProberOptions{
-		State: r.st, HTTP: r.http, Tailnet: r.tail, Clock: r.clk, Online: r.online.Load,
+		State: r.st, HTTP: r.http, Tailnet: r.tail, Clock: r.clk, Online: func() bool { r.onlineCalls.Add(1); return r.online.Load() },
 		Settings: func() modes.ProberSettings {
 			r.mu.Lock()
 			defer r.mu.Unlock()
@@ -395,7 +398,7 @@ func TestProberLoopStartStop(t *testing.T) {
 	r.p.Start()
 	r.p.Start() // idempotent
 	waitFor(t, "the first pass", func() bool { return r.p.Probes() == 1 })
-	if r.conn().Value != "full" {
+	if r.conn().Value != "full" { // Probes counts a pass once it is recorded
 		t.Fatalf("value = %q", r.conn().Value)
 	}
 	if r.clk.Tickers() != 1 {
@@ -406,8 +409,9 @@ func TestProberLoopStartStop(t *testing.T) {
 
 	// A pass is skipped, not stopped, while the node is not online; the next one runs again.
 	r.online.Store(false)
+	seen := r.onlineCalls.Load()
 	r.clk.Advance(30 * time.Second)
-	time.Sleep(20 * time.Millisecond)
+	waitFor(t, "the loop to consume the tick", func() bool { return r.onlineCalls.Load() > seen })
 	if r.p.Probes() != 2 {
 		t.Errorf("probed while not online: %d", r.p.Probes())
 	}
@@ -416,10 +420,11 @@ func TestProberLoopStartStop(t *testing.T) {
 	r.p.Stop()
 	r.p.Stop() // idempotent
 	waitFor(t, "ticker stopped", func() bool { return r.clk.Tickers() == 0 })
+	// Stop waited for the loop to end and its ticker is gone: no tick can reach anything.
 	n := r.p.Probes()
+	seen = r.onlineCalls.Load()
 	r.clk.Advance(5 * time.Minute)
-	time.Sleep(20 * time.Millisecond)
-	if r.p.Probes() != n {
+	if r.onlineCalls.Load() != seen || r.p.Probes() != n {
 		t.Error("probing went on after Stop")
 	}
 	if got := r.p.ConnectivityResults(); got != nil {
@@ -468,7 +473,12 @@ func TestStopDropsThePassInFlight(t *testing.T) {
 	}
 	// ...and the late pass, finishing afterwards, must not overwrite it.
 	close(bh.release)
-	time.Sleep(50 * time.Millisecond)
+	// The pass is over once it has reached its last check (the tailnet one); any write it could still
+	// make is queued before this flush, so the state read below sees it.
+	waitFor(t, "the late pass to finish its checks", func() bool { return r.tail.calls.Load() == 1 })
+	if err := r.st.MutateSync(func(*state.State) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
 	if got := r.conn().Value; got != state.ConnNotChecked {
 		t.Errorf("a pass that was in flight at Stop wrote %q", got)
 	}
@@ -528,12 +538,60 @@ func TestProberThroughTheEngine(t *testing.T) {
 	if got := r.st.Snapshot().Connectivity; got.Value != state.ConnNotChecked || got.NoneSince != nil {
 		t.Errorf("after offline: %+v", got)
 	}
-	n := len(hh.Calls())
-	time.Sleep(30 * time.Millisecond)
-	if got := len(hh.Calls()); got != n {
-		t.Errorf("probing continued offline: %d -> %d requests", n, got)
-	}
+	// prober_stop waited for the loop to end, so nothing can probe from here on (the loop's own
+	// stop is covered by TestProberLoopStartStop on a manual clock).
 	if got := p.ConnectivityResults(); got != nil {
 		t.Errorf("results while offline: %v", got)
+	}
+}
+
+// gatedStore is a StateStore whose Mutate parks until released, to hold a pass between "the checks
+// finished" and "the result is recorded".
+type gatedStore struct {
+	modes.StateStore
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func newGatedStore(st modes.StateStore) *gatedStore {
+	return &gatedStore{StateStore: st, entered: make(chan struct{}, 16), release: make(chan struct{})}
+}
+
+func (g *gatedStore) Mutate(fn func(*state.State) error) error {
+	g.entered <- struct{}{}
+	<-g.release
+	return g.StateStore.Mutate(fn)
+}
+
+func (g *gatedStore) open() { g.once.Do(func() { close(g.release) }) }
+
+// Regression (#221): a test that waited for Probes() == 1 and then read state.connectivity saw an
+// empty value, because the pass was counted before its result was recorded. A pass is now counted only
+// once recorded, and this test holds the write to prove it: it fails against the old order every time.
+func TestAPassIsCountedOnlyOnceItsResultIsRecorded(t *testing.T) {
+	var gate *gatedStore
+	r := newProberRig(t, cloudURL, func(o *modes.ProberOptions) {
+		gate = newGatedStore(o.State)
+		o.State = gate
+	})
+	t.Cleanup(gate.open)
+	r.script(ok200, ok200)
+	r.p.Start()
+	select {
+	case <-gate.entered: // the checks are done and the write is parked
+	case <-time.After(60 * time.Second):
+		t.Fatal("the pass never reached its write")
+	}
+	if n := r.p.Probes(); n != 0 {
+		t.Fatalf("Probes = %d while the result is not recorded yet", n)
+	}
+	if v := r.conn().Value; v != "" && v != state.ConnNotChecked {
+		t.Fatalf("value = %q before the write", v)
+	}
+	gate.open()
+	waitFor(t, "the pass to be counted", func() bool { return r.p.Probes() == 1 })
+	if v := r.conn().Value; v != "full" {
+		t.Fatalf("value = %q: a counted pass must already be recorded", v)
 	}
 }
