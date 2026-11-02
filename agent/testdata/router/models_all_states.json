@@ -1,0 +1,74 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "model-unloaded-q4km", "aliases": ["legacy-unloaded"], "tags": ["chat"], "object": "model", "owned_by": "llamacpp",
+      "created": 1793630645,
+      "status": {"value": "unloaded", "args": [], "preset": "[model-unloaded-q4km]\nmodel = /var/lib/localai/models/a.gguf\n"},
+      "architecture": {"input_modalities": ["text", "image"], "output_modalities": ["text"]},
+      "source": "preset", "can_remove": false
+    },
+    {
+      "id": "model-loading-q4km", "aliases": [], "tags": ["coder"], "object": "model", "owned_by": "llamacpp",
+      "created": 1793630645,
+      "status": {"value": "loading", "args": ["llama-server", "-ctx", "4096"]},
+      "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]},
+      "source": "preset", "can_remove": false
+    },
+    {
+      "id": "model-loaded-q4km", "aliases": ["model-loaded"], "tags": ["reasoning", "chat"], "object": "model", "owned_by": "llamacpp",
+      "created": 1793630645,
+      "status": {"value": "loaded", "args": ["llama-server", "-ctx", "4096"]},
+      "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]},
+      "context_length": 262144, "source": "preset", "can_remove": false,
+      "memory": {
+        "status": "measured",
+        "min": {"n_ctx": 4096, "devices": [
+          {"kind": "device", "name": "CUDA0", "total": 25757220864, "free": 24387584000, "model": 4986635264, "context": 536870912, "compute": 301989888},
+          {"kind": "host", "name": "Host", "model": 263454720, "context": 0, "compute": 16793600}
+        ]},
+        "max": {"n_ctx": 131072, "devices": [
+          {"kind": "device", "name": "CUDA0", "total": 25757220864, "free": 24387584000, "model": 4986635264, "context": 17179869184, "compute": 301989888}
+        ]},
+        "effective": {"n_ctx": 131072, "devices": [
+          {"kind": "device", "name": "CUDA0", "total": 25757220864, "free": 2147483648, "model": 4986635264, "context": 536870912, "compute": 301989888},
+          {"kind": "host", "name": "Host", "model": 263454720, "context": 0, "compute": 16793600}
+        ]}
+      }
+    },
+    {
+      "id": "model-failed-q4km", "aliases": [], "tags": [], "object": "model", "owned_by": "llamacpp",
+      "created": 1793630645,
+      "status": {"value": "unloaded", "args": ["llama-server", "-ctx", "4096"], "failed": true, "exit_code": 1},
+      "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]},
+      "source": "preset", "can_remove": false
+    },
+    {
+      "id": "model-sleeping-q4km", "aliases": [], "tags": ["chat"], "object": "model", "owned_by": "llamacpp",
+      "created": 1793630645,
+      "status": {"value": "sleeping", "args": ["llama-server", "-ctx", "4096"]},
+      "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]},
+      "source": "preset", "can_remove": false
+    },
+    {
+      "id": "org-example/model-downloading-GGUF:Q4_K_M", "aliases": [], "tags": [], "object": "model", "owned_by": "llamacpp",
+      "created": 1793630645,
+      "status": {"value": "downloading", "progress": {"https://models.example.test/model.gguf": {"done": 195963406, "total": 219307424}}},
+      "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]},
+      "source": "cache", "can_remove": true, "sidecars": ["mmproj"]
+    },
+    {
+      "id": "org-example/model-incomplete-GGUF:Q4_K_M", "aliases": [], "tags": [], "object": "model", "owned_by": "llamacpp",
+      "created": 1793630645,
+      "status": {"value": "incomplete", "args": []},
+      "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]},
+      "source": "cache", "can_remove": true, "sidecars": ["mmproj", "mtp"], "incomplete_sidecars": ["mtp"]
+    },
+    {
+      "id": "model-downloaded-q4km", "aliases": [], "tags": [], "object": "model", "owned_by": "llamacpp",
+      "created": 1793630645,
+      "status": {"value": "downloaded"},
+      "source": "models_dir", "can_remove": false, "unknown_future_field": {"a": 1}
+    }
+  ]
+}
