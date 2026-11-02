@@ -142,6 +142,7 @@ const (
 	VerbUnmask       Verb = "unmask"
 	VerbDaemonReload Verb = "daemon-reload"
 	VerbSubscribe    Verb = "subscribe"
+	VerbLogs         Verb = "logs"
 )
 
 // Errors of the Manager. Callers test them with errors.Is.
