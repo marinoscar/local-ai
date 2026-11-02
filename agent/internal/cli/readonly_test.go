@@ -31,9 +31,36 @@ var updateReadonly = flag.Bool("update-readonly", false, "rewrite testdata/golde
 
 var agoPattern = regexp.MustCompile(`\{\{ago:([0-9a-z]+)\}\}`)
 
+// roNow is the clock the fixture times come from; a test of the helper replaces it.
+var roNow = time.Now
+
+var (
+	anchorsMu sync.Mutex
+	anchors   = map[string]time.Time{}
+)
+
+// roAnchor is the one "now" of a test: every fixture time of that test (the body the fake serves and
+// the body the test expects) is computed from it, so a second boundary between the two evaluations
+// cannot make them differ. It is forgotten when the test ends, so each run starts from a fresh clock.
+func roAnchor(t testing.TB) time.Time {
+	anchorsMu.Lock()
+	defer anchorsMu.Unlock()
+	if a, ok := anchors[t.Name()]; ok {
+		return a
+	}
+	a := roNow()
+	anchors[t.Name()] = a
+	t.Cleanup(func() {
+		anchorsMu.Lock()
+		delete(anchors, t.Name())
+		anchorsMu.Unlock()
+	})
+	return a
+}
+
 // roBody loads testdata/bodies/<name>.json. {{ago:17h}} becomes a time that long (plus a margin
 // that keeps the rounded-down relative text stable) before now, and {{masked}} the masked
-// credential the agent sends.
+// credential the agent sends. All the times of one test come from one clock reading (roAnchor).
 func roBody(t testing.TB, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("testdata", "bodies", name+".json"))
@@ -45,7 +72,7 @@ func roBody(t testing.TB, name string) string {
 		if err != nil {
 			t.Fatalf("%s: bad duration in %s", name, m)
 		}
-		return time.Now().Add(-d - 20*time.Second).UTC().Format(time.RFC3339)
+		return roAnchor(t).Add(-d - 20*time.Second).UTC().Format(time.RFC3339)
 	})
 	s = strings.ReplaceAll(s, "{{sha256}}", strings.Repeat("ab", 32))
 	return strings.ReplaceAll(s, "{{masked}}", "nod_"+"…a1b2")
@@ -825,4 +852,34 @@ func TestNoCodeLiteralsInReadOnlyCommands(t *testing.T) {
 			t.Errorf("%s spells a doctor code literal %s", p, m)
 		}
 	}
+}
+
+// The fixture times of a test come from one clock reading, however many times the body is built:
+// a clock that moves a second on every call (the second boundary that made the served and the
+// expected JSON differ) must not change them.
+func TestFixtureTimesShareOneClockReading(t *testing.T) {
+	old := roNow
+	base := time.Date(2026, 11, 2, 16, 29, 25, 0, time.UTC)
+	calls := 0
+	roNow = func() time.Time { calls++; return base.Add(time.Duration(calls) * time.Second) }
+	defer func() { roNow = old }()
+
+	first := roBody(t, "models")
+	for i := 0; i < 5; i++ {
+		if again := roBody(t, "models"); again != first {
+			t.Fatalf("the same fixture built twice in one test differs:\n%s\n%s", first, again)
+		}
+	}
+	if calls != 1 {
+		t.Errorf("the clock was read %d times for one test, want 1", calls)
+	}
+	if !strings.Contains(first, "2026-11-01T10:29:06Z") { // anchor +1 s, minus 30 h and the 20 s margin
+		t.Errorf("fixture time not derived from the injected clock:\n%s", first)
+	}
+	// A different test gets its own reading.
+	t.Run("sub", func(t *testing.T) {
+		if roBody(t, "models") == first {
+			t.Error("a new test must take a new clock reading")
+		}
+	})
 }
