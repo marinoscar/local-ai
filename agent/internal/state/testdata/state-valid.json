@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "written_at": "2026-11-02T15:04:05Z",
+  "agent_version": "0.1.0",
+  "mode": "online",
+  "mode_changed_at": "2026-11-01T22:10:00Z",
+  "mode_transition": null,
+  "pending_mode": null,
+  "agent": {"recent_starts": ["2026-11-02T06:00:01Z"]},
+  "models": {
+    "default": "qwen3.5-9b-q4km",
+    "desired_loaded": ["qwen3.5-9b-q4km"],
+    "last_used": {"qwen3.5-9b-q4km": "2026-11-02T14:59:00Z"},
+    "last_load": {"id": "qwen3.5-9b-q4km", "op_id": "op_7k2m9q4r8t1c", "result": "ok", "load_ms": 7100, "at": "2026-11-02T08:00:12Z"}
+  },
+  "llama": {
+    "build": "f3586e66b-cuda",
+    "previous_build": null,
+    "ini_sha256": "<sha256 of models.ini>",
+    "unit_sha256": "<sha256 of the unit file>"
+  },
+  "key": {"fingerprint": "ab12…9f3c", "rotated_at": null, "cloud_synced": true},
+  "tailscale": {"applied_pattern": "B", "applied_at": "2026-11-01T22:10:02Z"},
+  "connectivity": {"value": "full", "since": "2026-11-02T06:00:00Z", "none_since": null},
+  "migration": {"llama_qwen": {"state": "done", "step": "M10", "at": "2026-11-02T07:58:00Z"}},
+  "update": {"last": {"result": "ok", "from": "0.0.9", "to": "0.1.0", "at": "2026-11-01T10:00:00Z"}},
+  "sync": {"_owner": "ark-sync.md", "last_run_at": "2026-11-02T03:00:00Z", "last_success_at": "2026-11-02T03:00:00Z", "last_result": "ok"},
+  "drill": {"_owner": "drill.md", "last_run_at": "2026-10-30T09:00:00Z", "last_result": "pass", "in_progress": null},
+  "maps": {"_owner": "companion-services.md", "manual_location": null}
+}
