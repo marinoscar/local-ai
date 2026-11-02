@@ -16,7 +16,6 @@ import (
 // out: it lists directories and it applies (and records) Chmod and Chown.
 type unitFS struct {
 	*memFS
-	mu2     sync.Mutex
 	chmods  []string
 	chowns  []string
 	failDir map[string]error // directory -> error of ReadDir
