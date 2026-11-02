@@ -112,8 +112,22 @@ func remainingAttempts(ae *APIError) (int, bool) {
 // reads one line from stdin and prints nothing. The PIN is returned to the caller and goes nowhere
 // else: no log, no error, no argv.
 func (c *Call) readPIN(prompt bool) (string, error) {
-	if prompt {
-		fmt.Fprint(c.Stderr, i18n.T(c.Lang, i18n.KeyPromptPIN))
+	line, err := c.readSecret(i18n.T(c.Lang, i18n.KeyPromptPIN), prompt)
+	if err != nil {
+		return "", err
+	}
+	if line == "" { // Enter on nothing, or the input ended
+		return "", c.Err(CodeNeedPIN, i18n.T(c.Lang, i18n.KeyNoPIN))
+	}
+	return line, nil
+}
+
+// readSecret reads one secret line. When show is set it writes prompt to stderr first and ends the
+// prompt line itself afterwards (echo was off). On a terminal the read is without echo; otherwise it
+// is one line of stdin. Ctrl-C is exit 130; the end of the input is an empty line, not an error.
+func (c *Call) readSecret(prompt string, show bool) (string, error) {
+	if show {
+		fmt.Fprint(c.Stderr, prompt)
 	}
 	var line string
 	var err error
@@ -122,7 +136,7 @@ func (c *Call) readPIN(prompt bool) (string, error) {
 	} else {
 		line, err = c.Term.ReadLine(c.Ctx)
 	}
-	if prompt {
+	if show {
 		fmt.Fprintln(c.Stderr) // echo was off: end the prompt line ourselves
 	}
 	switch {
@@ -131,11 +145,7 @@ func (c *Call) readPIN(prompt bool) (string, error) {
 	case err != nil && !errors.Is(err, io.EOF):
 		return "", err
 	}
-	line = strings.TrimRight(line, "\r\n")
-	if line == "" { // Enter on nothing, or the input ended
-		return "", c.Err(CodeNeedPIN, i18n.T(c.Lang, i18n.KeyNoPIN))
-	}
-	return line, nil
+	return strings.TrimRight(line, "\r\n"), nil
 }
 
 // verifyPIN exchanges the PIN for a grant (POST /pin/verify). An agent error comes back as the
