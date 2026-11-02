@@ -38,7 +38,6 @@ Specification: docs/specs/catalog.md section 6, docs/specs/aictl.md section 4.11
 				},
 				Run: catalogLint,
 			},
-			{Name: "refresh", Summary: "Fetch the newest catalog (not implemented yet).", Run: notImplemented("catalog refresh", "AICTL-06")},
 			{Name: "restore", Summary: "Put the previous catalog back (not implemented yet).", Marks: MarkLocal | MarkRoot,
 				Run: notImplemented("catalog restore", "AICTL-07")},
 			{Name: "use", Summary: "Install a catalog directory after testing it (not implemented yet).", Usage: "<dir> --test",
