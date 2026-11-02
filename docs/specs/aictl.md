@@ -703,7 +703,7 @@ API + local exec ([llama-router.md](llama-router.md) §4.13). Asks to unload cur
     requirements:
       min_vram_mib: 7240   # measured on RTX 2070 Max-Q 8 GB, build f3586e66b-cuda, 2026-11-02
 ```
-`--json`: the bench JSON. Exit 6 if another model operation runs; 1 `LAI-LLM-025` on failure.
+`--json`: the bench JSON. Exit 6 if another model operation runs; 1 `LAI-LLM-025` on failure. The measurement engine is `internal/router/bench` ([llama-router.md](llama-router.md) §4.13.1, ROUTER-10): the command implements its `Agent`, `Chatter` and `Procs` seams over the agent client, confirms the unload, and prints the returned `Result` (`Result.Snippet()` is the catalog YAML; no suggestion is printed when `Result.Disturbed`; a non-empty `Result.RestoreFailed` is printed as a warning with `aictl load <id>`). A `*bench.BusyError` is exit 6, a `*bench.Error` is exit 1 with its code.
 
 ### 4.25 `aictl backup-config`  [local] [root]
 ```
