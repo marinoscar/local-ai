@@ -1,0 +1,8 @@
+ActiveState=failed
+SubState=failed
+MainPID=0
+NRestarts=5
+ExecMainStatus=137
+ExecMainExitTimestamp=Mon 2026-11-02 08:10:41 UTC
+ActiveEnterTimestamp=Mon 2026-11-02 08:00:05 UTC
+UnitFileState=enabled

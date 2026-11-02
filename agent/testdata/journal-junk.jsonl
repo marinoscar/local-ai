@@ -1,0 +1,4 @@
+-- Journal begins at Mon 2026-11-02 --
+{"MESSAGE":"no timestamp"}
+{not json
+{"__CURSOR":"s=0;i=1","__REALTIME_TIMESTAMP":"1793610000000000","PRIORITY":"5","MESSAGE":"after the junk","_SYSTEMD_UNIT":"localai-llama.service","SYSLOG_IDENTIFIER":"llama-server","_PID":"2214","_HOSTNAME":"node-a"}
