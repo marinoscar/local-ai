@@ -85,14 +85,14 @@ func goldenCases() []goldenCase {
 			p.Problem(Problem{Severity: SevInfo, Code: "LAI-CLI-010", Message: "You stopped waiting.", Fix: "Check with `aictl status`."})
 			p.Problem(Problem{Severity: SevWarning, Code: "LAI-HW-012", Message: "Running on battery.", Fix: "Plug in the charger."})
 			p.Problem(Problem{Severity: SevError, Code: "LAI-CLI-005", Message: "Unknown option --x."})
-			p.Problem(Problem{Severity: SevCritical, Code: "LAI-HW-030", Message: "The battery is almost empty.", Fix: "Plug in the charger now."})
+			p.Problem(Problem{Severity: SevCritical, Code: "LAI-AGT-004", Message: "The battery is almost empty.", Fix: "Plug in the charger now."})
 			p.Problem(Problem{Severity: SevError, Message: "No code on this one."})
 		}},
 		{name: "problem-wrapped", run: func(p *Printer, _ variant) {
 			p.Problem(Problem{Severity: SevError, Code: "LAI-LLM-009",
 				Message: "The model qwen3.6-35b-a3b-q4km failed to start. The previous model was started again.",
 				Fix:     "Run `aictl logs --unit llama` to see why, or choose a smaller model with `aictl models --loadable`."})
-			p.Problem(Problem{Severity: SevWarning, Code: "LAI-HW-099",
+			p.Problem(Problem{Severity: SevWarning, Code: "LAI-HW-005",
 				Message: "This message is exactly long enough that the code has to move to its own line below.",
 				Fix:     "Nothing to do."})
 		}},

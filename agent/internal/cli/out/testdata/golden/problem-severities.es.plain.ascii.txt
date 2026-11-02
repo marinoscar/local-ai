@@ -4,6 +4,6 @@
 [!] Running on battery.  [LAI-HW-012]
   -> Solución: Plug in the charger.
 [x] Unknown option --x.  [LAI-CLI-005]
-[x] The battery is almost empty.  [LAI-HW-030]
+[x] The battery is almost empty.  [LAI-AGT-004]
   -> Solución: Plug in the charger now.
 [x] No code on this one.

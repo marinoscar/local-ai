@@ -4,5 +4,5 @@
   → Fix: Run `aictl logs --unit llama` to see why, or choose a smaller model
          with `aictl models --loadable`.
 \e[33m!\e[0m This message is exactly long enough that the code has to move to its own line
-  below.  \e[2m[LAI-HW-099]\e[0m
+  below.  \e[2m[LAI-HW-005]\e[0m
   → Fix: Nothing to do.
