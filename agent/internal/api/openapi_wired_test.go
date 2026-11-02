@@ -1,0 +1,110 @@
+package api_test
+
+// The second side of the route bijection (agent.md section 4.14): agent/api/openapi.yaml against every
+// route the agent implements. It is an external test package because the routes come from packages that
+// import internal/api (auth), which an internal test of internal/api cannot import.
+
+import (
+	"sort"
+	"strings"
+	"testing"
+
+	apispec "github.com/marinoscar/local-ai/agent/api"
+	"github.com/marinoscar/local-ai/agent/internal/api"
+	"github.com/marinoscar/local-ai/agent/internal/auth"
+	authfake "github.com/marinoscar/local-ai/agent/internal/auth/fake"
+	"github.com/marinoscar/local-ai/agent/internal/events"
+	"github.com/marinoscar/local-ai/agent/internal/hardware"
+	hwfake "github.com/marinoscar/local-ai/agent/internal/hardware/fake"
+)
+
+func spec(t *testing.T) *apispec.Spec {
+	t.Helper()
+	s, err := apispec.Default()
+	if err != nil {
+		t.Fatalf("agent/api/openapi.yaml does not parse: %v", err)
+	}
+	return s
+}
+
+// implementedRoutes is every route the agent implements: api.Routes() (the built-in route and what
+// packages add to DefaultRegistry at init) plus the routes that constructors return for the daemon
+// wiring (AGENT-20) to add to the server's registry: GET /events (api.EventsRoute) and the five routes
+// of the auth service (auth.Service.Routes).
+//
+// A later issue whose routes come from a constructor adds it HERE, with fakes for its dependencies, in
+// the PR that deletes the operations' x-localai-status: planned and x-localai-issue from openapi.yaml.
+func implementedRoutes(t *testing.T) []api.Route {
+	t.Helper()
+	routes := api.Routes()
+
+	bus := events.New(events.Options{})
+	t.Cleanup(bus.Close)
+	ev, err := api.EventsRoute(api.EventsOptions{Bus: bus})
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes = append(routes, ev)
+
+	svc := auth.New(auth.Config{Groups: authfake.NewGroups().Add(auth.OperatorsGroup, 990)})
+	routes = append(routes, svc.Routes()...)
+
+	routes = append(routes, hardware.Route(hwfake.New(hardware.Snapshot{}), hardware.HandlerOptions{}))
+
+	// Only the metadata (method, pattern, auth, timeout) is compared, so the dependencies stay empty.
+	routes = append(routes, api.ServicesRoutes(api.ServicesDeps{})...)
+	routes = append(routes, api.LogsRoutes(api.LogsDeps{})...)
+	return routes
+}
+
+// TestOpenAPIMatchesImplementedRoutes: every implemented route is in the document with the same auth
+// levels, timeout, gate exemption and media types and is not marked planned; every operation of the
+// document that is not planned is implemented.
+func TestOpenAPIMatchesImplementedRoutes(t *testing.T) {
+	for _, p := range api.CompareRegistered(spec(t).Operations(), implementedRoutes(t)) {
+		t.Error(p)
+	}
+}
+
+// TestPlannedOperations lists the allowlist and checks it is what it claims to be: no planned
+// operation is implemented (the comparison above says so too, with a message of its own), every other
+// operation is, and the implemented ones are the ones expected so far.
+func TestPlannedOperations(t *testing.T) {
+	s := spec(t)
+	implementedKeys := map[string]bool{}
+	for _, rt := range implementedRoutes(t) {
+		if !rt.Absolute {
+			implementedKeys[rt.Method+" "+rt.Pattern] = true
+		}
+	}
+	byIssue := map[string][]string{}
+	implemented := 0
+	for _, op := range s.Operations() {
+		if !op.Planned() {
+			implemented++
+			if !implementedKeys[op.Key()] {
+				t.Errorf("%s is not planned and not implemented", op.Key())
+			}
+			continue
+		}
+		if implementedKeys[op.Key()] {
+			t.Errorf("%s is planned but implemented: the allowlist must shrink (remove x-localai-status and x-localai-issue)", op.Key())
+		}
+		issue, _ := op.Raw["x-localai-issue"].(string)
+		byIssue[issue] = append(byIssue[issue], op.Key())
+	}
+	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs"} {
+		if !implementedKeys[key] {
+			t.Errorf("%s must be implemented", key)
+		}
+	}
+	var issues []string
+	for issue := range byIssue {
+		issues = append(issues, issue)
+	}
+	sort.Strings(issues)
+	for _, issue := range issues {
+		t.Logf("planned, lands with %s: %s", issue, strings.Join(byIssue[issue], ", "))
+	}
+	t.Logf("%d operation(s) implemented, %d planned", implemented, len(s.Operations())-implemented)
+}
