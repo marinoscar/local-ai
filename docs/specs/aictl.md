@@ -356,6 +356,7 @@ catalog/models.yaml:models[3].source.revision  LAI-CAT-011  revision must be a 4
 ✗ 1 problem found.
 ```
 Each problem is one line `<file>:<yaml-path>  LAI-CAT-0NN  <message>` (two spaces between fields; this form is canonical and catalog.md §6 uses it). Exit 0 valid, **2** invalid (catalog.md §6 contract). `--json`: `{"valid": false, "problems": [{"code","file","path","message"}]}`. `aictl catalog lint --json <dir>` is a stable machine interface: the cloud runs it on the VPS to lint imported catalogs ([cloud-app.md](cloud-app.md) §4.6, `LOCALAI_AICTL_PATH`), and it never needs an agent, root or network (except `--online`).
+The CAT-01 implementation is a thin hook in `internal/cli` (flags parsed by hand until AICTL-01); a problem about a whole file has an empty yaml-path (`<file>:  LAI-CAT-019  ...`), and results go to stdout in both modes (stderr only for usage errors).
 
 #### 4.11.2 `aictl catalog refresh`  [120 s]
 `POST /catalog/refresh`. Needs network; refused in offline/survival (exit 6).
