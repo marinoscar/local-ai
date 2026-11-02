@@ -671,10 +671,11 @@ Body `{"wait": true, "unload_others": true}` (both optional, defaults shown). Or
      "unloaded": ["small-vlm-q4km"], "op_id": "op_7k2m9q4r8t1c"}
 202 {"id": "qwen3.5-9b-q4km", "status": "loading", "op_id": "op_7k2m9q4r8t1c"}          (wait: false)
 ```
+The response may add `warning: {code, message}` (`LAI-HW-005`, `LAI-HW-006`: the load went ahead although other programs hold much of the memory). A Portal session's body is ignored and forced to `wait: false` ([survival-portal.md](survival-portal.md) §3.3). The handler is `internal/api/models_ops.go` over the orchestrator of [llama-router.md](llama-router.md) §4.4.1.
 Errors: `404 LAI-AGT-021`; `409 LAI-AGT-022` (another model operation running; `details.op_id` of the running one); `422 LAI-CAT-005` (does not fit, backend unsupported, or engine is not llama); `422 LAI-LLM-008` (files missing/unverified); `409 LAI-LLM-011` (`unload_others: false` and no room); `502 LAI-LLM-004`; `500 LAI-LLM-009` / `504 LAI-LLM-010` (failed/timed out, previous restored, `details.rolled_back: true`); `500 LAI-LLM-012` (rollback also failed).
 
 #### 3.8.9 `POST /models/{id}/unload`
-Body `{}`. → `200 {"id": "…", "status": "unloaded", "already_unloaded": false, "op_id": "…"}`. Unloading the default model is allowed (the default stays recorded). In `survival` mode, unloading the last loaded LLM answers `409 LAI-AGT-023` unless the body has `"force": true`.
+Body `{}`. → `200 {"id": "…", "status": "unloaded", "already_unloaded": false, "op_id": "…"}`. Unloading the default model is allowed (the default stays recorded). In `survival` mode, unloading the last loaded LLM answers `409 LAI-AGT-023` unless the body has `"force": true`. A model that would not stop makes the agent restart llama (llama-router.md §4.5): the answer is still `200`, with `"restarted": true` and `"restored": [...]`.
 
 #### 3.8.10 `PUT /models/default`
 Body `{"id": "qwen3.5-9b-q4km"}` → `200 {"default": "qwen3.5-9b-q4km", "previous": "…", "ini_regenerated": true}`. The model must be `present` and `loadable` (`422` otherwise). Sets `state.models.default`, regenerates `models.ini` (`load-on-startup`), reloads the router preset list (`GET /models?reload=1`; this does not unload a running unchanged model). Does **not** load the model.
