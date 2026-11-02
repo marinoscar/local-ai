@@ -108,6 +108,11 @@ type RestartRequest struct {
 	Actor audit.Actor
 	// LockWait is how long to wait for modelOpsMu; 0 means do not wait (busy is 409 LAI-AGT-022).
 	LockWait time.Duration
+	// Prepare, when set, runs once modelOpsMu is held and before the unit is restarted, with the
+	// id of the operation. POST /key/rotate writes the new key file in it, so that a busy lock
+	// leaves the old key untouched and no model operation can run between the write and the
+	// restart. An error aborts the restart and is returned as it is (the unit is not touched).
+	Prepare func(ctx context.Context, opID string) error
 }
 
 // RestartResult is the outcome of RestartAndRestore.
@@ -162,6 +167,11 @@ func (o *Orchestrator) RestartWith(ctx context.Context, req RestartRequest) (Res
 		return RestartResult{}, err
 	}
 	act := func(c context.Context, opID string) error {
+		if req.Prepare != nil {
+			if perr := req.Prepare(c, opID); perr != nil {
+				return perr
+			}
+		}
 		if rerr := o.opt.Restarter.RestartLlama(c); rerr != nil {
 			if errors.Is(rerr, ErrInterrupted) {
 				return ErrInterrupted

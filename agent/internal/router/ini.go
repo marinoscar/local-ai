@@ -409,15 +409,25 @@ func Render(h Header, presets []Preset, defaultID string) ([]byte, error) {
 	b.WriteString("; Spec: docs/specs/llama-router.md §3.5\n")
 	b.WriteString("version = 1\n\n[*]\nstop-timeout = 10\nload-on-startup = false\n")
 	for _, p := range sorted {
-		fmt.Fprintf(&b, "\n[%s]\n", p.ID)
-		for _, pr := range p.Pairs {
-			fmt.Fprintf(&b, "%s = %s\n", pr.Key, pr.Value)
-		}
-		if p.ID == defaultID {
-			b.WriteString("load-on-startup = true\n")
-		}
+		b.WriteString("\n")
+		b.WriteString(RenderSection(p, p.ID == defaultID))
 	}
 	return b.Bytes(), nil
+}
+
+// RenderSection is one model's section of models.ini as Render writes it: the "[id]" line, the keys
+// in table order and, for the default model, load-on-startup = true. GET /models/{id} returns it as
+// the model's "preset".
+func RenderSection(p Preset, isDefault bool) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "[%s]\n", p.ID)
+	for _, pr := range p.Pairs {
+		fmt.Fprintf(&b, "%s = %s\n", pr.Key, pr.Value)
+	}
+	if isDefault {
+		b.WriteString("load-on-startup = true\n")
+	}
+	return b.String()
 }
 
 // StripHeaderLine returns the file without its first line when that line is the generated header
