@@ -98,6 +98,10 @@ type InstallOptions struct {
 	// Test marks the installed catalog as a draft: a TEST file is written next to the catalog files
 	// (`aictl catalog use --test`, AICTL-07). The loader reports such a catalog as source "test".
 	Test bool
+	// KeepPrevious leaves <dir>.prev as it is when it already exists and the live catalog is a
+	// draft installed with Test: the draft is dropped instead of becoming the new .prev, so a second
+	// `aictl catalog use --test` never loses the real catalog that .prev holds (aictl.md 4.11.4).
+	KeepPrevious bool
 }
 
 // InstallResult says what changed.
@@ -114,6 +118,8 @@ var installMu sync.Mutex
 const (
 	newSuffix  = ".new"
 	prevSuffix = ".prev"
+	// discardSuffix names a draft catalog set aside while its replacement is renamed in.
+	discardSuffix = ".discard"
 )
 
 // Install replaces dir (/etc/localai/catalog) with the catalog in newDir, atomically:
@@ -158,6 +164,15 @@ func Install(dir, newDir string, opts InstallOptions) (*InstallResult, error) {
 	res := &InstallResult{Version: readVersionFile(newDir), Previous: readVersionFile(dir)}
 	_, statErr := fsys.Stat(dir)
 	hadOld := statErr == nil
+	if hadOld && opts.KeepPrevious {
+		if _, perr := fsys.Stat(prev); perr == nil {
+			installed, err := swapKeepingPrevious(fsys, dir, tmp, parent)
+			if !installed {
+				return nil, err
+			}
+			return res, err
+		}
+	}
 	if hadOld {
 		if err := fsys.RemoveAll(prev); err != nil {
 			_ = fsys.RemoveAll(tmp)
@@ -179,6 +194,34 @@ func Install(dir, newDir string, opts InstallOptions) (*InstallResult, error) {
 		return res, fmt.Errorf("catalog install: installed, but syncing %s failed: %w", parent, err)
 	}
 	return res, nil
+}
+
+// swapKeepingPrevious replaces the live draft catalog with tmp and leaves <dir>.prev alone: the draft
+// is renamed aside, tmp takes its place, then the draft is deleted. A crash before the second rename
+// leaves no <dir> and Recover moves <dir>.prev (the real catalog) back; the renamed draft is junk
+// that the next call removes.
+func swapKeepingPrevious(fsys FS, dir, tmp, parent string) (installed bool, err error) {
+	aside := dir + discardSuffix
+	if err := fsys.RemoveAll(aside); err != nil {
+		_ = fsys.RemoveAll(tmp)
+		return false, fmt.Errorf("catalog install: %w", err)
+	}
+	if err := fsys.Rename(dir, aside); err != nil {
+		_ = fsys.RemoveAll(tmp)
+		return false, fmt.Errorf("catalog install: setting the draft aside: %w", err)
+	}
+	if err := fsys.Rename(tmp, dir); err != nil {
+		_ = fsys.Rename(aside, dir) // best effort: the draft stays live, nothing is lost
+		_ = fsys.RemoveAll(tmp)
+		return false, fmt.Errorf("catalog install: installing the new catalog: %w", err)
+	}
+	if err := fsys.SyncDir(parent); err != nil {
+		return true, fmt.Errorf("catalog install: installed, but syncing %s failed: %w", parent, err)
+	}
+	if err := fsys.RemoveAll(aside); err != nil {
+		return true, fmt.Errorf("catalog install: installed, but removing the old draft failed: %w", err)
+	}
+	return true, nil
 }
 
 // Recover repairs an install that was interrupted between its two renames: when <dir> is missing

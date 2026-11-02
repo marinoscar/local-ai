@@ -245,6 +245,38 @@ func TestInstallTestMarker(t *testing.T) {
 	}
 }
 
+func TestInstallKeepPreviousKeepsTheRealCatalogUnderASecondDraft(t *testing.T) {
+	live := liveDir(t)
+	if err := os.MkdirAll(filepath.Dir(live), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustInstall(t, live, versionedDir(t, v1), InstallOptions{})
+	mustInstall(t, live, versionedDir(t, v2), InstallOptions{Test: true})
+	v3 := "2026.11.05-1"
+	mustInstall(t, live, versionedDir(t, v3), InstallOptions{Test: true, KeepPrevious: true})
+	if versionOf(t, live) != v3 || !IsTestCatalog(live) {
+		t.Fatalf("live is %q (test=%v), want the second draft", versionOf(t, live), IsTestCatalog(live))
+	}
+	if versionOf(t, live+".prev") != v1 || IsTestCatalog(live+".prev") {
+		t.Errorf(".prev is %q, want the real catalog %q kept", versionOf(t, live+".prev"), v1)
+	}
+	if _, err := os.Stat(live + ".discard"); err == nil {
+		t.Error("the replaced draft was left behind")
+	}
+}
+
+func TestInstallKeepPreviousWithoutAPreviousBehavesAsUsual(t *testing.T) {
+	live := liveDir(t)
+	if err := os.MkdirAll(filepath.Dir(live), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustInstall(t, live, versionedDir(t, v1), InstallOptions{Test: true})
+	mustInstall(t, live, versionedDir(t, v2), InstallOptions{Test: true, KeepPrevious: true})
+	if versionOf(t, live) != v2 || versionOf(t, live+".prev") != v1 {
+		t.Errorf("live %q, prev %q: the old catalog should have become .prev", versionOf(t, live), versionOf(t, live+".prev"))
+	}
+}
+
 func TestInstallCopiesExtraFilesButNotSymlinks(t *testing.T) {
 	live := liveDir(t)
 	if err := os.MkdirAll(filepath.Dir(live), 0o755); err != nil {
