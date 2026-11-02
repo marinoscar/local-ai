@@ -33,7 +33,9 @@ t "skips with a notice and exit 0" 0 "Skipping" run scripts/agent-ci.sh all
 echo "== healthy module"
 mkdir -p agent/cmd/aiagent agent/internal/x
 printf 'module example.test/agent\n\ngo 1.22\n' >agent/go.mod
-printf 'package main\n\nimport "fmt"\n\nfunc main() { fmt.Println("aiagent") }\n' >agent/cmd/aiagent/main.go
+mkdir -p agent/internal/app
+printf 'package app\n\nvar (\n\tVersion = "0.0.0-dev"\n\tCommit  = "none"\n\tBuiltAt = "unknown"\n)\n' >agent/internal/app/version.go
+printf 'package main\n\nimport (\n\t"fmt"\n\n\t"example.test/agent/internal/app"\n)\n\nfunc main() { fmt.Println(app.Version, app.Commit, app.BuiltAt) }\n' >agent/cmd/aiagent/main.go
 printf 'package x\n\nfunc Add(a, b int) int { return a + b }\n' >agent/internal/x/x.go
 printf 'package x\n\nimport "testing"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1, 2) != 3 {\n\t\tt.Fatal("bad")\n\t}\n}\n' >agent/internal/x/x_test.go
 (cd agent && go mod vendor >/dev/null 2>&1); commit module
@@ -45,6 +47,10 @@ a="$(sha256sum "$repo/agent/dist/aiagent-linux-amd64" | cut -d' ' -f1)"
 OUT_DIR="$work/second" run scripts/agent-ci.sh build >/dev/null 2>&1
 b="$(sha256sum "$work/second/aiagent-linux-amd64" 2>/dev/null | cut -d' ' -f1)"
 t "two builds are byte-identical" 0 "" test -n "$a" -a "$a" = "$b"
+t "default build reports the dev version" 0 "0.0.0-dev none unknown" "$repo/agent/dist/aiagent-linux-amd64"
+rm -rf agent/dist
+SOURCE_DATE_EPOCH=1700000000 AGENT_VERSION=1.2.3 run scripts/agent-ci.sh build >/dev/null 2>&1
+t "AGENT_VERSION injects version, commit and a deterministic build time" 0 "1.2.3 $(git rev-parse --short=7 HEAD) 2023-11-14T22:13:20Z" "$repo/agent/dist/aiagent-linux-amd64"
 rm -rf agent/dist
 
 echo "== failing test turns it red"
