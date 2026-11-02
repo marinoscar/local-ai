@@ -1,0 +1,6 @@
+== stderr ==
+\e[31m[x]\e[0m Too many wrong PIN attempts.  \e[2m[LAI-SEC-004]\e[0m
+  -> Solución: Wait, then try again.
+  -> Espere: 4 min 12 s
+\e[2m  details: {"a":"x","b":2}\e[0m
+\e[2m  request: req_ABCDEFGHIJKL\e[0m

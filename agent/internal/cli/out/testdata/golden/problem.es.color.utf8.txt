@@ -1,0 +1,4 @@
+== stderr ==
+\e[31m✗\e[0m The AI model service is not running.  \e[2m[LAI-LLM-001]\e[0m
+  → Solución: Run `aictl restart llama`. If it fails again, run
+              `aictl logs --unit llama`.

@@ -1,0 +1,4 @@
+== stderr ==
+✗ The AI model service is not running.  [LAI-LLM-001]
+  → Solución: Run `aictl restart llama`. If it fails again, run
+              `aictl logs --unit llama`.

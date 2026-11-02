@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -69,6 +70,8 @@ type Client struct {
 	everUp    bool
 	announced bool
 	token     string
+	// pinGrant is the admin PIN grant of this process (SetPinGrant): memory only, never written.
+	pinGrant string
 
 	healthOnce sync.Once
 	health     api.Health
@@ -125,6 +128,33 @@ func (c *Client) Close() {
 	c.sock.CloseIdleConnections()
 	c.tcp.CloseIdleConnections()
 }
+
+const (
+	// pinVerifyPath is POST /pin/verify (agent.md section 3.8.3).
+	pinVerifyPath = "/pin/verify"
+	// pinGrantHeader carries the grant on a retried admin request (agent.md section 3.9.1 step 6).
+	pinGrantHeader = "X-LocalAI-Pin-Grant"
+)
+
+// SetPinGrant makes every later request carry the admin PIN grant in X-LocalAI-Pin-Grant (agent.md
+// section 3.9.1 step 6), so an [admin] command works for an operator. The grant lives only in this
+// Client, for the life of the command; it is never written anywhere and never logged. An empty
+// string forgets it.
+func (c *Client) SetPinGrant(grant string) {
+	c.mu.Lock()
+	c.pinGrant = grant
+	c.mu.Unlock()
+}
+
+func (c *Client) grant() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.pinGrant
+}
+
+// secretPath reports whether a request to path carries or returns a secret the debug log must not
+// show: the PIN goes out in the body of POST /pin/verify and the grant comes back in its answer.
+func secretPath(path string) bool { return path == pinVerifyPath }
 
 // Transport reports which transport the client settled on: "socket", "tcp" or "" before the first
 // request.
@@ -230,7 +260,11 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) (*Res
 		return r, c.readErr(ctx, err)
 	}
 	if c.log != nil {
-		c.log.Debug("response", "status", r.Status, "request_id", r.RequestID, bodyAttr(r.Body))
+		if secretPath(path) {
+			c.log.Debug("response", "status", r.Status, "request_id", r.RequestID)
+		} else {
+			c.log.Debug("response", "status", r.Status, "request_id", r.RequestID, bodyAttr(r.Body))
+		}
 	}
 	if r.Status/100 != 2 {
 		return r, c.decodeError(r)
@@ -332,14 +366,25 @@ func (c *Client) decodeError(r *Response) error {
 		return c.badResponse(r, "not an error envelope")
 	}
 	return &APIError{
-		Status:    r.Status,
-		Code:      env.Error.Code,
-		Message:   env.Error.Message,
-		Fix:       env.Error.Fix,
-		Details:   env.Error.Details,
-		RequestID: r.RequestID,
-		OpID:      r.OpID,
+		Status:     r.Status,
+		Code:       env.Error.Code,
+		Message:    env.Error.Message,
+		Fix:        env.Error.Fix,
+		Details:    env.Error.Details,
+		RequestID:  r.RequestID,
+		OpID:       r.OpID,
+		RetryAfter: retryAfter(r.Header),
 	}
+}
+
+// retryAfter reads a Retry-After header given in seconds (the only form the agent sends); anything
+// else is zero.
+func retryAfter(h http.Header) time.Duration {
+	n, err := strconv.Atoi(strings.TrimSpace(h.Get("Retry-After")))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return time.Duration(n) * time.Second
 }
 
 // send sends one request with transport selection and the retry while the agent starts (or
@@ -525,13 +570,16 @@ func (c *Client) once(ctx context.Context, kind transportKind, token, method, pa
 	if isMutating(method) {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	if g := c.grant(); g != "" && !secretPath(path) {
+		req.Header.Set(pinGrantHeader, g)
+	}
 	if kind == viaTCP {
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Host = req.URL.Host
 	}
 	if c.log != nil {
 		attrs := []any{"method", method, "path", APIPrefix + path, "via", kind.String(), "authorization", req.Header.Get("Authorization")}
-		if body != nil {
+		if body != nil && !secretPath(path) {
 			attrs = append(attrs, bodyAttr(body))
 		}
 		c.log.Debug("request", attrs...)

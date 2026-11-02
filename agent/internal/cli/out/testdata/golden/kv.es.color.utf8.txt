@@ -1,0 +1,7 @@
+== stdout ==
+Mode      online      (since hace 17 horas)
+Internet  ✓ full      (cloud reachable)
+Graphics  6.6 GB / 8.0 GB used
+Services  ✓ llama   ✓ kiwix   ! whisper
+Ark       ! internal 82% ready · last sync hace 12 horas · no ark drive, plug
+          one in to copy everything

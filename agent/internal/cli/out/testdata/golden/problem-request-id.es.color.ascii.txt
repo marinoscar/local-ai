@@ -1,0 +1,3 @@
+== stderr ==
+\e[31m[x]\e[0m The agent sent an answer aictl does not understand.  \e[2m[LAI-CLI-009]\e[0m
+\e[2m  request: req_ABCDEFGHIJKL\e[0m

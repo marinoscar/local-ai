@@ -1,0 +1,6 @@
+== stderr ==
+[x] Too many wrong PIN attempts.  [LAI-SEC-004]
+  -> Solución: Wait, then try again.
+  -> Espere: 4 min 12 s
+  details: {"a":"x","b":2}
+  request: req_ABCDEFGHIJKL
