@@ -207,8 +207,11 @@ export interface paths {
         /**
          * Set the default model
          * @description The model must be `present` and `loadable` (422 otherwise). Sets `state.models.default`, regenerates
-         *     `models.ini` and reloads the router preset list; it does not load the model. Owned by ROUTER-05
-         *     (llama-router.md section 4.4). agent.md section 3.8.10.
+         *     `models.ini` (`load-on-startup`) and tells the router under the reload-safety rule, so a running
+         *     model whose preset did not change stays loaded; it never loads or unloads a model. `previous` is
+         *     the default in force before (the recorded one, else the profile's), `null` when there was none.
+         *     `ini_regenerated` is false when the file already said this. llama-router.md section 4.6.
+         *     agent.md section 3.8.10. Audit `model.set_default`.
          *
          */
         put: operations["setDefaultModel"];
@@ -264,9 +267,14 @@ export interface paths {
         put?: never;
         /**
          * Load a model
-         * @description Orchestration: llama-router.md section 4.4 (ROUTER-05). With `wait: false` it answers 202 and progress
-         *     arrives on `/events`. A Portal session may only load `loadable` models and the body is forced
-         *     (survival-portal.md section 3.3). agent.md section 3.8.8.
+         * @description Orchestration: llama-router.md section 4.4. The body is optional; `wait` and `unload_others` default
+         *     to true. With `wait: false` it answers 202 as soon as the load is planned and progress arrives on
+         *     `/events` (`model.loading`, `model.loaded`, `model.failed`, with the same `op_id`). A Portal session
+         *     may only load `loadable` models and its body is forced to `wait: false` with the planner deciding
+         *     what to unload (survival-portal.md section 3.3). A failed load is rolled back to the previous
+         *     models (`details.rolled_back`, `details.restored`). `warning` is present when the load went ahead
+         *     although other programs hold much of the memory (LAI-HW-005, LAI-HW-006). Audit `model.load`.
+         *     agent.md section 3.8.8.
          *
          */
         post: operations["loadModel"];
@@ -291,7 +299,10 @@ export interface paths {
         /**
          * Unload a model
          * @description Unloading the default model is allowed. In survival mode, unloading the last loaded LLM answers
-         *     `409 LAI-AGT-023` unless `force` is true. Owned by ROUTER-05. agent.md section 3.8.9.
+         *     `409 LAI-AGT-023` unless `force` is true. A model that is not running answers `already_unloaded`.
+         *     If the router still reports the model running after 60 s, llama is restarted, the other models
+         *     are loaded again and LAI-LLM-031 is raised; the answer is then 200 with `restarted` and
+         *     `restored`. llama-router.md section 4.5. Audit `model.unload`. agent.md section 3.8.9.
          *
          */
         post: operations["unloadModel"];
@@ -1444,9 +1455,16 @@ export interface components {
             /** @enum {string} */
             status: "loaded";
             already_loaded: boolean;
+            /** @description How long the router took to load the model, without the evictions; 0 when it was loaded already. */
             load_ms?: number | null;
+            /** @description The models stopped to make room, in the order they were stopped. */
             unloaded?: string[];
             op_id: string;
+            /** @description Present when the load went ahead although other programs hold much of the memory (LAI-HW-005, LAI-HW-006). */
+            warning?: {
+                code: string;
+                message: string;
+            };
         };
         ModelLoading: {
             id: string;
@@ -1467,6 +1485,10 @@ export interface components {
             status: "unloaded";
             already_unloaded: boolean;
             op_id: string;
+            /** @description Present and true when the model would not stop and llama was restarted (LAI-LLM-031). */
+            restarted?: boolean;
+            /** @description Present with restarted: the models loaded again afterwards. */
+            restored?: string[];
         };
         DefaultModelRequest: {
             id: string;
@@ -2490,10 +2512,13 @@ export interface operations {
             404: components["responses"]["NotFound"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
-            /** @description LAI-CAT-005 the model does not fit; LAI-LLM-008 its files are missing or unverified. */
+            /** @description LAI-CAT-005 the model does not fit, or the engine is not llama; LAI-LLM-008 its files are missing or unverified. */
             422: components["responses"]["Unprocessable"];
+            /** @description LAI-LLM-007 the model list could not be written, so the default was not changed; LAI-AGT-099 a bug. */
             500: components["responses"]["Internal"];
             503: components["responses"]["Starting"];
+            /** @description LAI-AGT-099 with details.reason deadline_exceeded: the handler ran past its 5 s deadline. */
+            504: components["responses"]["GatewayTimeout"];
         };
     };
     getModel: {
@@ -2611,9 +2636,9 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             /** @description LAI-CAT-005 does not fit, backend unsupported, or the engine is not llama; LAI-LLM-008 files missing or unverified. */
             422: components["responses"]["Unprocessable"];
-            /** @description LAI-LLM-009 the load failed and the previous model was restored (details.rolled_back); LAI-LLM-012 the rollback also failed; LAI-AGT-099 a bug. */
+            /** @description LAI-LLM-009 the load failed and the previous model was restored (details.rolled_back, details.restored, details.cause, details.exit_code); LAI-LLM-012 no model could be loaded, not even the previous one; LAI-LLM-007 the router does not list the model; LAI-AGT-099 a bug. */
             500: components["responses"]["Internal"];
-            /** @description LAI-LLM-004: the router is running but not answering. */
+            /** @description LAI-LLM-004: the router is running but not answering; LAI-LLM-005: it rejects this node's key. */
             502: components["responses"]["BadGateway"];
             503: components["responses"]["Starting"];
             /** @description LAI-LLM-010: the load timed out and the previous model was restored. */
@@ -2651,14 +2676,18 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description LAI-AGT-022 another model operation is running; LAI-AGT-023 survival mode and this is the last loaded LLM (send force). */
+            /** @description LAI-AGT-022 another model operation is running (details.op_id); LAI-AGT-023 survival mode and this is the last loaded LLM (send force). */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            /** @description LAI-CAT-005 the model is not a llama model. */
+            422: components["responses"]["Unprocessable"];
+            /** @description LAI-LLM-012 the model would not stop, llama was restarted and no model could be loaded afterwards; LAI-AGT-099 a bug. */
             500: components["responses"]["Internal"];
-            /** @description LAI-LLM-004: the router is running but not answering. */
+            /** @description LAI-LLM-004: the router is running but not answering, or the model would not stop and llama could not be restarted; LAI-LLM-005: it rejects this node's key. */
             502: components["responses"]["BadGateway"];
             503: components["responses"]["Starting"];
+            /** @description LAI-LLM-031: the model would not stop in time. */
             504: components["responses"]["GatewayTimeout"];
         };
     };
