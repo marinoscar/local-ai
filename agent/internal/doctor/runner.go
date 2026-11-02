@@ -165,7 +165,13 @@ func (r *Registry) runOne(ctx context.Context, c Check) []Result {
 
 	done := make(chan []Result, 1)
 	go func() {
-		res := safeRun(cctx, c)
+		var res []Result
+		// A run that was abandoned before its goroutine got to start (its context is already
+		// done: the caller has its LAI-AGT-099 result) must not call the check at all. Starting it
+		// after Stop or after a budget ran out would run a check nobody waits for.
+		if cctx.Err() == nil {
+			res = safeRun(cctx, c)
+		}
 		// Unmark the check BEFORE the result is delivered. The caller may start the next run the
 		// moment it has the result; if the mark were still set it would take a finished check for a
 		// stuck one and report LAI-AGT-099 (#207). An abandoned run unmarks itself here when it

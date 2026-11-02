@@ -501,6 +501,34 @@ func TestACheckIsNotRunningOnceItsResultIsDelivered(t *testing.T) {
 	}
 }
 
+// Found by the stress run for #207: a run whose context is already done when the check's goroutine
+// starts (Stop, or a budget that ran out) was abandoned by the caller but the goroutine still called
+// the check, so a check ran after the manager had stopped. The check must not be called at all.
+func TestACheckIsNotCalledOnceItsRunIsAlreadyOver(t *testing.T) {
+	var calls atomic.Int32
+	c := Check{ID: "hw.battery", Area: "HW", Fast: true, Run: func(context.Context) []Result {
+		calls.Add(1)
+		return nil
+	}}
+	r := newReg(t, c)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for i := 0; i < 200; i++ {
+		res := r.runOne(ctx, c)
+		if len(res) != 1 || res[0].Code != AGT099 {
+			t.Fatalf("result = %+v, want the abandoned run's LAI-AGT-099", res)
+		}
+	}
+	waitFor(t, "the abandoned goroutines to finish", func() bool {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		return len(r.running) == 0
+	})
+	if n := calls.Load(); n != 0 {
+		t.Fatalf("the check was called %d time(s) after its run was over", n)
+	}
+}
+
 // The same race seen from the outside: a check that passes must pass on every consecutive run.
 func TestConsecutiveRunsOfAPassingCheckNeverReportAGT099(t *testing.T) {
 	r := newReg(t, okCheck("hw.battery", "HW", true))
