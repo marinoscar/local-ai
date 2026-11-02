@@ -77,8 +77,9 @@ scripts/                    repo tooling (redaction check, doc rendering)
 1. **Install the pre-commit hook** (blocks commits that leak lab inventory or secrets):
    `scripts/install-hooks.sh`. It is idempotent: run it again any time. It makes git run
    `scripts/check-redaction.sh --staged` before every commit.
-2. **Create your private inventory** (owner machines only): `cp inventory.example.yaml inventory.local.yaml`
-   and fill in the real values. It is git-ignored. When it exists, `check-redaction.sh` also
+2. **Create your private inventory** (owner machines only): run `scripts/init-inventory.sh` (copies
+   `inventory.example.yaml`, sets mode 0600, never overwrites), fill in the real values, then run
+   `scripts/init-inventory.sh --check`. It is git-ignored. When it exists, `check-redaction.sh` also
    scans for its literal values (see issue #135).
 3. **Install gitleaks** (optional locally, always run in CI) to reproduce the CI secret scan:
    - macOS: `brew install gitleaks`
