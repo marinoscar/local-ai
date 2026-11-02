@@ -1,0 +1,18 @@
+{
+  "schema_version": 2,
+  "written_at": "2026-11-02T15:04:05Z",
+  "agent_version": "0.2.0",
+  "mode": "offline",
+  "mode_changed_at": "2026-11-02T12:00:00Z",
+  "mode_transition": null,
+  "pending_mode": null,
+  "agent": {"recent_starts": []},
+  "models": {"default": "model-x", "desired_loaded": ["model-x"], "last_used": {}, "last_load": null, "pinned": ["model-x"]},
+  "llama": {"build": "b1", "previous_build": null, "ini_sha256": "", "unit_sha256": ""},
+  "key": {"fingerprint": "", "rotated_at": null, "cloud_synced": false},
+  "tailscale": {"applied_pattern": "", "applied_at": null},
+  "connectivity": {"value": "none", "since": null, "none_since": null},
+  "migration": {},
+  "update": {"last": null},
+  "power": {"policy": "balanced", "history": [1, 2, 3]}
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "written_at": "2026-11-02T15:00:01Z",
+  "agent_version": "0.1.0",
+  "mode": "online",
+  "mode_changed_at": "2026-11-01T22:10:00Z",
+  "mode_transition": {
+    "op_id": "op_3h8x2k1m0p7w",
+    "from": "online",
+    "target": "survival",
+    "step": "survival_models",
+    "started_at": "2026-11-02T15:00:00Z",
+    "attempts": {"tailscale_off": 1, "survival_models": 2},
+    "warnings": [{"code": "LAI-LLM-020", "message": "The preferred model failed to start; using the next one."}],
+    "actor": {"kind": "anonymous", "via": "portal"}
+  },
+  "pending_mode": "survival",
+  "agent": {"recent_starts": []},
+  "models": {"default": null, "desired_loaded": [], "last_used": {}, "last_load": null},
+  "llama": {"build": "", "previous_build": null, "ini_sha256": "", "unit_sha256": ""},
+  "key": {"fingerprint": "", "rotated_at": null, "cloud_synced": false},
+  "tailscale": {"applied_pattern": "", "applied_at": null},
+  "connectivity": {"value": "not_checked", "since": null, "none_since": null},
+  "migration": {},
+  "update": {"last": null}
+}
