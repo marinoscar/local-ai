@@ -1,0 +1,48 @@
+name: Work item (feature / task)
+description: One independently mergeable piece of work under an epic
+title: "[E<n>] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every work item must be implementable by an agent that reads ONLY this issue + the linked specs + AGENTS.md.
+  - type: input
+    id: epic
+    attributes: {label: Epic, placeholder: "#3 (E1 Node agent & CLI)"}
+    validations: {required: true}
+  - type: textarea
+    id: context
+    attributes: {label: Context / why}
+    validations: {required: true}
+  - type: textarea
+    id: specs
+    attributes: {label: Governing spec sections, placeholder: "- docs/specs/agent.md §3.4"}
+    validations: {required: true}
+  - type: textarea
+    id: scope
+    attributes: {label: Scope (exactly what to build)}
+    validations: {required: true}
+  - type: textarea
+    id: oos
+    attributes: {label: Out of scope}
+  - type: textarea
+    id: files
+    attributes: {label: Files / paths to create or change}
+  - type: textarea
+    id: interfaces
+    attributes: {label: Interfaces (copied from spec), render: markdown}
+  - type: textarea
+    id: steps
+    attributes: {label: Implementation notes (step by step)}
+  - type: textarea
+    id: acceptance
+    attributes: {label: Acceptance criteria, value: "- [ ] \n- [ ] Spec updated if behaviour differs\n- [ ] Runbook(s) updated if operator-visible"}
+    validations: {required: true}
+  - type: textarea
+    id: tests
+    attributes: {label: Test plan, description: "Unit cases + manual commands with expected output."}
+    validations: {required: true}
+  - type: textarea
+    id: deps
+    attributes: {label: Dependencies, placeholder: "Blocked by #N"}

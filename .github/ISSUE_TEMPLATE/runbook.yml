@@ -1,0 +1,23 @@
+name: Runbook
+description: Write or fix an operator runbook
+title: "[Runbook] "
+labels: ["documentation", "area:runbook"]
+body:
+  - type: input
+    id: epic
+    attributes: {label: Epic, placeholder: "#11 (E9)"}
+  - type: input
+    id: file
+    attributes: {label: Runbook file, placeholder: docs/runbooks/04-ark-drive.md}
+    validations: {required: true}
+  - type: textarea
+    id: audience
+    attributes: {label: Audience and situation, placeholder: "Non-expert, no internet, laptop on battery"}
+    validations: {required: true}
+  - type: textarea
+    id: content
+    attributes: {label: What the runbook must cover}
+    validations: {required: true}
+  - type: textarea
+    id: acceptance
+    attributes: {label: Acceptance criteria, value: "- [ ] Every step has 'What you should see'\n- [ ] Commands match docs/specs/aictl.md\n- [ ] Dry-run performed literally on a node (record in PR)\n- [ ] No real IPs/keys (scripts/check-redaction.sh passes)"}

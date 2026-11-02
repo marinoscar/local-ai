@@ -1,0 +1,32 @@
+# Real lab inventory and secrets: NEVER commit
+inventory.local.yaml
+*.local.yaml
+*.key
+api-key
+agent-token
+cloud-credential
+pin.hash
+.env
+.env.*
+!.env.example
+
+# Build outputs
+/agent/bin/
+/dist/
+node_modules/
+*.AppImage
+*.deb
+/apps/desktop/release/
+
+# Content (models, ZIMs, maps never go in git)
+*.gguf
+*.zim
+*.pmtiles
+*.onnx
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+worktrees/

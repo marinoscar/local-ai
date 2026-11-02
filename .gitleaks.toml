@@ -1,0 +1,24 @@
+title = "local-ai gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "localai-token"
+description = "Local AI / EAB tokens (lat_, nod_, lai_, pat_)"
+regex = '''\b(lat|nod|lai|pat)_[A-Za-z0-9_-]{20,}'''
+
+[[rules]]
+id = "tailnet-ip"
+description = "Tailscale CGNAT address"
+regex = '''\b100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]{1,3}\.[0-9]{1,3}\b'''
+
+[[rules]]
+id = "tailnet-name"
+description = "Tailnet name"
+regex = '''\btail[0-9a-f]{6}\b'''
+
+[[rules]]
+id = "route53-zone"
+description = "Route53 hosted zone id"
+regex = '''\bZ0[0-9A-Z]{10,}\b'''

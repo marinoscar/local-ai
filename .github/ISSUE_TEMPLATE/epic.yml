@@ -1,0 +1,27 @@
+name: Epic
+description: A large initiative made of several independently mergeable issues
+title: "[Epic E<n>]: "
+labels: ["epic"]
+body:
+  - type: textarea
+    id: goal
+    attributes: {label: Goal, description: "The outcome this epic delivers and why it matters (lab operation and/or doomsday ark)."}
+    validations: {required: true}
+  - type: textarea
+    id: specs
+    attributes: {label: Governing specs, description: "Links to docs/specs/*.md and ADRs.", placeholder: "- docs/specs/agent.md"}
+    validations: {required: true}
+  - type: textarea
+    id: scope
+    attributes: {label: Scope, value: "In scope:\n- \n\nOut of scope:\n- "}
+    validations: {required: true}
+  - type: textarea
+    id: success
+    attributes: {label: Success criteria, description: "Measurable, verifiable on a real node."}
+    validations: {required: true}
+  - type: textarea
+    id: subissues
+    attributes: {label: Sub-issues, description: "Task list, kept in sync with GitHub sub-issues.", placeholder: "- [ ] #12 …"}
+  - type: textarea
+    id: deps
+    attributes: {label: Dependencies, placeholder: "Blocked by Epic E1 …"}
