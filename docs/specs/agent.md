@@ -839,6 +839,7 @@ Source: the first content root with `docs/index.json` (written by `aictl docs re
      "suggested": "small-8gb", "match_reasons": ["backend cuda", "vram 8192 MiB in 7000..11999"],
      "effective": {"models": ["qwen3.5-9b-q4km", "…"], "content": ["wikipedia-en-nopic", "…"], "planned_bytes": 180000000000, "budget_bytes": 220000000000}}
 ```
+`effective.models` and `effective.content` are what the plan keeps after the budget (reverse-priority drops, [catalog.md](catalog.md) §4 "Planning rule"); they are never filtered by hardware fit. The body also carries `effective.skipped`: `[{"kind": "content", "id": "…", "reason": "budget", "size_bytes": 0}]`, empty when nothing was dropped. Built by `catalog.Catalog.BuildProfileView`; for an unknown profile in `node.yaml` the route answers `LAI-CAT-003` and may still show `suggested` and `match_reasons`.
 `PUT` body `{"profile": "cuda-12gb", "profile_overrides": null}` (either field optional; `null` overrides = unchanged). Validates (`422 LAI-CAT-003/004`), writes `node.yaml`, regenerates `models.ini` + router reload, recomputes plan. Does not start a sync. → `200 { …same as GET… }`. Audit `profile.set`.
 
 ### 3.9 Authentication and request checks

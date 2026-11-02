@@ -1,0 +1,7 @@
+{
+  "gpus": [
+    {"index": 0, "vendor": "amd", "name": "AMD GPU (unified memory)", "backend": "vulkan", "unified_memory": true,
+     "vram_total_mib": 62464, "vram_used_mib": 1000, "vram_used_by_others_mib": 1000}
+  ],
+  "ram": {"total_mib": 124928, "available_mib": 100000}
+}
