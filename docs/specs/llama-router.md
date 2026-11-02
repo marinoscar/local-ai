@@ -319,6 +319,8 @@ From `internal/hardware` (agent.md §4.4) and the profile:
 | `used_v(k)` | for a loaded model `k`: the router's `memory.effective` device total in MiB when reported, else `need_v(k)` |
 | `N` | `router.models_max` |
 
+**How it is built** (ROUTER-02, `internal/router`: `fit.go`, `plan.go`, `codes.go`; pure, no I/O). `router.NewEnv(snapshot, backend, profile.Router, W_res)` distils a `hardware.Snapshot` into the symbols above: `G_total` is `Snapshot.FitMemory(B)`, `G_others` is `Snapshot.OthersMiB(B)` (a GPU whose share cannot be measured counts 0), unified is `Snapshot.UnifiedMemory(B)`, `R_total`/`R_avail` are `Snapshot.RAM`. `B` is the node's `llama.backend` or, when empty, the detected one (`cpu` when nothing is known). `router.memory_margin_mib` unset (0) is the default 512. A loaded model's `used_v` falls back to `need_v` when the router's `memory.effective` is absent or not positive. Callers refresh the snapshot before planning (it is at most 10 s old), and `G_others` is never read for static fit.
+
 #### 4.3.2 Static fit (the API's `loadable`)
 Evaluated in order; the first failing rule gives `loadable_reason`:
 1. `B ∈ requirements.backends`, else `LAI-CAT-005` "This model does not run on <B>".
@@ -329,13 +331,35 @@ Evaluated in order; the first failing rule gives `loadable_reason`:
 6. Present (§4.1 step 2), else `LAI-LLM-008`.
 `G_others` is deliberately ignored here: a desktop session using 300 MiB must not make a model "never loadable".
 
+**Messages.** `router.Env.StaticFit` returns `loadable_reason` as `{code, message}` (agent.md §3.8.7) plus the Spanish text (`Reason.Text("es")`; the doctor localization hook of AGENT-11 replaces the two in-package texts when it lands). Sizes are decimal GB with one decimal (`MiB × 1048576 / 1e9`; Spanish uses a decimal comma):
+
+| Rule | English message | Code |
+|---|---|---|
+| 1 | `This model does not run on <B>.` | `LAI-CAT-005` |
+| 2 | `Needs X GB of graphics memory; this computer has Y GB.` (X = `need_v(m)`, Y = `G_total`, not `G_total − M`) | `LAI-CAT-005` |
+| 3, 4 | `Needs X GB of memory, and the system keeps Z GB for itself; this computer has Y GB.` (X = `need_r(m)`, Z = `R_res`, Y = `R_total`) | `LAI-CAT-005` |
+| 5 | `Needs X GB of memory; this computer has Y GB.` | `LAI-CAT-005` |
+| 6 | `The files of this model are missing or not verified on this computer.` | `LAI-LLM-008` |
+
+`LAI-LLM-004` (router down) is never produced by the fit rules: the API layer sets it when it cannot reach the router.
+
 #### 4.3.3 Dynamic fit (at load time)
 For a candidate keep-set `K` (models that stay loaded):
 - count: `|K| + 1 ≤ N`;
 - GPU backends: `need_v(m) + Σ_{k∈K} used_v(k) + G_others + W_res + M ≤ G_total`, where `W_res` is the whisper VRAM reservation ([companion-services.md](companion-services.md) §4.2.3): the resolved whisper model's `requirements.min_vram_mib` when whisper's device resolves to `gpu` **and** `localai-whisper` is not running yet; `0` otherwise (when whisper runs, its memory is already measured in `G_others`, so it is not counted twice);
 - unified/CPU: `need_r(m) + Σ_{k∈K} need_r(k) ≤ R_avail + Σ_{e evicted} need_r(e) − R_res`.
 
-**Eviction planner:** start with `K = loaded set`. While dynamic fit fails: if `unload_others == false` → fail `LAI-LLM-011`; else remove from `K` the least recently used model (by `state.models.last_used`; ties: larger `used_v` first). If `K` is empty and it still fails on `G_others` alone → load anyway with warning `LAI-HW-005` (the router's `--fit` will reduce offload rather than crash), because refusing would leave the node with no model at all.
+A unified-memory node is a Vulkan node, so it must satisfy **both** the GPU rule (against the GTT) and the RAM rule; a dedicated Vulkan card and CUDA are subject to the GPU rule only, a CPU node to the RAM rule only. The RAM rule is deliberately conservative: `Σ_{k∈K} need_r(k)` is counted on top of `R_avail` (mapped weights are reclaimable page cache that `MemAvailable` already counts as free), and an evicted model's `need_r` is credited back. It never over-commits; at worst it evicts one model more than a precise measurement would.
+
+**Eviction planner** (`Env.Plan(m, loaded, unloadOthers) (evict []string, warn *Reason, err error)`): start with `K = loaded set`. While dynamic fit fails: if `unload_others == false` → fail `LAI-LLM-011`; else remove from `K` the least recently used model (by `state.models.last_used`; ties: larger `used_v` first). If `K` is empty and it still fails on `G_others` alone → load anyway with warning `LAI-HW-005` (the router's `--fit` will reduce offload rather than crash), because refusing would leave the node with no model at all.
+
+Details the code fixes (ROUTER-02):
+- **Order of the checks.** When `K` is empty there is nothing to unload, so the load-anyway rule applies even if `unload_others` is `false`; `LAI-LLM-011` is only raised while models are still kept. The failing predicate with `K` empty is `G_others + W_res` (the static fit already guaranteed `need_v(m) + M ≤ G_total`), and the warning is `LAI-HW-005` whenever the GPU rule is short.
+- **RAM-only shortage.** If, with `K` empty, only the RAM rule (CPU or unified node) fails because other programs hold the memory, the load also goes ahead, with warning `LAI-HW-006`, for the same reason (a node must not be left with no model; the kernel reclaims mapped pages, and `LAI-LLM-027` covers an OOM kill).
+- **Result.** `evict` lists the models to unload in unload order (LRU first); it is empty, never nil, when nothing has to go. The planner applies nothing (ROUTER-05 does) and returns `*router.PlanError` (a `Reason` with `LAI-LLM-011`) for a refusal. `warn` is a `Reason` (code, English and Spanish text); the evictions in `evict` still apply when it is set.
+- **Tie-breaks.** `last_used` ascending (never used is the oldest), then larger `used_v`, then model id ascending, so the plan does not depend on the order the caller lists the loaded models.
+- **No pin.** There is no pinned or protected model: the default model is evicted like any other when it is the least recently used (R8 in §9.3 evicts the default 9B for the VLM). A model keeps its place only by being more recently used, or by `unload_others: false`.
+- An entry for `m` itself in the loaded set is ignored (the orchestrator answers "already loaded" in §4.4 step 3 before planning), and a duplicate id counts once. A `models_max` below 1 counts as 1 (lint `LAI-CAT-018` rules it out).
 
 `unload_others: true` (the default) therefore means "unload as many other models as needed, least recently used first", not "unload everything".
 
@@ -636,8 +660,8 @@ Every 5 s (and on `/models/sse` events) the agent reads `GET /models` and diffs 
 | Effective set | profile include/add/remove; present on drive only → drive path; on both → internal; unverified → excluded; static misfit → excluded |
 | Env merge | none; one model; two equal; two conflicting → dropped + code; node override wins |
 | Reload-safety | default change only → no reload; flag change of running model → reload + reload-model; add/remove non-running → reload |
-| Static fit | each rule failing alone; unified memory using GTT; CPU node |
-| Dynamic fit / planner | ai-n3: load VLM while 9B loaded (`N=1`) → evict 9B; `unload_others:false` → LLM-011; ai-n1 `N=3` with 2 loaded → no eviction when VRAM fits, LRU eviction when not; `G_others` alone too big → load with warning |
+| Static fit | each rule failing alone; unified memory using GTT; CPU node; boundary values (`G_total − M`, `R_total − R_res`, `R_total`) and the first-failure order; multi-GPU CUDA sums, hybrid laptop; en/es messages with GB formatting (`internal/router/fit_test.go`) |
+| Dynamic fit / planner | ai-n3: load VLM while 9B loaded (`N=1`) → evict 9B; `unload_others:false` → LLM-011; ai-n1 `N=3` with 2 loaded → no eviction when VRAM fits, LRU eviction when not; `G_others` alone too big → load with warning; `W_res` (whisper on gpu not running → reserved, running → 0, on cpu → 0); ties by larger `used_v` then id; reported `memory.effective` over `need_v`; seeded property test: never over-commits, evicts the minimal LRU prefix, deterministic (`internal/router/plan_test.go`) |
 | Load state machine (fake router with scripted `/models` statuses) | already loaded; loading by someone else; success; `failed:true` → rollback restores evicted; timeout → rollback; rollback fails → default → survival list → LLM-012; busy → 409; `wait:false` → 202 then events |
 | Boot | default loaded by router; default not loaded → agent loads; desired set restored without eviction; survival set when in survival with no LLM |
 | Single mode | unit render (golden); load X success; failure → previous unit restored |
