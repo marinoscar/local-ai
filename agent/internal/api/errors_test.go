@@ -46,7 +46,7 @@ func TestEnvelopeDefaultsAndDetails(t *testing.T) {
 	t.Run("message and fix come from the code table, details is always an object", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		WriteError(rec, httptest.NewRequest("GET", "/x", nil), NewError(CodeNotFound, 404, nil))
-		want := `{"error":{"code":"LAI-AGT-021","message":"The thing asked for does not exist (model, service, content, route).","fix":"Check the name with ` + "`aictl models` or `aictl status`" + `.","details":{}}}` + "\n"
+		want := `{"error":{"code":"LAI-AGT-021","message":"The thing asked for does not exist (model, service, content, route)","fix":"Check the name with ` + "`aictl models` or `aictl status`" + `","details":{}}}` + "\n"
 		if rec.Body.String() != want {
 			t.Fatalf("got %s", rec.Body.String())
 		}
@@ -126,7 +126,7 @@ func TestErrorFrom(t *testing.T) {
 			}
 		})
 	}
-	if (&Error{Code: CodeBusy}).Error() != "LAI-AGT-022: Another operation is already running." {
+	if (&Error{Code: CodeBusy}).Error() != "LAI-AGT-022: Another operation is already running" {
 		t.Fatalf("Error() = %q", (&Error{Code: CodeBusy}).Error())
 	}
 }
@@ -137,7 +137,7 @@ func TestSpanishLocalization(t *testing.T) {
 	t.Run("Accept-Language es", func(t *testing.T) {
 		rec := do(h, req{target: "/api/v1/nope", header: map[string]string{"Accept-Language": "es"}})
 		e := expectError(t, rec, 404, CodeNotFound)
-		if e.Error.Message != "Lo solicitado no existe (modelo, servicio, contenido o ruta)." || !strings.HasPrefix(e.Error.Fix, "Revise el nombre") {
+		if e.Error.Message != "Lo solicitado no existe (modelo, servicio, contenido, ruta)" || !strings.HasPrefix(e.Error.Fix, "Compruebe el nombre") {
 			t.Fatalf("not Spanish: %+v", e.Error)
 		}
 	})
@@ -150,7 +150,7 @@ func TestSpanishLocalization(t *testing.T) {
 	t.Run("ui.language es", func(t *testing.T) {
 		s2, _ := newTestServer(t, func(o *Options) { o.Config = fixedConfig{lang: "es"} })
 		e := expectError(t, do(s2.Handler(), req{target: "/api/v1/nope"}), 404, CodeNotFound)
-		if !strings.HasPrefix(e.Error.Fix, "Revise") {
+		if !strings.HasPrefix(e.Error.Fix, "Compruebe") {
 			t.Fatalf("not Spanish: %+v", e.Error)
 		}
 	})
@@ -165,9 +165,18 @@ func TestSpanishLocalization(t *testing.T) {
 			t.Fatal("expected Spanish after the reload")
 		}
 	})
-	t.Run("every code in the table has both languages and distinct text", func(t *testing.T) {
-		for code, byLang := range messages {
-			en, es := byLang[langEN], byLang[langES]
+	t.Run("every code the package emits is in the doctor table with distinct English and Spanish text", func(t *testing.T) {
+		for _, code := range []string{
+			CodeSocketBind, CodeTCPBind, CodeInvalidRequest, CodeNotFound, CodeBusy, CodeNotInMode, CodeStarting,
+			CodeTooLarge, CodeInternal, CodeUnauthenticated, CodeAdminRequired, CodeWrongPIN, CodeNoPIN, CodeBadLoginCode,
+			CodeSessionExpired, CodeRateLimited, CodeBadHost,
+			CodeBadOrigin, CodePeerNotOperator, CodePortalSessionEnded, CodeRouterDown, CodeUpstreamTimeout,
+		} {
+			en, es := lookup(code, langEN), lookup(code, langES)
+			if en == unknownText[langEN] || es == unknownText[langES] {
+				t.Errorf("%s: not in the doctor table", code)
+				continue
+			}
 			if en.Message == "" || en.Fix == "" || es.Message == "" || es.Fix == "" {
 				t.Errorf("%s: missing text", code)
 			}

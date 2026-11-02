@@ -23,6 +23,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/doctor"
 )
 
 const (
@@ -40,7 +42,7 @@ const (
 
 	// CodeUnwritable is the doctor code raised when the audit log cannot be written
 	// (LAI-AGT-013, doctor-codes.md).
-	CodeUnwritable = "LAI-AGT-013"
+	CodeUnwritable = doctor.AGT013
 )
 
 // ErrClosed is returned by Write after Close.

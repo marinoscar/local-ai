@@ -1,21 +1,22 @@
 package config
 
+import "github.com/marinoscar/local-ai/agent/internal/doctor"
+
 // Doctor codes this package hands back to its callers (agent.md section 8, doctor-codes.md).
 //
-// They live in this one file on purpose: scripts/check-doctor-codes.sh forbids a "LAI-..." literal
-// in any non-test Go file outside internal/doctor/codes.go once that file exists. AGENT-11 replaces
-// these constants with the ones from internal/doctor; nothing else in this package spells a code.
+// They are aliases of the constants of internal/doctor/codes.go, the one file allowed to spell a
+// "LAI-..." literal (scripts/check-doctor-codes.sh). Nothing else in this package spells a code.
 const (
 	// CodeNodeYAMLMissing: /etc/localai/node.yaml does not exist.
-	CodeNodeYAMLMissing = "LAI-AGT-001"
+	CodeNodeYAMLMissing = doctor.AGT001
 	// CodeNodeYAMLInvalid: node.yaml cannot be read or has invalid values (a warning for unknown keys).
-	CodeNodeYAMLInvalid = "LAI-AGT-002"
+	CodeNodeYAMLInvalid = doctor.AGT002
 	// CodeRestartNeeded: a settings change needs a restart (of the agent, or of llama) to take effect.
-	CodeRestartNeeded = "LAI-AGT-016"
+	CodeRestartNeeded = doctor.AGT016
 	// CodeProfileMissing: node.yaml names a profile the loaded catalog does not have.
-	CodeProfileMissing = "LAI-CAT-003"
+	CodeProfileMissing = doctor.CAT003
 	// CodeCloudURLNotHTTPS: cloud.url must start with https://.
-	CodeCloudURLNotHTTPS = "LAI-CLD-062"
+	CodeCloudURLNotHTTPS = doctor.CLD062
 	// CodeSecretPermissions: a secret file had unsafe permissions (they were fixed).
-	CodeSecretPermissions = "LAI-SEC-009"
+	CodeSecretPermissions = doctor.SEC009
 )
