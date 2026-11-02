@@ -22,14 +22,15 @@ func Lock(e Env) (release func(), err error) {
 	path := filepath.Join(e.Paths.EtcDir, lockName)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
-		return nil, fileErr("write", path, err)
+		// the folder is what the person has to fix, not the lock file inside it
+		return nil, fileErr("write", e.Paths.EtcDir, err)
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
 			return nil, ErrBusy
 		}
-		return nil, fileErr("write", path, err)
+		return nil, fileErr("write", e.Paths.EtcDir, err)
 	}
 	return func() { _ = f.Close() }, nil
 }
