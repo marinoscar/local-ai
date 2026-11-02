@@ -29,6 +29,7 @@ import (
 
 	apispec "github.com/marinoscar/local-ai/agent/api"
 	"github.com/marinoscar/local-ai/agent/internal/api/apitest"
+	"github.com/marinoscar/local-ai/agent/internal/events"
 )
 
 func loadSpec(t *testing.T) *apispec.Spec {
@@ -904,9 +905,26 @@ func compareRegistered(ops []apispec.Operation, routes []Route) []string {
 	return problems
 }
 
+// implementedRoutes is every route this package implements: api.Routes() (the built-in route and what
+// packages add to DefaultRegistry) plus the routes its constructors return for AGENT-20 to wire into the
+// server's registry (EventsRoute). A later issue whose routes come from a constructor adds that
+// constructor here, with fakes for its dependencies, in the PR that removes the operation's
+// x-localai-status: planned marker.
+func implementedRoutes(t *testing.T) []Route {
+	t.Helper()
+	routes := Routes()
+	bus := events.New(events.Options{})
+	t.Cleanup(bus.Close)
+	ev, err := EventsRoute(EventsOptions{Bus: bus})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return append(routes, ev)
+}
+
 func TestOpenAPIMatchesRegisteredRoutes(t *testing.T) {
 	s := loadSpec(t)
-	for _, p := range compareRegistered(s.Operations(), Routes()) {
+	for _, p := range compareRegistered(s.Operations(), implementedRoutes(t)) {
 		t.Error(p)
 	}
 }
@@ -917,7 +935,7 @@ func TestOpenAPIMatchesRegisteredRoutes(t *testing.T) {
 func TestPlannedOperations(t *testing.T) {
 	s := loadSpec(t)
 	registered := map[string]bool{}
-	for _, rt := range Routes() {
+	for _, rt := range implementedRoutes(t) {
 		if !rt.Absolute {
 			registered[rt.Method+" "+rt.Pattern] = true
 		}

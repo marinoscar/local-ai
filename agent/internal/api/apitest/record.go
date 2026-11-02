@@ -55,6 +55,23 @@ func Record(t testing.TB, resp *http.Response) *http.Response {
 	return resp
 }
 
+// RecordStream is Record for a success response whose body never ends (server-sent events): the
+// status and the headers are checked when t finishes and the body is not touched. An error response
+// of a stream is an ordinary envelope and is recorded like any other.
+func RecordStream(t testing.TB, resp *http.Response) *http.Response {
+	t.Helper()
+	if resp.StatusCode >= 400 {
+		return Record(t, resp)
+	}
+	if resp.Request == nil {
+		t.Fatal("apitest.RecordStream: resp.Request is nil")
+	}
+	method, target := resp.Request.Method, resp.Request.URL.RequestURI()
+	status, header := resp.StatusCode, resp.Header.Clone()
+	t.Cleanup(func() { validate(t, method, target, status, header, nil) })
+	return resp
+}
+
 // RecordResult records the result of a httptest.ResponseRecorder served for req and returns the
 // recorder's http.Response.
 func RecordResult(t testing.TB, req *http.Request, rec *httptest.ResponseRecorder) *http.Response {
@@ -104,7 +121,9 @@ func Check(spec *apispec.Spec, method, target string, status int, header http.He
 	if found {
 		var ok bool
 		doc, ok = spec.Response(op, status)
-		if !ok {
+		// 405 is answered by routing for any method a path does not serve (and for every OPTIONS), so
+		// it belongs to no operation; it only has to be an envelope.
+		if !ok && status != http.StatusMethodNotAllowed {
 			add("status %d is not documented for %s", status, op.Key())
 		}
 	} else if status < 400 {

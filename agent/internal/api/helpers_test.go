@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/marinoscar/local-ai/agent/internal/api/apitest"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
 )
 
@@ -184,9 +185,15 @@ func (q req) build() *http.Request {
 	return r.WithContext(ctx)
 }
 
+// served maps each recorder `do` and `newRecorder` filled to the request it answered, so that
+// expectError can hand both to apitest.RecordResult.
+var served sync.Map // *httptest.ResponseRecorder -> *http.Request
+
 func do(h http.Handler, q req) *httptest.ResponseRecorder {
+	r := q.build()
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, q.build())
+	h.ServeHTTP(rec, r)
+	served.Store(rec, r)
 	return rec
 }
 
@@ -214,6 +221,11 @@ func decodeErr(t *testing.T, rec *httptest.ResponseRecorder) errBody {
 
 func expectError(t *testing.T, rec *httptest.ResponseRecorder, status int, code string) errBody {
 	t.Helper()
+	// Every error a test asserts is also recorded against openapi.yaml (agent.md section 4.14): it
+	// must be an ErrorEnvelope and, on a documented route, a documented status.
+	if r, ok := served.Load(rec); ok {
+		apitest.RecordResult(t, r.(*http.Request), rec)
+	}
 	if rec.Code != status {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, status, rec.Body.String())
 	}
@@ -241,5 +253,6 @@ func jsonHeaders(extra map[string]string) map[string]string {
 func newRecorder(h http.Handler, r *http.Request) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, r)
+	served.Store(rec, r)
 	return rec
 }

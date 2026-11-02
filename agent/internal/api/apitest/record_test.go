@@ -60,6 +60,8 @@ func TestCheck(t *testing.T) {
 		{"error as text fails", "GET", "/api/v1/health", 500, hdr("X-Request-Id", "req_abcdefghijkl", "Content-Type", "text/plain"), `boom`, "must be application/json"},
 		{"unknown path 404 as envelope conforms", "GET", "/api/v1/nope", 404, hdr(jsonH...), envelope, ""},
 		{"405 of an existing path conforms as envelope", "DELETE", "/api/v1/health", 405, hdr(jsonH...), envelope, ""},
+		{"405 on a documented path needs no documentation", "DELETE", "/api/v1/models/default", 405, hdr(jsonH...), envelope, ""},
+		{"405 that is not an envelope fails", "DELETE", "/api/v1/models/default", 405, hdr("X-Request-Id", "req_abcdefghijkl", "Content-Type", "text/plain"), `no`, "must be application/json"},
 		{"success on an unknown path fails", "GET", "/api/v1/nope", 200, hdr(jsonH...), `{}`, "no operation of openapi.yaml serves GET /api/v1/nope"},
 		{"path outside the base path fails", "GET", "/health", 200, hdr(jsonH...), `{}`, "no operation of openapi.yaml serves"},
 		{"429 without Retry-After fails", "POST", "/api/v1/pin/verify", 429, hdr(jsonH...), envelope, "429 must carry Retry-After"},
@@ -88,6 +90,29 @@ func TestCheck(t *testing.T) {
 				t.Fatalf("want a problem containing %q, got:\n%s", tc.wantErr, got)
 			}
 		})
+	}
+}
+
+// TestRecordStreamChecksHeadersOnly proves that a stream's body is never read: the reader here would
+// block forever.
+func TestRecordStreamChecksHeadersOnly(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	h := http.Header{}
+	h.Set("X-Request-Id", "req_abcdefghijkl")
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-store")
+	resp := &http.Response{StatusCode: 200, Header: h, Body: pr, Request: httptest.NewRequest("GET", "/api/v1/events", nil)}
+	if got := RecordStream(t, resp); got != resp {
+		t.Fatal("RecordStream returns its argument")
+	}
+	if problems := Check(mustSpec(t), "GET", "/api/v1/events", 200, h, nil); len(problems) != 0 {
+		t.Fatalf("a documented stream must conform, got %v", problems)
+	}
+	h2 := h.Clone()
+	h2.Set("Content-Type", "application/json")
+	if problems := Check(mustSpec(t), "GET", "/api/v1/events", 200, h2, nil); len(problems) == 0 {
+		t.Fatal("a stream answered as JSON must fail")
 	}
 }
 
