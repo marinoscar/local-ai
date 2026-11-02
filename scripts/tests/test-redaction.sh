@@ -75,6 +75,15 @@ mkdir -p "$repo/scripts" && cp scripts/check-redaction.sh scripts/install-hooks.
   rm scripts/tests/redaction/.redaction-fixtures
   scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL fixture dir scanned without marker expected"; rc=1; }
   rm -rf scripts/tests other
+  # 2b. vendored third-party files are skipped (a MAINTAINERS file names real people); the same
+  #     content anywhere else in agent/ is still a leak
+  mkdir -p agent/vendor/example.test/lib agent/internal
+  at='@'   # built at runtime so this file itself stays clean
+  printf 'Person A <person-a%scorp.example>\n' "$at" >agent/vendor/example.test/lib/MAINTAINERS
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 0 ]] || { echo "  FAIL agent/vendor was scanned"; rc=1; }
+  printf 'Person A <person-a%scorp.example>\n' "$at" >agent/internal/MAINTAINERS
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL skip of agent/vendor leaks into agent/internal"; rc=1; }
+  rm -rf agent
   # 3. hook install: idempotent, rejects a leaking commit, accepts a clean one
   scripts/install-hooks.sh >/dev/null || { echo "  FAIL install-hooks"; rc=1; }
   second="$(scripts/install-hooks.sh)"; grep -q 'already installed' <<<"$second" || { echo "  FAIL install-hooks not idempotent"; rc=1; }
