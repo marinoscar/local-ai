@@ -356,3 +356,37 @@ func TestAuthenticateWithoutARouteIsSafe(t *testing.T) {
 		t.Fatalf("%+v, %v", p, err)
 	}
 }
+
+func TestTokenFileOwnerIsTheOperatorsGroup(t *testing.T) {
+	logger, logs := newLogger()
+	with := New(Config{Groups: fake.NewGroups().Add(OperatorsGroup, opsGID), Logger: logger})
+	if got := with.tokens.policy; got.Mode != 0o640 || got.UID != 0 || got.GID != opsGID {
+		t.Errorf("token policy %+v, want 0640 root:%d", got, opsGID)
+	}
+	without := New(Config{Groups: fake.NewGroups(), Logger: logger})
+	if got := without.tokens.policy; got.GID != -1 {
+		t.Errorf("without the group the policy leaves the group alone: %+v", got)
+	}
+	if !strings.Contains(logs.String(), "operators group does not exist") {
+		t.Error("a missing group must be logged")
+	}
+	if got := with.pin.policy; got.Mode != 0o600 || got.UID != 0 || got.GID != 0 {
+		t.Errorf("PIN policy %+v, want 0600 root:root", got)
+	}
+}
+
+func TestOSGroupsAnswersForRoot(t *testing.T) {
+	if _, err := (OSGroups{}).GroupID("root"); err != nil {
+		t.Skip("no root group in this environment:", err)
+	}
+	ok, err := OSGroups{}.InGroup(0, "root")
+	if err != nil || !ok {
+		t.Errorf("uid 0 in root = %v, %v", ok, err)
+	}
+	if _, err := (OSGroups{}).InGroup(0, "no-such-group-xyz"); err == nil {
+		t.Error("an unknown group is an error (the caller then fails closed)")
+	}
+	if _, err := (OSGroups{}).GroupID("no-such-group-xyz"); err == nil {
+		t.Error("an unknown group has no id")
+	}
+}
