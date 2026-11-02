@@ -66,6 +66,7 @@ func Main(args []string, stdout, stderr io.Writer) int {
 			env.StdoutIsTTY = fi.Mode()&os.ModeCharDevice != 0
 		}
 	}
+	applyLate(DefaultRegistry)
 	return Run(ctx, env, DefaultRegistry, args)
 }
 
