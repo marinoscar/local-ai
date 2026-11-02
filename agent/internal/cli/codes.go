@@ -1,29 +1,31 @@
 package cli
 
+import "github.com/marinoscar/local-ai/agent/internal/doctor"
+
 // Doctor codes aictl itself raises (aictl.md section 8, doctor-codes.md section 2).
 //
-// They live in this one file on purpose: scripts/check-doctor-codes.sh forbids a code literal in any
-// other non-test Go file once agent/internal/doctor/codes.go exists.
+// The constants alias those of agent/internal/doctor/codes.go, the one file allowed to spell a code
+// literal (scripts/check-doctor-codes.sh).
 //
-// TODO(AGENT-11): the en/es strings below are a local table, acceptable only until AGENT-11 lands
-// internal/doctor. Then this table becomes a lookup into it and the constants alias its names.
+// The en/es strings below are this package's own table. internal/doctor holds text for every code
+// (doctor.Text), so the table could become a lookup into it in a later change.
 const (
 	// CodeUnreachable: the agent cannot be reached (socket and TCP both failed, or it is still starting).
-	CodeUnreachable = "LAI-CLI-001"
+	CodeUnreachable = doctor.CLI001
 	// CodePermission: the socket refused this user and there is no usable token.
-	CodePermission = "LAI-CLI-002"
+	CodePermission = doctor.CLI002
 	// CodeVersionSkew: aictl and the agent report different versions (a warning).
-	CodeVersionSkew = "LAI-CLI-003"
+	CodeVersionSkew = doctor.CLI003
 	// CodeTimeout: the command's overall deadline passed.
-	CodeTimeout = "LAI-CLI-004"
+	CodeTimeout = doctor.CLI004
 	// CodeUsage: unknown command, unknown option or an invalid option value.
-	CodeUsage = "LAI-CLI-005"
+	CodeUsage = doctor.CLI005
 	// CodeNeedRoot: the command must run as root (RequireRoot).
-	CodeNeedRoot = "LAI-CLI-006"
+	CodeNeedRoot = doctor.CLI006
 	// CodeBadResponse: the agent sent an answer aictl cannot decode.
-	CodeBadResponse = "LAI-CLI-009"
+	CodeBadResponse = doctor.CLI009
 	// CodeInterrupted: the user pressed Ctrl-C while waiting.
-	CodeInterrupted = "LAI-CLI-010"
+	CodeInterrupted = doctor.CLI010
 )
 
 // Severities of a code, as in the doctor registry.
