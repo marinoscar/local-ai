@@ -3712,10 +3712,10 @@ export interface operations {
     runDoctor: {
         parameters: {
             query?: {
-                /** @description Repeatable, for example LLM. */
+                /** @description Repeatable (a comma-separated list also works) and case-insensitive, for example LLM. It matches the check's area. An area that is not one of the code area prefixes is 400 LAI-AGT-020 with details.param area. */
                 area?: string[];
-                /** @description 1 runs only the checks marked fast (at most 5 s in total). */
-                fast?: "1";
+                /** @description 1 or true runs only the checks marked fast, within 5 s in total. Any other value is 400 LAI-AGT-020 with details.param fast. */
+                fast?: "0" | "1" | "true" | "false";
             };
             header?: never;
             path?: never;

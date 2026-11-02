@@ -13,6 +13,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/api"
 	"github.com/marinoscar/local-ai/agent/internal/auth"
 	authfake "github.com/marinoscar/local-ai/agent/internal/auth/fake"
+	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
 	hwfake "github.com/marinoscar/local-ai/agent/internal/hardware/fake"
@@ -29,8 +30,8 @@ func spec(t *testing.T) *apispec.Spec {
 
 // implementedRoutes is every route the agent implements: api.Routes() (the built-in route and what
 // packages add to DefaultRegistry at init) plus the routes that constructors return for the daemon
-// wiring (AGENT-20) to add to the server's registry: GET /events (api.EventsRoute) and the five routes
-// of the auth service (auth.Service.Routes).
+// wiring (AGENT-20) to add to the server's registry: GET /events (api.EventsRoute), the five routes
+// of the auth service (auth.Service.Routes) and GET /doctor (api.DoctorRoute).
 //
 // A later issue whose routes come from a constructor adds it HERE, with fakes for its dependencies, in
 // the PR that deletes the operations' x-localai-status: planned and x-localai-issue from openapi.yaml.
@@ -54,6 +55,8 @@ func implementedRoutes(t *testing.T) []api.Route {
 	// Only the metadata (method, pattern, auth, timeout) is compared, so the dependencies stay empty.
 	routes = append(routes, api.ServicesRoutes(api.ServicesDeps{})...)
 	routes = append(routes, api.LogsRoutes(api.LogsDeps{})...)
+
+	routes = append(routes, api.DoctorRoute(api.DoctorOptions{Registry: doctor.NewRegistry()}))
 	return routes
 }
 
@@ -93,7 +96,7 @@ func TestPlannedOperations(t *testing.T) {
 		issue, _ := op.Raw["x-localai-issue"].(string)
 		byIssue[issue] = append(byIssue[issue], op.Key())
 	}
-	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs"} {
+	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs", "GET /doctor"} {
 		if !implementedKeys[key] {
 			t.Errorf("%s must be implemented", key)
 		}

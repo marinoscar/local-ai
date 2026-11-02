@@ -56,6 +56,7 @@ func getDoctor(t *testing.T, s *Server, target string, hdr map[string]string) *h
 
 func decodeDoctor(t *testing.T, rec *httptest.ResponseRecorder) DoctorResponse {
 	t.Helper()
+	recordOK(t, rec) // the body must match DoctorReport of openapi.yaml (agent.md section 4.14)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
 	}
