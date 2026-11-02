@@ -85,7 +85,7 @@ func killAndResume(t *testing.T, from, to modes.Mode, k int, before bool) {
 	}()
 	select {
 	case <-ks.crashed:
-	case <-time.After(5 * time.Second):
+	case <-time.After(60 * time.Second):
 		t.Fatal("the kill point was never reached")
 	}
 	r1.abandon = true
@@ -148,7 +148,7 @@ func TestKillMidWriteNeverLosesTheRecordedTransition(t *testing.T) {
 		r1 := newRig(t, withMode(modes.Online), withFS(fs))
 		fs.CrashAfter(n)
 		_, _ = r1.request(modes.Survival, false)
-		time.Sleep(5 * time.Millisecond)
+		r1.idle() // the transition has run to its end, crash or not: every write it will make is made
 		r1.abandon = true
 		_ = r1.st.Close()
 		fs.Reboot()

@@ -128,7 +128,7 @@ func newRig(t *testing.T, mods ...func(*rigCfg)) *rig {
 	r := &rig{t: t, fs: cfg.fs, st: st, clk: clk, env: env, eng: eng, logs: logs}
 	t.Cleanup(func() {
 		if !r.abandon {
-			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			_ = eng.Shutdown(ctx)
 		}
@@ -147,7 +147,7 @@ var operator = state.Actor{Kind: "operator", Via: "socket"}
 // request asks for target; with wait it blocks until the transition ends.
 func (r *rig) request(target modes.Mode, wait bool) (modes.Result, error) {
 	r.t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	return r.eng.Request(ctx, target, modes.RequestOptions{Wait: wait, Actor: operator})
 }
@@ -168,17 +168,17 @@ func (r *rig) idle() {
 
 func waitIdle(t testing.TB, e *modes.Engine) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	if err := e.WaitIdle(ctx); err != nil {
 		t.Fatalf("engine did not become idle: %v", err)
 	}
 }
 
-// waitFor polls cond for up to five seconds.
+// waitFor polls cond for up to a minute: the deadline only bounds a hung test, it never paces a passing one.
 func waitFor(t testing.TB, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	for !cond() {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
@@ -215,7 +215,7 @@ func (b *blocker) waitEntered(t testing.TB) {
 	t.Helper()
 	select {
 	case <-b.entered:
-	case <-time.After(5 * time.Second):
+	case <-time.After(60 * time.Second):
 		t.Fatal("the step never started")
 	}
 }

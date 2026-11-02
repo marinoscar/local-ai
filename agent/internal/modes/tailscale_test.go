@@ -87,6 +87,8 @@ type tsRig struct {
 	clk    *cfake.Clock
 	http   *fakeHTTP
 	online atomic.Bool
+	// onlineCalls counts the reconciler's policy checks (one per tick it consumes).
+	onlineCalls atomic.Int32
 
 	mu  sync.Mutex
 	set modes.TailscaleSettings
@@ -106,7 +108,7 @@ func newTSRig(t *testing.T, pattern string, manage bool, fixtureName string) *ts
 	r.online.Store(true)
 	mgr, err := modes.NewTailscaleManager(modes.TailscaleOptions{
 		Run: r.cli, Lookup: r.cli.Lookup, State: r.st, Clock: r.clk, HTTP: r.http,
-		Online:   r.online.Load,
+		Online:   func() bool { r.onlineCalls.Add(1); return r.online.Load() },
 		Interval: 5 * time.Minute,
 		Settings: func() modes.TailscaleSettings {
 			r.mu.Lock()
@@ -917,8 +919,9 @@ func TestReconcilerLoop(t *testing.T) {
 	// Not online: the next period does nothing.
 	r.online.Store(false)
 	n := len(r.cli.Calls())
+	seen := r.onlineCalls.Load()
 	r.clk.Advance(5 * time.Minute)
-	time.Sleep(20 * time.Millisecond)
+	waitFor(t, "the loop to consume the tick", func() bool { return r.onlineCalls.Load() > seen })
 	if got := len(r.cli.Calls()); got != n {
 		t.Errorf("a pass ran while the node is not online (%d -> %d calls)", n, got)
 	}
@@ -1138,6 +1141,8 @@ func TestOnOffThroughTheEngine(t *testing.T) {
 	if !res.Done || !hasWarning(res.Warnings, doctor.NET006) {
 		t.Fatalf("offline with a stuck listener: %+v", res)
 	}
+	// The engine's retry loop creates its ticker on its own goroutine: wait for it before ticking.
+	waitFor(t, "the retry timer", func() bool { return r.clk.Tickers() == 1 })
 	r.clk.Advance(modes.DefaultTailscaleRetry)
 	waitFor(t, "the retry to remove it", func() bool { return !strings.Contains(string(cli.ServeJSON()), "127.0.0.1:8080") })
 	cli.Unexpected()
