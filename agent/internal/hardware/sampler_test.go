@@ -772,3 +772,34 @@ func TestFitMemoryByBackend(t *testing.T) {
 		t.Error("no internal root")
 	}
 }
+
+func TestFitUsedMiBByBackend(t *testing.T) {
+	nv := GPU{Vendor: VendorNVIDIA, VRAMUsedMiB: 6000}
+	nv2 := GPU{Vendor: VendorNVIDIA, VRAMUsedMiB: 500}
+	amd := GPU{Vendor: VendorAMD, UnifiedMemory: true, VRAMUsedMiB: 41000}
+	cases := []struct {
+		name    string
+		gpus    []GPU
+		backend string
+		want    int64
+		count   int
+	}{
+		{"cuda sums NVIDIA GPUs", []GPU{nv, nv2}, BackendCUDA, 6500, 2},
+		{"cuda ignores the AMD iGPU", []GPU{amd, nv}, BackendCUDA, 6000, 1},
+		{"vulkan on hybrid counts the AMD memory", []GPU{amd, nv}, BackendVulkan, 41000, 1},
+		{"vulkan with only NVIDIA", []GPU{nv}, BackendVulkan, 6000, 1},
+		{"cpu has no GPU memory", []GPU{nv, amd}, BackendCPU, 0, 0},
+		{"no GPUs", nil, BackendCUDA, 0, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := Snapshot{GPUs: c.gpus}
+			if got := s.FitUsedMiB(c.backend); got != c.want {
+				t.Errorf("FitUsedMiB = %d, want %d", got, c.want)
+			}
+			if got := len(s.FitGPUs(c.backend)); got != c.count {
+				t.Errorf("FitGPUs = %d entries, want %d", got, c.count)
+			}
+		})
+	}
+}
