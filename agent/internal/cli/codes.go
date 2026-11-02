@@ -35,6 +35,16 @@ const (
 	CodeBadResponse = doctor.CLI009
 	// CodeInterrupted: the user pressed Ctrl-C while waiting.
 	CodeInterrupted = doctor.CLI010
+	// CodeFileIO: a file or folder could not be read or written (named in the message).
+	CodeFileIO = doctor.CLI012
+	// CodeInventoryMissing: inventory.local.yaml was not found; placeholders stay in the documents.
+	CodeInventoryMissing = doctor.CLI013
+	// CodeNoPDFPrinter: no Chromium is installed; docs render made HTML only (info).
+	CodeNoPDFPrinter = doctor.CLI014
+	// CodeCardTooLong: the survival card does not fit on one page.
+	CodeCardTooLong = doctor.CLI015
+	// CodeCardPrivate: the survival card would show a private value (an address, the tailnet or an e-mail).
+	CodeCardPrivate = doctor.CLI016
 )
 
 // Codes of the agent that the PIN flow reacts to (agent.md section 3.8.3). The agent supplies their
@@ -117,6 +127,31 @@ var codeTable = map[string]codeInfo{
 			"Check with `aictl status`."},
 		text{"Dejó de esperar; la acción continúa en segundo plano.",
 			"Revise con `aictl status`."}},
+	CodeFileIO: {ExitFailed, sevError,
+		text{"A file could not be read or written.",
+			"Check the path and free space named in the message."},
+		text{"No se pudo leer o escribir un archivo.",
+			"Revise la ruta y el espacio libre que indica el mensaje."}},
+	CodeInventoryMissing: {ExitOK, sevWarning,
+		text{"inventory.local.yaml was not found; real addresses are shown as placeholders in the documents.",
+			"Plug in the ark drive or pass `--inventory <file>`."},
+		text{"No se encontró inventory.local.yaml; las direcciones reales aparecen como marcadores en los documentos.",
+			"Conecte el disco del arca o use `--inventory <archivo>`."}},
+	CodeNoPDFPrinter: {ExitOK, sevInfo,
+		text{"No PDF printer (Chromium) is installed; only HTML was made.",
+			"Install `chromium` to also get PDFs, or print the HTML pages from a browser."},
+		text{"No hay impresora de PDF (Chromium) instalada; solo se hizo HTML.",
+			"Instale `chromium` para obtener también PDF, o imprima las páginas HTML desde un navegador."}},
+	CodeCardTooLong: {ExitFailed, sevError,
+		text{"The survival card does not fit on one page.",
+			"Shorten the text in `docs/runbooks/00-survival-card.md` (survival-portal.md section 4.12)."},
+		text{"La tarjeta de supervivencia no cabe en una página.",
+			"Acorte el texto de `docs/runbooks/00-survival-card.md` (survival-portal.md sección 4.12)."}},
+	CodeCardPrivate: {ExitFailed, sevError,
+		text{"The survival card would show a secret value (an address, the tailnet or an e-mail).",
+			"Remove that placeholder from `docs/runbooks/00-survival-card.md` (survival-portal.md section 4.12)."},
+		text{"La tarjeta de supervivencia mostraría un valor secreto (una dirección, la tailnet o un correo).",
+			"Quite ese marcador de `docs/runbooks/00-survival-card.md` (survival-portal.md sección 4.12)."}},
 }
 
 func (ci codeInfo) text(l Lang) text {
