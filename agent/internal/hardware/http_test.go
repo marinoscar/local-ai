@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
+	"github.com/marinoscar/local-ai/agent/internal/api/apitest"
 	"github.com/marinoscar/local-ai/agent/internal/execx"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
 	"github.com/marinoscar/local-ai/agent/internal/hardware/fake"
@@ -49,8 +50,13 @@ func sample(at time.Time, used int64) hardware.Snapshot {
 			Index: 0, Vendor: hardware.VendorNVIDIA, Name: "GPU Example", Backend: hardware.BackendCUDA,
 			VRAMTotalMiB: 8192, VRAMUsedMiB: used, Throttling: []string{}, Processes: []hardware.GPUProcess{},
 		}},
-		RAM:   hardware.RAM{TotalMiB: 14336, AvailableMiB: 5120},
-		Power: hardware.Power{Source: hardware.SourceAC},
+		RAM: hardware.RAM{TotalMiB: 14336, AvailableMiB: 5120},
+		// The sampler hands out Snapshot.Clone, whose slices are never nil; the fixture must be as
+		// complete as a real snapshot because the response is checked against openapi.yaml.
+		Disks:   []hardware.Disk{},
+		Power:   hardware.Power{Source: hardware.SourceAC},
+		Thermal: hardware.Thermal{Zones: []hardware.ThermalZone{}},
+		CPU:     hardware.CPU{Model: "CPU Example", Cores: 12},
 	}
 }
 
@@ -68,7 +74,10 @@ func server(t *testing.T, src hardware.Sampler, clk *clock) http.Handler {
 	return s.Handler()
 }
 
-func get(h http.Handler, target string, principal string) *httptest.ResponseRecorder {
+// get serves one request and records the response against openapi.yaml (agent.md section 4.14): the
+// body must match the Hardware schema and an error must be an ErrorEnvelope.
+func get(t testing.TB, h http.Handler, target string, principal string) *httptest.ResponseRecorder {
+	t.Helper()
 	r := httptest.NewRequest(http.MethodGet, target, nil)
 	r.Host = "127.0.0.1:7070"
 	if principal != "" {
@@ -76,6 +85,7 @@ func get(h http.Handler, target string, principal string) *httptest.ResponseReco
 	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, r)
+	apitest.RecordResult(t, r, rec)
 	return rec
 }
 
@@ -103,10 +113,10 @@ func TestGetHardwareRequiresOperatorAndReturnsTheSnapshot(t *testing.T) {
 	f := fake.New(sample(clk.Now(), 6791))
 	h := server(t, f, clk)
 
-	if rec := get(h, "/api/v1/hardware", ""); rec.Code != http.StatusUnauthorized {
+	if rec := get(t, h, "/api/v1/hardware", ""); rec.Code != http.StatusUnauthorized {
 		t.Errorf("anonymous: status %d, want 401", rec.Code)
 	}
-	rec := get(h, "/api/v1/hardware", "op")
+	rec := get(t, h, "/api/v1/hardware", "op")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body)
 	}
@@ -142,7 +152,7 @@ func TestFreshIsRateLimitedToOnePerTwoSeconds(t *testing.T) {
 
 	used := func(target string) int64 {
 		t.Helper()
-		rec := get(h, target, "op")
+		rec := get(t, h, target, "op")
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s: status %d: %s", target, rec.Code, rec.Body)
 		}
@@ -180,7 +190,7 @@ func TestFreshRejectsUnknownValues(t *testing.T) {
 	clk := &clock{t: time.Now()}
 	h := server(t, fake.New(sample(clk.Now(), 1)), clk)
 	for _, q := range []string{"fresh=yes", "fresh=true", "fresh=2", "fresh=-1"} {
-		rec := get(h, "/api/v1/hardware?"+q, "op")
+		rec := get(t, h, "/api/v1/hardware?"+q, "op")
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: status %d", q, rec.Code)
 			continue
@@ -202,7 +212,7 @@ func TestUnsampledSamplerIsAskedToSampleOnce(t *testing.T) {
 	f := fake.New(hardware.Snapshot{}) // never sampled
 	f.QueueRefresh(sample(clk.Now(), 42))
 	h := server(t, f, clk)
-	rec := get(h, "/api/v1/hardware", "op")
+	rec := get(t, h, "/api/v1/hardware", "op")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"vram_used_mib":42`) || f.Refreshes() != 1 {
 		t.Errorf("status %d refreshes %d body %s", rec.Code, f.Refreshes(), rec.Body)
 	}
@@ -221,7 +231,7 @@ func TestGetHardwareAnswersWithinItsDeadlineWithAHungNvidiaSmi(t *testing.T) {
 	clk := &clock{t: time.Now()}
 	h := server(t, svc, clk)
 	start := time.Now()
-	rec := get(h, "/api/v1/hardware?fresh=1", "op")
+	rec := get(t, h, "/api/v1/hardware?fresh=1", "op")
 	if d := time.Since(start); d > 2*time.Second {
 		t.Fatalf("answered after %v with a hung nvidia-smi", d)
 	}
