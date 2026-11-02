@@ -5,7 +5,7 @@
 
 Every problem a user can see — an API error, a doctor result, an alert, a CLI message, a Portal warning — carries a **doctor code** and a one-sentence fix (AGENTS.md rule 4). This file is the **registry** of all codes, one section per area.
 
-> **Authority and sync.** Each owner spec's own §8 table is **authoritative** for its area. This registry is a copy that must be kept identical: any PR that adds, changes or retires a code edits the owner spec's §8 **and** this file **and** `agent/internal/doctor/codes.go`. The planned CI check `scripts/check-doctor-codes.sh` (§1.6) fails the build when they disagree.
+> **Authority and sync.** Each owner spec's own §8 table is **authoritative** for its area. This registry is a copy that must be kept identical: any PR that adds, changes or retires a code edits the owner spec's §8 **and** this file **and** `agent/internal/doctor/codes.go`. The CI check `scripts/check-doctor-codes.sh` (§1.6) fails the build when they disagree.
 
 ## 1. Rules
 
@@ -53,7 +53,7 @@ Allocation procedure: the owner spec takes the **next free number** in its area 
 A code has one default severity; a few codes escalate (documented in the "Sev" column, e.g. `warning (critical at lockout)`).
 
 ### 1.5 Message and fix text
-- **Message:** one sentence in everyday words; what happened, not why the code ran. ≤ 120 characters.
+- **Message:** one sentence in everyday words; what happened, not why the code ran. ≤ 120 characters. (`codes.go` enforces the limit on its titles; two older rows, `LAI-CAT-013` and `LAI-CAT-018`, are longer here, so their title in `codes.go` is a shortened form. A new row stays within the limit.)
 - **Fix:** one sentence (two at most), imperative, with the exact command or button in backticks. Never "contact support" alone; say what to report.
 - Every code has an English **and** a Spanish version in `codes.go` (`es` is shown in the Portal, the desktop and `aictl --lang es`). This file holds the English text; the Spanish text lives only in code and is reviewed in the PR.
 - Codes never contain secrets in their text or `details`.
@@ -64,10 +64,10 @@ The script (bash + `grep`/`awk`, no network) runs in CI (`docs-guard`, job `doct
 2. a code row in an owner spec's doctor table is missing from this registry, or a registry code is missing from its owner spec's table (the owner is the spec listed in §1.3; `LAI-CLD-050..069` is owned by agent.md);
 3. severity or meaning differ between the owner spec and this registry (compared after trimming and collapsing whitespace; the fix text is not compared);
 4. a code appears twice, has an unknown area prefix, sits in a registry section of another area, or is defined in a spec that does not own its area;
-5. once `agent/internal/doctor/codes.go` exists: it lacks a code from this registry, has one that is not here, defines a code twice, or a non-test Go file outside `codes.go` hard-codes a `"LAI-…"` literal instead of using the constant;
+5. once `agent/internal/doctor/codes.go` exists: it lacks a code from this registry, has one that is not here, defines a code twice, a registry code has no table entry, an entry's `Severity` differs from the first word of the registry severity, an entry has no non-empty Spanish (`ES:`) title or fix, or a non-test Go file outside `codes.go` hard-codes a `"LAI-…"` literal instead of using the constant (the other packages alias the constants of `codes.go`: `config.CodeNodeYAMLMissing = doctor.AGT001`);
 6. a range (`..`) is used outside a documented family. The families are listed in the script (`FAMILIES`): `LAI-CAT-010..019`, `LAI-CLD-050..069`, `LAI-INS-040..044`. Adding a family means editing the script and this section.
 
-Not checked yet: the Spanish (`es`) text in `codes.go`. The doctor framework issue (AGENT-11) adds that check together with the `codes.go` layout; until then reviewers check it by hand.
+The script reads the `codes.go` layout described in its header: a const block (`AGT001 = "LAI-AGT-001"`) and one table entry per code with `ID:`, `Severity:`, `Title:` and `Fix:` on their own lines, each text as `Msg{EN: "…", ES: "…"}`. That the Spanish text is *good* is still a review item; the script and `codes_test.go` only prove it is present, differs from the English, and keeps the commands in backticks. A change to the English fix text needs the matching `codes.go` edit by hand (the script does not compare fixes), as does a new or reworded `es` text.
 
 ## 2. Registry
 
