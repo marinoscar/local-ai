@@ -12,6 +12,7 @@ pin.hash
 
 # Build outputs
 /agent/bin/
+/agent/dist/
 /dist/
 node_modules/
 *.AppImage

@@ -3,7 +3,8 @@
 #
 #   scripts/agent-ci.sh check   go vet, go test -race, staticcheck (pinned), vendored deps are current
 #   scripts/agent-ci.sh build   static linux/amd64 and linux/arm64 binaries into agent/dist/, asserted static
-#   scripts/agent-ci.sh all     check, then build
+#   scripts/agent-ci.sh repro   build twice into temp dirs; the sha256 of every binary must be identical
+#   scripts/agent-ci.sh all     check, then build, then repro
 #
 # While agent/go.mod does not exist yet (before AGENT-01), every command prints a notice and exits 0.
 # Env: SKIP_STATICCHECK=1 skips staticcheck (hermetic tests); OUT_DIR overrides agent/dist.
@@ -29,6 +30,13 @@ do_check() {
   cd "$root/agent"
   echo "== go vet"
   go vet ./...
+  echo "== gofmt"
+  unformatted="$(find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 -r gofmt -l)"
+  if [[ -n "$unformatted" ]]; then
+    echo "ERROR gofmt would change these files (run gofmt -w):" >&2
+    sed 's/^/  /' <<<"$unformatted" >&2
+    exit 1
+  fi
   echo "== go test -race"
   go test -race ./...
   if [[ "${SKIP_STATICCHECK:-0}" != "1" ]]; then
@@ -84,9 +92,28 @@ do_build() {
   echo "✓ static binaries in $out"
 }
 
+do_repro() {
+  local tmp a b arch
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  OUT_DIR="$tmp/a" do_build >/dev/null
+  OUT_DIR="$tmp/b" do_build >/dev/null
+  for arch in "${ARCHES[@]}"; do
+    a="$(sha256sum "$tmp/a/aiagent-linux-$arch" | cut -d' ' -f1)"
+    b="$(sha256sum "$tmp/b/aiagent-linux-$arch" | cut -d' ' -f1)"
+    if [[ "$a" != "$b" ]]; then
+      echo "ERROR build is not reproducible for linux/$arch: $a != $b" >&2
+      exit 1
+    fi
+    echo "  ok  linux/$arch  ${a:0:12}…  identical across two builds"
+  done
+  echo "✓ builds are reproducible"
+}
+
 case "$cmd" in
   check) do_check ;;
   build) do_build ;;
-  all)   do_check; do_build ;;
-  *) echo "usage: $0 {check|build|all}" >&2; exit 2 ;;
+  repro) do_repro ;;
+  all)   do_check; do_build; do_repro ;;
+  *) echo "usage: $0 {check|build|repro|all}" >&2; exit 2 ;;
 esac
