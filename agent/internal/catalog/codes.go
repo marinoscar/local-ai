@@ -10,6 +10,8 @@ const (
 	CodeUnparseable = "LAI-CAT-001"
 	// CodeRejected: a new catalog failed validation; the previous one is kept.
 	CodeRejected = "LAI-CAT-002"
+	// CodeUnknownProfile: the profile in node.yaml (or in a PUT /profile body) is not in the catalog.
+	CodeUnknownProfile = "LAI-CAT-003"
 	// CodeUnknownRef: a profile references an unknown model or content id (also in lint).
 	CodeUnknownRef = "LAI-CAT-004"
 

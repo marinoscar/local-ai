@@ -1,0 +1,7 @@
+{
+  "gpus": [
+    {"index": 0, "vendor": "nvidia", "name": "NVIDIA GPU (8 GB)", "backend": "cuda", "unified_memory": false,
+     "vram_total_mib": 8192, "vram_used_mib": 300, "vram_used_by_others_mib": 300}
+  ],
+  "ram": {"total_mib": 14336, "available_mib": 11000}
+}
