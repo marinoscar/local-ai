@@ -60,10 +60,6 @@ func newLocalFixture(t *testing.T) *localFixture {
 	return f
 }
 
-func (f *localFixture) path(parts ...string) string {
-	return filepath.Join(append([]string{filepath.Dir(f.env.Paths.EtcDir)}, parts...)...)
-}
-
 func (f *localFixture) auditLines() []map[string]any {
 	f.t.Helper()
 	b, err := os.ReadFile(filepath.Join(f.env.Paths.StateDir, "audit.jsonl"))

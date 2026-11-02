@@ -252,10 +252,7 @@ func TestBackupToDriveKeepsTheLastFivePerNode(t *testing.T) {
 	if res.PruneErr != nil || filepath.Dir(res.Path) != dir {
 		t.Fatalf("%+v", res)
 	}
-	var left []string
-	for _, f := range listFiles(t, dir) {
-		left = append(left, f)
-	}
+	left := listFiles(t, dir)
 	sort.Strings(left)
 	if len(left) != 5+2 { // five backups of ai-n3, the other node's backup and the note
 		t.Fatalf("left %v", left)
