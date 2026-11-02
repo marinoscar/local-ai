@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 )
@@ -220,11 +221,14 @@ func TestOnlineNetworkFailureIsReported(t *testing.T) {
 }
 
 func TestOnlineEndpointOverride(t *testing.T) {
+	var mu sync.Mutex
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		if strings.Contains(r.URL.Path, "/resolve/") && gotPath == "" {
 			gotPath = r.URL.Path
 		}
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -233,6 +237,8 @@ func TestOnlineEndpointOverride(t *testing.T) {
 	// example.test names, so this test only inspects the first resolve URL and ignores the report.
 	opts := LintOptions{Online: true, HFEndpoint: srv.URL, GitHubEndpoint: srv.URL, Client: &http.Client{Transport: hubTransport{host: strings.TrimPrefix(srv.URL, "http://")}}}
 	Lint(dir, opts)
+	mu.Lock()
+	defer mu.Unlock()
 	if !strings.HasPrefix(gotPath, "/org-") || !strings.Contains(gotPath, "/resolve/") {
 		t.Errorf("unexpected HF path %q", gotPath)
 	}
