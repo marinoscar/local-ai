@@ -777,11 +777,13 @@ export interface paths {
         /**
          * Server-sent events
          * @description `text/event-stream`, `Cache-Control: no-store`, `X-Accel-Buffering: no`. Each event is `id: <n>`,
-         *     `event: <type>` and `data: <Event as JSON>`. A reconnecting client sends `Last-Event-ID`; the first event is
+         *     `event: <type>` and `data: <Event as JSON>`; the `resync` and `shutdown` frames carry only their
+         *     payload as data (`{"reason":"gap"}`, `{}`). A reconnecting client sends `Last-Event-ID`; the first event is
          *     `resync` when the gap is too old or the agent restarted. A keepalive comment `: ping` every 15 s. A
-         *     Portal session only receives `mode.*`, `model.*`, `service.state`, `drive.*` and `alert.*`.
-         *     The event catalog is agent.md section 3.10. After the stream started an error cannot be reported
-         *     as an envelope.
+         *     Portal session only receives `mode.*`, `model.*`, `service.state`, `drive.*` and `alert.*`; the rest
+         *     of its `types` is dropped silently. The event catalog is agent.md section 3.10. It is a GET, so the
+         *     starting gate does not hold it back; a request while the agent is stopping answers 503. After the
+         *     stream started an error cannot be reported as an envelope.
          *
          */
         get: operations["streamEvents"];
@@ -3414,11 +3416,11 @@ export interface operations {
     streamEvents: {
         parameters: {
             query?: {
-                /** @description Comma-separated, a * suffix is a wildcard, for example model.*,mode.changed. Default: all. */
+                /** @description Comma-separated, may repeat; each pattern is an exact type or ends in a single *, for example model.*,mode.changed. Default: all. */
                 types?: string;
             };
             header?: {
-                /** @description The last event id the client saw. */
+                /** @description The last event id the client saw. A missing or malformed value means no replay. */
                 "Last-Event-ID"?: number;
             };
             path?: never;
@@ -3438,9 +3440,13 @@ export interface operations {
                     "text/event-stream": string;
                 };
             };
+            /** @description LAI-AGT-020: a types pattern is malformed (details.param is types). */
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["Internal"];
+            /** @description LAI-AGT-024: the agent is stopping, or the event bus is closed. */
+            503: components["responses"]["Starting"];
         };
     };
     speechToText: {
