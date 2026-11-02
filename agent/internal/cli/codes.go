@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/cli/i18n"
 	"github.com/marinoscar/local-ai/agent/internal/cli/out"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
@@ -35,6 +36,17 @@ const (
 	CodeBadResponse = doctor.CLI009
 	// CodeInterrupted: the user pressed Ctrl-C while waiting.
 	CodeInterrupted = doctor.CLI010
+)
+
+// Codes of the local root commands (pin, token, catalog restore/use, backup-config; aictl.md
+// sections 4.11 to 4.25). Other areas' codes appear here only because these commands raise them.
+const (
+	// CodeFileIO: a file could not be read or written (the message names the path and the reason).
+	CodeFileIO = doctor.CLI012
+	// CodeKitMissing: no ark kit with a catalog on the internal disk or a mounted drive.
+	CodeKitMissing = doctor.KIT040
+	// CodeNoDrive: `backup-config --to-ark` found no mounted AI-ARK drive.
+	CodeNoDrive = doctor.ARK001
 )
 
 // Codes of the agent that the PIN flow reacts to (agent.md section 3.8.3). The agent supplies their
@@ -117,6 +129,26 @@ var codeTable = map[string]codeInfo{
 			"Check with `aictl status`."},
 		text{"Dejó de esperar; la acción continúa en segundo plano.",
 			"Revise con `aictl status`."}},
+	CodeFileIO: {ExitFailed, sevError,
+		text{"A file could not be read or written.",
+			"Check the path and free space named in the message."},
+		text{"No se pudo leer o escribir un archivo.",
+			"Revise la ruta y el espacio libre que indica el mensaje."}},
+	CodeKitMissing: {ExitNotFound, sevError,
+		text{"The rebuild kit is missing parts for this computer.",
+			"Run `aictl ark sync` with internet, or `aictl ark import` from a good drive."},
+		text{"Al kit de reconstrucción le faltan partes para este equipo.",
+			"Ejecute `aictl ark sync` con internet, o `aictl ark import` desde un disco bueno."}},
+	CodeNoDrive: {ExitNotFound, sevError,
+		text{"No AI-ARK drive is mounted.",
+			"Plug in an AI-ARK drive, or run `aictl doctor`."},
+		text{"No hay ningún disco AI-ARK montado.",
+			"Conecte un disco AI-ARK, o ejecute `aictl doctor`."}},
+	catalog.CodeRejected: {ExitFailed, sevError,
+		text{"The new catalog failed validation; the previous one was kept.",
+			"Nothing to do. Report it to the maintainer."},
+		text{"El catálogo nuevo no pasó la validación; se conservó el anterior.",
+			"No hay nada que hacer. Infórmelo al mantenedor."}},
 }
 
 func (ci codeInfo) text(l Lang) text {
