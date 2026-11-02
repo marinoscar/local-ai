@@ -89,7 +89,7 @@ Implemented in `agent/internal/cli` (`Client`, `Config`, `Registry`, `ExitFor`);
 
 #### 3.2.6 Output, prompts and the PIN flow (AICTL-02)
 Implemented in `agent/internal/cli/out` (printing), `agent/internal/cli/i18n` (the en/es labels) and `agent/internal/cli` (`confirm.go`, `admin.go`, `terminal.go`). A command prints through `c.Out` (an `*out.Printer`) and never writes colour or symbols itself; the framework prints the problems a command returns.
-- **Printer.** `OK` and `Info` (stdout), `Warn`, `Error`, `Critical`, `Progress` and `Problem` (stderr), `Table`, `KV`, `Secondary`, `Result` and `Blank` (stdout), `When` (a time for people), `PrintSecretWarning`. `Problem` takes the doctor `Code`, `Message`, `Fix`, `Details`, the request id and a wait time. `--quiet` hides everything except errors, the essential `Result` and `Table`/`KV` output, and the secret warning; `--json` turns every stdout method into a no-op (the `out.JSON` writer owns stdout) and an error-severity problem into the envelope.
+- **Printer.** `OK` and `Info` (stdout), `Warn`, `Error`, `Critical`, `Progress` and `Problem` (stderr), `Table`, `KV`, `Secondary`, `Result`, `Blank` and `Finding` (stdout), `When` (a time for people), `PrintSecretWarning`. `Problem` takes the doctor `Code`, `Message`, `Fix`, `Details`, the request id and a wait time. `--quiet` hides everything except errors, the essential `Result` and `Table`/`KV` output, and the secret warning; `Finding` is `Problem` for a command whose result is a list of problems (`doctor`, the alerts of `status`): the same layout on stdout, so a pipe keeps it; `--quiet` hides its info and warning findings, never an error. `--json` turns every stdout method into a no-op (the `out.JSON` writer owns stdout) and an error-severity problem into the envelope.
 - **`--json` writer** (`c.Out.JSON()`): `Document(v)` or `Raw(body)` once, or `Line(v)` repeatedly for JSON Lines. A second document, or a document after lines, is refused (`ErrSecondDocument`) and writes nothing. If a command has already written its document and then fails, stdout keeps that one document and only the exit code reports the failure; stderr stays empty.
 - **Terminal.** Prompts read through a `Terminal` (`Interactive`, `ReadLine`, `ReadSecret`), real (`golang.org/x/term` on stdin) or scripted in tests (`cli/fake`); the question is written to **stderr**. Interactive means stdin is a terminal; a pipe, `/dev/null` and a closed stdin are not. Nothing is ever read from a non-terminal stdin for a confirmation, so piped data meant for a command is never consumed by one. Reads are bounded (4 KiB per line).
 - **Confirm** (`c.Confirm(question)`). Writes `<question> [y/N] ` (es: `[s/N]`). Yes is `y`/`yes` (es also `s`/`si`/`sí`), case-insensitive; Enter, anything else and end of input (Ctrl-D) are **No** and the command stops without changing anything. `--yes` answers yes without asking. Without `--yes`, `--json` or no terminal is `LAI-CLI-007` (exit 2). **ConfirmTyped** (`c.ConfirmTyped(prompt, expected)`) asks the user to type `expected` exactly (the model id of `delete --allow-last-copy`); `--yes` does **not** answer it (a person decides), so without a terminal it is `LAI-CLI-007` even with `--yes`. Ctrl-C at either prompt ends the command at once with exit 130 and **no message** (nothing had started, so "still running in the background" would be false).
@@ -185,14 +185,14 @@ Each command lists: synopsis, flags, transport (API route or **[local]**), offli
 ```
 aictl status [--watch]
 ```
-`GET /status`. `--watch` redraws every 2 s and on events (TTY only). Offline: works (reports `Internet: not checked` in offline/survival).
+`GET /status`. `--watch` redraws every 2 s and whenever the agent publishes an event (`GET /events`, any type, bursts coalesced to one redraw at most every 0.5 s; if the stream cannot be opened it only polls). `--watch` needs a terminal and is refused with `--json` (exit 2, `LAI-CLI-005`); Ctrl-C ends it with exit 0; it has no overall deadline unless `--timeout` is given (each request still has its own 10 s). A refresh that fails (the agent restarting) is drawn as the problem and retried on the next tick. Offline: works (reports `Internet: not checked` in offline/survival).
 ```
 Node ai-n3 · HP ZBook (ai-n3) · profile small-8gb
-Mode       online      (since yesterday 22:10)
+Mode       online      (since 17 hours ago)
 Internet   ✓ full      (cloud reachable)
 Brain      ✓ Qwen 3.5 9B (qwen3.5-9b-q4km) — default, loaded
-Graphics   6.8 / 8.0 GB used · 61 °C
-Memory     5.1 GB free of 14.3 GB
+Graphics   6.6 / 8.0 GB used · 61 °C
+Memory     5.0 GB free of 14.0 GB
 Power      ✓ plugged in · battery 100%
 Services   ✓ llama   ✓ kiwix   ✓ whisper
 Ark        ! internal 82% ready · last sync 12 hours ago · no ark drive
@@ -202,22 +202,35 @@ Tailnet    ✓ published (pattern B)
 ! Running on battery.  [LAI-HW-012]
   → Fix: Plug in the charger. A laptop server stops when the battery runs out.
 ```
-(Alerts are printed after the summary in the problem layout of §3.3.) `--json`: `GET /status` body. Exit 0 even with alerts.
+(Alerts are printed after the summary in the problem layout of §3.3, on stdout.) `--json`: `GET /status` body. Exit 0 even with alerts.
+
+Line rules (AICTL-04). A section the agent leaves out is skipped, never printed as zeros; a time that cannot be read is left out. Times are relative (§3.3), so "since yesterday 22:10" is `since 17 hours ago`. Sizes in MiB are shown as `MiB / 1024` GB (§3.3), so 14336 MiB reads `14.0 GB`.
+- *Header*: `Node <id> · <display name> · profile <profile>`; the display name is left out when it equals the id.
+- *Mode*: the mode and `(since …)`; during a transition `online (switching to survival)`.
+- *Internet*: `✓ full (cloud reachable)`, `! internet (cloud not reachable)`, `! tailnet (no internet)`, `✗ no connection`; `not checked` for `not_checked` and always in `offline` and `survival`.
+- *Brain*: `✓ <display name> (<id>) — default, loaded` (the display name comes from a best-effort `GET /models` with a 3 s deadline; if that fails the id is shown alone, and `--json` never makes the call). Not loaded: `… loading <model>`, or `! no model loaded · default is <model>`, or `! no model stored on this computer`.
+- *Graphics*: `used / total GB` and the GPU temperature; `no graphics memory (CPU only)` without a GPU. *Power*: `✓ plugged in[, charging]`, `! on battery`, plus `battery N%` when there is a battery.
+- *Services*: `✓` running and healthy, `!` running but not healthy, `✗` stopped.
+- *Ark*: one `<kind> N% ready` per root (`!` unless every root is 100%), `last sync <when>` / `sync running` / `never synced`, `ark drive connected` / `no ark drive`.
+- *Cloud*: `✓ linked to <url> · last heartbeat …`, `! not connected right now, retrying`, `i paused until the computer is online` (state `stopped`), `not linked (optional)`. *Tailnet*: `✓ published (pattern B)`, `! not published`, `not managed by this node`.
 
 ### 4.2 `aictl models`  [10 s]
 ```
 aictl models [--loadable] [--all] [--engine llama|whisper|piper]
+aictl models show <model-id>
 ```
-`GET /models` (`?loadable=1` with `--loadable`). Default shows models in the profile plus any present; `--all` shows the whole catalog. Offline: works.
+`GET /models` (`?loadable=1` with `--loadable`, `?engine=` with `--engine`; another engine is exit 2). Default shows models in the profile plus any present (a client-side filter); `--all` shows the whole catalog; `--loadable` shows the agent's list as it comes. Offline: works.
 ```
 MODEL                    SIZE     STATUS    NOTES
 qwen3.5-9b-q4km          5.9 GB   loaded    default · chat, reasoning, coder
 small-vlm-q4km           3.2 GB   stored    vision
 tiny-fallback-q4km       2.1 GB   stored    chat
-qwen3.6-35b-a3b-q4km     19.0 GB  absent    ✗ does not fit: needs 11.0 GB of graphics memory, this computer has 8.0 GB
-whisper-small            0.5 GB   stored    speech-to-text
+qwen3.6-35b-a3b-q4km     19.0 GB  absent    ✗ Needs 11.0 GB of graphics memory; this…
+whisper-small            466 MB   stored    speech-to-text
 ```
-`--json`: `GET /models` body. Exit 0.
+NOTES carries `default`, the roles and, for a model that cannot be loaded, `✗` and the agent's `loadable_reason.message` (already in the user's language through `Accept-Language`). A table wider than 80 columns shortens its widest column with an ellipsis (§3.3), so a long reason is cut: `aictl models show <id>` prints it whole, with its code. `--json`: `GET /models` body. Exit 0.
+
+`aictl models show <model-id>` (`GET /models/{id}`, id escaped as one path segment): the display name, summary and a key/value block (engine, status, size, roles, default, loadable with the reason and its code, where it is stored, what it needs, aliases, last load time, file count). An unknown id is exit 5. `--json`: the body.
 
 ### 4.3 `aictl load <model>`  [load timeout × 3 + 60 s]
 ```
@@ -257,7 +270,9 @@ Show: `GET /models` → `default`. Set: `PUT /models/default`. Offline: works.
 ✓ The default model is now Qwen 3.5 9B. It starts automatically when the computer starts.
   It is not loaded right now. Load it with `aictl load qwen3.5-9b-q4km`.
 ```
-`--json`: `{"default": "…"}` (show) or the PUT body. Exit 6 when not present/loadable.
+`--json`: `{"default": "…"}` (show; `""` when none is set) or the PUT body. Exit 6 when not present/loadable.
+
+Show (AICTL-04): `The default model is Qwen 3.5 9B (qwen3.5-9b-q4km). It is loaded.` (or `It is not loaded right now.`, `It is not stored on this computer.`); with none set, `i No default model is set. Choose one with \`aictl models\`.`. Setting it (AICTL-05) is not available yet: `aictl default <model-id>` is exit 1 `not implemented yet`.
 
 ### 4.6 `aictl download <model>`  [30 s; `--wait`: none]
 ```
@@ -371,7 +386,7 @@ The ark commands are summarized in [ark-sync.md](ark-sync.md) §3.4, which is au
 Human output examples:
 ```
 $ aictl ark status
-Internal disk  internal     ! 82% ready   (180 of 220 GB budget, 273 GB free)
+Internal disk  internal     ! 82% ready   (180 GB of 220 GB budget, 273 GB free)
   missing: wikipedia-es-nopic (12.0 GB), osm-central-america (2.5 GB)
   last sync 12 hours ago: ok
 Ark drive      not connected
@@ -384,6 +399,10 @@ $ aictl ark drives
 AI-ARK  ark-3f9c0a12  /media/<user>/AI-ARK   ext4   900 GB free of 2.0 TB   ✓ ready
 ```
 `--json`: the API body (`ark status` prints `{"ark": <GET /ark>, "sync": <GET /ark/sync>}`; `sync --wait` prints the final run summary). Verify mismatches are shown with their `LAI-SYN-*` codes and exit 1.
+
+Read side (AICTL-04). `ark` and `ark status` take no arguments and make two reads, `GET /ark` then `GET /ark/sync`; the second is extra detail, so an answer from the agent that is an error (no run yet) leaves the status printed and `"sync": null` under `--json`. Each root is one line `<Internal disk|Ark drive>  <root id>  <symbol> N% ready` followed by `(<used> of <budget> budget, <free> free)` (on its own indented line when the first would pass 80 columns), a `missing:` line (items whose status is `missing`, with their size when known, wrapped under the label) and `last sync <when>: ok|failed|cancelled|skipped` from the root's `last_sync`, or `never synced`. A root of another kind than `internal` is the ark drive; with none, `Ark drive  not connected`. A run in progress adds `i Sync running: 22 of 31 items.` The symbol follows the root's `overall` colour (green `✓`, yellow `!`, red `✗`). **Percent ready** is the agent's `ready_pct` when it sends one, else `verified / (verified + stale + missing + skipped + failed + quarantined)` from the READY.json `counts` (orphans are not wanted, so they do not count); unknown when nothing is wanted (`not checked`). The `problems[]` of every root follow in the problem layout on stdout.
+
+`ark drives` prints one line per drive, columns aligned, no header: label, root id (`—` when the agent has none), mount path, filesystem, `<free> free of <size>`, and the state with a symbol (`ready` `✓`, `read-only` `!`, `not mounted` `!`, `not set up yet` `!`, `ejecting` `…`, `not shut down cleanly` `✗`, `cannot be used` `✗`); an unusable drive's `problems[]` follow indented (`  ✗ This drive is not formatted as ext4.  [LAI-ARK-002]`); with no drive, `i No ark drive found.`
 
 ### 4.11 `aictl catalog …`
 #### 4.11.1 `aictl catalog lint <dir>`  [local]
@@ -427,6 +446,8 @@ Installs a **draft** catalog on a test node so a new entry can be measured with 
 
 All work offline. Exit 2/6 for unknown or invalid profile (`LAI-CAT-003`). `--json`: `GET /profile` / `PUT` body.
 
+Read side (AICTL-04). `profile show` prints a key/value block: `Profile` (`small-8gb — Small GPU laptop (8 GB VRAM)`), `Suggested` (`✓ the same`, or `! <id>` when the agent would pick another), `Overrides` (the names of the overridden keys, or `none`), `Models`, `Content` and `Disk plan` (`180 GB planned of 220 GB budget`, with `!` and `(over budget)` when the plan is larger). `profile suggest` builds its sentence from the hardware, so besides `GET /profile` it makes a best-effort `GET /status` (backend, graphics memory, memory; sizes as in §3.3); if that fails the agent's own `match_reasons` stand in (`(backend cuda; vram 8192 MiB in 7000..11999)`). When the profile in use differs from the suggestion the command says so (`! This computer looks like "small-8gb" (…), but it uses "cpu-only". See \`aictl profile show\`.`) and still exits 0; with no suggestion, `i No profile matches this computer.`
+
 ### 4.13 `aictl services`  [10 s]
 ```
 aictl services
@@ -439,6 +460,7 @@ llama    running   ✓        8 hours ago
 kiwix    running   ✓        8 hours ago
 whisper  stopped   ✗        —   last exit code 1
 ```
+The body is `{"services": [...]}` (agent.md section 3.8.22; aictl also accepts a bare array). STATE is `running`, `stopped`, `failed` or `starting` from the unit's `active` state; HEALTH is `✓` healthy, `…` starting, `!` degraded, `✗` otherwise. A service without a unit (voices, maps) is shown by the supervisor's `state` (`available`, `starting`, `disabled`, `stopped`). The untitled last column holds notes (`last exit code N` for a non-zero exit, `disabled`, `restarted N times`) and exists only when some row has one. Only the list exists so far (AICTL-04): `start|stop|restart` is exit 1 `not implemented yet` until AICTL-10.
 
 ### 4.14 `aictl restart <service>`  [120 s]
 Alias of `aictl services restart <name>` (§4.13). `aictl restart llama|kiwix|whisper [--force]` → `POST /services/{name}/restart`. For llama it waits for the models to come back. `--force` needed for llama in survival mode. Offline: works.
@@ -451,18 +473,20 @@ Alias of `aictl services restart <name>` (§4.13). `aictl restart llama|kiwix|wh
 ```
 aictl logs [--unit agent|llama|kiwix|whisper|sync|drill] [-n <lines>] [--since <time>] [-f]
 ```
-`GET /logs` (`unit` default `agent`, `-n` default 100, max 2000). `-f` polls every 2 s with `since` = last line time. Secrets are already scrubbed by the agent. Offline: works.
+`GET /logs` (`unit` default `agent` in the CLI, which always sends it; `-n` default 100, 1 to 2000). `--since` takes an RFC 3339 time or an age (`15m`, `2h`) before now, sent as RFC 3339 UTC. `-f` polls every 2 s with `since` = the last line's time and `lines=2000`. Secrets are already scrubbed by the agent. Offline: works.
 ```
 08:00:05  llama_server: loading model
 08:00:12  llama_server: model loaded
 ```
 `--json`: response body; with `-f`, JSON Lines of `{"at","priority","message"}`.
 
+Details (AICTL-04). The time column is HH:MM:SS in this computer's time zone (with `-v`, RFC 3339 UTC). Lines are printed as the agent sent them, oldest first, never wrapped (so `grep` and `head` see whole lines); control characters (an escape sequence in a logged value could drive the terminal) are replaced by a space, tabs stay. A `truncated` answer prints `! The output was cut at the agent's size limit. Ask for fewer lines with -n.` on stderr. A bad `--unit`, `-n` or `--since` is exit 2 before any request. **`-f`**: the journal's `since` is inclusive, so the lines of the last printed second come back; they are matched by content (`at`, priority, message) and skipped, so a new line in the same second is still printed and identical lines are counted. Ctrl-C ends it with exit 0 and no message (it is how `tail -f` ends), a closed pipe ends it with exit 0, an error from the agent ends it with that error's exit code, and there is no overall deadline unless `--timeout` is given (each request has its own 10 s).
+
 ### 4.16 `aictl doctor`  [60 s]
 ```
 aictl doctor [--area AGT|NET|HW|LLM|CAT|SYN|ARK|SVC|CLD|SEC|…]... [--fast] [--all]
 ```
-`GET /doctor`. Prints problems grouped by severity (critical first), then a summary. `--all` also lists passed checks. Offline: works (checks that need the network report `info` "not checked offline").
+`GET /doctor` (`?area=HW&area=LLM` for each `--area`, `?fast=1` for `--fast`). `--area` may be repeated and may hold commas (`--area hw,net`); a value is two to five letters (case is ignored) and is sent in upper case, because the set of areas belongs to the agent. Prints problems grouped by severity (critical, error, warning, info), then a summary. `--all` also lists passed checks. Offline: works (checks that need the network report `info` "not checked offline").
 ```
 ✗ The AI model service is not running.  [LAI-LLM-001]
   → Fix: Run `aictl restart llama`. If it fails again, run `aictl logs --unit llama`.
@@ -471,7 +495,9 @@ aictl doctor [--area AGT|NET|HW|LLM|CAT|SYN|ARK|SVC|CLD|SEC|…]... [--fast] [--
 
 41 checks passed · 1 warning · 1 error
 ```
-**Doctor code display rules:** the code is always printed (dim, in brackets) after the message; codes are never translated; the fix line is mandatory; `-v` adds `check: <id>` and details. `--json`: response body. Exit **0** all ok/info, **8** warnings only, **9** any error/critical.
+The problems are the result of the command, so they go to stdout (`Printer.Finding`), not stderr. The summary counts passed checks first and then every severity that occurred, least serious first (`41 checks passed · 1 notice · 1 warning · 1 error · 1 critical problem`), wrapped at 80 columns; the counts are the larger of the agent's `summary` and the listed `results`. With no problem at all it is one line, `✓ 42 checks passed.`. `--all` lists the passed check ids as `✓ <id>` before the summary. With `-v` every problem is followed by its `details` and `  check: <id>`. `-q` shows errors and critical problems only (the exit code still reports warnings).
+
+**Doctor code display rules:** the code is always printed (dim, in brackets) after the message; codes are never translated; the fix line is mandatory; `-v` adds `check: <id>` and details. `--json`: response body. Exit **0** all ok/info, **8** warnings only, **9** any error/critical; the exit is decided by the listed results and the summary counts, whichever says more, and is the same with `--json`.
 
 ### 4.17 `aictl drill`  [30 min]
 ```
@@ -509,6 +535,8 @@ Node credential (nod_…):
 ✓ Connected to https://ai.marin.cr as ai-n3. The node shows up on the Nodes page.
 ```
 Errors: rejected credential → exit 6 `LAI-CLD-051`; network down → exit 0 with `! Saved. The cloud is not reachable right now; the node will connect by itself.  [LAI-CLD-053]`.
+
+`cloud status` (AICTL-04) prints a key/value block: `State` (`✓ linked`, `! not connected right now, retrying`, `i paused until the computer is online`), `Address`, `Node name`, `Last heartbeat`, `Credential`, `Key synced` (`✓ yes` / `! no`) and `Last error` when there is one. The credential is shown as the agent sends it, masked (`nod_…a1b2`); should an answer ever carry more, only the prefix and the last four characters are printed. A node that is not enrolled prints `i This node is not linked to a cloud app. That is fine: everything works without it.` and exits 0. `--json`: the body.
 
 ### 4.19 `aictl pin set`  [local] [root]
 Prompts twice (`New admin PIN (4 to 8 digits):`, `Repeat:`), or reads one line from stdin with `--pin-stdin`. Writes `/etc/localai/admin-pin` (argon2id, agent.md §3.9.2) atomically, 0600 root, and appends an audit line (`pin.set`, `actor.kind: cli-root`). The agent reads the file on every verify, so no restart is needed. Offline: works.
@@ -629,6 +657,8 @@ agent 0.1.0 · llama.cpp f3586e66b-cuda · catalog 2026.11.02-1
 ```
 CLI line is local; the second line needs the agent (`/health` + `/status`); agent down → `agent  not reachable` and exit 0. `--json`: `{"cli": {…}, "agent": {"version"} | null, "llama_build", "catalog_version"}`.
 
+Details (AICTL-04). `cli` is `{version, commit, os, arch, built_at}`; `llama_build` and `catalog_version` are `null` when unknown (agent down, no llama build, `/status` failing after `/health` answered: the second line then shows the agent version alone). "Agent down" means exit 3 (not reachable, or still starting after 10 s); any other failure of `/health` (not allowed, timed out, undecodable) is that failure with its own exit code, because "your user may not talk to the agent" (`LAI-CLI-002`) is information `version` must not hide. A different agent version raises the usual `LAI-CLI-003` warning on stderr after the two lines (also with `--json`, since the command succeeded).
+
 ### 4.27 `aictl update`  [local] [root]  [15 min]
 ```
 aictl update [--version <x.y.z>] [--check] [--yes]
@@ -724,6 +754,7 @@ Documented here so nobody re-invents them. They may change between versions with
 | Output | golden files for every command's human output in `en` and `es`, colour on/off, UTF-8 and ASCII symbol sets; problem layout (message, code, fix); 80-column wrap |
 | `--json` | every command emits exactly one JSON document; errors as envelope on stdout with empty stderr |
 | Confirmations | default No; `--yes`; non-interactive without `--yes` → exit 2 |
+| Read-only commands (AICTL-04) | golden `en`/`es` for `status` (online, survival, partial), `models`, `models show`, `default`, `services`, `logs`, `doctor` (mixed, warnings, all fine, `--all -v`), `version`, `ark`, `ark drives`, `cloud status`, `profile show/suggest` from fixture bodies that are valid answers of `agent/api/openapi.yaml`; `--json` equals the agent body (or the documented composite); `doctor` exits 0/8/9 with and without `--json`; agent down (exit 3, `version` still 0), 401/403 (exit 4), 503 starting retried, undecodable answer (exit 1 with request id), partial bodies, unknown fields ignored, 2000 long log lines, closed pipe (exit 0, `logs -f` stops), `logs -f` de-duplication and Ctrl-C, `status --watch` redraw on tick, on event and after a failed refresh |
 | Progress | SSE fake over the real event bus: load progress (TTY golden, non-TTY lines, `-q`, `--json`), rollback events, `Last-Event-ID` on reconnect, `gap` and `restart` resync, shutdown, agent down mid-wait (re-read finishes the wait), idle stream, deadline → exit 7, Ctrl-C → exit 130 and no cancel request sent, interrupt hook, SSE parser (multi-line data, comments, missing id, CRLF, oversized line) |
 | Local commands | `pin set` writes argon2id PHC string with mode 0600; `token rotate` format `lat_` + 43 chars; `catalog restore` atomic swap and lint; `backup-config` manifest and modes; `--restore` round trip; `docs render` refuses `.git` output, fills placeholders from a fixture inventory and follows the inventory lookup order of §4.22; `catalog use --test` refuses a failing lint (exit 2), keeps `catalog.prev/` and `restore` puts it back |
 
@@ -743,6 +774,16 @@ Run `aictl` against a real `aiagent serve` started by the integration harness (a
 | 8 | `aictl --json models \| jq '.models[0].id'` | a model id; no other output |
 | 9 | `LANG=es_CR.UTF-8 aictl status` | Spanish labels; codes unchanged |
 | 10 | `aictl mode survival`, then `aictl mode online` as operator | survival without PIN; leaving works for an operator over the socket |
+| 11 | `aictl status --watch` in one terminal; in another `aictl load small-vlm-q4km` | the Brain line changes within about a second of the event (not 2 s later); Ctrl-C leaves with exit 0 |
+| 12 | `aictl models`, `aictl models --all`, `aictl models show qwen3.5-9b-q4km`, `aictl default` | rows agree with `aictl --json models \| jq '.models[] \| {id,status}'`; the default matches the Brain line of `aictl status` |
+| 13 | `sudo systemctl stop localai-whisper; aictl services; aictl status; sudo systemctl start localai-whisper` | whisper `stopped ✗` (with `last exit code` only if it crashed), `✗ whisper` on the Services line; healthy again after the start |
+| 14 | `aictl logs --unit llama -n 20 --since 10m`; `aictl logs -f` while `aictl load …` runs; `aictl logs -n 2000 \| head -3; echo ${PIPESTATUS[0]}` | the last 20 lines of the last 10 minutes; new lines appear once each; Ctrl-C leaves with exit 0; the piped command ends silently with `0` |
+| 15 | `aictl doctor --fast --area HW; echo $?`, then unplug the charger and run `aictl doctor --all -v; echo $?` | `0`, then the battery warning with `check: hw.battery` and exit `8` (or `9` with an error listed) |
+| 16 | `aictl version`; `sudo systemctl stop localai-agent; aictl version; echo $?; sudo systemctl start localai-agent` | both lines; then `agent  not reachable` and `0`; with an older `aictl` binary the skew warning `[LAI-CLI-003]` on stderr |
+| 17 | `aictl ark` and `aictl ark drives` with the ark drive unplugged, then plugged in, then with a non-ext4 stick named AI-ARK | `Ark drive  not connected`; the drive's line `✓ ready`; the stick `✗ cannot be used` with its `[LAI-ARK-002]` problem |
+| 18 | `aictl cloud status` linked, then `aictl mode offline` | `✓ linked`, a heartbeat time, a masked credential; then `i paused until the computer is online` |
+| 19 | `aictl profile show; aictl profile suggest` | the profile in use with its plan; `✓ This computer matches "<id>" (cuda, 8.0 GB graphics memory, 14.0 GB memory).` |
+| 20 | Pull the network cable and stop Tailscale, then `time aictl status; echo $?` | `Internet  not checked`, exit `0`, well under a second (no read-only command waits for the network) |
 
 ## 10. Implementation breakdown
 
