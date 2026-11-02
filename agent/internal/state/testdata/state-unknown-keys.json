@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "written_at": "2026-11-02T15:04:05Z",
+  "agent_version": "0.1.0",
+  "mode": "survival",
+  "mode_changed_at": "2026-11-02T10:00:00Z",
+  "mode_transition": {
+    "op_id": "op_3h8x2k1m0p7w",
+    "from": "online",
+    "target": "offline",
+    "step": "tailscale_off",
+    "started_at": "2026-11-02T15:00:00Z",
+    "attempts": {"tailscale_off": 1},
+    "warnings": [{"code": "LAI-AGT-008", "message": "One step failed.", "future_warning_field": [1, 2, 3]}],
+    "actor": {"kind": "operator", "via": "cli", "future_actor_field": "x"},
+    "future_transition_field": {"deep": {"er": true}}
+  },
+  "pending_mode": null,
+  "agent": {"recent_starts": [], "future_agent_field": 7},
+  "models": {
+    "default": null,
+    "desired_loaded": [],
+    "last_used": {},
+    "last_load": {"id": "model-x", "op_id": "op_aaaaaaaaaaaa", "result": "failed", "load_ms": 0, "at": "2026-11-02T08:00:12Z", "future_load_field": 1.50},
+    "future_models_field": ["a", "b"]
+  },
+  "llama": {"build": "", "previous_build": null, "ini_sha256": "", "unit_sha256": "", "future_llama_field": null},
+  "key": {"fingerprint": "", "rotated_at": null, "cloud_synced": false, "future_key_field": "k"},
+  "tailscale": {"applied_pattern": "A", "applied_at": null, "future_tailscale_field": false},
+  "connectivity": {"value": "none", "since": null, "none_since": null, "future_conn_field": 3},
+  "migration": {"llama_qwen": {"state": "running", "step": "M3", "at": "2026-11-02T07:58:00Z", "future_migration_field": "m"}},
+  "update": {"last": {"result": "failed", "from": "0.0.9", "to": "0.1.0", "at": "2026-11-01T10:00:00Z", "future_update_field": 9}, "future_update_info_field": "u"},
+  "sync": {"_owner": "ark-sync.md", "last_result": "ok", "nested": {"unknown": [true, null, {"a": 1}]}},
+  "drill": {"_owner": "drill.md", "in_progress": {"run_id": "drl-0001", "captured": {"loaded_models": ["model-x"]}}},
+  "maps": {"_owner": "companion-services.md", "manual_location": {"lat": 9.93, "lon": -84.08, "label": "Place A", "set_at": "2026-11-02T01:00:00Z"}},
+  "future_top_level": {"added_by": "a newer agent", "n": 12345678901234567890}
+}

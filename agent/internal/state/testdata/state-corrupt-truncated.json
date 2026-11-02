@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "written_at": "2026-11-02T15:04:05Z",
+  "agent_version": "0.1.0",
+  "mode": "online",
+  "mode_changed_at": "2026-11-01T22:10:00Z",
+  "mode_transition": null,
+  "models": {"default": "qwen3.5-9b-q4km", "desired_lo

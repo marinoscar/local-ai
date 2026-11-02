@@ -1,0 +1,6 @@
+{
+  "written_at": "2026-11-02T15:04:05Z",
+  "agent_version": "0.1.0",
+  "mode": "online",
+  "models": {"default": "model-x"}
+}
