@@ -60,6 +60,25 @@ func TestResolve(t *testing.T) {
 	}
 }
 
+func TestInSkippedDir(t *testing.T) {
+	cases := map[string]bool{
+		"README.md":           false,
+		"docs/specs/agent.md": false,
+		"agent/vendor/github.com/x/y/CONTRIBUTING.md": true,
+		"vendor/README.md":                            true,
+		"apps/cloud/node_modules/pkg/README.md":       true,
+		".claude/worktrees/agent-x/docs/a.md":         true,
+		"docs/vendor-notes.md":                        false,
+		"docs/specs/vendor.md":                        false,
+		"agent/internal/vendorcheck/README.md":        false,
+	}
+	for rel, want := range cases {
+		if got := inSkippedDir(rel); got != want {
+			t.Errorf("inSkippedDir(%q) = %v, want %v", rel, got, want)
+		}
+	}
+}
+
 func TestParseMarkdown(t *testing.T) {
 	src := strings.Join([]string{
 		"# Title",                          // 1

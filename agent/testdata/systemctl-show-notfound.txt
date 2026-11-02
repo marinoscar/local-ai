@@ -1,0 +1,8 @@
+ActiveState=inactive
+SubState=dead
+MainPID=0
+NRestarts=0
+ExecMainStatus=0
+ExecMainExitTimestamp=
+ActiveEnterTimestamp=
+UnitFileState=

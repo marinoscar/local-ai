@@ -32,8 +32,10 @@ case "$mode" in
   *)      mapfile -t files < <(git ls-files --cached --others --exclude-standard) ;;
 esac
 
-# Never scan these: they define the patterns themselves.
-skip='^(scripts/check-redaction\.sh|\.gitleaks\.toml)$'
+# Never scan these: they define the patterns themselves, or are third-party source we do not author
+# (agent/vendor/: pinned by go.sum and proven by CI's `go mod vendor` check; their license, AUTHORS and
+# MAINTAINERS files name real people, which is not lab inventory).
+skip='^(scripts/check-redaction\.sh|\.gitleaks\.toml|agent/vendor/.*)$'
 
 # Directory of must-fail fixtures: skipped in tree/staged scans, but only when the
 # marker file is present, and only for this one directory (a stray marker elsewhere
