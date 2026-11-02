@@ -1,6 +1,17 @@
 # github.com/godbus/dbus/v5 v5.2.2
 ## explicit; go 1.20
 github.com/godbus/dbus/v5
+# github.com/yuin/goldmark v1.7.8
+## explicit; go 1.19
+github.com/yuin/goldmark
+github.com/yuin/goldmark/ast
+github.com/yuin/goldmark/extension
+github.com/yuin/goldmark/extension/ast
+github.com/yuin/goldmark/parser
+github.com/yuin/goldmark/renderer
+github.com/yuin/goldmark/renderer/html
+github.com/yuin/goldmark/text
+github.com/yuin/goldmark/util
 # golang.org/x/crypto v0.40.0
 ## explicit; go 1.23.0
 golang.org/x/crypto/argon2

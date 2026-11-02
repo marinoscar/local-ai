@@ -1,0 +1,62 @@
+{
+  "root": "/srv/localai/docs",
+  "rendered_at": "2026-11-02T15:04:05Z",
+  "docs": [
+    {
+      "slug": "survival-card-ai-n3",
+      "title": "Survival card ai-n3",
+      "title_es": "Tarjeta de supervivencia",
+      "kind": "card",
+      "html": "/docs/survival-card-ai-n3.html",
+      "pdf": null
+    },
+    {
+      "slug": "01-first",
+      "title": "01. First runbook: connect",
+      "title_es": null,
+      "kind": "runbook",
+      "html": "/docs/01-first.html",
+      "pdf": null
+    },
+    {
+      "slug": "02-second",
+      "title": "02. Second runbook",
+      "title_es": "Segunda guía",
+      "kind": "runbook",
+      "html": "/docs/02-second.html",
+      "pdf": null
+    },
+    {
+      "slug": "runbooks-README",
+      "title": "Mini runbooks",
+      "title_es": null,
+      "kind": "runbook",
+      "html": "/docs/runbooks-README.html",
+      "pdf": null
+    },
+    {
+      "slug": "mini",
+      "title": "Spec: mini",
+      "title_es": "Especificación mínima",
+      "kind": "spec",
+      "html": "/docs/mini.html",
+      "pdf": null
+    },
+    {
+      "slug": "arch",
+      "title": "Architecture note",
+      "title_es": null,
+      "kind": "architecture",
+      "html": "/docs/arch.html",
+      "pdf": null
+    },
+    {
+      "slug": "docs-README",
+      "title": "Mini docs map",
+      "title_es": null,
+      "kind": "other",
+      "html": "/docs/docs-README.html",
+      "pdf": null
+    }
+  ]
+}

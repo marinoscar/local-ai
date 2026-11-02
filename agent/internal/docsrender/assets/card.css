@@ -1,0 +1,34 @@
+/* Survival card (survival-portal.md 4.12): US Letter, content inside the 8.0 x 10.5 in safe area (0.25 in
+   margins on Letter, which also fits A4), English left and Spanish right, headings 18 pt, body 11 pt
+   minimum, black on white. Loaded after print.css, so this @page wins. */
+@page { size: Letter; margin: 0.25in; }
+
+body.card {
+  margin: 0 auto;
+  max-width: 8in;
+  background: #fff;
+  color: #000;
+  font-size: 11pt;
+  line-height: 1.2;
+}
+
+body.card table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0; font-size: 11pt; }
+body.card th, body.card td {
+  width: 50%;
+  border: 1px solid #000;
+  padding: 2pt 5pt;
+  vertical-align: top;
+  background: #fff;
+  color: #000;
+  overflow-wrap: anywhere;
+}
+body.card th { font-size: 18pt; line-height: 1.15; padding: 4pt 5pt; }
+body.card tr { break-inside: avoid; page-break-inside: avoid; }
+body.card p { margin: 3pt 0 0; font-size: 11pt; }
+body.card code { font-size: 11pt; background: none; padding: 0; font-weight: bold; }
+body.card strong { font-weight: bold; }
+body.card a { color: #000; text-decoration: none; }
+
+@media print {
+  body.card { font-size: 11pt; max-width: none; }
+}
