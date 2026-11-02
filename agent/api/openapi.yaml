@@ -1360,8 +1360,6 @@ paths:
         `maps`). agent.md section 3.8.22.
       x-localai-auth: op
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-09
       responses:
         "200":
           description: The services.
@@ -1387,8 +1385,6 @@ paths:
         `force: true` (`409 LAI-AGT-023`). agent.md section 3.8.22.
       x-localai-auth: op
       x-localai-timeout: "120 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-09
       requestBody:
         required: false
         content:
@@ -1416,7 +1412,12 @@ paths:
           description: "LAI-AGT-022 another operation is running; LAI-AGT-023 stopping llama in survival mode without force."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
-        "500": {$ref: "#/components/responses/Internal"}
+        "500":
+          $ref: "#/components/responses/Internal"
+          description: "LAI-AGT-099: a stop that did not stop, an allowlist violation or a bug (details service, unit, action, reason, active, sub, op_id)."
+        "502":
+          $ref: "#/components/responses/BadGateway"
+          description: "The start or restart left the unit not running: LAI-LLM-001 for llama, LAI-SVC-002 for kiwix, LAI-SVC-011 for whisper (details.reason is job_failed, timeout, wrong_state or unavailable)."
         "503": {$ref: "#/components/responses/Starting"}
         "504": {$ref: "#/components/responses/GatewayTimeout"}
 
@@ -1430,8 +1431,6 @@ paths:
         message passes the scrubber. agent.md section 3.8.23.
       x-localai-auth: op
       x-localai-timeout: "10 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-09
       parameters:
         - {name: unit, in: query, required: true, schema: {type: string, enum: [agent, llama, kiwix, whisper, sync, drill]}}
         - {name: lines, in: query, schema: {type: integer, minimum: 1, maximum: 2000, default: 200}}
@@ -1448,7 +1447,12 @@ paths:
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
-        "500": {$ref: "#/components/responses/Internal"}
+        "500":
+          $ref: "#/components/responses/Internal"
+          description: "LAI-AGT-099: journalctl failed (details.reason is journalctl_failed, details.exit_code) or a bug."
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+          description: "LAI-AGT-099: journalctl took longer than 5 s (details.reason is journalctl_timeout)."
 
   /events:
     get:

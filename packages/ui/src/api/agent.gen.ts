@@ -3401,7 +3401,10 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            /** @description LAI-AGT-099: a stop that did not stop, an allowlist violation or a bug (details service, unit, action, reason, active, sub, op_id). */
             500: components["responses"]["Internal"];
+            /** @description The start or restart left the unit not running: LAI-LLM-001 for llama, LAI-SVC-002 for kiwix, LAI-SVC-011 for whisper (details.reason is job_failed, timeout, wrong_state or unavailable). */
+            502: components["responses"]["BadGateway"];
             503: components["responses"]["Starting"];
             504: components["responses"]["GatewayTimeout"];
         };
@@ -3433,7 +3436,10 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            /** @description LAI-AGT-099: journalctl failed (details.reason is journalctl_failed, details.exit_code) or a bug. */
             500: components["responses"]["Internal"];
+            /** @description LAI-AGT-099: journalctl took longer than 5 s (details.reason is journalctl_timeout). */
+            504: components["responses"]["GatewayTimeout"];
         };
     };
     streamEvents: {
