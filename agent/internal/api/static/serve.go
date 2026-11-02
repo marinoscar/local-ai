@@ -82,23 +82,33 @@ func ServeFile(w http.ResponseWriter, r *http.Request, path string) error {
 	return nil
 }
 
-// ServeUnder serves rel (relative, decoded, as for SafeJoin) below root. A request for a directory
-// ("" for the root itself, or "sub/") is answered with the index file inside it, which goes through
-// SafeJoin too, so an index that is a symbolic link out of the root is not followed. Errors are as
-// for ServeFile; every SafeJoin failure is a 404.
-func ServeUnder(w http.ResponseWriter, r *http.Request, root, rel, index string) error {
+// Resolve returns the real path of rel below root for serving: the SafeJoin result, or, when that is
+// a directory ("" for the root itself, "sub" or "sub/"), the index file inside it, which goes through
+// SafeJoin too, so an index that is a symbolic link out of the root is not followed. Every failure is
+// a 404 *Error.
+func Resolve(root, rel, index string) (string, *Error) {
 	p, err := SafeJoin(root, rel)
 	if err != nil {
-		return notFound(err)
+		return "", notFound(err)
 	}
 	if isDir(p) {
 		if index == "" {
-			return notFound(errIsDir)
+			return "", notFound(errIsDir)
 		}
 		p, err = SafeJoin(root, path.Join(strings.TrimSuffix(rel, "/"), index))
 		if err != nil {
-			return notFound(err)
+			return "", notFound(err)
 		}
+	}
+	return p, nil
+}
+
+// ServeUnder serves rel (relative, decoded, as for SafeJoin) below root: Resolve, then ServeFile.
+// Errors are as for ServeFile; every SafeJoin failure is a 404.
+func ServeUnder(w http.ResponseWriter, r *http.Request, root, rel, index string) error {
+	p, err := Resolve(root, rel, index)
+	if err != nil {
+		return err
 	}
 	return ServeFile(w, r, p)
 }
