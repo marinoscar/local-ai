@@ -1,0 +1,2 @@
+# matches the literal in the temp inventory the test creates
+the VPS is zephyr-quokka-9931 today

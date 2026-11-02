@@ -1,0 +1,5 @@
+# fake tokens, low entropy
+lat_aaaaaaaaaaaaaaaaaaaaaaaa
+nod_bbbbbbbbbbbbbbbbbbbbbbbb
+lai_cccccccccccccccccccccccc
+pat_dddddddddddddddddddddddd

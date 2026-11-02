@@ -1,0 +1,2 @@
+# fake zone id
+zone Z0123456789ABC

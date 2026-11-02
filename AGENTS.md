@@ -72,6 +72,26 @@ apps/desktop/               ai-desktop Electron shell                           
 scripts/                    repo tooling (redaction check, doc rendering)
 ```
 
+## Local setup (once per clone)
+
+1. **Install the pre-commit hook** (blocks commits that leak lab inventory or secrets):
+   `scripts/install-hooks.sh`. It is idempotent: run it again any time. It makes git run
+   `scripts/check-redaction.sh --staged` before every commit.
+2. **Create your private inventory** (owner machines only): `cp inventory.example.yaml inventory.local.yaml`
+   and fill in the real values. It is git-ignored. When it exists, `check-redaction.sh` also
+   scans for its literal values (see issue #135).
+3. **Install gitleaks** (optional locally, always run in CI) to reproduce the CI secret scan:
+   - macOS: `brew install gitleaks`
+   - Linux or anywhere with Go: `go install github.com/gitleaks/gitleaks/v8@latest`
+   - or download a release binary from <https://github.com/gitleaks/gitleaks/releases>
+
+   Then run `gitleaks detect --config .gitleaks.toml --redact` from the repo root.
+4. **Check before you push:** `scripts/check-redaction.sh` and `scripts/tests/test-redaction.sh`.
+
+The redaction check never prints a matched value: only `LEAK <file>:<line>`. Test fixtures with
+deliberately fake leaks live in `scripts/tests/redaction/`, which `check-redaction.sh` skips only
+while the marker file `scripts/tests/redaction/.redaction-fixtures` exists there.
+
 ## Tech stack (decided, see ADRs)
 - **Agent + CLI:** Go (latest stable), one static binary (`CGO_ENABLED=0`), built for linux/amd64 and linux/arm64. It uses the standard library `net/http`, `log/slog` for structured JSON logs, and `gopkg.in/yaml.v3`. Keep dependencies minimal and vendored (`go mod vendor`) so the kit can rebuild the agent offline. See ADR-0001.
 - **Local UI / Survival Portal:** React + Vite, built to static files and embedded with `go:embed`. It must not load any network assets.

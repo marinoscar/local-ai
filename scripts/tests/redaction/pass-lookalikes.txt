@@ -1,0 +1,11 @@
+# look-alikes that must NOT be flagged
+metric localai_drill_last_finished_timestamp 1
+CGNAT range 100.64/10 is documented, not an address
+placeholder <TAILNET_IP_AI_N1> and <VPS_PUBLIC_IP> and <ROUTE53_ZONE_ID>
+below range 100.63.255.255 and above range 100.128.0.1
+not a LAN address 192.169.0.1 and 10.0.0.1
+words tailscale tailnet taildead tail12345
+short token lai_short and zone Z0SHORT
+63 hex 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde
+allowed mail noreply@marin.cr and admin@example.test
+public host ai-n1.marin.cr and machine ai-marin-linux

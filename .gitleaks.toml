@@ -22,3 +22,9 @@ regex = '''\btail[0-9a-f]{6}\b'''
 id = "route53-zone"
 description = "Route53 hosted zone id"
 regex = '''\bZ0[0-9A-Z]{10,}\b'''
+
+# The redaction self-test fixtures contain deliberately fake, forbidden-looking values.
+# scripts/check-redaction.sh --file proves they are caught; gitleaks must not fail on them.
+[allowlist]
+description = "redaction test fixtures"
+paths = ['''scripts/tests/redaction/.*''']

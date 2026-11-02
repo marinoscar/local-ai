@@ -1,0 +1,2 @@
+# non-allowed email
+owner person@corp.example.org
