@@ -57,6 +57,22 @@ var messages = map[string]map[string]text{
 		langEN: {"This action needs the admin PIN.", "Enter the admin PIN when asked, or run the command with `sudo`."},
 		langES: {"Esta acción requiere el PIN de administrador.", "Introduzca el PIN de administrador cuando se pida, o ejecute el comando con `sudo`."},
 	},
+	CodeWrongPIN: {
+		langEN: {"Wrong PIN.", "Try again. After 5 wrong tries you must wait 5 minutes."},
+		langES: {"PIN incorrecto.", "Inténtelo de nuevo. Tras 5 intentos fallidos debe esperar 5 minutos."},
+	},
+	CodeNoPIN: {
+		langEN: {"No admin PIN has been set.", "Run `sudo aictl pin set`."},
+		langES: {"No se ha establecido un PIN de administrador.", "Ejecute `sudo aictl pin set`."},
+	},
+	CodeBadLoginCode: {
+		langEN: {"The login code is wrong, used, or expired.", "Get a new code with `aictl ui-code`."},
+		langES: {"El código de acceso es incorrecto, ya se usó o caducó.", "Obtenga un código nuevo con `aictl ui-code`."},
+	},
+	CodeSessionExpired: {
+		langEN: {"Your session expired.", "Sign in again."},
+		langES: {"Su sesión caducó.", "Inicie sesión de nuevo."},
+	},
 	CodeRateLimited: {
 		langEN: {"Too many wrong PIN or login-code attempts.", "Wait the time shown. Forgotten PIN: `sudo aictl pin set`."},
 		langES: {"Demasiados intentos fallidos de PIN o de código de acceso.", "Espere el tiempo indicado. Si olvidó el PIN: `sudo aictl pin set`."},

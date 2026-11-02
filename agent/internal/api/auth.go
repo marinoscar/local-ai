@@ -58,6 +58,17 @@ type Principal struct {
 	Credential Credential
 	// Via refines the kind for logs and audit: "bearer", "session", "uid=1000", "pin", ...
 	Via string
+	// UID is the socket peer's uid. It is meaningful only when Credential is CredSocket.
+	UID int
+	// TokenFingerprint is the redacted agent token of a bearer request (lat_...last4), the form
+	// logs and audit may carry. It is never the token.
+	TokenFingerprint string
+	// SessionID is the internal handle of the operator session (a hash of the cookie value, never
+	// the cookie itself), set when Credential is CredSession.
+	SessionID string
+	// PortalSessionID is the id the PortalSessions store gave the Portal session, set when
+	// Credential is CredPortal.
+	PortalSessionID string
 }
 
 // Anonymous is the principal of a request without credentials.
