@@ -153,7 +153,7 @@ func TestPortalHook(t *testing.T) {
 		wantPrincipal(t, e.do(req{method: "POST", path: "/mutate", cookies: portalCookie, header: map[string]string{"Origin": testOrigin}}), "portal:portal")
 	})
 	t.Run("no hook configured: the cookie is ignored", func(t *testing.T) {
-		svc := New(Config{TokenPath: e.tokPath, PINPath: e.pinPath, Clock: e.clock, Groups: e.groups})
+		svc := New(Config{TokenPath: e.tokPath, PINPath: e.pinPath, Clock: e.clock, Groups: e.groups, Logger: e.svc.log})
 		r := req{path: "/open", cookies: portalCookie}.build()
 		p, err := svc.Authenticate(r, &api.Route{Auth: []api.Level{api.AuthPortal, api.AuthOp}})
 		if p.Kind != api.KindAnonymous || err == nil {
