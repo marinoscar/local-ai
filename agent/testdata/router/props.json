@@ -1,0 +1,8 @@
+{
+  "default_generation_settings": {"n_ctx": 65536, "params": {"temperature": 0.8}},
+  "total_slots": 1,
+  "model_path": "/var/lib/localai/models/model-a-q4km.gguf",
+  "chat_template": "{{ example }}",
+  "build_info": "b1234-abcdef0",
+  "is_sleeping": false
+}

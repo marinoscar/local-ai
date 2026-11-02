@@ -1,0 +1,14 @@
+{
+  "data": [{
+    "id": "org-example/small-it-GGUF:Q4_K_M",
+    "path": "/home/example/.cache/llama.cpp/org-example_small-it-Q4_K_M.gguf",
+    "status": {
+      "value": "loaded",
+      "args": ["llama-server", "-ctx", "4096"]
+    },
+    "architecture": {
+      "input_modalities": ["text", "image"],
+      "output_modalities": ["text"]
+    }
+  }]
+}

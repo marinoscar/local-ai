@@ -1,0 +1,16 @@
+: ping
+
+data: {"model":"model-a-q4km","event":"model_status","data":{"status":"loading"}}
+
+data: {"model":"model-a-q4km","event":"status_change","data":{"status":"loading","progress":{"stages":["text_model","mmproj_model"],"current":"text_model","value":0.5}}}
+
+data: {"model":"org-example/stray-GGUF:Q8_0","event":"download_progress","data":{"https://models.example.test/model.gguf":{"done":195963406,"total":219307424}}}
+
+data: {"model":"model-a-q4km","event":"status_change","data":{"status":"loaded","info":{"architecture":{"input_modalities":["text"]}}}}
+
+data: {"model":"model-a-q4km","event":"status_change","data":{"status":"unloaded","exit_code":1}}
+
+data: {"model":"model-a-q4km","event":"model_remove"}
+
+data: {"model":"*","event":"models_reload"}
+
