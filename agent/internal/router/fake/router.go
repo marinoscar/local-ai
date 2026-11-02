@@ -231,7 +231,8 @@ func (r *Router) find(id string) *Model {
 
 // settle finishes a load whose time has come.
 func (r *Router) settle(m *Model) {
-	if m.Status != Loading || r.now().Before(m.readyAt) {
+	// readyAt is zero for a load a test holds open with Set(id, Loading).
+	if m.Status != Loading || m.readyAt.IsZero() || r.now().Before(m.readyAt) {
 		return
 	}
 	if m.failOnLoad != 0 {
