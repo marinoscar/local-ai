@@ -189,6 +189,16 @@ func (q req) build() *http.Request {
 // expectError can hand both to apitest.RecordResult.
 var served sync.Map // *httptest.ResponseRecorder -> *http.Request
 
+// recordOK records a success response served by do against openapi.yaml; the errors of a test are
+// recorded by expectError, so they are left alone here.
+func recordOK(t testing.TB, rec *httptest.ResponseRecorder) *httptest.ResponseRecorder {
+	t.Helper()
+	if r, ok := served.Load(rec); ok && rec.Code < 400 {
+		apitest.RecordResult(t, r.(*http.Request), rec)
+	}
+	return rec
+}
+
 func do(h http.Handler, q req) *httptest.ResponseRecorder {
 	r := q.build()
 	rec := httptest.NewRecorder()

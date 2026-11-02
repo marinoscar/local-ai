@@ -50,6 +50,10 @@ func implementedRoutes(t *testing.T) []api.Route {
 	routes = append(routes, svc.Routes()...)
 
 	routes = append(routes, hardware.Route(hwfake.New(hardware.Snapshot{}), hardware.HandlerOptions{}))
+
+	// Only the metadata (method, pattern, auth, timeout) is compared, so the dependencies stay empty.
+	routes = append(routes, api.ServicesRoutes(api.ServicesDeps{})...)
+	routes = append(routes, api.LogsRoutes(api.LogsDeps{})...)
 	return routes
 }
 
@@ -89,7 +93,7 @@ func TestPlannedOperations(t *testing.T) {
 		issue, _ := op.Raw["x-localai-issue"].(string)
 		byIssue[issue] = append(byIssue[issue], op.Key())
 	}
-	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware"} {
+	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs"} {
 		if !implementedKeys[key] {
 			t.Errorf("%s must be implemented", key)
 		}
