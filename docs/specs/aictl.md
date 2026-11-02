@@ -51,6 +51,8 @@ aiagent ctl [global flags] <command> …        (same, when the /usr/local/bin/a
 
 Environment: `LOCALAI_SOCKET`, `LOCALAI_URL`, `LOCALAI_TOKEN_FILE` override the defaults (flags win). The PIN is **never** accepted as a flag or environment variable (it would leak through shell history and `/proc/<pid>/environ`).
 
+**Parsing rules (AICTL-01).** Global flags come **before** the command name; a flag after it belongs to the command (stdlib `flag`, one `FlagSet` per command). Command flags may appear before, between or after positional arguments; `--` ends the flags. `-y` and `--yes` (and the other short forms) are the same flag; `--timeout 0` means no deadline; a negative `--timeout`, an unknown `--lang`, an unknown option or a missing option value is `LAI-CLI-005` / exit 2. `aictl help [command [subcommand]]` and `-h`/`--help` print help (exit 0); `aictl` with no command prints the same help on stderr and exits 2; help lists every command with its marks (`[local]`, `[root]`, `[admin]`) and default timeout. `--url` is validated (http, `127.0.0.1`, `localhost` or `[::1]`, no credentials, no path) when the client is first needed, never for a `[local]` command, so offline recovery works with any transport setting; a bad value is `LAI-CLI-005` / exit 2 and no request is made, even when the socket would have worked.
+
 ### 3.2 Transport and authentication
 
 #### 3.2.1 Default: unix socket
@@ -73,6 +75,17 @@ For an **[admin]** command:
 
 #### 3.2.4 Version skew
 Every API command reads `GET /health` once (cached for the process). If the agent's version differs from the CLI's (possible for a few seconds during self-update, or when a recovery binary is used) → warning `LAI-CLI-003` on stderr; the command continues. Unknown fields in responses are ignored; a response that cannot be decoded at all → exit 1 `LAI-CLI-009`.
+
+#### 3.2.5 Client behaviour (AICTL-01)
+Implemented in `agent/internal/cli` (`Client`, `Config`, `Registry`, `ExitFor`); later commands only register themselves (`cli.Register(&cli.Command{...})`) and return errors.
+- **Transport choice is made once per process**, on the first request, which is the `/health` call of §3.2.4. Any failure to *connect* to the socket (missing path, nobody listening, `EACCES`) falls back to TCP **if** the token file is readable and not empty; the token file is read only then. If TCP also fails to connect, the socket error decides: `EACCES`/`EPERM` is `LAI-CLI-002` (exit 4), anything else `LAI-CLI-001` (exit 3). A socket error with an unreadable token gives the same two results.
+- **Retry window.** A `503` whose code is `LAI-AGT-024` is retried every second for up to 10 s, then `LAI-CLI-001` (exit 3) with `details.reason: "starting"`. A `503` with any other code is not retried and is exit 3 with the agent's own envelope. After the agent has answered once in this process, a lost connection (it is restarting) is retried in the same window; the very first contact is never retried, so an agent that is down fails at once.
+- **Deadline.** The command's deadline (`--timeout`, else its default) covers `/health`, retries and the call itself; expiry is `LAI-CLI-004` (exit 7). Ctrl-C cancels the request, never the operation, and is `LAI-CLI-010` (exit 130).
+- **Requests.** `Accept-Language` carries the language; every mutating request (`POST`, `PUT`, `PATCH`, `DELETE`) carries `Content-Type: application/json` and the body `{}` when there is none; reads carry no body. The TCP client ignores the proxy environment and never follows redirects. A body over 32 MiB is `LAI-CLI-009`.
+- **Errors.** A non-2xx answer is decoded into `APIError{Status, Code, Message, Fix, Details, RequestID, OpID}`; one that is not the agent's envelope (no `error.code`) is `LAI-CLI-009` (exit 1) and the request id is printed. `ExitFor(err)` is the single mapping to exit codes; a command returns `ExitWith(8)` or `ExitWith(9)` for results that are not failures.
+- **Output of the framework's own problems.** Human mode follows §3.3 (message, two spaces, `[code]`, then `→ Fix:` / `→ Solución:`; `-v` adds details and the request id; the request id is always shown for `LAI-CLI-009`). With `--json` a failure is the envelope on stdout and stderr stays empty. Warnings (`LAI-CLI-003`) go to stderr after the command, except with `--quiet`, and with `--json` when the command failed.
+- **Broken pipe.** A write error `EPIPE` on stdout ends the run with exit 0 and no message; later writes are discarded.
+- **Debug.** `LOCALAI_CLI_DEBUG=1` logs one JSON line per request and response to stderr through the agent's scrubber (`internal/logx`): the `Authorization` value and secret-named body fields are redacted.
 
 ### 3.3 Output style guide (human mode)
 
@@ -356,7 +369,7 @@ catalog/models.yaml:models[3].source.revision  LAI-CAT-011  revision must be a 4
 ✗ 1 problem found.
 ```
 Each problem is one line `<file>:<yaml-path>  LAI-CAT-0NN  <message>` (two spaces between fields; this form is canonical and catalog.md §6 uses it). Exit 0 valid, **2** invalid (catalog.md §6 contract). `--json`: `{"valid": false, "problems": [{"code","file","path","message"}]}`. `aictl catalog lint --json <dir>` is a stable machine interface: the cloud runs it on the VPS to lint imported catalogs ([cloud-app.md](cloud-app.md) §4.6, `LOCALAI_AICTL_PATH`), and it never needs an agent, root or network (except `--online`).
-The CAT-01 implementation is a thin hook in `internal/cli` (flags parsed by hand until AICTL-01); a problem about a whole file has an empty yaml-path (`<file>:  LAI-CAT-019  ...`), and results go to stdout in both modes (stderr only for usage errors).
+The CAT-01 implementation is a `[local]` command registered with the AICTL-01 framework (`internal/cli/catalog_lint.go`; it never builds the agent client, `--json` and `--online` may come before or after the directory, and a global `--json` before `catalog` works too); a problem about a whole file has an empty yaml-path (`<file>:  LAI-CAT-019  ...`), and results go to stdout in both modes (stderr only for usage errors).
 
 #### 4.11.2 `aictl catalog refresh`  [120 s]
 `POST /catalog/refresh`. Needs network; refused in offline/survival (exit 6).
