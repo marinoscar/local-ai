@@ -1985,6 +1985,8 @@ export interface components {
                 "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
                 /** @description localai_session=<token>. */
                 "Set-Cookie"?: string;
+                /** @description no-store: the response sets a credential. */
+                "Cache-Control"?: "no-store";
                 [name: string]: unknown;
             };
             content?: never;
@@ -2207,6 +2209,8 @@ export interface operations {
                     "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
                     /** @description localai_session= with Max-Age=0. */
                     "Set-Cookie"?: string;
+                    /** @description no-store. */
+                    "Cache-Control"?: "no-store";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -2264,6 +2268,8 @@ export interface operations {
                 headers: {
                     "X-Request-Id": components["headers"]["XRequestId"];
                     "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    /** @description no-store: the body carries a credential. */
+                    "Cache-Control"?: "no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2297,6 +2303,8 @@ export interface operations {
                 headers: {
                     "X-Request-Id": components["headers"]["XRequestId"];
                     "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    /** @description no-store: the body carries a credential. */
+                    "Cache-Control"?: "no-store";
                     [name: string]: unknown;
                 };
                 content: {

@@ -89,8 +89,6 @@ paths:
       x-localai-auth: op
       x-localai-auth-note: Bearer token only; a cookie or Portal session cannot mint a session.
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-06
       requestBody:
         required: true
         content:
@@ -113,8 +111,6 @@ paths:
       x-localai-auth: op
       x-localai-auth-note: Session cookie.
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-06
       responses:
         "204":
           description: The session ended.
@@ -122,6 +118,7 @@ paths:
             X-Request-Id: {$ref: "#/components/headers/XRequestId"}
             X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
             Set-Cookie: {description: "localai_session= with Max-Age=0.", schema: {type: string}}
+            Cache-Control: {description: "no-store.", schema: {type: string, enum: [no-store]}}
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -138,8 +135,6 @@ paths:
       description: The code comes from `POST /ui-code`. Single use, 5 minutes. agent.md section 3.8.2.
       x-localai-auth: none
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-06
       requestBody:
         required: true
         content:
@@ -170,8 +165,6 @@ paths:
       description: At most 3 unexpired codes exist; minting a 4th invalidates the oldest. Audit event `ui_code.mint`. agent.md section 3.8.2.
       x-localai-auth: "admin*"
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-06
       requestBody:
         required: true
         content:
@@ -183,6 +176,7 @@ paths:
           headers:
             X-Request-Id: {$ref: "#/components/headers/XRequestId"}
             X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+            Cache-Control: {description: "no-store: the body carries a credential.", schema: {type: string, enum: [no-store]}}
           content:
             application/json:
               schema: {$ref: "#/components/schemas/UiCode"}
@@ -206,8 +200,6 @@ paths:
         routes; it lasts 5 minutes. Audit events `pin.verify.ok` and `pin.verify.fail`. agent.md section 3.8.3.
       x-localai-auth: op
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-06
       requestBody:
         required: true
         content:
@@ -221,6 +213,7 @@ paths:
           headers:
             X-Request-Id: {$ref: "#/components/headers/XRequestId"}
             X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+            Cache-Control: {description: "no-store: the body carries a credential.", schema: {type: string, enum: [no-store]}}
           content:
             application/json:
               schema: {$ref: "#/components/schemas/PinGrant"}
@@ -2086,6 +2079,7 @@ components:
         X-Request-Id: {$ref: "#/components/headers/XRequestId"}
         X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
         Set-Cookie: {description: "localai_session=<token>.", schema: {type: string}}
+        Cache-Control: {description: "no-store: the response sets a credential.", schema: {type: string, enum: [no-store]}}
     InvalidRequest:
       description: "400 LAI-AGT-020: malformed JSON, unknown field (details.field), invalid value."
       headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
