@@ -266,17 +266,40 @@ All calls go to `http://127.0.0.1:8080` with `Authorization: Bearer <key>` (ever
 
 | Call | Purpose | Notes |
 |---|---|---|
-| `GET /health` | liveness | public; `200 {"status":"ok"}` |
+| `GET /health` | liveness | public (`/v1/health` too); `200 {"status":"ok"}`, or `503` with an error object while the model of a single-mode server is loading |
 | `GET /models` | status of every preset | `data[].id`, `aliases`, `tags`, `status.value` ∈ `unloaded\|loading\|loaded\|sleeping\|downloading\|incomplete`, `status.failed`, `status.exit_code`, optional `memory.{min,max,effective}` (with `--models-memory-margin`) |
 | `GET /models?reload=1` | re-read `models.ini` and reconcile | a **running** model whose preset changed or was removed is **unloaded** by the router (`server-models.cpp` reload path). See the reload-safety rule §4.2 step 8 |
 | `POST /models/load` `{"model": "<id>"}` | start a child | returns `{"success": true}` immediately; readiness is observed via `GET /models` |
 | `POST /models/unload` `{"model": "<id>"}` | stop a child | child gets `stop-timeout` (10 s) then is force-killed |
-| `GET /models/sse` | progress events (`model_status` with `progress.stages/current/value`) | optional; used for UI progress only, never for correctness |
+| `GET /models/sse` | progress events (`model_status` / `status_change` with `progress.stages/current/value`) | optional; used for UI progress and to nudge the watcher, never for correctness. Frame format in §3.6.1 |
 | `GET /v1/models` | the OpenAI list | in router mode this is the same handler as `/models` |
 | `GET /props?model=<id>` | `n_ctx`, build info of a loaded model | doctor checks only |
 | `POST /v1/chat/completions` | doctor/drill smoke test | `max_tokens: 8` |
 
 Never used: `POST /models` (download), `DELETE /models`, `?autoload=true`.
+
+#### 3.6.1 The client (`internal/router`, ROUTER-01)
+
+The wire facts below were checked against `tools/server/README.md`, `server-models.cpp` and `server-http.cpp` at llama.cpp commit `f3586e66b`; the manual checks R9 and R10 (§9.3) re-verify the two that matter most after a commit change.
+
+**Shapes.**
+- `status.value` is one of `unloaded`, `loading`, `loaded`, `sleeping`, `downloading`, `downloaded`, `incomplete`. A value outside the list is kept as is and treated as "not running" (logged once per change); it is never a parse error, so a llama.cpp upgrade cannot blind the watcher.
+- `status.failed: true` and `status.exit_code` appear **only** when the model is not running and its child exited with a non-zero code (the router's `is_failed`). A model that was never started has neither.
+- `status.args` is the child's command line (no key: the router strips it); `status.preset` is the INI section text; `status.progress` is, for a downloading model, a map `URL → {done, total}`. Loading progress is **not** in `GET /models`, only on the SSE stream.
+- `source` is `preset`, `models_dir` or `cache`; `aliases` and `tags` are lists; `context_length` is the training context. `architecture.{input,output}_modalities` are lists of strings.
+- `memory` exists only with `--models-memory-margin`: `{status, min, max, effective}`, each estimate `{n_ctx, devices: [{kind: "device"|"host", name, total, free, model, context, compute}]}` in **bytes**; `effective` is `null` unless the model is loaded. The planner's `used_v(k)` is the sum of `model + context + compute` over the entries of kind `device`, rounded up to MiB (`ModelStatus.EffectiveMiB`); the `host` entry is RAM and is ignored.
+- Decoding is strict about shape (a body that is not an object with a `data` array, an entry without `id` or `status.value`, a duplicate id, a wrong type, a negative size, trailing data, a body over 8 MiB: `ErrMalformed`) and tolerant about content (unknown fields and unknown values are ignored).
+- Errors are `{"error": {"code", "message", "type"}}`. `POST /models/load` of a running model is `400` ("model is already running"), of an unknown model `404`; `POST /models/unload` of a model that is not running or unknown is `400`. A wrong or missing key is `401` ("Invalid API Key", `authentication_error`).
+- SSE: `Content-Type: text/event-stream`, one `data: <json>` line plus a blank line per event, **no** `event:` line. The JSON is `{"model": "<id>" | "*", "event": "<name>", "data": {...}}`. Names seen: `model_status` (the first, at spawn), `status_change` (every later change; `data.status`, `data.exit_code` with `unloaded`, `data.progress {stages, current, value}` while loading), `download_progress`, `download_finished`, `download_failed`, `model_remove`, `models_reload` (model `*`), `model_memory`. The README documents `model_status` only; the client treats `model_status` and `status_change` alike and skips a frame it cannot use without ending the stream. A line over 1 MiB ends the stream.
+
+**Rules.**
+1. **Base URL and key.** `http://127.0.0.1:<llama.port>`; the client refuses any base URL that is not plain `http` on a loopback address (no credentials, path or query). The key is read from `/etc/localai/api-key`, re-read when the file's mtime or size changes, after `key.rotated` and after a `401` (§4.11), and sent only as `Authorization: Bearer`. `/health` is sent without it. The key never appears in a log line, an error, an event or a finding: logs carry its fingerprint (last four characters). A key file that is missing, not a regular file or holds an unusable value fails the call before anything is sent.
+2. **A `401` is retried once**, and only when re-reading the key file gives a different key (the key was rotated between two reads). An unchanged key is a real `401`: `LAI-LLM-005`, never retried.
+3. **Transport hardening.** The proxy environment is ignored; the dialer connects only to loopback addresses; a redirect is never followed (it is an error); response bodies are capped (8 MiB for `GET /models`, 1 MiB otherwise); compression is off.
+4. **Timeouts.** 5 s per call; `POST /v1/chat/completions` (the smoke test) 30 s, because it generates tokens and a CPU node is slow; the SSE stream has no overall timeout, only 5 s to receive its headers.
+5. **Error classes.** Connection refused or reset, a timeout, or `502`/`503`/`504` is `ErrDown` (`LAI-LLM-004`); `401` is `ErrUnauthorized` (`LAI-LLM-005`); `404` is `ErrNotFound`; any other non-2xx is an `*HTTPError` with the router's message (scrubbed, at most 200 bytes); an unusable body is `ErrMalformed`. A call cancelled by its caller returns the context error, not `ErrDown`.
+6. **Allow list.** The client can issue only the routes of the table above. A download (`POST /models`), a delete (`DELETE /models`) and any `autoload` query are refused with `ErrRefused` before anything is sent; the tests assert it on the request log of the fake router.
+7. **The fake.** `internal/router/fake` is a router served over HTTP with scripted model states (`Set`, `Crash`, `FailLoad`, `Restart`, load time), failure modes (`Down`, `Reset`, `Delay`, `Malformed`, `Force`, `Redirect`), a key that can be rotated, an SSE stream (`Emit`, `DropStreams`) and a request log that records method, path, query and whether a correct key was sent (never the key). Other packages' tests reuse it.
 
 ## 4. Behaviour
 
@@ -574,7 +597,42 @@ Measures throughput and **VRAM** for the catalog's `min_vram_mib` (catalog.md §
 7. CPU-only nodes: VRAM fields are null; `min_ram_mib` is suggested from RSS of the child (`/proc/<pid>/status VmRSS`) peak × 1.10.
 
 ### 4.14 Router watcher
-Every 5 s (and on `/models/sse` events) the agent reads `GET /models` and diffs it with its last view: status changes outside an agent operation emit `model.loaded`/`model.unloaded {reason: "crash"}`; `failed: true` raises `LAI-LLM-009` (error, "a model stopped unexpectedly"); more loaded than `models_max` → `LAI-LLM-028`. The watcher also detects `LLAMA_CACHE` models (ids not in the preset) → `LAI-LLM-024`.
+
+An `app.Worker` (`internal/router/watcher.go`, name `router-watcher`). Every 5 s, and whenever the `/models/sse` stream delivers an event (at most one SSE-triggered poll per 500 ms), the agent reads `GET /models` and diffs it with its last view. `Start` returns at once; the first poll runs on the poll goroutine, so a router that is not up yet does not delay the agent.
+
+**The view.** The last good list, when it was read, and `stale` plus the error text when the last poll failed. Readers (`/status`, `GET /models`) copy it under a lock that no I/O ever holds, so a hung router never blocks them. The first good list is a **baseline**: it publishes no event (a model already loaded at start did not just load), but findings are evaluated on it.
+
+**Events** are edge-triggered and published only for changes outside an agent operation, with no `op_id`:
+
+| Change since the last good list | Event |
+|---|---|
+| a model that was `loaded` or `sleeping` is now anything else (including `loading`: the child restarted) | `model.unloaded {model, reason: "crash"}` |
+| a `loaded` or `sleeping` model is no longer in the list (a reload dropped its section) | `model.unloaded {model, reason: "preset_changed"}` |
+| a model becomes `loaded` and was not `loaded` or `sleeping` | `model.loaded {model, load_ms}` |
+
+`load_ms` is measured from the first poll that saw the model `loading`; it is `0` when the load was not observed (the duration is unknown, not zero). `loaded` ↔ `sleeping` is not an event. `model.loading` and `model.failed` belong to the orchestrator (§4.4), which knows the `op_id`.
+
+**Operations.** The orchestrator, key rotation and llama restart call `Suppress(op_id)` while they hold `modelOpsMu` and release it when they finish. While any operation is active, the watcher keeps reading but publishes nothing and does not re-evaluate `LAI-LLM-009` and `LAI-LLM-028` (an evict-then-load passes through states that would raise them); what it reads becomes the new baseline, so nothing the operation did is reported later. A poll that overlapped the start or the end of an operation counts as quiet too (an epoch counter, not a timestamp). The release also nudges a poll.
+
+**Findings** are level-triggered: recomputed from every good list, reported once when they appear (`AlertSink.Raise(code, subject, details)`) and cleared when they stop being true (`Clear`). `ManagerAlerts` connects the sink to the doctor alert manager (`internal/doctor`), which owns severity, title, fix and the `alert.raised` / `alert.cleared` events; those alerts are keyed by code, so the adapter raises a code when its first model appears, re-raises it with the new `models` list when the set changes and clears it when the last one is gone.
+
+| Code | Subject | Raised when | Cleared when |
+|---|---|---|---|
+| `LAI-LLM-009` | model id | the model's `status.failed` is true | it is not |
+| `LAI-LLM-028` | none | more models are `loaded` than `models_max` (not evaluated during an operation; skipped when `models_max` is 0) | not any more |
+| `LAI-LLM-024` | none | an entry has `source: cache`, or its id is not in the effective set (`models.ini`) | none is left |
+| `LAI-LLM-004` | none | 3 consecutive polls fail with the router not answering (connection, timeout, `502/503/504`): a llama restart takes a few seconds and is not an alert | a poll succeeds |
+| `LAI-LLM-005` | none | 2 consecutive polls get `401` (the client has already re-read the key file once per call) | a poll succeeds |
+
+A malformed answer, a missing key file or any other failure marks the view stale and is logged once per episode; it raises no code.
+
+**Failures and backoff.** After `n` consecutive failed polls the wait doubles per failure up to 30 s (5, 10, 20, 30, 30 ... s); one success resets it. `Kick()` (a `key.rotated` event, an operation's release, an SSE event) polls at once. When the router comes back after a restart, the next good list is diffed against the last good one: models that were loaded and are not any more are reported as `crash` (unless an operation was running).
+
+**Key rotation.** On `key.rotated` the watcher makes the client forget its cached key and polls. A rotation the watcher did not hear about is absorbed by the client's one retry after a `401` (§3.6.1 rule 2), so it raises nothing.
+
+**SSE.** The stream is only a nudge and a source of load progress; `OnProgress` hands every event to the orchestrator, which forwards `model.loading {progress}` with its own `op_id` (§4.4 step 6), and `LatestProgress(id)` returns the last progress of a loading model. It reconnects with backoff (1 s doubling to 30 s, reset after an event or a 30 s run); an unavailable stream is logged once per episode and the poll carries on alone. A restart of llama ends the stream, which polls at once.
+
+Known limit: a router that restarts and brings the same models back within one poll interval produces no event (the diff sees `loaded` before and after). The orchestrator's own restarts are suppressed anyway, and the unit's `NRestarts` (the service watcher) records the rest.
 
 ## 5. Failure handling and edge cases
 
@@ -663,6 +721,8 @@ Every 5 s (and on `/models/sse` events) the agent reads `GET /models` and diffs 
 | Static fit | each rule failing alone; unified memory using GTT; CPU node; boundary values (`G_total − M`, `R_total − R_res`, `R_total`) and the first-failure order; multi-GPU CUDA sums, hybrid laptop; en/es messages with GB formatting (`internal/router/fit_test.go`) |
 | Dynamic fit / planner | ai-n3: load VLM while 9B loaded (`N=1`) → evict 9B; `unload_others:false` → LLM-011; ai-n1 `N=3` with 2 loaded → no eviction when VRAM fits, LRU eviction when not; `G_others` alone too big → load with warning; `W_res` (whisper on gpu not running → reserved, running → 0, on cpu → 0); ties by larger `used_v` then id; reported `memory.effective` over `need_v`; seeded property test: never over-commits, evicts the minimal LRU prefix, deterministic (`internal/router/plan_test.go`) |
 | Load state machine (fake router with scripted `/models` statuses) | already loaded; loading by someone else; success; `failed:true` → rollback restores evicted; timeout → rollback; rollback fails → default → survival list → LLM-012; busy → 409; `wait:false` → 202 then events |
+| Router client and parser (`internal/router`, fixtures in `agent/testdata/router/`) | every status value, `failed`/`exit_code`, aliases, tags, source, memory (bytes to MiB, host entry ignored), download progress; unknown status and unknown fields tolerated; every malformed body shape refused; props; the SSE fixture, CRLF, split `data:` lines, a bad frame skipped, a huge line; `/health` without a key; key reload on mtime and size change, `Invalidate`, `Refresh`, missing, directory, symlink and malformed key files; `401` retried once only when the key file changed; wrong key → `ErrUnauthorized`; timeout, reset, `503`, `502`, `504`, redirect, oversized and truncated body, connection refused → the right class; the caller's cancel is not `ErrDown`; load/unload of running and unknown models; invalid ids never sent; base URL guard; proxy environment ignored; non-loopback dial refused; no call outside the allow list in the request log; the key never in a log line or an error |
+| Router watcher (fake router over HTTP, manual clock) | baseline is silent; loaded→unloaded, loaded→loading, loaded↔sleeping, sleeping→unloaded, removed while loaded; `load_ms` observed and unobserved; an operation silent before, during and after release; a poll overlapping an operation; LLM-009 raised and cleared, LLM-028 (and not evaluated during an operation), LLM-024 (cache source and id outside the preset), LLM-004 after 3 failures and cleared, LLM-005 after 2 and cleared, a rotation absorbed; a down router, a restart mid-poll, a slow answer, malformed and `500` answers keep the last view stale; backoff schedule; SSE nudge, reconnect with backoff, unavailable stream logged once; `key.rotated` on the bus; `Stop` is prompt; the key never in a log line |
 | Boot | default loaded by router; default not loaded → agent loads; desired set restored without eviction; survival set when in survival with no LLM |
 | Single mode | unit render (golden); load X success; failure → previous unit restored |
 | Migration (fake systemd, fake fs, fake tailscale) | parse the ai-n3 unit verbatim (brief); unmatched sha → stop; flag diff → stop / `--accept-catalog-flags`; same-fs rename + symlink; cross-fs copy + verify; M8 failure → automatic rollback; re-run from each recorded step; rollback restores regular key file with current key; masking after moving the unit file |
@@ -670,7 +730,7 @@ Every 5 s (and on `/models/sse` events) the agent reads `GET /models` and diffs 
 | Bench | VRAM math, suggestion rounding, restore of previous models |
 
 ### 9.2 Integration tests (fakes)
-- A **fake router** HTTP server implementing `/health`, `/models` (+`reload`), `/models/load`, `/models/unload`, `/v1/models` with scripted timings and failures; the orchestrator is run end to end with the fake systemd manager.
+- A **fake router** HTTP server (`internal/router/fake`, §3.6.1 rule 7) implementing `/health`, `/models` (+`reload`), `/models/load`, `/models/unload`, `/models/sse`, `/props`, `/v1/chat/completions`, `/v1/models` with scripted timings and failures; the orchestrator is run end to end with the fake systemd manager.
 - An opt-in test (`-tags llama`) that runs a **real** `llama-server` built at the pinned commit with a tiny GGUF (e.g. a 15M-parameter test model from the kit) in router mode with two presets and `--models-max 1`, and checks R1–R8 below automatically.
 
 ### 9.3 Manual tests on a real node
@@ -685,6 +745,9 @@ Router behaviour assumptions (run on any node after a llama.cpp commit change):
 | R6 | chat completion naming an **unloaded** preset | error, and the model stays unloaded (autoload off) |
 | R7 | edit only the default (`aictl default <other>`), then R4 | running model **not** unloaded |
 | R8 | `aictl load small-vlm-q4km` on ai-n3 | 9B unloaded, VLM loaded, `aictl status` shows it; `aictl load qwen3.5-9b-q4km` restores |
+| R9 | in one terminal `curl -sN -H "Authorization: Bearer $(sudo cat /etc/localai/api-key)" localhost:8080/models/sse`, in another `aictl load <other model>` | frames of the form `data: {"model":"…","event":"status_change","data":{"status":"loading"…}}`, ending with `"status":"loaded"`; no `event:` line (the client's SSE parser assumes both) |
+| R10 | with a model loaded, `sudo kill -9 $(pgrep -f 'llama-server.*--port' \| tail -1)` (a child, not the router), then `curl -s -H "Authorization: Bearer …" localhost:8080/models \| jq '.data[] \| select(.status.failed) \| {id, s: .status}'` | the model shows `"value":"unloaded","failed":true,"exit_code":137` (or the signal's code); `aictl doctor` lists `LAI-LLM-009` within 5 s; the agent journal has `component=router` and `event=model.unloaded` with `reason:crash` |
+| R11 | `sudo aictl restart llama`, watching `journalctl -u localai-agent -f` | no `LAI-LLM-004` alert for a restart under 15 s; `the router answers again` is logged after it; with the key file replaced by hand (`sudo aictl key rotate`) no `LAI-LLM-005` appears |
 
 Migration rehearsal on ai-n3 (owner runs; record results in the PR):
 ```
@@ -701,7 +764,7 @@ sudo aiagent migrate llama-qwen --rollback     # then forward again; both direct
 
 ## 10. Implementation breakdown
 
-1. **ROUTER-01 Router client and watcher** — typed client for §3.6 (with key from file), `GET /models` parser for all status shapes, SSE progress reader, watcher §4.14. *Accept:* parser tests on fixtures copied from `tools/server/README.md`; watcher emits events on scripted changes. *Deps:* AGENT-08, AGENT-09.
+1. **ROUTER-01 Router client and watcher** — typed client for §3.6 (with key from file), `GET /models` parser for all status shapes, SSE progress reader, watcher §4.14. *Accept:* parser tests on fixtures modelled on `tools/server/README.md` (commit `f3586e66b`); watcher emits events on scripted changes. *Deps:* AGENT-08, AGENT-09. *Done in* `internal/router/{client,key,models,sse,watcher}.go` and `internal/router/fake`.
 2. **ROUTER-02 Fit rules** — §4.3 static and dynamic fit, planner, `loadable_reason`. *Accept:* §9.1 fit cases. *Deps:* AGENT-10.
 3. **ROUTER-03 Preset generator** — effective set, mapping table, env merge, deterministic rendering, hand-edit detection, reload-safety rule, golden files for ai-n3 and ai-n1. *Accept:* §9.1 mapping/env/reload cases. *Deps:* ROUTER-01, ROUTER-02, CAT-01.
 4. **ROUTER-04 Unit generator** — router unit §3.2, env drop-in §3.3, single unit §3.4, daemon-reload integration, `LLAMA_CACHE` dir. *Accept:* golden units; `systemd-analyze verify` passes on generated files in CI (container). *Deps:* ROUTER-03.
