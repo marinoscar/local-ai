@@ -31,3 +31,11 @@ jobs:
         run: cd scripts/linkcheck && go vet ./... && go test -race ./...
       - name: Markdown links and anchors (offline)
         run: scripts/check-links.sh
+  doctor-codes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Doctor code registry check
+        run: scripts/check-doctor-codes.sh
+      - name: Doctor code check self-test (fixtures)
+        run: scripts/tests/test-doctor-codes.sh

@@ -1,6 +1,6 @@
 # Doctor codes registry
 
-> **Status:** approved design · **Code:** `agent/internal/doctor/codes.go` (machine copy) · **CI:** `scripts/check-doctor-codes.sh` (planned)
+> **Status:** approved design · **Code:** `agent/internal/doctor/codes.go` (machine copy) · **CI:** `scripts/check-doctor-codes.sh`
 > Canonical names and code areas: [overview.md](../architecture/overview.md) §3.7.
 
 Every problem a user can see — an API error, a doctor result, an alert, a CLI message, a Portal warning — carries a **doctor code** and a one-sentence fix (AGENTS.md rule 4). This file is the **registry** of all codes, one section per area.
@@ -58,15 +58,16 @@ A code has one default severity; a few codes escalate (documented in the "Sev" c
 - Every code has an English **and** a Spanish version in `codes.go` (`es` is shown in the Portal, the desktop and `aictl --lang es`). This file holds the English text; the Spanish text lives only in code and is reviewed in the PR.
 - Codes never contain secrets in their text or `details`.
 
-### 1.6 Keeping things in sync: `scripts/check-doctor-codes.sh` (planned)
-The script (bash + `grep`/`awk`, no network) fails CI when:
-1. a code matching `LAI-[A-Z]+-[0-9]{3}` appears in `agent/`, `apps/`, `packages/`, `installers/` or `docs/` but is not defined in this registry;
-2. a code in this registry is missing from its owner spec's §8 table, or vice versa;
-3. code, severity or meaning differ between the owner spec and this registry;
-4. `agent/internal/doctor/codes.go` lacks a code from this registry (or has one that is not here), or lacks an `es` text;
-5. a code appears twice, or in a section whose area prefix does not match (except the reserved block `LAI-CLD-050..069` defined by agent.md);
-6. a range (`..`) is used outside a documented family.
-Until the script exists, reviewers check the same rules by hand.
+### 1.6 Keeping things in sync: `scripts/check-doctor-codes.sh`
+The script (bash + `grep`/`awk`, no network) runs in CI (`docs-guard`, job `doctor-codes`) and locally. `scripts/tests/test-doctor-codes.sh` proves each rule against fixture trees in `scripts/tests/doctor/`. It fails with `ERROR <file>:<line>: <reason>` when:
+1. a code matching `LAI-[A-Z]+-[0-9]{3}` appears in `README.md`, `AGENTS.md`, `CLAUDE.md`, `agent/`, `apps/`, `packages/`, `installers/` or `docs/` but is not defined in this registry (this also rejects placeholders that look like a real code, for example an unknown area with digits);
+2. a code row in an owner spec's doctor table is missing from this registry, or a registry code is missing from its owner spec's table (the owner is the spec listed in §1.3; `LAI-CLD-050..069` is owned by agent.md);
+3. severity or meaning differ between the owner spec and this registry (compared after trimming and collapsing whitespace; the fix text is not compared);
+4. a code appears twice, has an unknown area prefix, sits in a registry section of another area, or is defined in a spec that does not own its area;
+5. once `agent/internal/doctor/codes.go` exists: it lacks a code from this registry, has one that is not here, defines a code twice, or a non-test Go file outside `codes.go` hard-codes a `"LAI-…"` literal instead of using the constant;
+6. a range (`..`) is used outside a documented family. The families are listed in the script (`FAMILIES`): `LAI-CAT-010..019`, `LAI-CLD-050..069`, `LAI-INS-040..044`. Adding a family means editing the script and this section.
+
+Not checked yet: the Spanish (`es`) text in `codes.go`. The doctor framework issue (AGENT-11) adds that check together with the `codes.go` layout; until then reviewers check it by hand.
 
 ## 2. Registry
 
