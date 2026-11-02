@@ -8,10 +8,10 @@ name: agent
 # `go test ./...` here, so no workflow change is needed.
 on:
   pull_request:
-    paths: ['agent/**', 'catalog/**', 'scripts/agent-ci.sh', 'scripts/tests/test-agent-ci.sh', '.github/workflows/agent.yml']
+    paths: ['agent/**', 'catalog/**', 'packages/ui/**', 'docs/specs/agent.md', 'docs/specs/doctor-codes.md', 'scripts/agent-ci.sh', 'scripts/tests/test-agent-ci.sh', '.github/workflows/agent.yml']
   push:
     branches: [main]
-    paths: ['agent/**', 'catalog/**', 'scripts/agent-ci.sh', 'scripts/tests/test-agent-ci.sh', '.github/workflows/agent.yml']
+    paths: ['agent/**', 'catalog/**', 'packages/ui/**', 'docs/specs/agent.md', 'docs/specs/doctor-codes.md', 'scripts/agent-ci.sh', 'scripts/tests/test-agent-ci.sh', '.github/workflows/agent.yml']
 permissions:
   contents: read
 jobs:
@@ -40,6 +40,10 @@ jobs:
       - name: vet, test -race, staticcheck, vendor is current
         if: steps.detect.outputs.present == 'true'
         run: scripts/agent-ci.sh check
+      - name: OpenAPI conformance (agent/api/openapi.yaml against the routes, the spec table and the recorded responses)
+        if: steps.detect.outputs.present == 'true'
+        working-directory: agent
+        run: go test ./api/... ./internal/api/...
       - name: Static builds for linux/amd64 and linux/arm64
         if: steps.detect.outputs.present == 'true'
         run: scripts/agent-ci.sh build
@@ -65,3 +69,21 @@ jobs:
           name: aiagent-linux-arm64
           path: agent/dist/aiagent-linux-arm64
           if-no-files-found: error
+  api-types:
+    # packages/ui/src/api/agent.gen.ts is generated from agent/api/openapi.yaml (agent.md section 4.14):
+    # regenerate it and fail on any difference, so the TypeScript clients never drift from the contract.
+    # Node comes preinstalled on ubuntu-latest; the generator itself is pinned by package-lock.json.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/ui
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install (pinned by package-lock.json)
+        run: npm ci --no-audit --no-fund
+      - name: Regenerate agent.gen.ts
+        run: npm run gen:agent-api
+      - name: The generated file is committed and current
+        run: git diff --exit-code -- src/api/agent.gen.ts
+      - name: The generated types compile
+        run: npm run typecheck

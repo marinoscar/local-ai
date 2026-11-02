@@ -103,7 +103,7 @@ func newSvcRig(t *testing.T, opts ...func(*ServicesDeps)) *svcRig {
 }
 
 func (r *svcRig) post(path, body string, extra map[string]string) *httptest.ResponseRecorder {
-	return do(r.h, req{method: "POST", target: "/api/v1" + path, body: body, header: jsonHeaders(extra)})
+	return recordOK(r.t, do(r.h, req{method: "POST", target: "/api/v1" + path, body: body, header: jsonHeaders(extra)}))
 }
 
 func (r *svcRig) get(path string, extra map[string]string) *httptest.ResponseRecorder {
@@ -111,7 +111,7 @@ func (r *svcRig) get(path string, extra map[string]string) *httptest.ResponseRec
 	for k, v := range extra {
 		h[k] = v
 	}
-	return do(r.h, req{target: "/api/v1" + path, header: h})
+	return recordOK(r.t, do(r.h, req{target: "/api/v1" + path, header: h}))
 }
 
 func decodeMap(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {

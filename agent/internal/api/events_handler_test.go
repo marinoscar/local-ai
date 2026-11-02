@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/marinoscar/local-ai/agent/internal/api/apitest"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/config/fake"
 	"github.com/marinoscar/local-ai/agent/internal/events"
@@ -58,6 +59,7 @@ func openStream(t *testing.T, url string, hdr map[string]string) *sseStream {
 		cancel()
 		t.Fatal(err)
 	}
+	apitest.RecordStream(t, resp) // status and headers must match GET /events of openapi.yaml
 	st := &sseStream{resp: resp, frames: make(chan sseFrame, 4096), cancel: cancel}
 	go func() {
 		defer close(st.frames)

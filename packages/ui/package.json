@@ -1,0 +1,16 @@
+{
+  "name": "@localai/ui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared UI package of the Local AI lab: the generated agent API types today; the shared components arrive with CLOUD-11 and the desktop shell with DSK-01.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "gen:agent-api": "openapi-typescript ../../agent/api/openapi.yaml --output src/api/agent.gen.ts",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.9.1",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,3319 @@
+openapi: 3.1.0
+info:
+  title: Local AI node agent API
+  version: 1.0.0
+  summary: The wire contract of the aiagent REST API (agent.md section 3.8).
+  description: |
+    Hand-written, and the contract: the local UI, the Survival Portal, ai-desktop and the cloud generate
+    their TypeScript types from this file, and `internal/api/openapi_test.go` fails when a route, an auth
+    level or a field exists on one side only. Workflow: docs/specs/agent.md section 4.14. A change to any
+    `/api/v1` route edits the spec and this file in the same PR.
+
+    Conventions (agent.md section 3.7):
+    - Same routes on TCP `127.0.0.1:<ports.agent>` and on the unix socket `/run/localai/agent.sock`.
+    - Bodies are `application/json; charset=utf-8`, except SSE (`text/event-stream`), the STT upload
+      (`multipart/form-data`) and TTS (`audio/wav`).
+    - A mutating request (every method except GET) must send `Content-Type: application/json`, even with
+      an empty body `{}`, else `415 LAI-AGT-020`. The body limit is 1 MiB (STT 25 MiB), else `413 LAI-AGT-025`.
+      Decoding is strict: an unknown field is `400 LAI-AGT-020` with `details.field`.
+    - Times are RFC 3339 UTC with `Z` (`format: date-time`). Sizes are integer bytes. Durations are integers
+      with an `_ms` or `_s` suffix.
+    - Every response carries `X-Request-Id`. A mutating response carries `X-LocalAI-Op-Id` when an
+      operation was created. `Retry-After` is set on 429 and on the 503 `LAI-AGT-024`.
+    - Every non-2xx response is an `ErrorEnvelope`. `OPTIONS` is answered `405` and no `Access-Control-*`
+      header is ever sent. A `405` also lists the allowed methods in `Allow` and `details.allow`.
+    - `Accept-Language: es` localizes `message` and `fix`; codes and field names never change.
+    - Repeating a request whose effect is already in place answers `200` with a flag (`already_loaded`),
+      not an error.
+
+    Extensions:
+    - `x-localai-auth`: the level an operation requires: `none`, `op`, `portal`, `admin` or `admin*`; a list
+      when several principals are accepted (`[op, portal]`). One of them is enough. Must equal the route's
+      auth in `api.Routes()`.
+    - `x-localai-auth-note`: free text for a restriction the level cannot express.
+    - `x-localai-timeout`: the server-side handler deadline (agent.md section 3.8 column "Timeout"), informational.
+    - `x-localai-status: planned`: documented, not implemented yet. It lands in the issue named by
+      `x-localai-issue`, whose PR removes both extensions. A planned operation must not be registered, and a
+      registered operation must not be planned (this is the allowlist the bijection test uses).
+    - `x-localai-gate-exempt: true`: the mutating-route gate does not hold the route back (POST /mode/survival).
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+    description: Same origin on TCP 127.0.0.1:<ports.agent> (default 7070) and on unix:/run/localai/agent.sock.
+tags:
+  - {name: health, description: "Liveness."}
+  - {name: auth, description: "Sessions, UI codes and the admin PIN."}
+  - {name: status, description: "Node snapshot, hardware, doctor, logs and events."}
+  - {name: models, description: "Models and the llama router."}
+  - {name: key, description: "The llama API key."}
+  - {name: mode, description: "Online, offline and survival modes."}
+  - {name: ark, description: "Content roots, drives and sync (owned by ark-sync.md)."}
+  - {name: catalog, description: "The catalog and the profile."}
+  - {name: services, description: "Companion services and speech."}
+  - {name: cloud, description: "The cloud link."}
+  - {name: drill, description: "The offline-readiness drill (owned by drill.md)."}
+  - {name: docs, description: "The rendered manuals index."}
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Liveness
+      description: |
+        No auth. Never touches upstreams. `ok` is true whenever the agent answers; a damaged state is
+        reported as an alert, not here. `starting` stays true until startup step 17 (mutations open after
+        step 12). The status is always 200. agent.md section 3.8.1.
+      x-localai-auth: none
+      x-localai-timeout: "2 s"
+      responses:
+        "200":
+          description: The agent is alive.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Health"}
+              examples:
+                online: {value: {ok: true, version: "0.1.0", mode: online, starting: false}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /session:
+    post:
+      tags: [auth]
+      operationId: createSession
+      summary: Exchange the agent token for a session cookie
+      description: "Header `Authorization: Bearer lat_...`, body `{}`. Sets the cookie `localai_session` (HttpOnly, SameSite=Strict, 7 days). agent.md section 3.8.2."
+      x-localai-auth: op
+      x-localai-auth-note: Bearer token only; a cookie or Portal session cannot mint a session.
+      x-localai-timeout: "5 s"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EmptyRequest"}
+      responses:
+        "204": {$ref: "#/components/responses/SessionCookie"}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+    delete:
+      tags: [auth]
+      operationId: deleteSession
+      summary: End the session
+      description: Answers 204 and clears the cookie (`Set-Cookie`, `Max-Age=0`). agent.md section 3.8.2.
+      x-localai-auth: op
+      x-localai-auth-note: Session cookie.
+      x-localai-timeout: "5 s"
+      responses:
+        "204":
+          description: The session ended.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+            Set-Cookie: {description: "localai_session= with Max-Age=0.", schema: {type: string}}
+            Cache-Control: {description: "no-store.", schema: {type: string, enum: [no-store]}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /session/code:
+    post:
+      tags: [auth]
+      operationId: createSessionFromCode
+      summary: Exchange a one-time UI code for a session cookie
+      description: The code comes from `POST /ui-code`. Single use, 5 minutes. agent.md section 3.8.2.
+      x-localai-auth: none
+      x-localai-timeout: "5 s"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SessionCodeRequest"}
+            examples:
+              code: {value: {code: "482913"}}
+      responses:
+        "204": {$ref: "#/components/responses/SessionCookie"}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+          description: "LAI-SEC-008: the code is wrong, expired or already used."
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "429":
+          $ref: "#/components/responses/RateLimited"
+          description: "LAI-SEC-004: 5 failures in 5 minutes (global, not per client)."
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /ui-code:
+    post:
+      tags: [auth]
+      operationId: createUiCode
+      summary: Mint a one-time UI code
+      description: At most 3 unexpired codes exist; minting a 4th invalidates the oldest. Audit event `ui_code.mint`. agent.md section 3.8.2.
+      x-localai-auth: "admin*"
+      x-localai-timeout: "5 s"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EmptyRequest"}
+      responses:
+        "200":
+          description: The code.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+            Cache-Control: {description: "no-store: the body carries a credential.", schema: {type: string, enum: [no-store]}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/UiCode"}
+              examples:
+                code: {value: {code: "482913", expires_at: "2026-11-02T15:09:05Z"}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /pin/verify:
+    post:
+      tags: [auth]
+      operationId: verifyPin
+      summary: Verify the admin PIN and get a grant
+      description: |
+        The grant is bound to the principal that obtained it and is sent as `X-LocalAI-Pin-Grant` on admin
+        routes; it lasts 5 minutes. Audit events `pin.verify.ok` and `pin.verify.fail`. agent.md section 3.8.3.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PinVerifyRequest"}
+            examples:
+              pin: {value: {pin: "4821"}}
+      responses:
+        "200":
+          description: The grant.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+            Cache-Control: {description: "no-store: the body carries a credential.", schema: {type: string, enum: [no-store]}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PinGrant"}
+              examples:
+                grant: {value: {grant: "pg_0123456789abcdefghijklmnopqrstuvwxyzABCDEFG", expires_at: "2026-11-02T15:09:05Z"}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+          description: "LAI-SEC-001 missing credentials; LAI-SEC-003 wrong PIN (details.remaining_attempts)."
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-SEC-005: no PIN is set (fix: sudo aictl pin set)."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "429":
+          $ref: "#/components/responses/RateLimited"
+          description: "LAI-SEC-004: too many wrong PINs; Retry-After in seconds."
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /status:
+    get:
+      tags: [status]
+      operationId: getStatus
+      summary: The full node snapshot
+      description: Also the body pushed to the cloud (agent.md section 4.8.4), minus `alerts[].details` and `hardware.gpus[].processes`. agent.md section 3.8.4.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-14
+      responses:
+        "200":
+          description: The snapshot.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Status"}
+              examples:
+                snapshot:
+                  value:
+                    node: {id: ai-n3, display_name: "HP ZBook (ai-n3)", hostname: hp-linux, profile: small-8gb, agent_version: "0.1.0", backend: cuda, llama_mode: router, llama_build: "f3586e66b-cuda", catalog_version: "2026.11.02-1", uptime_s: 86400, time: "2026-11-02T15:04:05Z"}
+                    mode: {value: online, since: "2026-11-01T22:10:00Z", transition: null}
+                    connectivity: {value: full, checked_at: "2026-11-02T15:04:00Z", none_since: null}
+                    hardware: {gpu: "NVIDIA GeForce RTX 2070 with Max-Q Design", vram_total_mib: 8192, vram_used_mib: 6791, ram_total_mib: 14336, ram_available_mib: 5120, gpu_temp_c: 61, cpu_temp_c: 72, power: {source: ac, battery_percent: 100, charging: false}}
+                    services:
+                      - {name: llama, unit: "localai-llama.service", active: active, sub: running, since: "2026-11-02T08:00:05Z", restarts: 0, healthy: true}
+                      - {name: whisper, unit: "localai-whisper.service", active: inactive, sub: dead, since: null, restarts: 0, healthy: false}
+                    models: {default: qwen3.5-9b-q4km, loaded: [qwen3.5-9b-q4km], loading: [], present: 5, loadable: 4, models_max: 1}
+                    ark:
+                      roots: [{path: /srv/localai, kind: internal, status: partial, ready_pct: 82, updated_at: "2026-11-02T03:12:00Z"}]
+                      drive: {mounted: false}
+                      sync: {state: idle, last_success_at: "2026-11-02T03:12:00Z"}
+                    cloud: {enrolled: true, state: linked, url: "https://ai.marin.cr", last_heartbeat_at: "2026-11-02T15:03:55Z"}
+                    tailscale: {manage: true, pattern: B, applied: true, backend_state: Running}
+                    alerts:
+                      - {code: LAI-HW-012, severity: warning, title: "Running on battery", fix: "Plug in the charger. A laptop server stops when the battery runs out.", since: "2026-11-02T08:00:30Z", details: {battery_percent: 64}}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /portal/status:
+    get:
+      tags: [status]
+      operationId: getPortalStatus
+      summary: The reduced, localized status of the Survival Portal
+      description: |
+        No auth. The schema and example are owned by survival-portal.md section 3.5 (AGENT-14 provides the
+        route, the 2 s cache and a minimal builder; PORTAL-01 the full schema). It never contains paths, keys,
+        hostnames, ids beyond model ids, or cloud details. agent.md section 3.8.5.
+      x-localai-auth: none
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-14
+      responses:
+        "200":
+          description: The Portal status.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PortalStatus"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /hardware:
+    get:
+      tags: [status]
+      operationId: getHardware
+      summary: Hardware sample
+      description: GPU UUIDs and serial numbers are never collected. agent.md section 3.8.6.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      parameters:
+        - name: fresh
+          in: query
+          description: "1 forces a new sample, at most one per 2 s across all clients (a request inside the window gets the previous forced sample, never an error); 0 or absent answers the cached snapshot. Any other value is 400. API clients only."
+          schema: {type: string, enum: ["0", "1"]}
+      responses:
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+          description: "LAI-AGT-020: fresh is not 0 or 1 (details.field is fresh)."
+
+        "200":
+          description: The sample.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Hardware"}
+              examples:
+                nvidia:
+                  value:
+                    sampled_at: "2026-11-02T15:04:00Z"
+                    gpus:
+                      - {index: 0, vendor: nvidia, name: "NVIDIA GeForce RTX 2070 with Max-Q Design", backend: cuda, compute_cap: "7.5", driver: "595.99.02", unified_memory: false, vram_total_mib: 8192, vram_used_mib: 6791, vram_used_by_others_mib: 210, temp_c: 61, util_pct: 0, power_w: 1.46, throttling: [], processes: [{pid: 4242, name: llama-server, vram_mib: 6581}]}
+                    ram: {total_mib: 14336, available_mib: 5120, swap_total_mib: 4096, swap_free_mib: 4000}
+                    disks:
+                      - {path: /srv/localai, role: internal_root, fs: ext4, total_bytes: 342000000000, free_bytes: 293000000000}
+                      - {path: /var/lib/localai, role: state, fs: ext4, total_bytes: 342000000000, free_bytes: 293000000000}
+                    power: {source: ac, battery_percent: 100, charging: false, time_remaining_s: null, profile: performance}
+                    thermal: {cpu_temp_c: 72, cpu_throttle_events: 0, zones: [{type: x86_pkg_temp, temp_c: 72}]}
+                    cpu: {model: "Intel(R) Core(TM) i7-10850H CPU @ 2.70GHz", cores: 12, load1: 0.4}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /models:
+    get:
+      tags: [models]
+      operationId: listModels
+      summary: Catalog models merged with local state
+      description: "All engines. `?loadable=1` keeps `loadable: true`; `?engine=llama` filters by engine. agent.md section 3.8.7."
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-15
+      parameters:
+        - {name: loadable, in: query, schema: {type: string, enum: ["1"]}, description: "1 keeps the models with loadable true."}
+        - {name: engine, in: query, schema: {type: string}, description: "For example llama."}
+      responses:
+        "200":
+          description: The models.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ModelList"}
+              examples:
+                two:
+                  value:
+                    models_max: 1
+                    default: qwen3.5-9b-q4km
+                    models:
+                      - {id: qwen3.5-9b-q4km, display_name: "Qwen 3.5 9B", summary: "Fast general assistant", engine: llama, roles: [chat, reasoning, coder], survival_tier: 1, in_profile: true, size_bytes: 5868826976, present: true, verified: true, locations: [{root: /srv/localai, complete: true, verified_at: "2026-11-02T03:10:00Z"}], loadable: true, loadable_reason: null, status: loaded, loaded: true, default: true, aliases: [qwen3.5-9b], requirements: {backends: [cuda, vulkan, cpu], min_vram_mib: 6400, min_ram_mib: 8192}, last_load_ms: 7100}
+                      - {id: qwen3.6-35b-a3b-q4km, display_name: "Qwen 3.6 35B A3B", engine: llama, in_profile: false, present: false, verified: false, locations: [], loadable: false, loadable_reason: {code: LAI-CAT-005, message: "Needs 11.0 GB of graphics memory; this computer has 8.0 GB."}, status: absent, loaded: false, default: false, aliases: []}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /models/default:
+    put:
+      tags: [models]
+      operationId: setDefaultModel
+      summary: Set the default model
+      description: |
+        The model must be `present` and `loadable` (422 otherwise). Sets `state.models.default`, regenerates
+        `models.ini` and reloads the router preset list; it does not load the model. Owned by ROUTER-05
+        (llama-router.md section 4.4). agent.md section 3.8.10.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: ROUTER-05
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DefaultModelRequest"}
+            examples:
+              default: {value: {id: qwen3.5-9b-q4km}}
+      responses:
+        "200":
+          description: The new default.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DefaultModelResponse"}
+              examples:
+                changed: {value: {default: qwen3.5-9b-q4km, previous: small-vlm-q4km, ini_regenerated: true}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+          description: "LAI-CAT-005 the model does not fit; LAI-LLM-008 its files are missing or unverified."
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /models/{id}:
+    parameters:
+      - {$ref: "#/components/parameters/ModelId"}
+    get:
+      tags: [models]
+      operationId: getModel
+      summary: One model, with its files and router preset
+      description: Like a `GET /models` entry plus `files` and `preset`. An unknown id is `404 LAI-AGT-021`. agent.md section 3.8.7.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-15
+      responses:
+        "200":
+          description: The model.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Model"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/Internal"}
+    delete:
+      tags: [models]
+      operationId: deleteModel
+      summary: Delete a model's files
+      description: |
+        Query `root` (default all roots) and `keep_last` (default true). A loaded model is refused
+        (409 LAI-AGT-022, "Unload it first"). With `keep_last=true` it refuses to remove the last verified copy
+        across all mounted roots (409, code defined by ark-sync.md section 4.10). Audit `model.delete`.
+        agent.md section 3.8.12.
+      x-localai-auth: admin
+      x-localai-timeout: "60 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-15
+      parameters:
+        - {name: root, in: query, schema: {type: string}, description: "A content root path or root id."}
+        - {name: keep_last, in: query, schema: {type: boolean, default: true}}
+      responses:
+        "200":
+          description: What was deleted.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DeleteModelResponse"}
+              examples:
+                deleted: {value: {id: qwen3.5-9b-q4km, deleted: [{root: /srv/localai, bytes: 5868826976}], op_id: op_7k2m9q4r8t1c}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-022 the model is loaded; the last verified copy would be removed (code from ark-sync.md section 4.10)."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /models/{id}/load:
+    parameters:
+      - {$ref: "#/components/parameters/ModelId"}
+    post:
+      tags: [models]
+      operationId: loadModel
+      summary: Load a model
+      description: |
+        Orchestration: llama-router.md section 4.4 (ROUTER-05). With `wait: false` it answers 202 and progress
+        arrives on `/events`. A Portal session may only load `loadable` models and the body is forced
+        (survival-portal.md section 3.3). agent.md section 3.8.8.
+      x-localai-auth: [op, portal]
+      x-localai-auth-note: "Portal: restricted to loadable models, body forced (survival-portal.md section 3.3)."
+      x-localai-timeout: "load_timeout x (n+2) + 30 s"
+      x-localai-status: planned
+      x-localai-issue: ROUTER-05
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LoadRequest"}
+            examples:
+              defaults: {value: {wait: true, unload_others: true}}
+      responses:
+        "200":
+          description: Loaded (or already loaded).
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ModelLoaded"}
+              examples:
+                loaded: {value: {id: qwen3.5-9b-q4km, status: loaded, already_loaded: false, load_ms: 7100, unloaded: [small-vlm-q4km], op_id: op_7k2m9q4r8t1c}}
+        "202":
+          description: "Loading started (`wait: false`)."
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ModelLoading"}
+              examples:
+                loading: {value: {id: qwen3.5-9b-q4km, status: loading, op_id: op_7k2m9q4r8t1c}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-022 another model operation is running (details.op_id); LAI-LLM-011 unload_others is false and there is no room."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+          description: "LAI-CAT-005 does not fit, backend unsupported, or the engine is not llama; LAI-LLM-008 files missing or unverified."
+        "500":
+          $ref: "#/components/responses/Internal"
+          description: "LAI-LLM-009 the load failed and the previous model was restored (details.rolled_back); LAI-LLM-012 the rollback also failed; LAI-AGT-099 a bug."
+        "502":
+          $ref: "#/components/responses/BadGateway"
+          description: "LAI-LLM-004: the router is running but not answering."
+        "503": {$ref: "#/components/responses/Starting"}
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+          description: "LAI-LLM-010: the load timed out and the previous model was restored."
+
+  /models/{id}/unload:
+    parameters:
+      - {$ref: "#/components/parameters/ModelId"}
+    post:
+      tags: [models]
+      operationId: unloadModel
+      summary: Unload a model
+      description: |
+        Unloading the default model is allowed. In survival mode, unloading the last loaded LLM answers
+        `409 LAI-AGT-023` unless `force` is true. Owned by ROUTER-05. agent.md section 3.8.9.
+      x-localai-auth: op
+      x-localai-timeout: "90 s"
+      x-localai-status: planned
+      x-localai-issue: ROUTER-05
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UnloadRequest"}
+      responses:
+        "200":
+          description: Unloaded (or already unloaded).
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ModelUnloaded"}
+              examples:
+                unloaded: {value: {id: qwen3.5-9b-q4km, status: unloaded, already_unloaded: false, op_id: op_7k2m9q4r8t1c}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-022 another model operation is running; LAI-AGT-023 survival mode and this is the last loaded LLM (send force)."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "502":
+          $ref: "#/components/responses/BadGateway"
+          description: "LAI-LLM-004: the router is running but not answering."
+        "503": {$ref: "#/components/responses/Starting"}
+        "504": {$ref: "#/components/responses/GatewayTimeout"}
+
+  /models/{id}/download:
+    parameters:
+      - {$ref: "#/components/parameters/ModelId"}
+    post:
+      tags: [models]
+      operationId: downloadModel
+      summary: Queue a model download through the sync engine
+      description: |
+        Delegates to the sync engine with `items: [id]` (ark-sync.md). Default roots: the internal root, plus
+        the drive if its profile includes the model. agent.md section 3.8.11.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-15
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DownloadRequest"}
+      responses:
+        "202":
+          description: Queued.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DownloadAccepted"}
+              examples:
+                queued: {value: {id: qwen3.5-9b-q4km, sync_run_id: "run-20261102T031500Z-a1f3", queued: true}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-SYN-010 survival mode; LAI-AGT-023 offline mode without allow_offline_mode; LAI-SYN-005 a run is already active."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /key:
+    get:
+      tags: [key]
+      operationId: getKey
+      summary: The llama API key
+      description: |
+        The only route that returns the full llama key. Writes audit `key.show` with the principal.
+        `Cache-Control: no-store`. Snippets embed `$KEY` placeholders, never the key. agent.md section 3.8.13.
+        There is deliberately no example: a 64-hex key literal in the repository trips scripts/check-redaction.sh.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-15
+      responses:
+        "200":
+          description: The key and how to use it.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            Cache-Control: {description: "no-store.", schema: {type: string, enum: [no-store]}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Key"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /key/rotate:
+    post:
+      tags: [key]
+      operationId: rotateKey
+      summary: Rotate the llama API key
+      description: |
+        Generates a new key, writes `/etc/localai/api-key` atomically, restarts llama (unless `restart` is
+        false), restores `models.desired_loaded` and pushes the key to the cloud. If the llama restart
+        fails the new key stays and the answer is `500 LAI-LLM-001` with `details.key_rotated: true`.
+        Audit `key.rotate`. agent.md section 3.8.14.
+      x-localai-auth: admin
+      x-localai-timeout: "15 min"
+      x-localai-status: planned
+      x-localai-issue: AGENT-15
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/KeyRotateRequest"}
+      responses:
+        "200":
+          description: Rotated.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/KeyRotated"}
+              examples:
+                rotated:
+                  value:
+                    fingerprint: "c0de...77aa"
+                    rotated_at: "2026-11-02T15:10:00Z"
+                    cloud_synced: true
+                    restored_models: [qwen3.5-9b-q4km]
+                    clients_to_update: ["OpenCode on this computer: ~/.config/opencode/llama-api-key", "Any script that uses the old key directly"]
+                    op_id: op_7k2m9q4r8t1c
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500":
+          $ref: "#/components/responses/Internal"
+          description: "LAI-LLM-001: the llama restart failed; the new key stays (details.key_rotated is true). LAI-AGT-099: a bug."
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /mode:
+    get:
+      tags: [mode]
+      operationId: getMode
+      summary: The current mode
+      description: agent.md section 3.8.15.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-12
+      responses:
+        "200":
+          description: The mode.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Mode"}
+              examples:
+                online: {value: {mode: online, since: "2026-11-01T22:10:00Z", transition: null, allowed_targets: [offline, survival], leave_requires_admin: false, connectivity: full, suggest_survival: false}}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+    post:
+      tags: [mode]
+      operationId: setMode
+      summary: Request a mode transition
+      description: |
+        `reapply: true` re-runs every step of the current mode's transition even when `target` equals the
+        current mode; without it a same-target request answers `200 {already: true}`. Cloud principals may only
+        request `offline`. agent.md section 3.8.15.
+      x-localai-auth: op
+      x-localai-auth-note: "admin* is required to leave survival (LAI-SEC-002)."
+      x-localai-timeout: "20 min if wait, else 5 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-12
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ModeRequest"}
+            examples:
+              offline: {value: {target: offline, wait: false, reapply: false}}
+      responses:
+        "200":
+          description: "Done (`wait: true`), or already in the target mode."
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {$ref: "#/components/schemas/ModeDone"}
+                  - {$ref: "#/components/schemas/ModeAlready"}
+              examples:
+                done: {value: {op_id: op_7k2m9q4r8t1c, from: online, mode: offline, warnings: []}}
+                already: {value: {mode: offline, already: true}}
+        "202":
+          description: The transition started.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ModeAccepted"}
+              examples:
+                started: {value: {op_id: op_7k2m9q4r8t1c, from: online, target: offline, transition: {step: link_stop, started_at: "2026-11-02T15:04:05Z"}}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: "LAI-SEC-002: leaving survival needs admin*; plus the generic 403 codes."
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-022 another transition is running (a request for survival preempts it)."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /mode/survival:
+    post:
+      tags: [mode]
+      operationId: enterSurvival
+      summary: Enter survival mode
+      description: |
+        No auth, loopback only, still subject to the Host and Origin checks. The Content-Type is still
+        required. Before startup step 12 and during shutdown the request is queued (`pending_mode` in
+        state.json) and answered `202` with `queued: true`. It never refuses for any other reason, so it
+        has no 503. agent.md section 3.8.16.
+      x-localai-auth: none
+      x-localai-timeout: "5 s"
+      x-localai-gate-exempt: true
+      x-localai-status: planned
+      x-localai-issue: AGENT-12
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SurvivalRequest"}
+            examples:
+              plain: {value: {}}
+      responses:
+        "200":
+          description: Already in survival mode.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SurvivalAlready"}
+              examples:
+                already: {value: {mode: survival, already: true}}
+        "202":
+          description: The transition started, or the request was queued.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SurvivalAccepted"}
+              examples:
+                started: {value: {op_id: op_7k2m9q4r8t1c, target: survival}}
+                queued: {value: {op_id: op_7k2m9q4r8t1c, target: survival, queued: true}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /ark:
+    get:
+      tags: [ark]
+      operationId: getArk
+      summary: The readiness report of every mounted root
+      description: Shape owned by ark-sync.md section 3.5 and 4.12.1. agent.md section 3.8.17.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-12
+      responses:
+        "200":
+          description: One READY.json per mounted root.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ArkRoots"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /ark/drives:
+    get:
+      tags: [ark]
+      operationId: listArkDrives
+      summary: Detected AI-ARK drives
+      description: Shape owned by ark-sync.md section 3.5. agent.md section 3.8.17.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-02
+      responses:
+        "200":
+          description: The drives.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ArkDrives"}
+              examples:
+                two:
+                  value:
+                    drives:
+                      - {root_id: ark-3f9c0a12, device: /dev/sdb1, mount: /media/operator/AI-ARK, fstype: ext4, label: AI-ARK, size_bytes: 2000398934016, free_bytes: 812345678901, state: ready, read_only: false, fs_errors: 0, initialized: true, profile: ark-drive-full, ready: {overall: yellow, generated_at: "2026-11-01T04:02:10Z"}, problems: []}
+                      - {root_id: null, device: /dev/sdc1, mount: /media/operator/AI-ARK1, fstype: exfat, label: AI-ARK, state: unusable, problems: [{code: LAI-ARK-002, title: "This drive is not formatted as ext4"}]}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /ark/sync:
+    post:
+      tags: [ark]
+      operationId: startArkSync
+      summary: Start a sync run
+      description: |
+        `roots` empty or absent means every writable mounted root; `items` empty means the whole plan. With
+        `dry_run: true` the answer is `200` with the plan and nothing is written. The agent only routes; schemas
+        and errors are owned by ark-sync.md section 3.5. agent.md section 3.8.18.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-05
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SyncRequest"}
+            examples:
+              manual: {value: {roots: [], items: [], dry_run: false, allow_offline_mode: false, trigger: manual}}
+      responses:
+        "200":
+          description: "The plan (`dry_run: true`)."
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SyncPlan"}
+        "202":
+          description: The run started.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SyncAccepted"}
+              examples:
+                running: {value: {run_id: "run-20261102T031500Z-a1f3", state: running, events: "/api/v1/events?types=sync.*"}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-SYN-010 survival mode; LAI-SYN-011 offline mode without allow_offline_mode; LAI-SYN-005 a run is already active (details.run_id)."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+    get:
+      tags: [ark]
+      operationId: getArkSync
+      summary: The active or last sync run
+      description: Shape owned by ark-sync.md section 3.5. agent.md section 3.8.18.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-07
+      responses:
+        "200":
+          description: The run.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SyncRun"}
+              examples:
+                running:
+                  value:
+                    run_id: "run-20261102T031500Z-a1f3"
+                    trigger: scheduled
+                    state: running
+                    started_at: "2026-11-02T03:15:02Z"
+                    finished_at: null
+                    roots: [internal, ark-3f9c0a12]
+                    totals: {items: 31, done: 22, skipped: 6, failed: 0, bytes_total: 61234567890, bytes_done: 40211223344, rate_bps: 18874368, eta_s: 1105}
+                    active: [{root: ark-3f9c0a12, item: wikipedia-en-maxi, state: downloading, version: "2026-10", bytes_done: 61200000000, bytes_total: 110000000000, rate_bps: 18874368, attempt: 1}]
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: "LAI-AGT-021: no run has happened yet."
+        "500": {$ref: "#/components/responses/Internal"}
+    delete:
+      tags: [ark]
+      operationId: cancelArkSync
+      summary: Cancel the active run
+      description: Idempotent. Every active transfer stops at the next 1 MiB boundary and checkpoints. agent.md section 3.8.18.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-07
+      responses:
+        "202":
+          description: Cancelling.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SyncCancelling"}
+              examples:
+                cancelling: {value: {run_id: "run-20261102T031500Z-a1f3", state: cancelling}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /ark/verify:
+    post:
+      tags: [ark]
+      operationId: verifyArk
+      summary: Re-verify content (bit rot)
+      description: Runs as a run of trigger `verify`, sharing the run slot with sync. ark-sync.md section 3.5. agent.md section 3.8.19.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-13
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/VerifyRequest"}
+            examples:
+              quick: {value: {roots: [], items: [], full: false}}
+      responses:
+        "202":
+          description: The run started.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RunAccepted"}
+              examples:
+                run: {value: {run_id: "run-20261102T031500Z-a1f3"}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-SYN-005: a run is already active."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /ark/import:
+    post:
+      tags: [ark]
+      operationId: importArk
+      summary: Import content from another root
+      description: |
+        Works in every mode (no network). With `dry_run: true` the answer is `200` with the plan. `from_root`
+        absent and several drives mounted is `409 LAI-ARK-015` with `details.roots`. ark-sync.md section 3.5
+        and 4.14. agent.md section 3.8.20.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-13
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ImportRequest"}
+            examples:
+              import: {value: {from_root: ark-3f9c0a12, items: [], add_to_profile: false, catalog: false, dry_run: false}}
+      responses:
+        "200":
+          description: "The plan (`dry_run: true`)."
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SyncPlan"}
+        "202":
+          description: The run started.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RunAccepted"}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-SYN-005 a run is already active; LAI-ARK-015 several drives are mounted and from_root is absent (details.roots)."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /ark/drives/{root_id}/eject:
+    parameters:
+      - {$ref: "#/components/parameters/RootId"}
+    post:
+      tags: [ark]
+      operationId: ejectArkDrive
+      summary: Safely eject a drive
+      description: |
+        Stops using the drive, syncs, flushes and unmounts. `force: true` unloads models whose only copy is on
+        the drive instead of refusing. The event `drive.unmounted` follows. ark-sync.md section 3.5 and 4.1.5.
+        agent.md section 3.8.20a.
+      x-localai-auth: op
+      x-localai-timeout: "60 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-03
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EjectRequest"}
+      responses:
+        "202":
+          description: Ejecting.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Ejecting"}
+              examples:
+                ejecting: {value: {state: ejecting}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-ARK-009: something still uses the drive (details.blockers: kind process, model or sync, name, pid)."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /ark/drives/{root_id}/init:
+    parameters:
+      - {$ref: "#/components/parameters/RootId"}
+    post:
+      tags: [ark]
+      operationId: initArkDrive
+      summary: Initialize an empty AI-ARK filesystem
+      description: |
+        Creates `localai/` and `ROOT.json`. Only for a drive in state `uninitialized`; any other state is
+        `409 LAI-AGT-020` with `details.state`. Refused if `<mount>/localai` already exists. ark-sync.md
+        section 3.5. agent.md section 3.8.20a.
+      x-localai-auth: op
+      x-localai-timeout: "60 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-03
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EmptyRequest"}
+      responses:
+        "200":
+          description: The drive, now `ready`.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ArkDrive"}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-020: the drive is not uninitialized (details.state), or localai/ already exists."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /ark/drives/{root_id}/mount:
+    parameters:
+      - {$ref: "#/components/parameters/RootId"}
+    post:
+      tags: [ark]
+      operationId: mountArkDrive
+      summary: Mount a detected but unmounted AI-ARK filesystem
+      description: Only for state `not_mounted`; other states are `409 LAI-AGT-020` with `details.state`. ark-sync.md section 3.5. agent.md section 3.8.20a.
+      x-localai-auth: op
+      x-localai-timeout: "60 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-03
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EmptyRequest"}
+      responses:
+        "200":
+          description: The drive, once mountinfo shows the mount.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ArkDrive"}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-020: the drive is not in state not_mounted (details.state)."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /ark/drives/{root_id}/profile:
+    parameters:
+      - {$ref: "#/components/parameters/RootId"}
+    put:
+      tags: [ark]
+      operationId: setArkDriveProfile
+      summary: Set the profile a drive follows
+      description: ark-sync.md section 3.5. agent.md section 3.8.20a.
+      x-localai-auth: admin
+      x-localai-timeout: "60 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-03
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DriveProfileRequest"}
+            examples:
+              full: {value: {profile: ark-drive-full}}
+      responses:
+        "200":
+          description: The profile is set.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DriveProfile"}
+              examples:
+                set: {value: {root_id: ark-3f9c0a12, profile: ark-drive-full}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+          description: "LAI-CAT-003: unknown profile id."
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /ark/prune:
+    post:
+      tags: [ark]
+      operationId: pruneArk
+      summary: Delete orphans and trash
+      description: Never the last verified copy (it is listed in `refused`). ark-sync.md section 3.5. agent.md section 3.8.20a.
+      x-localai-auth: admin
+      x-localai-timeout: "60 s"
+      x-localai-status: planned
+      x-localai-issue: SYNC-08
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PruneRequest"}
+            examples:
+              orphans: {value: {roots: [internal], orphans: true, trash: false, dry_run: false}}
+      responses:
+        "200":
+          description: What was (or with dry_run would be) deleted.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PruneResult"}
+              examples:
+                pruned:
+                  value:
+                    deleted: [{root: internal, item: osm-north-america, version: "20260501", bytes: 11200000000, kind: orphan}]
+                    refused: [{root: internal, item: gutenberg-en, reason: last_verified_copy}]
+                    freed_bytes: 11200000000
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-SYN-005: a run is active."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /catalog:
+    get:
+      tags: [catalog]
+      operationId: getCatalog
+      summary: The installed catalog merged with local state
+      description: catalog.md section 1 defines the sources. agent.md section 3.8.21.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-14
+      responses:
+        "200":
+          description: The catalog.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Catalog"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /catalog/refresh:
+    post:
+      tags: [catalog]
+      operationId: refreshCatalog
+      summary: Fetch a newer catalog
+      description: Needs network; `aictl catalog restore` works offline. A rejected new catalog keeps the previous one. agent.md section 3.8.21.
+      x-localai-auth: op
+      x-localai-timeout: "120 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-14
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EmptyRequest"}
+      responses:
+        "200":
+          description: Refreshed (or unchanged).
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CatalogRefresh"}
+              examples:
+                changed: {value: {version: "2026.11.02-1", previous: "2026.10.20-2", changed: true, source: cloud}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-023: offline or survival mode (refresh needs network)."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+          description: "LAI-CAT-002: the new catalog was rejected; the previous one is kept."
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /services:
+    get:
+      tags: [services]
+      operationId: listServices
+      summary: The companion services
+      description: |
+        The `services` of `/status` plus `enabled` and `last_exit`, and the per-service fields of
+        companion-services.md section 4.6 (kiwix `books`, whisper `model` and `device`, piper `voices`, maps
+        `maps`). agent.md section 3.8.22.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      responses:
+        "200":
+          description: The services.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServiceList"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /services/{name}/{action}:
+    parameters:
+      - {$ref: "#/components/parameters/ServiceName"}
+      - {$ref: "#/components/parameters/ServiceAction"}
+    post:
+      tags: [services]
+      operationId: controlService
+      summary: Start, stop or restart a service
+      description: |
+        Waits until the unit is `active` (or `inactive` for stop), at most 60 s; for `llama` it also waits for
+        the router health and restores `models.desired_loaded`. Stopping `llama` in survival mode needs
+        `force: true` (`409 LAI-AGT-023`). agent.md section 3.8.22.
+      x-localai-auth: op
+      x-localai-timeout: "120 s"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ServiceActionRequest"}
+      responses:
+        "200":
+          description: Done.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServiceActionResult"}
+              examples:
+                restarted: {value: {name: llama, active: active, restored_models: [qwen3.5-9b-q4km], op_id: op_7k2m9q4r8t1c}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: "LAI-AGT-021: unknown service name or action."
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-022 another operation is running; LAI-AGT-023 stopping llama in survival mode without force."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500":
+          $ref: "#/components/responses/Internal"
+          description: "LAI-AGT-099: a stop that did not stop, an allowlist violation or a bug (details service, unit, action, reason, active, sub, op_id)."
+        "502":
+          $ref: "#/components/responses/BadGateway"
+          description: "The start or restart left the unit not running: LAI-LLM-001 for llama, LAI-SVC-002 for kiwix, LAI-SVC-011 for whisper (details.reason is job_failed, timeout, wrong_state or unavailable)."
+        "503": {$ref: "#/components/responses/Starting"}
+        "504": {$ref: "#/components/responses/GatewayTimeout"}
+
+  /logs:
+    get:
+      tags: [status]
+      operationId: getLogs
+      summary: Recent log lines of a unit
+      description: |
+        `journalctl -u <unit> -n <lines> [--since <t>] -o json --no-pager`, 5 s timeout, 4 MiB cap; each
+        message passes the scrubber. agent.md section 3.8.23.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      parameters:
+        - {name: unit, in: query, required: true, schema: {type: string, enum: [agent, llama, kiwix, whisper, sync, drill]}}
+        - {name: lines, in: query, schema: {type: integer, minimum: 1, maximum: 2000, default: 200}}
+        - {name: since, in: query, schema: {type: string, format: date-time}, description: "RFC 3339."}
+      responses:
+        "200":
+          description: The lines.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Logs"}
+              examples:
+                llama: {value: {unit: "localai-llama.service", lines: [{at: "2026-11-02T08:00:12Z", priority: 6, message: "llama_server: model loaded"}], truncated: false}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500":
+          $ref: "#/components/responses/Internal"
+          description: "LAI-AGT-099: journalctl failed (details.reason is journalctl_failed, details.exit_code) or a bug."
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+          description: "LAI-AGT-099: journalctl took longer than 5 s (details.reason is journalctl_timeout)."
+
+  /events:
+    get:
+      tags: [status]
+      operationId: streamEvents
+      summary: Server-sent events
+      description: |
+        `text/event-stream`, `Cache-Control: no-store`, `X-Accel-Buffering: no`. Each event is `id: <n>`,
+        `event: <type>` and `data: <Event as JSON>`; the `resync` and `shutdown` frames carry only their
+        payload as data (`{"reason":"gap"}`, `{}`). A reconnecting client sends `Last-Event-ID`; the first event is
+        `resync` when the gap is too old or the agent restarted. A keepalive comment `: ping` every 15 s. A
+        Portal session only receives `mode.*`, `model.*`, `service.state`, `drive.*` and `alert.*`; the rest
+        of its `types` is dropped silently. The event catalog is agent.md section 3.10. It is a GET, so the
+        starting gate does not hold it back; a request while the agent is stopping answers 503. After the
+        stream started an error cannot be reported as an envelope.
+      x-localai-auth: [op, portal]
+      x-localai-auth-note: "Portal: types limited to mode.*, model.*, service.state, drive.* and alert.* (survival-portal.md section 3.3)."
+      x-localai-timeout: none
+      parameters:
+        - {name: types, in: query, schema: {type: string}, description: "Comma-separated, may repeat; each pattern is an exact type or ends in a single *, for example model.*,mode.changed. Default: all."}
+        - {name: Last-Event-ID, in: header, schema: {type: integer, minimum: 0}, description: "The last event id the client saw. A missing or malformed value means no replay."}
+      responses:
+        "200":
+          description: The stream.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            Cache-Control: {description: "no-store.", schema: {type: string, enum: [no-store]}}
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: "Server-sent events whose data field is an Event."
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+          description: "LAI-AGT-020: a types pattern is malformed (details.param is types)."
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503":
+          $ref: "#/components/responses/Starting"
+          description: "LAI-AGT-024: the agent is stopping, or the event bus is closed."
+
+  /speech/stt:
+    post:
+      tags: [services]
+      operationId: speechToText
+      summary: Transcribe audio
+      description: |
+        Owned by companion-services.md section 3.4; the agent only routes it to whisper-server. The upload is
+        `multipart/form-data` (not JSON) and the limit is 25 MiB. agent.md section 3.8.25.
+      x-localai-auth: [op, portal]
+      x-localai-timeout: "120 s"
+      x-localai-status: planned
+      x-localai-issue: SVC-07
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: {$ref: "#/components/schemas/SttRequest"}
+      responses:
+        "200":
+          description: The transcript.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SttResponse"}
+              examples:
+                english: {value: {text: "How do I clean a deep cut?", language: en, language_probability: 0.97, duration_s: 3.2, model: whisper-small, elapsed_ms: 1840}}
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+          description: "LAI-SVC-014: not WAV, unsupported encoding, too long, empty or silent; LAI-AGT-020 malformed request."
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413":
+          $ref: "#/components/responses/TooLarge"
+          description: "LAI-SVC-014 or LAI-AGT-025: larger than 25 MiB."
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "429":
+          $ref: "#/components/responses/RateLimited"
+          description: "LAI-SVC-015: 2 requests are already queued."
+        "500": {$ref: "#/components/responses/Internal"}
+        "503":
+          $ref: "#/components/responses/Starting"
+          description: "LAI-AGT-024 the agent is starting or stopping; LAI-SVC-010 no model; LAI-SVC-011 the server is down."
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+          description: "LAI-SVC-016: whisper took longer than 60 s."
+
+  /speech/tts:
+    post:
+      tags: [services]
+      operationId: textToSpeech
+      summary: Synthesize speech
+      description: |
+        Owned by companion-services.md section 3.4. Produces `audio/wav` by exec'ing piper with a fixed argv.
+        agent.md section 3.8.25.
+      x-localai-auth: [op, portal]
+      x-localai-timeout: "120 s"
+      x-localai-status: planned
+      x-localai-issue: SVC-08
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TtsRequest"}
+            examples:
+              english: {value: {text: "Press firmly on the wound with a clean cloth.", voice: null, language: en, speed: 1.0}}
+      responses:
+        "200":
+          description: The audio.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+            X-LocalAI-Voice: {description: "The voice used, for example piper-en-medium.", schema: {type: string}}
+            X-LocalAI-Language: {description: "The language of the voice.", schema: {type: string}}
+            X-LocalAI-Fallback: {description: "true when the requested language had no voice.", schema: {type: string, enum: ["true"]}}
+          content:
+            audio/wav:
+              schema: {type: string, format: binary}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413":
+          $ref: "#/components/responses/TooLarge"
+          description: "LAI-SVC-024: the text is over 2000 characters after cleanup; LAI-AGT-025 the body is over the limit."
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "429":
+          $ref: "#/components/responses/RateLimited"
+          description: "LAI-SVC-015: more than 2 concurrent syntheses and 4 queued."
+        "500":
+          $ref: "#/components/responses/Internal"
+          description: "LAI-SVC-023: piper failed; LAI-AGT-099 a bug."
+        "503":
+          $ref: "#/components/responses/Starting"
+          description: "LAI-AGT-024 the agent is starting or stopping; LAI-SVC-022 no voice."
+
+  /speech/voices:
+    get:
+      tags: [services]
+      operationId: listVoices
+      summary: The installed voices
+      description: Needed by the Portal voice picker. companion-services.md section 3.4. agent.md section 3.8.25.
+      x-localai-auth: [op, portal]
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: SVC-08
+      responses:
+        "200":
+          description: The voices.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Voices"}
+              examples:
+                one: {value: {voices: [{id: piper-en-medium, language: en, display_name: "English (US), medium", default: true}]}}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /cloud:
+    get:
+      tags: [cloud]
+      operationId: getCloud
+      summary: The cloud link
+      description: When not enrolled only `enrolled` is guaranteed. agent.md section 3.8.26.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-17
+      responses:
+        "200":
+          description: The link.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Cloud"}
+              examples:
+                linked:
+                  value:
+                    enrolled: true
+                    url: "https://ai.marin.cr"
+                    state: linked
+                    server_node_id: "00000000-0000-4000-8000-000000000001"
+                    name: ai-n3
+                    since: "2026-11-01T22:10:00Z"
+                    last_heartbeat_at: "2026-11-02T15:03:55Z"
+                    last_claim_at: "2026-11-02T15:03:58Z"
+                    last_error: null
+                    credential: "nod_...a1b2"
+                    eligible_types: ["localai.status.refresh"]
+                    server_features: [node_host_vitals]
+                    state_transport: endpoint
+                    inflight: null
+                    key_synced: true
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+    delete:
+      tags: [cloud]
+      operationId: unenrollCloud
+      summary: Unenroll from the cloud
+      description: Deregisters (3 s, errors ignored), deletes the credential and `cloud/link.json`. Audit `cloud.unenroll`. agent.md section 3.8.26.
+      x-localai-auth: admin
+      x-localai-timeout: "15 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-17
+      responses:
+        "200":
+          description: Unenrolled.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CloudUnenrolled"}
+              examples:
+                done: {value: {enrolled: false}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /cloud/enroll:
+    post:
+      tags: [cloud]
+      operationId: enrollCloud
+      summary: Enroll in the cloud
+      description: |
+        Writes the credential (0600), sets `cloud.url` in node.yaml and registers synchronously (10 s). A
+        network failure answers `200` with `state: backoff` (credential kept, the link retries). In offline
+        and survival modes the credential is stored and the state is `stopped`. Audit `cloud.enroll`.
+        agent.md section 3.8.26.
+      x-localai-auth: admin
+      x-localai-timeout: "30 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-17
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CloudEnrollRequest"}
+            examples:
+              enroll: {value: {url: "https://ai.marin.cr", credential: "<NODE_CREDENTIAL>"}}
+      responses:
+        "200":
+          description: Linked, backing off, or stopped.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CloudEnrolled"}
+              examples:
+                linked: {value: {state: linked, server_node_id: "00000000-0000-4000-8000-000000000001", reattached: false}}
+                backoff: {value: {state: backoff, last_error: "cloud unreachable"}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+          description: "LAI-CLD-051: the cloud answered 401; the credential is not kept."
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /cloud/resend-key:
+    post:
+      tags: [cloud]
+      operationId: resendCloudKey
+      summary: Push the llama key to the cloud now
+      description: agent.md section 3.8.26 (an expansion of the brief's table, needed by cloud-app.md section 3.6).
+      x-localai-auth: admin
+      x-localai-timeout: "15 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-17
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EmptyRequest"}
+      responses:
+        "200":
+          description: Pushed.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ResendKeyResult"}
+              examples:
+                synced: {value: {key_synced: true, fingerprint: "ab12...9f3c"}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-023: the node is not linked."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /doctor:
+    get:
+      tags: [status]
+      operationId: runDoctor
+      summary: Run the doctor checks
+      description: |
+        Runs the checks concurrently (at most 4 at once), each with its own timeout. Only non-ok results
+        appear in `results`. Severity order: info < warning < error < critical. agent.md section 3.8.27.
+      x-localai-auth: op
+      x-localai-timeout: "60 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-11
+      parameters:
+        - {name: area, in: query, style: form, explode: true, schema: {type: array, items: {type: string}}, description: "Repeatable, for example LLM."}
+        - {name: fast, in: query, schema: {type: string, enum: ["1"]}, description: "1 runs only the checks marked fast (at most 5 s in total)."}
+      responses:
+        "200":
+          description: The report.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DoctorReport"}
+              examples:
+                battery:
+                  value:
+                    ran_at: "2026-11-02T15:04:05Z"
+                    duration_ms: 2310
+                    summary: {ok: 41, info: 1, warning: 2, error: 0, critical: 0}
+                    results: [{check: hw.battery, code: LAI-HW-012, severity: warning, title: "Running on battery", fix: "Plug in the charger. A laptop server stops when the battery runs out.", details: {battery_percent: 64}}]
+                    passed: [agt.config, llm.router_health, net.loopback_only]
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /drill:
+    post:
+      tags: [drill]
+      operationId: startDrill
+      summary: Start a drill
+      description: |
+        `trigger: scheduled` is what `localai-drill.service` sends. Owned by drill.md section 3.1. agent.md
+        section 3.8.28.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      x-localai-status: planned
+      x-localai-issue: DRILL-01
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DrillRequest"}
+            examples:
+              full: {value: {quick: false, only: [], trigger: manual}}
+      responses:
+        "202":
+          description: The drill started.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DrillAccepted"}
+              examples:
+                run: {value: {run_id: "drl-20261101T043512Z-9c1e"}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-DRL-002 a drill or an ark run is active; LAI-DRL-003 survival mode."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+    get:
+      tags: [drill]
+      operationId: getDrill
+      summary: The last drill results, or one run
+      description: Owned by drill.md section 3.4. agent.md section 3.8.28.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      x-localai-status: planned
+      x-localai-issue: DRILL-01
+      parameters:
+        - {name: run_id, in: query, schema: {type: string}, description: "That run instead of the last one."}
+      responses:
+        "200":
+          description: The results document.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DrillResults"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: "LAI-AGT-021: the run is no longer kept, or no drill has run."
+        "500": {$ref: "#/components/responses/Internal"}
+    delete:
+      tags: [drill]
+      operationId: abortDrill
+      summary: Abort the running drill
+      description: The agent restores state (drill.md section 4.3). agent.md section 3.8.28.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      x-localai-status: planned
+      x-localai-issue: DRILL-01
+      responses:
+        "202":
+          description: Aborting.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DrillAccepted"}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: "LAI-AGT-021: no drill is running."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /drill/manual:
+    post:
+      tags: [drill]
+      operationId: recordManualDrill
+      summary: Record the quarterly pull-the-plug drill
+      description: |
+        Stores a results document with `trigger: manual_plug` and no `checks`. Audit `drill.record_manual`.
+        Owned by drill.md sections 4.6 and 11. agent.md section 3.8.28.
+      x-localai-auth: admin
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: DRILL-06
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DrillManualRequest"}
+            examples:
+              pass: {value: {result: pass, notes: "Unplugged the AC and the node kept answering.", at: "2026-11-02T15:00:00Z"}}
+      responses:
+        "201":
+          description: Recorded.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DrillAccepted"}
+              examples:
+                run: {value: {run_id: "drl-20261102T150000Z-manual"}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /docs/index:
+    get:
+      tags: [docs]
+      operationId: getDocsIndex
+      summary: The rendered manuals
+      description: From the first content root with `docs/index.json` (written by `aictl docs render`), internal root first. An empty list if none. agent.md section 3.8.29.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-16
+      responses:
+        "200":
+          description: The index.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DocsIndex"}
+              examples:
+                one: {value: {root: /srv/localai/docs, rendered_at: "2026-11-02T03:00:00Z", docs: [{slug: 01-survival-mode, title: "Survival mode", title_es: "Modo de supervivencia", html: /docs/01-survival-mode.html, pdf: /docs/01-survival-mode.pdf}]}}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /profile:
+    get:
+      tags: [catalog]
+      operationId: getProfile
+      summary: The profile and its effective plan
+      description: agent.md section 3.8.30.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-14
+      responses:
+        "200":
+          description: The profile.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Profile"}
+              examples:
+                small:
+                  value:
+                    profile: small-8gb
+                    display_name: "Small GPU laptop (8 GB VRAM)"
+                    overrides: {}
+                    suggested: small-8gb
+                    match_reasons: ["backend cuda", "vram 8192 MiB in 7000..11999"]
+                    effective: {models: [qwen3.5-9b-q4km], content: [wikipedia-en-nopic], planned_bytes: 180000000000, budget_bytes: 220000000000}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+    put:
+      tags: [catalog]
+      operationId: setProfile
+      summary: Change the profile
+      description: |
+        Either field is optional; `null` overrides means unchanged. Validates, writes node.yaml, regenerates
+        `models.ini`, reloads the router and recomputes the plan. Does not start a sync. Audit `profile.set`.
+        agent.md section 3.8.30.
+      x-localai-auth: admin
+      x-localai-timeout: "30 s"
+      x-localai-status: planned
+      x-localai-issue: AGENT-14
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProfileRequest"}
+            examples:
+              cuda: {value: {profile: cuda-12gb, profile_overrides: null}}
+      responses:
+        "200":
+          description: The new profile.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Profile"}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+          description: "LAI-CAT-003 or LAI-CAT-004: the profile or an override is invalid."
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+components:
+  securitySchemes:
+    bearerToken:
+      type: http
+      scheme: bearer
+      description: "Authorization: Bearer lat_... (the agent token). Yields the operator principal."
+    operatorSession:
+      type: apiKey
+      in: cookie
+      name: localai_session
+      description: "Operator session (HttpOnly). A mutating request authenticated by it must carry a same-origin Origin."
+    portalSession:
+      type: apiKey
+      in: cookie
+      name: lai_portal
+      description: "Restricted Portal session, issued only in survival mode (survival-portal.md section 3.3)."
+    pinGrant:
+      type: apiKey
+      in: header
+      name: X-LocalAI-Pin-Grant
+      description: "A PIN grant from POST /pin/verify: lifts an operator to admin."
+
+  headers:
+    XRequestId:
+      description: "req_ plus 12 base32 characters. Echoes a valid incoming X-Request-Id."
+      schema: {type: string}
+    XLocalAIOpId:
+      description: "op_ id of the operation the request created, when it created one."
+      schema: {type: string}
+    RetryAfter:
+      description: "Seconds to wait."
+      schema: {type: integer, minimum: 0}
+    Allow:
+      description: "The methods the path accepts."
+      schema: {type: string}
+
+  parameters:
+    ModelId:
+      name: id
+      in: path
+      required: true
+      description: "A catalog model id (or alias)."
+      schema: {type: string}
+    RootId:
+      name: root_id
+      in: path
+      required: true
+      description: "A drive's root id, ark-<8 hex> (ark-sync.md section 2)."
+      schema: {type: string}
+    ServiceName:
+      name: name
+      in: path
+      required: true
+      schema: {type: string, enum: [llama, kiwix, whisper]}
+    ServiceAction:
+      name: action
+      in: path
+      required: true
+      schema: {type: string, enum: [start, stop, restart]}
+
+  responses:
+    SessionCookie:
+      description: "No content. Sets the cookie localai_session (43 base64url characters; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800)."
+      headers:
+        X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+        X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+        Set-Cookie: {description: "localai_session=<token>.", schema: {type: string}}
+        Cache-Control: {description: "no-store: the response sets a credential.", schema: {type: string, enum: [no-store]}}
+    InvalidRequest:
+      description: "400 LAI-AGT-020: malformed JSON, unknown field (details.field), invalid value."
+      headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    Unauthenticated:
+      description: "401 LAI-SEC-001 missing or invalid credentials, or LAI-SVC-110 a Portal session used where it is not allowed."
+      headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    Forbidden:
+      description: "403 LAI-SEC-002 admin needed (details.pin_required), LAI-SEC-006 bad Host, LAI-SEC-007 bad Origin, LAI-SEC-013 socket peer is not an operator."
+      headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    NotFound:
+      description: "404 LAI-AGT-021: unknown route, model id, service name or content id."
+      headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    Conflict:
+      description: "409 LAI-AGT-022 another operation is in progress, or LAI-AGT-023 not allowed in the current mode."
+      headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    TooLarge:
+      description: "413 LAI-AGT-025: the body is over the limit (1 MiB; STT 25 MiB)."
+      headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    UnsupportedMediaType:
+      description: "415 LAI-AGT-020: a mutating request without the right Content-Type."
+      headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    Unprocessable:
+      description: "422 a domain code: understood but refused by a rule."
+      headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    RateLimited:
+      description: "429 LAI-SEC-004 too many wrong PIN or login-code attempts, or a queue limit (Retry-After is set)."
+      headers:
+        X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+        Retry-After: {$ref: "#/components/headers/RetryAfter"}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    Internal:
+      description: "500 LAI-AGT-099: a bug (details.request_id is always present), or a domain failure code."
+      headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    BadGateway:
+      description: "502 LAI-LLM-004 the router, or LAI-SVC-* another upstream, is not answering."
+      headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    Starting:
+      description: "503 LAI-AGT-024: the agent is starting up or shutting down (Retry-After: 5)."
+      headers:
+        X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+        Retry-After: {$ref: "#/components/headers/RetryAfter"}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+    GatewayTimeout:
+      description: "504 LAI-LLM-010: an upstream took too long."
+      headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+
+  schemas:
+    ErrorEnvelope:
+      description: "The body of every non-2xx response (agent.md section 3.7). `code` is always a doctor code, `fix` one plain-language sentence, `details` an object whose keys are documented per route."
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, fix, details]
+          additionalProperties: false
+          properties:
+            code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+            message: {type: string}
+            fix: {type: string}
+            details: {type: object}
+      examples:
+        - error: {code: LAI-LLM-009, message: "The model failed to start. The previous model was started again.", fix: "Run aictl logs --unit llama to see why.", details: {model: qwen3.5-9b-q4km, exit_code: 1, rolled_back: true, op_id: op_7k2m9q4r8t1c}}
+
+    EmptyRequest:
+      description: "The empty JSON object. The Content-Type is still required."
+      type: object
+      additionalProperties: false
+      properties: {}
+
+    Health:
+      description: "GET /health (agent.md section 3.8.1)."
+      type: object
+      required: [ok, version, mode, starting]
+      additionalProperties: false
+      properties:
+        ok: {type: boolean, description: "True whenever the agent answers."}
+        version: {type: string}
+        mode: {$ref: "#/components/schemas/ModeValue"}
+        starting: {type: boolean, description: "True until startup step 17 completes."}
+
+    ModeValue:
+      type: string
+      enum: [online, offline, survival]
+
+    SessionCodeRequest:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code: {type: string, pattern: "^[0-9]{6}$", description: "Six decimal digits."}
+
+    UiCode:
+      type: object
+      required: [code, expires_at]
+      additionalProperties: false
+      properties:
+        code: {type: string, pattern: "^[0-9]{6}$"}
+        expires_at: {type: string, format: date-time}
+
+    PinVerifyRequest:
+      type: object
+      required: [pin]
+      additionalProperties: false
+      properties:
+        pin: {type: string, pattern: "^[0-9]{4,8}$", description: "4 to 8 digits."}
+
+    PinGrant:
+      type: object
+      required: [grant, expires_at]
+      additionalProperties: false
+      properties:
+        grant: {type: string, pattern: "^pg_[A-Za-z0-9_-]{43}$"}
+        expires_at: {type: string, format: date-time}
+
+    Alert:
+      description: "An alert raised by the doctor (agent.md section 4.13)."
+      type: object
+      required: [code, severity, title, fix]
+      additionalProperties: false
+      properties:
+        code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+        severity: {$ref: "#/components/schemas/Severity"}
+        title: {type: string}
+        fix: {type: string}
+        since: {type: string, format: date-time}
+        details: {type: object}
+
+    Severity:
+      type: string
+      enum: [info, warning, error, critical]
+
+    Service:
+      description: |
+        One companion service. `name` and `unit` are always present (`unit` is null for piper and maps). The agent
+        fields (`active`, `sub`, `since`, `restarts`, `healthy`, `enabled`, `last_exit`) are in agent.md section 3.8.4
+        and 3.8.22; the supervisor fields (`state`, `last_check`, `detail`, `books`, `model`, `device`, `voices`,
+        `maps`, `problems`) are owned by companion-services.md section 4.6, hence the open object.
+      type: object
+      required: [name, unit]
+      additionalProperties: true
+      properties:
+        name: {type: string}
+        unit: {type: [string, "null"]}
+        active: {type: string, description: "systemd ActiveState."}
+        sub: {type: string, description: "systemd SubState."}
+        since: {type: [string, "null"], format: date-time}
+        restarts: {type: integer, minimum: 0}
+        healthy: {type: boolean}
+        enabled: {type: boolean}
+        last_exit:
+          type: [object, "null"]
+          additionalProperties: false
+          properties:
+            code: {type: integer}
+            at: {type: string, format: date-time}
+        state: {type: string, enum: [ok, degraded, down, missing_content, disabled, starting]}
+        last_check: {type: string, format: date-time}
+        detail: {type: string}
+        books: {type: array, items: {type: object, additionalProperties: true}}
+        model: {type: string}
+        device: {type: string}
+        voices: {type: array, items: {type: string}}
+        maps: {type: array, items: {type: string}}
+        problems: {type: array, items: {type: object, additionalProperties: true}}
+
+    ServiceList:
+      type: object
+      required: [services]
+      additionalProperties: false
+      properties:
+        services: {type: array, items: {$ref: "#/components/schemas/Service"}}
+
+    ServiceActionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        force: {type: boolean, default: false, description: "Needed to stop llama in survival mode."}
+
+    ServiceActionResult:
+      type: object
+      required: [name, active, op_id]
+      additionalProperties: false
+      properties:
+        name: {type: string}
+        active: {type: string}
+        restored_models: {type: array, items: {type: string}}
+        op_id: {type: string}
+
+    ModeTransition:
+      type: object
+      required: [step, started_at]
+      additionalProperties: false
+      properties:
+        target: {$ref: "#/components/schemas/ModeValue"}
+        step: {type: string}
+        started_at: {type: string, format: date-time}
+
+    Status:
+      description: "GET /status (agent.md section 3.8.4)."
+      type: object
+      required: [node, mode, connectivity, hardware, services, models, ark, cloud, tailscale, alerts]
+      additionalProperties: false
+      properties:
+        node:
+          type: object
+          required: [id, display_name, hostname, profile, agent_version, backend, llama_mode, llama_build, catalog_version, uptime_s, time]
+          additionalProperties: false
+          properties:
+            id: {type: string}
+            display_name: {type: string}
+            hostname: {type: string}
+            profile: {type: [string, "null"]}
+            agent_version: {type: string}
+            backend: {type: string}
+            llama_mode: {type: string, description: "router or single."}
+            llama_build: {type: [string, "null"]}
+            catalog_version: {type: [string, "null"]}
+            uptime_s: {type: integer, minimum: 0}
+            time: {type: string, format: date-time}
+        mode:
+          type: object
+          required: [value, since, transition]
+          additionalProperties: false
+          properties:
+            value: {$ref: "#/components/schemas/ModeValue"}
+            since: {type: string, format: date-time}
+            transition:
+              oneOf:
+                - {type: "null"}
+                - {$ref: "#/components/schemas/ModeTransition"}
+        connectivity:
+          type: object
+          required: [value, checked_at, none_since]
+          additionalProperties: false
+          properties:
+            value: {type: string, description: "For example full or none."}
+            checked_at: {type: [string, "null"], format: date-time}
+            none_since: {type: [string, "null"], format: date-time}
+        hardware:
+          type: object
+          required: [gpu, vram_total_mib, vram_used_mib, ram_total_mib, ram_available_mib, gpu_temp_c, cpu_temp_c, power]
+          additionalProperties: false
+          properties:
+            gpu: {type: [string, "null"]}
+            vram_total_mib: {type: [integer, "null"]}
+            vram_used_mib: {type: [integer, "null"]}
+            ram_total_mib: {type: integer}
+            ram_available_mib: {type: integer}
+            gpu_temp_c: {type: [number, "null"]}
+            cpu_temp_c: {type: [number, "null"]}
+            power: {$ref: "#/components/schemas/Power"}
+        services: {type: array, items: {$ref: "#/components/schemas/Service"}}
+        models:
+          type: object
+          required: [default, loaded, loading, present, loadable, models_max]
+          additionalProperties: false
+          properties:
+            default: {type: [string, "null"]}
+            loaded: {type: array, items: {type: string}}
+            loading: {type: array, items: {type: string}}
+            present: {type: integer, minimum: 0}
+            loadable: {type: integer, minimum: 0}
+            models_max: {type: integer, minimum: 0}
+        ark:
+          description: "Summary of ark-sync.md section 4.12.1 and 3.5."
+          type: object
+          required: [roots, drive, sync]
+          additionalProperties: true
+          properties:
+            roots:
+              type: array
+              items:
+                type: object
+                required: [path, kind, status]
+                additionalProperties: true
+                properties:
+                  path: {type: string}
+                  kind: {type: string}
+                  status: {type: string}
+                  ready_pct: {type: integer}
+                  updated_at: {type: [string, "null"], format: date-time}
+            drive:
+              type: object
+              required: [mounted]
+              additionalProperties: true
+              properties:
+                mounted: {type: boolean}
+            sync:
+              type: object
+              required: [state]
+              additionalProperties: true
+              properties:
+                state: {type: string}
+                last_success_at: {type: [string, "null"], format: date-time}
+        cloud:
+          type: object
+          required: [enrolled]
+          additionalProperties: false
+          properties:
+            enrolled: {type: boolean}
+            state: {type: string}
+            url: {type: [string, "null"]}
+            last_heartbeat_at: {type: [string, "null"], format: date-time}
+        tailscale:
+          type: object
+          required: [manage]
+          additionalProperties: false
+          properties:
+            manage: {type: boolean}
+            pattern: {type: string, enum: [A, B, none]}
+            applied: {type: boolean}
+            backend_state: {type: [string, "null"]}
+        alerts: {type: array, items: {$ref: "#/components/schemas/Alert"}}
+
+    Power:
+      type: object
+      required: [source]
+      additionalProperties: false
+      properties:
+        source: {type: string, description: "ac or battery."}
+        battery_percent: {type: [integer, "null"], minimum: 0, maximum: 100}
+        charging: {type: [boolean, "null"]}
+        time_remaining_s: {type: [integer, "null"], minimum: 0}
+        profile: {type: [string, "null"]}
+        stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
+
+    PortalStatus:
+      description: "Owned by survival-portal.md section 3.5; only the keys every build sets are required here."
+      type: object
+      required: [schema_version, generated_at, node_id, mode, language, session, brain, capabilities, alerts]
+      additionalProperties: true
+      properties:
+        schema_version: {type: integer}
+        generated_at: {type: string, format: date-time}
+        node_id: {type: string}
+        mode: {$ref: "#/components/schemas/ModeValue"}
+        language: {type: string, enum: [en, es]}
+        session: {type: string, enum: [none, portal, full]}
+        brain: {type: object, additionalProperties: true}
+        capabilities: {type: object, additionalProperties: true}
+        alerts: {type: array, items: {type: object, additionalProperties: true}}
+
+    Hardware:
+      description: "GET /hardware (agent.md section 3.8.6)."
+      type: object
+      required: [sampled_at, gpus, ram, disks, power, thermal, cpu]
+      additionalProperties: false
+      properties:
+        sampled_at: {type: string, format: date-time}
+        gpus:
+          description: "Empty on a CPU-only node."
+          type: array
+          items:
+            type: object
+            required: [index, vendor, name, backend, vram_total_mib, vram_used_mib]
+            additionalProperties: false
+            properties:
+              index: {type: integer, minimum: 0}
+              vendor: {type: string, enum: [nvidia, amd, intel, other]}
+              name: {type: string}
+              backend: {type: string}
+              compute_cap: {type: [string, "null"]}
+              driver: {type: [string, "null"]}
+              unified_memory: {type: boolean}
+              vram_total_mib: {type: integer, minimum: 0}
+              vram_used_mib: {type: integer, minimum: 0}
+              vram_used_by_others_mib: {type: [integer, "null"], minimum: 0}
+              temp_c: {type: [number, "null"]}
+              util_pct: {type: [number, "null"]}
+              power_w: {type: [number, "null"]}
+              stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
+              throttling: {type: array, items: {type: string}}
+              processes:
+                type: array
+                items:
+                  type: object
+                  required: [pid, name, vram_mib]
+                  additionalProperties: false
+                  properties:
+                    pid: {type: integer}
+                    name: {type: string}
+                    vram_mib: {type: integer, minimum: 0}
+        ram:
+          type: object
+          required: [total_mib, available_mib]
+          additionalProperties: false
+          properties:
+            total_mib: {type: integer, minimum: 0}
+            available_mib: {type: integer, minimum: 0}
+            swap_total_mib: {type: integer, minimum: 0}
+            swap_free_mib: {type: integer, minimum: 0}
+            stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
+        disks:
+          description: "One entry per role (per drive for drive_root), even when several share a filesystem."
+          type: array
+          items:
+            type: object
+            required: [path, role, total_bytes, free_bytes]
+            additionalProperties: false
+            properties:
+              path: {type: string}
+              role: {type: string, enum: [internal_root, drive_root, state, opt, etc]}
+              fs: {type: string}
+              total_bytes: {type: integer, minimum: 0}
+              free_bytes: {type: integer, minimum: 0}
+              stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
+        power: {$ref: "#/components/schemas/Power"}
+        thermal:
+          type: object
+          additionalProperties: false
+          properties:
+            cpu_temp_c: {type: [number, "null"]}
+            cpu_throttle_events: {type: integer, minimum: 0}
+            stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
+            zones:
+              type: array
+              items:
+                type: object
+                required: [type, temp_c]
+                additionalProperties: false
+                properties:
+                  type: {type: string}
+                  temp_c: {type: number}
+        cpu:
+          type: object
+          required: [model, cores]
+          additionalProperties: false
+          properties:
+            model: {type: string}
+            cores: {type: integer, minimum: 0, description: "0 when the probe has not succeeded yet."}
+            load1: {type: number}
+            stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
+
+    Model:
+      description: "A catalog model merged with local state. `files` and `preset` appear on GET /models/{id} only."
+      type: object
+      required: [id, display_name, engine, in_profile, present, verified, locations, loadable, loadable_reason, status, loaded, default, aliases]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        display_name: {type: string}
+        summary: {type: string}
+        engine: {type: string, description: "For example llama."}
+        roles: {type: array, items: {type: string}}
+        survival_tier: {type: integer}
+        in_profile: {type: boolean}
+        size_bytes: {type: integer, minimum: 0}
+        present: {type: boolean}
+        verified: {type: boolean}
+        locations:
+          type: array
+          items:
+            type: object
+            required: [root, complete]
+            additionalProperties: false
+            properties:
+              root: {type: string}
+              complete: {type: boolean}
+              verified_at: {type: [string, "null"], format: date-time}
+        loadable: {type: boolean}
+        loadable_reason:
+          description: "Null when loadable. code is LAI-CAT-005 (fit or backend), LAI-LLM-008 (files missing or unverified) or LAI-LLM-004 (router down)."
+          type: [object, "null"]
+          required: [code, message]
+          additionalProperties: false
+          properties:
+            code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+            message: {type: string}
+        status: {type: string, enum: [absent, stored, unloaded, loading, loaded, sleeping, failed, n/a]}
+        loaded: {type: boolean}
+        default: {type: boolean}
+        aliases: {type: array, items: {type: string}}
+        requirements:
+          type: object
+          additionalProperties: false
+          properties:
+            backends: {type: array, items: {type: string}}
+            min_vram_mib: {type: integer, minimum: 0}
+            min_ram_mib: {type: integer, minimum: 0}
+        last_load_ms: {type: [integer, "null"], minimum: 0}
+        files:
+          type: array
+          items:
+            type: object
+            required: [kind, name, size_bytes, sha256, path]
+            additionalProperties: false
+            properties:
+              kind: {type: string}
+              name: {type: string}
+              size_bytes: {type: integer, minimum: 0}
+              sha256: {type: string, pattern: "^[0-9a-f]{64}$"}
+              path: {type: string}
+        preset: {type: string, description: "The router INI section text."}
+
+    ModelList:
+      type: object
+      required: [models_max, default, models]
+      additionalProperties: false
+      properties:
+        models_max: {type: integer, minimum: 0}
+        default: {type: [string, "null"]}
+        models: {type: array, items: {$ref: "#/components/schemas/Model"}}
+
+    LoadRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        wait: {type: boolean, default: true}
+        unload_others: {type: boolean, default: true}
+
+    ModelLoaded:
+      type: object
+      required: [id, status, already_loaded, op_id]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [loaded]}
+        already_loaded: {type: boolean}
+        load_ms: {type: [integer, "null"], minimum: 0}
+        unloaded: {type: array, items: {type: string}}
+        op_id: {type: string}
+
+    ModelLoading:
+      type: object
+      required: [id, status, op_id]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [loading]}
+        op_id: {type: string}
+
+    UnloadRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        force: {type: boolean, default: false, description: "Needed to unload the last loaded LLM in survival mode."}
+
+    ModelUnloaded:
+      type: object
+      required: [id, status, already_unloaded, op_id]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [unloaded]}
+        already_unloaded: {type: boolean}
+        op_id: {type: string}
+
+    DefaultModelRequest:
+      type: object
+      required: [id]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+
+    DefaultModelResponse:
+      type: object
+      required: [default, previous, ini_regenerated]
+      additionalProperties: false
+      properties:
+        default: {type: string}
+        previous: {type: [string, "null"]}
+        ini_regenerated: {type: boolean}
+
+    DownloadRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        roots: {type: array, items: {type: string}, description: "Content roots (path or root id). Default: the internal root, plus the drive if its profile includes the model."}
+        allow_offline_mode: {type: boolean, default: false}
+
+    DownloadAccepted:
+      type: object
+      required: [id, sync_run_id, queued]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        sync_run_id: {type: string, pattern: "^run-"}
+        queued: {type: boolean}
+
+    DeleteModelResponse:
+      type: object
+      required: [id, deleted, op_id]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        deleted:
+          type: array
+          items:
+            type: object
+            required: [root, bytes]
+            additionalProperties: false
+            properties:
+              root: {type: string}
+              bytes: {type: integer, minimum: 0}
+        op_id: {type: string}
+
+    Key:
+      description: "GET /key (agent.md section 3.8.13)."
+      type: object
+      required: [key, fingerprint, base_urls, models, snippets]
+      additionalProperties: false
+      properties:
+        key: {type: string, pattern: "^[0-9a-f]{64}$"}
+        fingerprint: {type: string}
+        base_urls:
+          type: object
+          required: [local, tailnet, public]
+          additionalProperties: false
+          properties:
+            local: {type: string}
+            tailnet: {type: [string, "null"]}
+            public: {type: [string, "null"]}
+        models: {type: array, items: {type: string}}
+        snippets:
+          type: object
+          required: [curl, env]
+          additionalProperties: true
+          properties:
+            curl: {type: string}
+            env: {type: string}
+            opencode: {type: object, additionalProperties: true}
+            openai_python: {type: string}
+
+    KeyRotateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        restart: {type: boolean, default: true}
+
+    KeyRotated:
+      type: object
+      required: [fingerprint, rotated_at, cloud_synced, restored_models, clients_to_update, op_id]
+      additionalProperties: false
+      properties:
+        fingerprint: {type: string}
+        rotated_at: {type: string, format: date-time}
+        cloud_synced: {type: boolean}
+        restored_models: {type: array, items: {type: string}}
+        clients_to_update: {type: array, items: {type: string}}
+        op_id: {type: string}
+
+    Mode:
+      description: "GET /mode (agent.md section 3.8.15)."
+      type: object
+      required: [mode, since, transition, allowed_targets, leave_requires_admin, connectivity, suggest_survival]
+      additionalProperties: false
+      properties:
+        mode: {$ref: "#/components/schemas/ModeValue"}
+        since: {type: string, format: date-time}
+        transition:
+          oneOf:
+            - {type: "null"}
+            - {$ref: "#/components/schemas/ModeTransition"}
+        allowed_targets: {type: array, items: {$ref: "#/components/schemas/ModeValue"}}
+        leave_requires_admin: {type: boolean}
+        connectivity: {type: string}
+        suggest_survival: {type: boolean}
+
+    ModeRequest:
+      type: object
+      required: [target]
+      additionalProperties: false
+      properties:
+        target: {$ref: "#/components/schemas/ModeValue"}
+        wait: {type: boolean, default: false}
+        reapply: {type: boolean, default: false}
+
+    ModeAccepted:
+      type: object
+      required: [op_id, from, target, transition]
+      additionalProperties: false
+      properties:
+        op_id: {type: string}
+        from: {$ref: "#/components/schemas/ModeValue"}
+        target: {$ref: "#/components/schemas/ModeValue"}
+        transition: {$ref: "#/components/schemas/ModeTransition"}
+
+    ModeDone:
+      type: object
+      required: [op_id, from, mode, warnings]
+      additionalProperties: false
+      properties:
+        op_id: {type: string}
+        from: {$ref: "#/components/schemas/ModeValue"}
+        mode: {$ref: "#/components/schemas/ModeValue"}
+        warnings:
+          type: array
+          items:
+            type: object
+            required: [code, message]
+            additionalProperties: false
+            properties:
+              code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+              message: {type: string}
+
+    ModeAlready:
+      type: object
+      required: [mode, already]
+      additionalProperties: false
+      properties:
+        mode: {$ref: "#/components/schemas/ModeValue"}
+        already: {type: boolean, enum: [true]}
+
+    SurvivalRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reapply: {type: boolean, default: false}
+
+    SurvivalAccepted:
+      type: object
+      required: [op_id, target]
+      additionalProperties: false
+      properties:
+        op_id: {type: string}
+        target: {type: string, enum: [survival]}
+        queued: {type: boolean, description: "True when the request was persisted as pending_mode (before startup step 12, or during shutdown)."}
+
+    SurvivalAlready:
+      type: object
+      required: [mode, already]
+      additionalProperties: false
+      properties:
+        mode: {type: string, enum: [survival]}
+        already: {type: boolean, enum: [true]}
+
+    ArkRoots:
+      description: "Owned by ark-sync.md section 4.12.1 (READY.json)."
+      type: object
+      required: [roots]
+      additionalProperties: false
+      properties:
+        roots:
+          type: array
+          items:
+            type: object
+            required: [schema_version, generated_at, root, overall]
+            additionalProperties: true
+            properties:
+              schema_version: {type: integer}
+              generated_at: {type: string, format: date-time}
+              root: {type: object, additionalProperties: true}
+              overall: {type: string, enum: [green, yellow, red]}
+
+    ArkDrive:
+      description: "A drive of GET /ark/drives (ark-sync.md section 3.5). `root_id` is null only when there is no usable filesystem UUID."
+      type: object
+      required: [root_id, device, mount, state]
+      additionalProperties: true
+      properties:
+        root_id: {type: [string, "null"]}
+        device: {type: string}
+        mount: {type: [string, "null"]}
+        fstype: {type: string}
+        label: {type: [string, "null"]}
+        size_bytes: {type: integer, minimum: 0}
+        free_bytes: {type: integer, minimum: 0}
+        state: {type: string, enum: [ready, read_only, unclean, not_mounted, unusable, ejecting, uninitialized]}
+        read_only: {type: boolean}
+        fs_errors: {type: integer, minimum: 0}
+        initialized: {type: boolean}
+        profile: {type: [string, "null"]}
+        ready:
+          type: object
+          required: [overall, generated_at]
+          additionalProperties: true
+          properties:
+            overall: {type: string}
+            generated_at: {type: string, format: date-time}
+        problems: {type: array, items: {type: object, additionalProperties: true}}
+
+    ArkDrives:
+      type: object
+      required: [drives]
+      additionalProperties: false
+      properties:
+        drives: {type: array, items: {$ref: "#/components/schemas/ArkDrive"}}
+
+    SyncRequest:
+      description: "ark-sync.md section 3.5."
+      type: object
+      additionalProperties: false
+      properties:
+        roots: {type: array, items: {type: string}, description: "Root paths or ids. Empty or absent: every writable mounted root."}
+        items: {type: array, items: {type: string}, description: "Empty: the whole plan."}
+        dry_run: {type: boolean, default: false}
+        allow_offline_mode: {type: boolean, default: false}
+        trigger: {type: string, enum: [manual, scheduled, cloud, mode_online, install, verify, import], default: manual}
+
+    SyncAccepted:
+      type: object
+      required: [run_id, state, events]
+      additionalProperties: false
+      properties:
+        run_id: {type: string, pattern: "^run-"}
+        state: {type: string, enum: [running]}
+        events: {type: string}
+
+    SyncPlan:
+      description: "The dry-run plan, owned by ark-sync.md section 4.4.4 (JSON form)."
+      type: object
+      additionalProperties: true
+      properties:
+        root: {type: string}
+        profile: {type: string}
+        catalog_version: {type: string}
+        budget_bytes: {type: integer}
+        planned_bytes: {type: integer}
+        items: {type: array, items: {type: object, additionalProperties: true}}
+
+    SyncRun:
+      description: "The active or last run (ark-sync.md section 3.5)."
+      type: object
+      required: [run_id, trigger, state, started_at, finished_at]
+      additionalProperties: true
+      properties:
+        run_id: {type: string, pattern: "^run-"}
+        trigger: {type: string}
+        state: {type: string, enum: [running, cancelling, done, cancelled, failed, skipped]}
+        reason: {type: string, description: "For state skipped: offline, mode, battery, disabled or no_roots."}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: [string, "null"], format: date-time}
+        roots: {type: array, items: {type: string}}
+        totals: {type: object, additionalProperties: true}
+        active: {type: array, items: {type: object, additionalProperties: true}}
+
+    SyncCancelling:
+      type: object
+      required: [run_id, state]
+      additionalProperties: false
+      properties:
+        run_id: {type: string}
+        state: {type: string, enum: [cancelling]}
+
+    RunAccepted:
+      type: object
+      required: [run_id]
+      additionalProperties: false
+      properties:
+        run_id: {type: string, pattern: "^run-"}
+
+    VerifyRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        roots: {type: array, items: {type: string}}
+        items: {type: array, items: {type: string}}
+        full: {type: boolean, default: false}
+
+    ImportRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        from_root: {type: string, description: "A root id. Absent with several drives mounted is 409 LAI-ARK-015."}
+        items: {type: array, items: {type: string}}
+        add_to_profile: {type: boolean, default: false}
+        catalog: {type: boolean, default: false}
+        dry_run: {type: boolean, default: false}
+
+    EjectRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        force: {type: boolean, default: false}
+
+    Ejecting:
+      type: object
+      required: [state]
+      additionalProperties: false
+      properties:
+        state: {type: string, enum: [ejecting]}
+
+    DriveProfileRequest:
+      type: object
+      required: [profile]
+      additionalProperties: false
+      properties:
+        profile: {type: string}
+
+    DriveProfile:
+      type: object
+      required: [root_id, profile]
+      additionalProperties: false
+      properties:
+        root_id: {type: string}
+        profile: {type: string}
+
+    PruneRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        roots: {type: array, items: {type: string}}
+        orphans: {type: boolean}
+        trash: {type: boolean}
+        dry_run: {type: boolean, default: false}
+
+    PruneResult:
+      type: object
+      required: [deleted, refused, freed_bytes]
+      additionalProperties: false
+      properties:
+        deleted:
+          type: array
+          items:
+            type: object
+            required: [root, item, bytes, kind]
+            additionalProperties: false
+            properties:
+              root: {type: string}
+              item: {type: string}
+              version: {type: string}
+              bytes: {type: integer, minimum: 0}
+              kind: {type: string, enum: [orphan, trash]}
+        refused:
+          type: array
+          items:
+            type: object
+            required: [root, item, reason]
+            additionalProperties: false
+            properties:
+              root: {type: string}
+              item: {type: string}
+              reason: {type: string}
+        freed_bytes: {type: integer, minimum: 0}
+
+    Catalog:
+      description: "GET /catalog (agent.md section 3.8.21; catalog.md)."
+      type: object
+      required: [version, source, models, content]
+      additionalProperties: false
+      properties:
+        version: {type: string}
+        source: {type: string, enum: [cloud, github, offline, kit, test]}
+        fetched_at: {type: [string, "null"], format: date-time}
+        models: {type: array, items: {$ref: "#/components/schemas/Model"}}
+        content:
+          type: array
+          items:
+            type: object
+            required: [id, kind, display_name, present, verified, in_profile, size_bytes, status]
+            additionalProperties: false
+            properties:
+              id: {type: string}
+              kind: {type: string}
+              display_name: {type: string}
+              present: {type: boolean}
+              verified: {type: boolean}
+              in_profile: {type: boolean}
+              size_bytes: {type: integer, minimum: 0}
+              status: {type: string}
+
+    CatalogRefresh:
+      type: object
+      required: [version, previous, changed, source]
+      additionalProperties: false
+      properties:
+        version: {type: string}
+        previous: {type: [string, "null"]}
+        changed: {type: boolean}
+        source: {type: string, enum: [cloud, github, offline, kit, test]}
+
+    Logs:
+      type: object
+      required: [unit, lines, truncated]
+      additionalProperties: false
+      properties:
+        unit: {type: string}
+        lines:
+          type: array
+          items:
+            type: object
+            required: [at, priority, message]
+            additionalProperties: false
+            properties:
+              at: {type: string, format: date-time}
+              priority: {type: integer, minimum: 0, maximum: 7}
+              message: {type: string}
+        truncated: {type: boolean}
+
+    Event:
+      description: "The JSON in the data field of a server-sent event (agent.md section 3.10); the shape of `data` depends on `type`."
+      type: object
+      required: [id, type, at, node, data]
+      additionalProperties: false
+      properties:
+        id: {type: integer, minimum: 1}
+        type: {type: string}
+        at: {type: string, format: date-time}
+        node: {type: string}
+        op_id: {type: string}
+        data: {type: object, additionalProperties: true}
+      examples:
+        - {id: 1042, type: model.loaded, at: "2026-11-02T15:04:05Z", node: ai-n3, op_id: op_7k2m9q4r8t1c, data: {model: qwen3.5-9b-q4km, load_ms: 7100}}
+
+    SttRequest:
+      type: object
+      required: [audio]
+      additionalProperties: false
+      properties:
+        audio: {type: string, format: binary, description: "audio/wav (RIFF, PCM 16-bit or 32-bit float, 1 or 2 channels), at most 25 MiB."}
+        language: {type: string, description: "auto (default), en, es or a whisper language code."}
+        prompt: {type: string, maxLength: 200, description: "Whisper's initial prompt."}
+
+    SttResponse:
+      description: "Owned by companion-services.md section 3.4."
+      type: object
+      required: [text, language]
+      additionalProperties: true
+      properties:
+        text: {type: string}
+        language: {type: string}
+        language_probability: {type: number, minimum: 0, maximum: 1}
+        duration_s: {type: number, minimum: 0}
+        model: {type: string}
+        elapsed_ms: {type: integer, minimum: 0}
+
+    TtsRequest:
+      type: object
+      required: [text]
+      additionalProperties: false
+      properties:
+        text: {type: string, minLength: 1, maxLength: 2000}
+        voice: {type: [string, "null"], description: "A catalog piper model id."}
+        language: {type: string, enum: [auto, en, es], default: auto}
+        speed: {type: number, minimum: 0.7, maximum: 1.5, default: 1.0}
+
+    Voices:
+      type: object
+      required: [voices]
+      additionalProperties: false
+      properties:
+        voices:
+          type: array
+          items:
+            type: object
+            required: [id, language, display_name, default]
+            additionalProperties: false
+            properties:
+              id: {type: string}
+              language: {type: string}
+              display_name: {type: string}
+              default: {type: boolean}
+
+    Cloud:
+      description: "GET /cloud (agent.md section 3.8.26). When not enrolled only `enrolled` is guaranteed."
+      type: object
+      required: [enrolled]
+      additionalProperties: false
+      properties:
+        enrolled: {type: boolean}
+        url: {type: [string, "null"]}
+        state: {type: string}
+        server_node_id: {type: [string, "null"]}
+        name: {type: [string, "null"]}
+        since: {type: [string, "null"], format: date-time}
+        last_heartbeat_at: {type: [string, "null"], format: date-time}
+        last_claim_at: {type: [string, "null"], format: date-time}
+        last_error: {type: [string, "null"]}
+        credential: {type: [string, "null"], description: "The credential, masked."}
+        eligible_types: {type: array, items: {type: string}}
+        server_features: {type: array, items: {type: string}}
+        state_transport: {type: string, enum: [endpoint, capabilities]}
+        inflight: {type: [object, "null"], additionalProperties: true}
+        key_synced: {type: boolean}
+
+    CloudEnrollRequest:
+      type: object
+      required: [url, credential]
+      additionalProperties: false
+      properties:
+        url: {type: string}
+        credential: {type: string, description: "A nod_ credential."}
+
+    CloudEnrolled:
+      type: object
+      required: [state]
+      additionalProperties: false
+      properties:
+        state: {type: string, enum: [linked, backoff, stopped]}
+        server_node_id: {type: string}
+        reattached: {type: boolean}
+        last_error: {type: string}
+
+    CloudUnenrolled:
+      type: object
+      required: [enrolled]
+      additionalProperties: false
+      properties:
+        enrolled: {type: boolean, enum: [false]}
+
+    ResendKeyResult:
+      type: object
+      required: [key_synced, fingerprint]
+      additionalProperties: false
+      properties:
+        key_synced: {type: boolean}
+        fingerprint: {type: string}
+
+    DoctorReport:
+      description: "GET /doctor (agent.md section 3.8.27)."
+      type: object
+      required: [ran_at, duration_ms, summary, results, passed]
+      additionalProperties: false
+      properties:
+        ran_at: {type: string, format: date-time}
+        duration_ms: {type: integer, minimum: 0}
+        summary:
+          type: object
+          required: [ok, info, warning, error, critical]
+          additionalProperties: false
+          properties:
+            ok: {type: integer, minimum: 0}
+            info: {type: integer, minimum: 0}
+            warning: {type: integer, minimum: 0}
+            error: {type: integer, minimum: 0}
+            critical: {type: integer, minimum: 0}
+        results:
+          description: "Only non-ok results."
+          type: array
+          items:
+            type: object
+            required: [check, code, severity, title, fix]
+            additionalProperties: false
+            properties:
+              check: {type: string}
+              code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+              severity: {$ref: "#/components/schemas/Severity"}
+              title: {type: string}
+              fix: {type: string}
+              details: {type: object}
+        passed: {type: array, items: {type: string}}
+
+    DrillRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        quick: {type: boolean, default: false}
+        only: {type: array, items: {type: string}, description: "Check ids."}
+        trigger: {type: string, enum: [manual, scheduled], default: manual}
+
+    DrillAccepted:
+      type: object
+      required: [run_id]
+      additionalProperties: false
+      properties:
+        run_id: {type: string, pattern: "^drl-"}
+
+    DrillResults:
+      description: "The results document, owned by drill.md section 3.4."
+      type: object
+      required: [schema_version, run_id, trigger, started_at, overall]
+      additionalProperties: true
+      properties:
+        schema_version: {type: integer}
+        run_id: {type: string, pattern: "^drl-"}
+        trigger: {type: string}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: [string, "null"], format: date-time}
+        overall: {type: string, enum: [pass, warn, fail, aborted]}
+        survival_ready: {type: boolean}
+        checks: {type: array, items: {type: object, additionalProperties: true}}
+
+    DrillManualRequest:
+      type: object
+      required: [result]
+      additionalProperties: false
+      properties:
+        result: {type: string, enum: [pass, fail]}
+        notes: {type: string, maxLength: 2000}
+        at: {type: string, format: date-time}
+
+    DocsIndex:
+      type: object
+      required: [root, rendered_at, docs]
+      additionalProperties: false
+      properties:
+        root: {type: [string, "null"]}
+        rendered_at: {type: [string, "null"], format: date-time}
+        docs:
+          type: array
+          items:
+            type: object
+            required: [slug, title, html]
+            additionalProperties: false
+            properties:
+              slug: {type: string}
+              title: {type: string}
+              title_es: {type: string}
+              html: {type: string}
+              pdf: {type: string}
+
+    Profile:
+      description: "GET and PUT /profile (agent.md section 3.8.30)."
+      type: object
+      required: [profile, display_name, overrides, suggested, match_reasons, effective]
+      additionalProperties: false
+      properties:
+        profile: {type: string}
+        display_name: {type: string}
+        overrides: {type: object, additionalProperties: true, description: "node.yaml profile_overrides."}
+        suggested: {type: [string, "null"]}
+        match_reasons: {type: array, items: {type: string}}
+        effective:
+          type: object
+          required: [models, content, planned_bytes, budget_bytes]
+          additionalProperties: false
+          properties:
+            models: {type: array, items: {type: string}}
+            content: {type: array, items: {type: string}}
+            planned_bytes: {type: integer, minimum: 0}
+            budget_bytes: {type: integer, minimum: 0}
+
+    ProfileRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        profile: {type: string}
+        profile_overrides: {type: [object, "null"], additionalProperties: true, description: "null means unchanged."}
