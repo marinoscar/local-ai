@@ -397,7 +397,7 @@ func TestVerifyPINSuccess(t *testing.T) {
 		t.Fatalf("audit %+v", evs)
 	}
 	mustNotContain(t, "audit", dump(evs), "4821", out["grant"])
-	mustNotContain(t, "log", e.logs.String(), "4821", out["grant"])
+	mustNotLeak(t, "log", e.logs.String(), "4821", out["grant"])
 }
 
 func TestVerifyPINFailureModes(t *testing.T) {

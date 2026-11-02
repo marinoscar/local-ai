@@ -386,7 +386,7 @@ func TestPINNeverReachesTheLog(t *testing.T) {
 	_ = e.pin.Verify("7777")
 	_ = e.pin.Verify("4821")
 	hash, _ := os.ReadFile(e.path)
-	mustNotContain(t, "log", e.logs.String(), "7777", "4821", strings.TrimSpace(string(hash)))
+	mustNotLeak(t, "log", e.logs.String(), "7777", "4821", strings.TrimSpace(string(hash)))
 }
 
 func TestPINVerificationsRunOneAtATime(t *testing.T) {
