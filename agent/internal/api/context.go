@@ -59,6 +59,12 @@ type RequestInfo struct {
 	Err error
 }
 
+// WithRequestInfo returns ctx carrying info, as the server's first middleware does. Handler and
+// authenticator unit tests use it to run without the server; the daemon never does.
+func WithRequestInfo(ctx context.Context, info *RequestInfo) context.Context {
+	return context.WithValue(ctx, infoKey{}, info)
+}
+
 // InfoFrom returns the request's RequestInfo. A request that did not pass through the server's
 // middleware (a handler unit test) gets a detached, TCP-transport value, never nil.
 func InfoFrom(ctx context.Context) *RequestInfo {
