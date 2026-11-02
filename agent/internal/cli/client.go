@@ -180,6 +180,12 @@ func (c *Client) Do(ctx context.Context, method, path string, in, out any) (*Res
 // version check are the same as for Do; a non-2xx answer is returned as an error and the body is
 // consumed. Streaming commands pass a context without a deadline unless the user set --timeout.
 func (c *Client) Stream(ctx context.Context, method, path string, in any) (*http.Response, error) {
+	return c.StreamWith(ctx, method, path, in, nil)
+}
+
+// StreamWith is Stream with extra request headers (Last-Event-ID on a reconnect, AICTL-03). The
+// headers are copied; Accept is always text/event-stream.
+func (c *Client) StreamWith(ctx context.Context, method, path string, in any, hdr http.Header) (*http.Response, error) {
 	if _, err := c.Health(ctx); err != nil {
 		return nil, err
 	}
@@ -187,7 +193,14 @@ func (c *Client) Stream(ctx context.Context, method, path string, in any) (*http
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.send(ctx, method, path, body, http.Header{"Accept": {"text/event-stream"}})
+	h := http.Header{}
+	for k, vs := range hdr {
+		for _, v := range vs {
+			h.Add(k, v)
+		}
+	}
+	h.Set("Accept", "text/event-stream")
+	resp, err := c.send(ctx, method, path, body, h)
 	if err != nil {
 		return nil, err
 	}
