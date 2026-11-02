@@ -1,0 +1,62 @@
+name: catalog-lint
+# `aictl catalog lint catalog/` on every PR that touches the catalog or the linter, and a weekly
+# `--online` run that HEAD-checks every URL and Hugging Face file (sizes and LFS hashes).
+# Spec: docs/specs/catalog.md section 6 and section 9. Owner: CAT-01.
+# Until the catalog is populated (CAT-02, CAT-03) catalog/ does not exist and the job only says so.
+on:
+  pull_request:
+    paths: ['catalog/**', 'agent/internal/catalog/**', 'agent/internal/cli/**', 'agent/cmd/**', '.github/workflows/catalog-lint.yml']
+  push:
+    branches: [main]
+    paths: ['catalog/**', 'agent/internal/catalog/**', 'agent/internal/cli/**', 'agent/cmd/**', '.github/workflows/catalog-lint.yml']
+  schedule:
+    - cron: '17 5 * * 1' # Mondays, 05:17 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: catalog-lint-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  lint:
+    # Every PR: offline rules only, no network.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: Build aictl from the vendored tree
+        working-directory: agent
+        env:
+          GOFLAGS: -mod=vendor
+        run: |
+          go build -o "$RUNNER_TEMP/aiagent" ./cmd/aiagent
+          ln -sf "$RUNNER_TEMP/aiagent" "$RUNNER_TEMP/aictl"
+      - name: aictl catalog lint catalog/
+        run: |
+          if [ ! -d catalog ]; then echo "::notice::catalog/ does not exist yet (CAT-02, CAT-03): nothing to lint"; exit 0; fi
+          "$RUNNER_TEMP/aictl" catalog lint catalog/
+  online:
+    # Weekly (and on demand): the same rules, then HEAD every URL and compare sizes and hashes.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: Build aictl from the vendored tree
+        working-directory: agent
+        env:
+          GOFLAGS: -mod=vendor
+        run: |
+          go build -o "$RUNNER_TEMP/aiagent" ./cmd/aiagent
+          ln -sf "$RUNNER_TEMP/aiagent" "$RUNNER_TEMP/aictl"
+      - name: aictl catalog lint --online catalog/
+        run: |
+          if [ ! -d catalog ]; then echo "::notice::catalog/ does not exist yet (CAT-02, CAT-03): nothing to check"; exit 0; fi
+          "$RUNNER_TEMP/aictl" catalog lint --online catalog/
