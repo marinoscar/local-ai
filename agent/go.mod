@@ -9,7 +9,7 @@ require (
 	golang.org/x/term v0.33.0
 )
 
-require github.com/yuin/goldmark v1.7.8 // indirect
+require github.com/yuin/goldmark v1.7.8
 
 require (
 	golang.org/x/crypto v0.40.0

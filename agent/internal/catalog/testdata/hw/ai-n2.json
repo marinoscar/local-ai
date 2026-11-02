@@ -1,0 +1,7 @@
+{
+  "gpus": [
+    {"index": 0, "vendor": "nvidia", "name": "NVIDIA GPU (12 GB)", "backend": "cuda", "unified_memory": false,
+     "vram_total_mib": 12282, "vram_used_mib": 0, "vram_used_by_others_mib": 0}
+  ],
+  "ram": {"total_mib": 32768, "available_mib": 28000}
+}

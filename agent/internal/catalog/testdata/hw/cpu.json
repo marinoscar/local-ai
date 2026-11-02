@@ -1,0 +1,4 @@
+{
+  "gpus": [],
+  "ram": {"total_mib": 16384, "available_mib": 12000}
+}

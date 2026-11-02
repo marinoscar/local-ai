@@ -11,6 +11,8 @@ const (
 	CodeUnparseable = doctor.CAT001
 	// CodeRejected: a new catalog failed validation; the previous one is kept.
 	CodeRejected = doctor.CAT002
+	// CodeUnknownProfile: the profile in node.yaml (or in a PUT /profile body) is not in the catalog.
+	CodeUnknownProfile = doctor.CAT003
 	// CodeUnknownRef: a profile references an unknown model or content id (also in lint).
 	CodeUnknownRef = doctor.CAT004
 
