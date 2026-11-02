@@ -203,12 +203,12 @@ func TestCatalogCommandUsage(t *testing.T) {
 		out, errIn string
 	}{
 		{[]string{"catalog"}, 2, "", "Usage:"},
-		{[]string{"catalog", "--help"}, 0, "aictl catalog lint", ""},
+		{[]string{"catalog", "--help"}, 0, "Subcommands:", ""},
 		{[]string{"catalog", "lint"}, 2, "", "a catalog directory is required"},
 		{[]string{"catalog", "lint", "a", "b"}, 2, "", "unexpected argument"},
-		{[]string{"catalog", "lint", "--bogus", "a"}, 2, "", `unknown flag "--bogus"`},
+		{[]string{"catalog", "lint", "--bogus", "a"}, 2, "", `Unknown option -bogus`},
 		{[]string{"catalog", "lint", "--help"}, 0, "--online", ""},
-		{[]string{"catalog", "nope"}, 2, "", `unknown subcommand "nope"`},
+		{[]string{"catalog", "nope"}, 2, "", `Unknown subcommand "nope"`},
 		{[]string{"catalog", "refresh"}, 1, "", "not implemented yet (AICTL-06)"},
 		{[]string{"catalog", "restore"}, 1, "", "not implemented yet (AICTL-07)"},
 		{[]string{"catalog", "use", "x", "--test"}, 1, "", "not implemented yet (AICTL-07)"},

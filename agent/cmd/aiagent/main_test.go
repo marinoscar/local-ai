@@ -34,7 +34,7 @@ func TestDispatch(t *testing.T) {
 	}{
 		{"aictl --help", []string{"/usr/local/bin/aictl", "--help"}, 0, "aictl: command line", ""},
 		{"aictl help", []string{"aictl", "help"}, 0, "aictl: command line", ""},
-		{"aictl anything", []string{"aictl", "bogus"}, 2, "", "unknown command"},
+		{"aictl anything", []string{"aictl", "bogus"}, 2, "", "Unknown command"},
 		{"aictl no args", []string{"aictl"}, 2, "", "aictl: command line"},
 		{"aiagent ctl --help", []string{"aiagent", "ctl", "--help"}, 0, "aictl: command line", ""},
 		{"aiagent serve stops on cancel", []string{"aiagent", "serve"}, 0, "", ""},
