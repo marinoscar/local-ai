@@ -1281,6 +1281,8 @@ export interface components {
             charging?: boolean | null;
             time_remaining_s?: number | null;
             profile?: string | null;
+            /** @description Present and true when the last probe failed and this is the previous value. */
+            stale?: boolean;
         };
         /** @description Owned by survival-portal.md section 3.5; only the keys every build sets are required here. */
         PortalStatus: {
@@ -1325,6 +1327,8 @@ export interface components {
                 temp_c?: number | null;
                 util_pct?: number | null;
                 power_w?: number | null;
+                /** @description Present and true when the last probe failed and this is the previous value. */
+                stale?: boolean;
                 throttling?: string[];
                 processes?: {
                     pid: number;
@@ -1337,6 +1341,8 @@ export interface components {
                 available_mib: number;
                 swap_total_mib?: number;
                 swap_free_mib?: number;
+                /** @description Present and true when the last probe failed and this is the previous value. */
+                stale?: boolean;
             };
             /** @description One entry per role (per drive for drive_root), even when several share a filesystem. */
             disks: {
@@ -1346,11 +1352,15 @@ export interface components {
                 fs?: string;
                 total_bytes: number;
                 free_bytes: number;
+                /** @description Present and true when the last probe failed and this is the previous value. */
+                stale?: boolean;
             }[];
             power: components["schemas"]["Power"];
             thermal: {
                 cpu_temp_c?: number | null;
                 cpu_throttle_events?: number;
+                /** @description Present and true when the last probe failed and this is the previous value. */
+                stale?: boolean;
                 zones?: {
                     type: string;
                     temp_c: number;
@@ -1358,8 +1368,11 @@ export interface components {
             };
             cpu: {
                 model: string;
+                /** @description 0 when the probe has not succeeded yet. */
                 cores: number;
                 load1?: number;
+                /** @description Present and true when the last probe failed and this is the previous value. */
+                stale?: boolean;
             };
         };
         /** @description A catalog model merged with local state. `files` and `preset` appear on GET /models/{id} only. */
@@ -2375,8 +2388,8 @@ export interface operations {
     getHardware: {
         parameters: {
             query?: {
-                /** @description 1 forces a new sample (rate-limited to one per 2 s, API clients only). */
-                fresh?: "1";
+                /** @description 1 forces a new sample, at most one per 2 s across all clients (a request inside the window gets the previous forced sample, never an error); 0 or absent answers the cached snapshot. Any other value is 400. API clients only. */
+                fresh?: "0" | "1";
             };
             header?: never;
             path?: never;
@@ -2394,6 +2407,8 @@ export interface operations {
                     "application/json": components["schemas"]["Hardware"];
                 };
             };
+            /** @description LAI-AGT-020: fresh is not 0 or 1 (details.field is fresh). */
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["Internal"];

@@ -306,14 +306,16 @@ paths:
       description: GPU UUIDs and serial numbers are never collected. agent.md section 3.8.6.
       x-localai-auth: op
       x-localai-timeout: "10 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-10
       parameters:
         - name: fresh
           in: query
-          description: "1 forces a new sample (rate-limited to one per 2 s, API clients only)."
-          schema: {type: string, enum: ["1"]}
+          description: "1 forces a new sample, at most one per 2 s across all clients (a request inside the window gets the previous forced sample, never an error); 0 or absent answers the cached snapshot. Any other value is 400. API clients only."
+          schema: {type: string, enum: ["0", "1"]}
       responses:
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+          description: "LAI-AGT-020: fresh is not 0 or 1 (details.field is fresh)."
+
         "200":
           description: The sample.
           headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
@@ -2417,6 +2419,7 @@ components:
         charging: {type: [boolean, "null"]}
         time_remaining_s: {type: [integer, "null"], minimum: 0}
         profile: {type: [string, "null"]}
+        stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
 
     PortalStatus:
       description: "Owned by survival-portal.md section 3.5; only the keys every build sets are required here."
@@ -2462,6 +2465,7 @@ components:
               temp_c: {type: [number, "null"]}
               util_pct: {type: [number, "null"]}
               power_w: {type: [number, "null"]}
+              stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
               throttling: {type: array, items: {type: string}}
               processes:
                 type: array
@@ -2482,6 +2486,7 @@ components:
             available_mib: {type: integer, minimum: 0}
             swap_total_mib: {type: integer, minimum: 0}
             swap_free_mib: {type: integer, minimum: 0}
+            stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
         disks:
           description: "One entry per role (per drive for drive_root), even when several share a filesystem."
           type: array
@@ -2495,6 +2500,7 @@ components:
               fs: {type: string}
               total_bytes: {type: integer, minimum: 0}
               free_bytes: {type: integer, minimum: 0}
+              stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
         power: {$ref: "#/components/schemas/Power"}
         thermal:
           type: object
@@ -2502,6 +2508,7 @@ components:
           properties:
             cpu_temp_c: {type: [number, "null"]}
             cpu_throttle_events: {type: integer, minimum: 0}
+            stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
             zones:
               type: array
               items:
@@ -2517,8 +2524,9 @@ components:
           additionalProperties: false
           properties:
             model: {type: string}
-            cores: {type: integer, minimum: 1}
+            cores: {type: integer, minimum: 0, description: "0 when the probe has not succeeded yet."}
             load1: {type: number}
+            stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
 
     Model:
       description: "A catalog model merged with local state. `files` and `preset` appear on GET /models/{id} only."
