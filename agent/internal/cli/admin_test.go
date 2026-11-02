@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"github.com/marinoscar/local-ai/agent/internal/leakcheck"
 	"io"
 	"net/http"
 	"strings"
@@ -515,7 +516,8 @@ func TestAdminSecretsStayOutOfTheDebugLog(t *testing.T) {
 		t.Fatalf("the debug log should show the verify request:\n%s", r.errOut)
 	}
 	for _, secret := range []string{testPIN, testGrant, testGrant[:20]} {
-		if strings.Contains(r.errOut, secret) {
+		// leakcheck, not strings.Contains: the log's nanosecond timestamps can contain the PIN's digits.
+		if leakcheck.Contains(r.errOut, secret) {
 			t.Errorf("debug log contains %q:\n%s", secret, r.errOut)
 		}
 	}

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"github.com/marinoscar/local-ai/agent/internal/leakcheck"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -116,6 +117,17 @@ func tempPaths(t testing.TB) (token, pin string) {
 }
 
 // mustNotContain fails when out holds any of the secrets.
+// mustNotLeak is mustNotContain for a JSON log: it ignores generated fields (timestamps, durations,
+// ids), whose digits can contain a short secret such as a PIN by chance.
+func mustNotLeak(t testing.TB, what, log string, secrets ...string) {
+	t.Helper()
+	for _, s := range secrets {
+		if leakcheck.Contains(log, s) {
+			t.Errorf("%s contains a secret (%d bytes starting %q)", what, len(s), s[:min(len(s), 6)])
+		}
+	}
+}
+
 func mustNotContain(t testing.TB, what, out string, secrets ...string) {
 	t.Helper()
 	for _, s := range secrets {

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"github.com/marinoscar/local-ai/agent/internal/leakcheck"
 	"io/fs"
 	"net/http"
 	"os"
@@ -186,7 +187,7 @@ func TestPinSetInteractive(t *testing.T) {
 	if a := lines[0]["actor"].(map[string]any); a["kind"] != "cli-root" || a["uid"] != float64(0) {
 		t.Errorf("actor %v", a)
 	}
-	if strings.Contains(readFile(t, filepath.Join(f.env.Paths.StateDir, "audit.jsonl")), "4821") {
+	if leakcheck.Contains(readFile(t, filepath.Join(f.env.Paths.StateDir, "audit.jsonl")), "4821") {
 		t.Error("the PIN is in the audit log")
 	}
 }

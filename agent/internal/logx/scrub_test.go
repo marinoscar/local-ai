@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/marinoscar/local-ai/agent/internal/leakcheck"
 	"log/slog"
 	"math/rand"
 	"regexp"
@@ -289,7 +290,7 @@ func TestScrubHandler_KeyNameRedaction(t *testing.T) {
 	if m["key_synced"] != true || m["cloud_synced"] != "yes" || m["api_key_fingerprint"] != "lat_…9xQz" {
 		t.Errorf("an exempt key was redacted: %v", m)
 	}
-	if strings.Contains(buf.String(), secret) || strings.Contains(buf.String(), "123456") {
+	if strings.Contains(buf.String(), secret) || leakcheck.Contains(buf.String(), "123456") {
 		t.Fatalf("secret in output: %s", buf.String())
 	}
 }
