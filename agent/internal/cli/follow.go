@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/marinoscar/local-ai/agent/internal/cli/events"
+	"github.com/marinoscar/local-ai/agent/internal/cli/out"
 	"github.com/marinoscar/local-ai/agent/internal/cli/progress"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 )
@@ -71,7 +72,7 @@ func (c *Call) Follow(fs FollowSpec) (progress.Result, error) {
 		Silent: c.Global.Quiet || c.Global.JSON,
 		JSON:   c.Global.JSON,
 		Color:  tty && !c.Global.NoColor,
-		UTF8:   localeUTF8(c.env.Getenv),
+		UTF8:   out.UTF8Enabled(c.env.Getenv),
 		Lang:   string(c.Lang),
 		Clock:  fs.Clock,
 	})
@@ -181,14 +182,4 @@ func (c *Call) stderrIsTTY() bool {
 	}
 	fi, err := f.Stat()
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0
-}
-
-// localeUTF8 says whether the locale can print the UTF-8 symbols of aictl.md section 3.3.
-func localeUTF8(getenv func(string) string) bool {
-	for _, k := range []string{"LC_ALL", "LANG"} {
-		if v := strings.ToUpper(getenv(k)); v != "" {
-			return strings.Contains(v, "UTF-8") || strings.Contains(v, "UTF8")
-		}
-	}
-	return false
 }

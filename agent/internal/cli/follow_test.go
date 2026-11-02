@@ -354,8 +354,10 @@ func TestFollowRollback(t *testing.T) {
 		t.Fatalf("exit %d, want 1; stderr %q", res.code, res.errOut)
 	}
 	want := "… Loading Qwen 3.5 9B\n" +
-		"✗ The model Qwen 3.6 35B failed to start. The previous model was started again.  [LAI-LLM-009]\n" +
-		"  → Fix: Choose a smaller model (`aictl models --loadable`) or check `aictl logs --unit llama`.\n"
+		"✗ The model Qwen 3.6 35B failed to start. The previous model was started again.\n" +
+		"  [LAI-LLM-009]\n" +
+		"  → Fix: Choose a smaller model (`aictl models --loadable`) or check\n" +
+		"         `aictl logs --unit llama`.\n"
 	if res.errOut != want {
 		t.Errorf("stderr:\n%s\nwant:\n%s", res.errOut, want)
 	}
@@ -539,24 +541,6 @@ func TestMarkFatal(t *testing.T) {
 		}
 		if tt.err != nil && got == nil {
 			t.Errorf("%s: markFatal dropped the error", tt.name)
-		}
-	}
-}
-
-func TestLocaleUTF8(t *testing.T) {
-	get := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
-	for _, tt := range []struct {
-		env  map[string]string
-		want bool
-	}{
-		{nil, false},
-		{map[string]string{"LANG": "en_US.UTF-8"}, true},
-		{map[string]string{"LANG": "en_US.utf8"}, true},
-		{map[string]string{"LANG": "C"}, false},
-		{map[string]string{"LC_ALL": "C", "LANG": "en_US.UTF-8"}, false},
-	} {
-		if got := localeUTF8(get(tt.env)); got != tt.want {
-			t.Errorf("%v: %v, want %v", tt.env, got, tt.want)
 		}
 	}
 }
