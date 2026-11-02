@@ -1,0 +1,2 @@
+NVRM: API mismatch: the client has the version 595.99.02, but this kernel module has the version 590.10.01.
+Failed to initialize NVML: Driver/library version mismatch

@@ -1,0 +1,5 @@
+22 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw
+30 22 8:2 /srv /srv/localai rw,relatime shared:2 - xfs /dev/sda2 rw
+31 22 0:25 / /var/lib/localai rw,relatime - btrfs /dev/sda3 rw
+40 22 8:17 / /media/ark\040drive rw,relatime - exfat /dev/sdb1 rw
+41 22 0:5 / /dev rw,nosuid - devtmpfs devtmpfs rw

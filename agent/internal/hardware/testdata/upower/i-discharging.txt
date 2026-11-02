@@ -1,0 +1,11 @@
+  native-path:          BAT0
+  power supply:         yes
+  updated:              Mon 02 Nov 2026 03:04:00 PM (12 seconds ago)
+  has history:          yes
+  battery
+    present:             yes
+    state:               discharging
+    energy:              32 Wh
+    percentage:          64%
+    time to empty:       3.2 hours
+    technology:          lithium-ion

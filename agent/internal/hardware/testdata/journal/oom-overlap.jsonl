@@ -1,0 +1,2 @@
+{"__REALTIME_TIMESTAMP":"1793631240123456","MESSAGE":"Out of memory: Killed process 4242 (llama-server) total-vm:1kB"}
+{"__REALTIME_TIMESTAMP":"1793631500000000","MESSAGE":"Memory cgroup out of memory: Killed process 4300 (llama-server) total-vm:1kB"}
