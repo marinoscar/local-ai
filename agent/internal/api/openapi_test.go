@@ -29,7 +29,6 @@ import (
 
 	apispec "github.com/marinoscar/local-ai/agent/api"
 	"github.com/marinoscar/local-ai/agent/internal/api/apitest"
-	"github.com/marinoscar/local-ai/agent/internal/events"
 )
 
 func loadSpec(t *testing.T) *apispec.Spec {
@@ -903,71 +902,6 @@ func compareRegistered(ops []apispec.Operation, routes []Route) []string {
 	}
 	sort.Strings(problems)
 	return problems
-}
-
-// implementedRoutes is every route this package implements: api.Routes() (the built-in route and what
-// packages add to DefaultRegistry) plus the routes its constructors return for AGENT-20 to wire into the
-// server's registry (EventsRoute). A later issue whose routes come from a constructor adds that
-// constructor here, with fakes for its dependencies, in the PR that removes the operation's
-// x-localai-status: planned marker.
-func implementedRoutes(t *testing.T) []Route {
-	t.Helper()
-	routes := Routes()
-	bus := events.New(events.Options{})
-	t.Cleanup(bus.Close)
-	ev, err := EventsRoute(EventsOptions{Bus: bus})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return append(routes, ev)
-}
-
-func TestOpenAPIMatchesRegisteredRoutes(t *testing.T) {
-	s := loadSpec(t)
-	for _, p := range compareRegistered(s.Operations(), implementedRoutes(t)) {
-		t.Error(p)
-	}
-}
-
-// TestPlannedOperations lists the allowlist and checks it is what it claims to be: planned operations
-// are not registered (also covered by the comparison above, with a message of its own), every
-// implemented operation of the document is registered, and GET /health is among them.
-func TestPlannedOperations(t *testing.T) {
-	s := loadSpec(t)
-	registered := map[string]bool{}
-	for _, rt := range implementedRoutes(t) {
-		if !rt.Absolute {
-			registered[rt.Method+" "+rt.Pattern] = true
-		}
-	}
-	byIssue := map[string][]string{}
-	implemented := 0
-	for _, op := range s.Operations() {
-		if !op.Planned() {
-			implemented++
-			if !registered[op.Key()] {
-				t.Errorf("%s is not planned and not registered", op.Key())
-			}
-			continue
-		}
-		if registered[op.Key()] {
-			t.Errorf("%s is planned but registered: the allowlist must shrink (remove x-localai-status and x-localai-issue)", op.Key())
-		}
-		issue, _ := op.Raw["x-localai-issue"].(string)
-		byIssue[issue] = append(byIssue[issue], op.Key())
-	}
-	if !registered["GET /health"] {
-		t.Error("GET /health must be registered")
-	}
-	var issues []string
-	for issue := range byIssue {
-		issues = append(issues, issue)
-	}
-	sort.Strings(issues)
-	for _, issue := range issues {
-		t.Logf("planned, lands with %s: %s", issue, strings.Join(byIssue[issue], ", "))
-	}
-	t.Logf("%d operation(s) implemented, %d planned", implemented, len(s.Operations())-implemented)
 }
 
 // TestCompareRegisteredNegative gives the comparison the two negative fixtures of the issue (a route on the

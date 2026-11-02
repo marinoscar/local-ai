@@ -72,6 +72,26 @@ func RecordStream(t testing.TB, resp *http.Response) *http.Response {
 	return resp
 }
 
+// Serves reports whether an operation of openapi.yaml serves method and target ("/api/v1/session"). A
+// test helper that records every response of a server that also has routes outside the document (probe
+// routes) records the ones that are documented, and every error.
+func Serves(method, target string) bool {
+	spec, err := apispec.Default()
+	if err != nil {
+		return false
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return false
+	}
+	rest, ok := strings.CutPrefix(u.Path, spec.BasePath)
+	if !ok || (rest != "" && !strings.HasPrefix(rest, "/")) {
+		return false
+	}
+	_, found := spec.Match(method, rest)
+	return found
+}
+
 // RecordResult records the result of a httptest.ResponseRecorder served for req and returns the
 // recorder's http.Response.
 func RecordResult(t testing.TB, req *http.Request, rec *httptest.ResponseRecorder) *http.Response {
