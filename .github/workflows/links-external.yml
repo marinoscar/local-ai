@@ -1,0 +1,19 @@
+name: links-external
+# Weekly: fetch the external https:// links in the docs. A 404/410 or dead host fails the run;
+# 403/429/5xx/timeouts are printed as WARN only (they are often transient or bot-blocked).
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  external:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: scripts/linkcheck/go.mod
+      - name: External link check
+        run: scripts/check-links.sh --external

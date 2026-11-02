@@ -31,4 +31,5 @@
 - Runbooks: numbered steps, exact commands or buttons, a "What you should see" after each step, and "If it doesn't work" with a doctor code. Write for someone who has never used a terminal. Spanish summaries are welcome for the survival runbook.
 - Specs: follow the section format used in existing specs (purpose, interfaces, behaviour, failures, security, observability, doctor codes, test plan, implementation breakdown).
 - Never restate canonical names. Link to [overview.md §3](architecture/overview.md#3-canonical-names-single-source-of-truth).
+- Every relative link and `#anchor` must resolve: run `scripts/check-links.sh` (CI runs it on every PR; a weekly job also checks external links).
 - Placeholders only for lab-specific values ([security-model.md §5](architecture/security-model.md#5-redaction-public-repo)).
