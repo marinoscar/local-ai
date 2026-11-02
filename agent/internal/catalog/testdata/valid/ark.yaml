@@ -1,0 +1,139 @@
+schema_version: 1
+content:
+  - id: wiki-alpha-en
+    kind: kiwix
+    display_name: "Encyclopedia Alpha (English, text only)"
+    summary: "A whole encyclopedia without pictures."
+    survival_tier: 1
+    languages: [en]
+    license: "CC BY-SA 4.0"
+    source:
+      type: kiwix
+      book: wiki_alpha_en_nopic
+      base_url: https://mirror.example.test/zim/alpha/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 50000000000
+    refresh_days: 90
+
+  - id: wiki-alpha-es
+    kind: kiwix
+    survival_tier: 2
+    source: {type: kiwix, book: wiki_alpha_es_nopic, base_url: "https://mirror.example.test/zim/alpha/", version_policy: pinned, pinned: {file: wiki_alpha_es_nopic_2026-09.zim, sha256: "@sha:b@"}, checksum: pinned}
+
+  - id: medical-alpha-en
+    kind: kiwix
+    survival_tier: 1
+    source: {type: kiwix, book: medical_alpha_en, base_url: "https://mirror.example.test/zim/other/", version_policy: latest, checksum: sidecar}
+    refresh_days: 30
+    portal_links:
+      - key: bleeding
+        title: {en: "Severe bleeding", es: "Sangrado grave"}
+        article: "Bleeding"
+        es_item: wiki-alpha-es
+        es_article: "Hemorragia"
+        order: 10
+      - key: burns
+        title: {en: "Burns", es: "Quemaduras"}
+        article: "Burns"
+        order: 20
+
+  - id: map-region-alpha
+    kind: maps
+    display_name: "Offline map: Region Alpha"
+    summary: "Streets, towns, rivers and roads. Works without internet."
+    survival_tier: 1
+    source:
+      type: pmtiles_extract
+      planet_url_pattern: "https://tiles.example.test/{date}.pmtiles"
+      bbox: [-92.5, 7.0, -77.0, 18.6]
+      maxzoom: 15
+      checksum: computed
+    expected_size_bytes: 2500000000
+    refresh_days: 180
+
+  - id: map-assets
+    kind: maps
+    display_name: "Map styles and fonts"
+    survival_tier: 1
+    source:
+      type: github_release
+      repo: org-alpha/map-assets
+      tag: v1.2.3
+      asset: map-assets-1.2.3.tar.gz
+      sha256: "@sha:c@"
+      extract: true
+
+  - id: places-region-alpha
+    kind: maps
+    display_name: "Place names: Region Alpha"
+    survival_tier: 1
+    license: "CC BY 4.0"
+    source:
+      type: url
+      files:
+        - {url: "https://data.example.test/export/AA.zip", sha256: null}
+        - {url: "https://data.example.test/export/BB.zip", sha256: null}
+      version_policy: latest
+      checksum: computed
+      trust: tofu
+    expected_size_bytes: 40000000
+    refresh_days: 180
+
+  - id: kit-ubuntu-iso-26.04
+    kind: kit
+    source:
+      type: url
+      url: "https://releases.example.test/ubuntu-26.04-live-server-amd64.iso"
+      checksum: sidecar
+      sidecar_url: "https://releases.example.test/SHA256SUMS"
+
+  - id: kit-tool-bundle
+    kind: kit
+    source:
+      type: url
+      url: "https://data.example.test/tool-bundle.tar.gz"
+      sha256: "@sha:d@"
+
+  - id: kit-llama-cpp
+    kind: kit
+    survival_tier: 1
+    source:
+      type: git_mirror
+      url: https://git.example.test/org-alpha/llama-cpp.git
+      also_tarball_of: pinned
+
+  - id: kit-debs-resolute-amd64
+    kind: kit
+    source:
+      type: apt_closure
+      codename: resolute
+      arch: amd64
+      packages: [build-essential, cmake, libvulkan-dev, g++-14, tailscale]
+      extra_repos:
+        - name: tailscale
+          uri: https://pkgs.example.test/stable/ubuntu
+          suite: resolute
+          components: [main]
+          key: tailscale-archive-keyring.gpg
+        - name: nvidia-cuda
+          uri: https://developer.example.test/compute/cuda/repos/ubuntu2604/x86_64/
+          suite: /
+          components: []
+          key: nvidia-cuda-archive-keyring.gpg
+
+  - id: kit-nvidia-resolute-amd64-595-open
+    kind: kit
+    source:
+      type: apt_closure
+      codename: resolute
+      arch: amd64
+      packages: [nvidia-driver-595-open, nvidia-utils-595]
+      extra_repos: []
+
+  - id: docs-bundle
+    kind: docs
+    survival_tier: 1
+    source:
+      type: repo_docs
