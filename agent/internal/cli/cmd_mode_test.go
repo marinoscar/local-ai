@@ -138,8 +138,8 @@ const modelNames = `{"models":[{"id":"qwen3.5-9b-q4km","display_name":"Qwen 3.5 
 // transition from inside the handler (they reach aictl before it knows the op id and must be held).
 type survivalRig struct {
 	*mgRig
-	body     string // what the POST answered with (set per test)
-	status   int
+	body      string // what the POST answered with (set per test)
+	status    int
 	published func()
 }
 
