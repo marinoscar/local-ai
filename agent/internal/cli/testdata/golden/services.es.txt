@@ -1,0 +1,6 @@
+== stdout ==
+SERVICIO  ESTADO        SALUD  DESDE
+llama     en ejecución  ✓      hace 8 horas
+kiwix     en ejecución  ✓      hace 8 horas
+whisper   detenido      ✗      —             último código de salida 1
+== exit 0 ==

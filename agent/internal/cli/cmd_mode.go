@@ -84,8 +84,8 @@ func modeRun(c *Call) error {
 	return c.usageErr(pick(c.Lang, "Give one mode: online, offline or survival.", "Indique un solo modo: online, offline o survival."), "")
 }
 
-// modeWord is the mode in a sentence ("survival mode").
-func modeWord(l Lang, mode string) string {
+// modePhrase is the mode in a sentence ("survival mode").
+func modePhrase(l Lang, mode string) string {
 	switch mode {
 	case "online":
 		return pick(l, "online mode", "modo en línea")

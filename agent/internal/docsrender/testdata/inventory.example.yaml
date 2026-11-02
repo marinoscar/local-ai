@@ -1,0 +1,29 @@
+# Fixture schema with placeholders; same shape as the repository's inventory.example.yaml.
+schema_version: 1
+secret_fields: [owner_email, tailnet, public_ip, tailnet_ip, lan_ip, fs_uuid, hostname, token_label]
+
+lab:
+  owner_email: "<ADMIN_EMAIL>"
+  public_domain: "lab.example.test"
+  tailnet: "<TAILNET>"
+
+vps:
+  name: "server-x"
+  public_ip: "<VPS_PUBLIC_IP>"
+  tailnet_ip: "<TAILNET_IP_VPS>"
+
+nodes:
+  - id: ai-n1
+    tailnet_ip: "<TAILNET_IP_AI_N1>"
+    desktop_user: "<DESKTOP_USER>"
+    label_for_card: "<NODE_LABEL>"
+    token_label: "<NODE_TOKEN_LABEL>"
+  - id: ai-n3
+    tailnet_ip: "<TAILNET_IP_AI_N3>"
+    desktop_user: "<DESKTOP_USER>"
+    label_for_card: "<NODE_LABEL>"
+    token_label: "<NODE_TOKEN_LABEL>"
+
+ark_drives:
+  - label: "AI-ARK"
+    fs_uuid: "<ARK_DRIVE_UUID>"

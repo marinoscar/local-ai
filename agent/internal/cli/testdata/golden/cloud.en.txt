@@ -1,0 +1,8 @@
+== stdout ==
+State           ✓ linked
+Address         https://cloud.example.test
+Node name       ai-n3
+Last heartbeat  2 minutes ago
+Credential      nod_…a1b2
+Key synced      ✓ yes
+== exit 0 ==

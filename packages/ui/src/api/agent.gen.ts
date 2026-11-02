@@ -1175,11 +1175,18 @@ export interface components {
             restored_models?: string[];
             op_id: string;
         };
+        /** @description `op_id`, `from` and `warnings` are present in GET /mode (the steps' warnings so far). */
         ModeTransition: {
+            op_id?: string;
+            from?: components["schemas"]["ModeValue"];
             target?: components["schemas"]["ModeValue"];
             step: string;
             /** Format: date-time */
             started_at: string;
+            warnings?: {
+                code: string;
+                message: string;
+            }[];
         };
         /** @description GET /status (agent.md section 3.8.4). */
         Status: {
@@ -1525,8 +1532,8 @@ export interface components {
         /** @description GET /mode (agent.md section 3.8.15). */
         Mode: {
             mode: components["schemas"]["ModeValue"];
-            /** Format: date-time */
-            since: string;
+            /** @description When the mode was committed; null on a node that never changed mode. */
+            since: null | string;
             transition: null | components["schemas"]["ModeTransition"];
             allowed_targets: components["schemas"]["ModeValue"][];
             leave_requires_admin: boolean;
@@ -2818,7 +2825,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             /** @description LAI-SEC-002: leaving survival needs admin*; plus the generic 403 codes. */
             403: components["responses"]["Forbidden"];
-            /** @description LAI-AGT-022 another transition is running (a request for survival preempts it). */
+            /** @description LAI-AGT-022 another transition is running (a request for survival preempts it); with `wait: true`, also the answer to a transition that survival preempted (`details.preempted` is true, `details.op_id` is the survival operation). */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];

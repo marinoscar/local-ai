@@ -73,7 +73,7 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
 ### Every 3 months
 22. [ ] Run the "pull the plug" drill on at least one laptop node ([08 Part 6](08-scheduled-sync.md)), and update the battery table in its printed [01](01-survival-mode.md).
 23. [ ] Re-check every file on each drive: `aictl ark verify --root <root-id> --full --wait` ([04](04-ark-drive.md)).
-24. [ ] Re-print the Survival card and [01](01-survival-mode.md) if anything changed (`sudo aictl docs render`, then print from `/srv/localai/docs`).
+24. [ ] Re-print the Survival card and [01](01-survival-mode.md) if anything changed (from a copy of the repository: `cd ~/git/local-ai && sudo aictl docs render`, then print from `/srv/localai/docs`).
 
 ---
 

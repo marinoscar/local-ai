@@ -1,0 +1,7 @@
+== stdout ==
+2026-11-02T08:00:05Z  llama_server: loading model
+2026-11-02T08:00:12Z  llama_server: model loaded
+2026-11-02T08:00:13Z  bad [31m escape  and	tab
+== stderr ==
+via socket
+== exit 0 ==

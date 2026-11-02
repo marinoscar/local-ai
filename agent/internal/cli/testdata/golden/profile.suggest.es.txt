@@ -1,0 +1,4 @@
+== stdout ==
+✓ Este equipo coincide con "small-8gb" (cuda, 8.0 GB de memoria gráfica, 14.0 GB
+  de memoria).
+== exit 0 ==

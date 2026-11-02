@@ -51,7 +51,7 @@ aiagent ctl [global flags] <command> …        (same, when the /usr/local/bin/a
 
 Environment: `LOCALAI_SOCKET`, `LOCALAI_URL`, `LOCALAI_TOKEN_FILE` override the defaults (flags win). The PIN is **never** accepted as a flag or environment variable (it would leak through shell history and `/proc/<pid>/environ`).
 
-**Parsing rules (AICTL-01).** Global flags come **before** the command name; a flag after it belongs to the command (stdlib `flag`, one `FlagSet` per command). Command flags may appear before, between or after positional arguments; `--` ends the flags. `-y` and `--yes` (and the other short forms) are the same flag; `--timeout 0` means no deadline; a negative `--timeout`, an unknown `--lang`, an unknown option or a missing option value is `LAI-CLI-005` / exit 2. `aictl help [command [subcommand]]` and `-h`/`--help` print help (exit 0); `aictl` with no command prints the same help on stderr and exits 2; help lists every command with its marks (`[local]`, `[root]`, `[admin]`) and default timeout. `--url` is validated (http, `127.0.0.1`, `localhost` or `[::1]`, no credentials, no path) when the client is first needed, never for a `[local]` command, so offline recovery works with any transport setting; a bad value is `LAI-CLI-005` / exit 2 and no request is made, even when the socket would have worked.
+**Parsing rules (AICTL-01).** Global flags come **before** the command name; a flag after it belongs to the command (stdlib `flag`, one `FlagSet` per command). Command flags may appear before, between or after positional arguments; `--` ends the flags. `-y` and `--yes` (and the other short forms) are the same flag; `--timeout 0` means no deadline; a negative `--timeout`, an unknown `--lang`, an unknown option or a missing option value is `LAI-CLI-005` / exit 2. `aictl help [command [subcommand]]` and `-h`/`--help` print help (exit 0); `aictl` with no command prints the same help on stderr and exits 2; help lists every command with its marks (`[local]`, `[root]`, `[admin]`) and default timeout. `--url` is validated (http, `127.0.0.1`, `localhost` or `[::1]`, no credentials, no path) when the client is first needed, never for a `[local]` command, so offline recovery works with any transport setting; a bad value is `LAI-CLI-005` / exit 2 and no request is made, even when the socket would have worked. A command whose synopsis shows `--yes` or `--pin-stdin` **after** the command name (`catalog use <dir> --test --yes`, `backup-config --restore <file> --yes`, `pin set --pin-stdin`) declares that flag itself and folds it into the global one, so both positions work for it; `-y` is accepted there too.
 
 ### 3.2 Transport and authentication
 
@@ -89,7 +89,7 @@ Implemented in `agent/internal/cli` (`Client`, `Config`, `Registry`, `ExitFor`);
 
 #### 3.2.6 Output, prompts and the PIN flow (AICTL-02)
 Implemented in `agent/internal/cli/out` (printing), `agent/internal/cli/i18n` (the en/es labels) and `agent/internal/cli` (`confirm.go`, `admin.go`, `terminal.go`). A command prints through `c.Out` (an `*out.Printer`) and never writes colour or symbols itself; the framework prints the problems a command returns.
-- **Printer.** `OK` and `Info` (stdout), `Warn`, `Error`, `Critical`, `Progress` and `Problem` (stderr), `Table`, `KV`, `Secondary`, `Result` and `Blank` (stdout), `When` (a time for people), `PrintSecretWarning`. `Problem` takes the doctor `Code`, `Message`, `Fix`, `Details`, the request id and a wait time. `--quiet` hides everything except errors, the essential `Result` and `Table`/`KV` output, and the secret warning; `--json` turns every stdout method into a no-op (the `out.JSON` writer owns stdout) and an error-severity problem into the envelope.
+- **Printer.** `OK` and `Info` (stdout), `Warn`, `Error`, `Critical`, `Progress` and `Problem` (stderr), `Table`, `KV`, `Secondary`, `Result`, `Blank` and `Finding` (stdout), `When` (a time for people), `PrintSecretWarning`. `Problem` takes the doctor `Code`, `Message`, `Fix`, `Details`, the request id and a wait time. `--quiet` hides everything except errors, the essential `Result` and `Table`/`KV` output, and the secret warning; `Finding` is `Problem` for a command whose result is a list of problems (`doctor`, the alerts of `status`): the same layout on stdout, so a pipe keeps it; `--quiet` hides its info and warning findings, never an error. `--json` turns every stdout method into a no-op (the `out.JSON` writer owns stdout) and an error-severity problem into the envelope.
 - **`--json` writer** (`c.Out.JSON()`): `Document(v)` or `Raw(body)` once, or `Line(v)` repeatedly for JSON Lines. A second document, or a document after lines, is refused (`ErrSecondDocument`) and writes nothing. If a command has already written its document and then fails, stdout keeps that one document and only the exit code reports the failure; stderr stays empty.
 - **Terminal.** Prompts read through a `Terminal` (`Interactive`, `ReadLine`, `ReadSecret`), real (`golang.org/x/term` on stdin) or scripted in tests (`cli/fake`); the question is written to **stderr**. Interactive means stdin is a terminal; a pipe, `/dev/null` and a closed stdin are not. Nothing is ever read from a non-terminal stdin for a confirmation, so piped data meant for a command is never consumed by one. Reads are bounded (4 KiB per line).
 - **Confirm** (`c.Confirm(question)`). Writes `<question> [y/N] ` (es: `[s/N]`). Yes is `y`/`yes` (es also `s`/`si`/`sí`), case-insensitive; Enter, anything else and end of input (Ctrl-D) are **No** and the command stops without changing anything. `--yes` answers yes without asking. Without `--yes`, `--json` or no terminal is `LAI-CLI-007` (exit 2). **ConfirmTyped** (`c.ConfirmTyped(prompt, expected)`) asks the user to type `expected` exactly (the model id of `delete --allow-last-copy`); `--yes` does **not** answer it (a person decides), so without a terminal it is `LAI-CLI-007` even with `--yes`. Ctrl-C at either prompt ends the command at once with exit 130 and **no message** (nothing had started, so "still running in the background" would be false).
@@ -185,14 +185,14 @@ Each command lists: synopsis, flags, transport (API route or **[local]**), offli
 ```
 aictl status [--watch]
 ```
-`GET /status`. `--watch` redraws every 2 s and on events (TTY only). Offline: works (reports `Internet: not checked` in offline/survival).
+`GET /status`. `--watch` redraws every 2 s and whenever the agent publishes an event (`GET /events`, any type, bursts coalesced to one redraw at most every 0.5 s; if the stream cannot be opened it only polls). `--watch` needs a terminal and is refused with `--json` (exit 2, `LAI-CLI-005`); Ctrl-C ends it with exit 0; it has no overall deadline unless `--timeout` is given (each request still has its own 10 s). A refresh that fails (the agent restarting) is drawn as the problem and retried on the next tick. Offline: works (reports `Internet: not checked` in offline/survival).
 ```
 Node ai-n3 · HP ZBook (ai-n3) · profile small-8gb
-Mode       online      (since yesterday 22:10)
+Mode       online      (since 17 hours ago)
 Internet   ✓ full      (cloud reachable)
 Brain      ✓ Qwen 3.5 9B (qwen3.5-9b-q4km) — default, loaded
-Graphics   6.8 / 8.0 GB used · 61 °C
-Memory     5.1 GB free of 14.3 GB
+Graphics   6.6 / 8.0 GB used · 61 °C
+Memory     5.0 GB free of 14.0 GB
 Power      ✓ plugged in · battery 100%
 Services   ✓ llama   ✓ kiwix   ✓ whisper
 Ark        ! internal 82% ready · last sync 12 hours ago · no ark drive
@@ -202,22 +202,35 @@ Tailnet    ✓ published (pattern B)
 ! Running on battery.  [LAI-HW-012]
   → Fix: Plug in the charger. A laptop server stops when the battery runs out.
 ```
-(Alerts are printed after the summary in the problem layout of §3.3.) `--json`: `GET /status` body. Exit 0 even with alerts.
+(Alerts are printed after the summary in the problem layout of §3.3, on stdout.) `--json`: `GET /status` body. Exit 0 even with alerts.
+
+Line rules (AICTL-04). A section the agent leaves out is skipped, never printed as zeros; a time that cannot be read is left out. Times are relative (§3.3), so "since yesterday 22:10" is `since 17 hours ago`. Sizes in MiB are shown as `MiB / 1024` GB (§3.3), so 14336 MiB reads `14.0 GB`.
+- *Header*: `Node <id> · <display name> · profile <profile>`; the display name is left out when it equals the id.
+- *Mode*: the mode and `(since …)`; during a transition `online (switching to survival)`.
+- *Internet*: `✓ full (cloud reachable)`, `! internet (cloud not reachable)`, `! tailnet (no internet)`, `✗ no connection`; `not checked` for `not_checked` and always in `offline` and `survival`.
+- *Brain*: `✓ <display name> (<id>) — default, loaded` (the display name comes from a best-effort `GET /models` with a 3 s deadline; if that fails the id is shown alone, and `--json` never makes the call). Not loaded: `… loading <model>`, or `! no model loaded · default is <model>`, or `! no model stored on this computer`.
+- *Graphics*: `used / total GB` and the GPU temperature; `no graphics memory (CPU only)` without a GPU. *Power*: `✓ plugged in[, charging]`, `! on battery`, plus `battery N%` when there is a battery.
+- *Services*: `✓` running and healthy, `!` running but not healthy, `✗` stopped.
+- *Ark*: one `<kind> N% ready` per root (`!` unless every root is 100%), `last sync <when>` / `sync running` / `never synced`, `ark drive connected` / `no ark drive`.
+- *Cloud*: `✓ linked to <url> · last heartbeat …`, `! not connected right now, retrying`, `i paused until the computer is online` (state `stopped`), `not linked (optional)`. *Tailnet*: `✓ published (pattern B)`, `! not published`, `not managed by this node`.
 
 ### 4.2 `aictl models`  [10 s]
 ```
 aictl models [--loadable] [--all] [--engine llama|whisper|piper]
+aictl models show <model-id>
 ```
-`GET /models` (`?loadable=1` with `--loadable`). Default shows models in the profile plus any present; `--all` shows the whole catalog. Offline: works.
+`GET /models` (`?loadable=1` with `--loadable`, `?engine=` with `--engine`; another engine is exit 2). Default shows models in the profile plus any present (a client-side filter); `--all` shows the whole catalog; `--loadable` shows the agent's list as it comes. Offline: works.
 ```
 MODEL                    SIZE     STATUS    NOTES
 qwen3.5-9b-q4km          5.9 GB   loaded    default · chat, reasoning, coder
 small-vlm-q4km           3.2 GB   stored    vision
 tiny-fallback-q4km       2.1 GB   stored    chat
-qwen3.6-35b-a3b-q4km     19.0 GB  absent    ✗ does not fit: needs 11.0 GB of graphics memory, this computer has 8.0 GB
-whisper-small            0.5 GB   stored    speech-to-text
+qwen3.6-35b-a3b-q4km     19.0 GB  absent    ✗ Needs 11.0 GB of graphics memory; this…
+whisper-small            466 MB   stored    speech-to-text
 ```
-`--json`: `GET /models` body. Exit 0.
+NOTES carries `default`, the roles and, for a model that cannot be loaded, `✗` and the agent's `loadable_reason.message` (already in the user's language through `Accept-Language`). A table wider than 80 columns shortens its widest column with an ellipsis (§3.3), so a long reason is cut: `aictl models show <id>` prints it whole, with its code. `--json`: `GET /models` body. Exit 0.
+
+`aictl models show <model-id>` (`GET /models/{id}`, id escaped as one path segment): the display name, summary and a key/value block (engine, status, size, roles, default, loadable with the reason and its code, where it is stored, what it needs, aliases, last load time, file count). An unknown id is exit 5. `--json`: the body.
 
 ### 4.3 `aictl load <model>`  [load timeout × 3 + 60 s]
 ```
@@ -257,7 +270,9 @@ Show: `GET /models` → `default`. Set: `PUT /models/default`. Offline: works.
 ✓ The default model is now Qwen 3.5 9B. It starts automatically when the computer starts.
   It is not loaded right now. Load it with `aictl load qwen3.5-9b-q4km`.
 ```
-`--json`: `{"default": "…"}` (show) or the PUT body. Exit 6 when not present/loadable.
+`--json`: `{"default": "…"}` (show; `""` when none is set) or the PUT body. Exit 6 when not present/loadable.
+
+Show (AICTL-04): `The default model is Qwen 3.5 9B (qwen3.5-9b-q4km). It is loaded.` (or `It is not loaded right now.`, `It is not stored on this computer.`); with none set, `i No default model is set. Choose one with \`aictl models\`.`. Setting it (AICTL-05) is not available yet: `aictl default <model-id>` is exit 1 `not implemented yet`.
 
 ### 4.6 `aictl download <model>`  [30 s; `--wait`: none]
 ```
@@ -379,7 +394,7 @@ The ark commands are summarized in [ark-sync.md](ark-sync.md) §3.4, which is au
 Human output examples:
 ```
 $ aictl ark status
-Internal disk  internal     ! 82% ready   (180 of 220 GB budget, 273 GB free)
+Internal disk  internal     ! 82% ready   (180 GB of 220 GB budget, 273 GB free)
   missing: wikipedia-es-nopic (12.0 GB), osm-central-america (2.5 GB)
   last sync 12 hours ago: ok
 Ark drive      not connected
@@ -405,6 +420,10 @@ AI-ARK  ark-3f9c0a12  /media/<user>/AI-ARK   ext4   900 GB free of 2.0 TB   ✓ 
 - **`ark import --from`.** Without it, `GET /ark/drives` and the one drive that has a `root_id` and state `ready` or `read_only`; several → exit 2 with `LAI-ARK-015` and the ids; none → exit 5 `No ark drive is connected.` `--from` must be a root id.
 - **`ark drives set-profile <root-id> <profile>`** checks both ids (exit 2), then `PUT /ark/drives/{root_id}/profile` through the admin PIN flow; an unknown profile is `422 LAI-CAT-003` → exit 6.
 
+Read side (AICTL-04). `ark` and `ark status` take no arguments and make two reads, `GET /ark` then `GET /ark/sync`; the second is extra detail, so an answer from the agent that is an error (no run yet) leaves the status printed and `"sync": null` under `--json`. Each root is one line `<Internal disk|Ark drive>  <root id>  <symbol> N% ready` followed by `(<used> of <budget> budget, <free> free)` (on its own indented line when the first would pass 80 columns), a `missing:` line (items whose status is `missing`, with their size when known, wrapped under the label) and `last sync <when>: ok|failed|cancelled|skipped` from the root's `last_sync`, or `never synced`. A root of another kind than `internal` is the ark drive; with none, `Ark drive  not connected`. A run in progress adds `i Sync running: 22 of 31 items.` The symbol follows the root's `overall` colour (green `✓`, yellow `!`, red `✗`). **Percent ready** is the agent's `ready_pct` when it sends one, else `verified / (verified + stale + missing + skipped + failed + quarantined)` from the READY.json `counts` (orphans are not wanted, so they do not count); unknown when nothing is wanted (`not checked`). The `problems[]` of every root follow in the problem layout on stdout.
+
+`ark drives` prints one line per drive, columns aligned, no header: label, root id (`—` when the agent has none), mount path, filesystem, `<free> free of <size>`, and the state with a symbol (`ready` `✓`, `read-only` `!`, `not mounted` `!`, `not set up yet` `!`, `ejecting` `…`, `not shut down cleanly` `✗`, `cannot be used` `✗`); an unusable drive's `problems[]` follow indented (`  ✗ This drive is not formatted as ext4.  [LAI-ARK-002]`); with no drive, `i No ark drive found.`
+
 ### 4.11 `aictl catalog …`
 #### 4.11.1 `aictl catalog lint <dir>`  [local]
 Runs the catalog validator in-process ([catalog.md](catalog.md) §6). No agent needed. `--online` also HEAD-checks URLs.
@@ -429,15 +448,26 @@ Copies the last good catalog from the kit (`<root>/kit/catalog/`, internal root 
 ```
 When `/etc/localai/catalog.prev/` exists because of `aictl catalog use --test` (§4.11.4), `restore` puts that previous catalog back instead of the kit copy.
 
+Details (AICTL-07, `internal/cli/cmd_catalog_local.go`, `internal/cli/local/catalog.go`):
+- **Sources, in order.** (1) `/etc/localai/catalog.prev/`, only when the live catalog carries the `TEST` marker, `catalog.prev/` exists and has no `TEST` marker itself; (2) `<root>/kit/catalog/` of the internal root; (3) the same on every mounted AI-ARK drive, sorted by mount path. A drive is found without the agent: an ext4 mount of `/proc/self/mountinfo` whose `<mount>/localai/` exists and whose `ROOT.json` says `kind: ark_drive` or whose filesystem label is exactly `AI-ARK` (`blkid`, through `execx`); an uninitialised drive (no `localai/`) is never used.
+- **First valid copy wins.** Each source is linted in-process; the first that passes is installed, so one damaged copy does not stop a restore while another is intact. When none passes the command fails with `LAI-CAT-002` (exit 1; the message carries the first problem, `-v` up to ten) and `/etc/localai/catalog/` is byte-identical; when there is no source at all it is `LAI-KIT-040` (exit 5, "run `aictl ark sync` or `aictl ark import`").
+- **Swap.** `catalog.Install`: copy to `catalog.new/` (every file fsynced), lint the copy, rename `catalog/` → `catalog.prev/` (replacing an older one), rename `catalog.new/` → `catalog/`, fsync `/etc/localai`. Every directory is created `root:localai` 0750 and every file 0640. After restoring from `catalog.prev/` it is removed (it only held the draft that was replaced).
+- **Locking.** The command holds an exclusive, non-blocking lock (`/etc/localai/.aictl.lock`, `flock`) with every other aictl command that changes files under `/etc/localai`; a second one exits 6 `LAI-CLI-012` ("another aictl command is changing the files of this node"). The kernel drops the lock if the process dies.
+- **Agent.** It waits (≤ 30 s, polling `GET /catalog` every second) only when the agent answers; if the agent is down it returns at once. If the agent answers but does not report the version in time it prints `! The catalog is installed, but the agent has not reported it yet…` and still exits 0 (the swap is done; the agent re-reads every 10 s). Ctrl-C stops the wait (exit 130).
+- **Audit.** `catalog.restore` with `target.version`, `target.from` (`kit` or `previous`) and `target.root`; a failure is recorded with `result: "fail"` and its code.
+- `--json`: `{"version","previous","from"}` (`from` is `kit` or `previous`; `previous` is the version that was replaced, `""` when none).
+
 #### 4.11.4 `aictl catalog use <dir> --test`  [local] [root]  [30 s]
 ```
 aictl catalog use <dir> --test [--yes]
 ```
-Installs a **draft** catalog on a test node so a new entry can be measured with `aictl bench` before the catalog PR is merged. `--test` is required (there is no non-test mode). Steps: lint `<dir>` in-process (problems → printed as in §4.11.1, exit 2); confirm (`--yes` skips); copy the current `/etc/localai/catalog/` to `/etc/localai/catalog.prev/`; install `<dir>` atomically as `/etc/localai/catalog/` (same `catalog.new/` + rename as §4.11.3) with an extra marker file `TEST`. The agent picks it up through the `CATALOG_VERSION` mtime watch (agent.md §3.3) and reports `GET /catalog` `source: "test"` (agent.md §3.8.21). The test catalog stays until `aictl catalog restore` (which restores `catalog.prev/`) or the next successful `aictl catalog refresh`. Offline: works.
+Installs a **draft** catalog on a test node so a new entry can be measured with `aictl bench` before the catalog PR is merged. `--test` is required (there is no non-test mode; without it: exit 2). Steps: lint `<dir>` in-process (problems → printed as in §4.11.1, exit 2); confirm (`--yes` skips; default No; no terminal or `--json` without `--yes` → `LAI-CLI-007`, exit 2); copy the current `/etc/localai/catalog/` to `/etc/localai/catalog.prev/`; install `<dir>` atomically as `/etc/localai/catalog/` (same `catalog.new/` + rename, ownership, modes, lock and agent wait as §4.11.3) with an extra marker file `TEST`. The agent picks it up through the `CATALOG_VERSION` mtime watch (agent.md §3.3) and reports `GET /catalog` `source: "test"` (agent.md §3.8.21); the CLI waits for that. The test catalog stays until `aictl catalog restore` (which restores `catalog.prev/`) or the next successful `aictl catalog refresh`. Offline: works.
+
+A second `use --test` while a test catalog is live replaces the draft but **keeps the real catalog in `catalog.prev/`** (the draft is set aside and deleted, `catalog.Install` with `KeepPrevious`), so one `restore` always returns to the real catalog. A directory that fails lint, a declined confirmation and a non-root run change nothing. The catalog version must be a real `YYYY.MM.DD-N` (catalog.md §1), so a draft is for example `2026.11.03-1`.
 ```
-✓ Test catalog 2026.11.03-draft is in use (from ./catalog). Undo with `sudo aictl catalog restore`.
+✓ Test catalog 2026.11.03-1 is in use (from ./catalog). Undo with `sudo aictl catalog restore`.
 ```
-`--json`: `{"version","source":"test","previous"}`.
+`--json`: `{"version","source":"test","previous"}` (a declined confirmation prints `{"cancelled":true}`, exit 0). Audit: `catalog.use_test` with `target.dir`, `target.version` and `target.previous`.
 
 ### 4.12 `aictl profile …`
 | Command | Transport | Output |
@@ -447,6 +477,8 @@ Installs a **draft** catalog on a test node so a new entry can be measured with 
 | `aictl profile set <id> [--yes]` [admin] | `GET /catalog`, then `PUT /profile {"profile": id}` | confirmation listing the target profile's models and content with their sizes (from `GET /catalog`; no sync plan is computed), then `✓ Profile set to cuda-12gb. Run \`aictl ark sync\` to fetch the new content.` |
 
 All work offline. Exit 2/6 for unknown or invalid profile (`LAI-CAT-003`). `--json`: `GET /profile` / `PUT` body.
+
+Read side (AICTL-04). `profile show` prints a key/value block: `Profile` (`small-8gb — Small GPU laptop (8 GB VRAM)`), `Suggested` (`✓ the same`, or `! <id>` when the agent would pick another), `Overrides` (the names of the overridden keys, or `none`), `Models`, `Content` and `Disk plan` (`180 GB planned of 220 GB budget`, with `!` and `(over budget)` when the plan is larger). `profile suggest` builds its sentence from the hardware, so besides `GET /profile` it makes a best-effort `GET /status` (backend, graphics memory, memory; sizes as in §3.3); if that fails the agent's own `match_reasons` stand in (`(backend cuda; vram 8192 MiB in 7000..11999)`). When the profile in use differs from the suggestion the command says so (`! This computer looks like "small-8gb" (…), but it uses "cpu-only". See \`aictl profile show\`.`) and still exits 0; with no suggestion, `i No profile matches this computer.`
 
 **Implementation of `profile set` (AICTL-06).** A malformed id (`[a-z0-9][a-z0-9-]*`) is exit 2 before any request. Without `--yes`: no terminal (or `--json`) → `LAI-CLI-007` / exit 2 before any request; else `GET /profile` (the same profile → `i The profile is already <id>.`, no `PUT`) and `GET /catalog`, then the preview on **stderr**:
 ```
@@ -474,6 +506,7 @@ llama    running   ✓        8 hours ago
 kiwix    running   ✓        8 hours ago
 whisper  stopped   ✗        —   last exit code 1
 ```
+The body is `{"services": [...]}` (agent.md section 3.8.22; aictl also accepts a bare array). STATE is `running`, `stopped`, `failed` or `starting` from the unit's `active` state; HEALTH is `✓` healthy, `…` starting, `!` degraded, `✗` otherwise. A service without a unit (voices, maps) is shown by the supervisor's `state` (`available`, `starting`, `disabled`, `stopped`). The untitled last column holds notes (`last exit code N` for a non-zero exit, `disabled`, `restarted N times`) and exists only when some row has one. Only the list exists so far (AICTL-04): `start|stop|restart` is exit 1 `not implemented yet` until AICTL-10.
 
 ### 4.14 `aictl restart <service>`  [120 s]
 Alias of `aictl services restart <name>` (§4.13). `aictl restart llama|kiwix|whisper [--force]` → `POST /services/{name}/restart`. For llama it waits for the models to come back. `--force` needed for llama in survival mode. Offline: works.
@@ -486,18 +519,20 @@ Alias of `aictl services restart <name>` (§4.13). `aictl restart llama|kiwix|wh
 ```
 aictl logs [--unit agent|llama|kiwix|whisper|sync|drill] [-n <lines>] [--since <time>] [-f]
 ```
-`GET /logs` (`unit` default `agent`, `-n` default 100, max 2000). `-f` polls every 2 s with `since` = last line time. Secrets are already scrubbed by the agent. Offline: works.
+`GET /logs` (`unit` default `agent` in the CLI, which always sends it; `-n` default 100, 1 to 2000). `--since` takes an RFC 3339 time or an age (`15m`, `2h`) before now, sent as RFC 3339 UTC. `-f` polls every 2 s with `since` = the last line's time and `lines=2000`. Secrets are already scrubbed by the agent. Offline: works.
 ```
 08:00:05  llama_server: loading model
 08:00:12  llama_server: model loaded
 ```
 `--json`: response body; with `-f`, JSON Lines of `{"at","priority","message"}`.
 
+Details (AICTL-04). The time column is HH:MM:SS in this computer's time zone (with `-v`, RFC 3339 UTC). Lines are printed as the agent sent them, oldest first, never wrapped (so `grep` and `head` see whole lines); control characters (an escape sequence in a logged value could drive the terminal) are replaced by a space, tabs stay. A `truncated` answer prints `! The output was cut at the agent's size limit. Ask for fewer lines with -n.` on stderr. A bad `--unit`, `-n` or `--since` is exit 2 before any request. **`-f`**: the journal's `since` is inclusive, so the lines of the last printed second come back; they are matched by content (`at`, priority, message) and skipped, so a new line in the same second is still printed and identical lines are counted. Ctrl-C ends it with exit 0 and no message (it is how `tail -f` ends), a closed pipe ends it with exit 0, an error from the agent ends it with that error's exit code, and there is no overall deadline unless `--timeout` is given (each request has its own 10 s).
+
 ### 4.16 `aictl doctor`  [60 s]
 ```
 aictl doctor [--area AGT|NET|HW|LLM|CAT|SYN|ARK|SVC|CLD|SEC|…]... [--fast] [--all]
 ```
-`GET /doctor`. Prints problems grouped by severity (critical first), then a summary. `--all` also lists passed checks. Offline: works (checks that need the network report `info` "not checked offline").
+`GET /doctor` (`?area=HW&area=LLM` for each `--area`, `?fast=1` for `--fast`). `--area` may be repeated and may hold commas (`--area hw,net`); a value is two to five letters (case is ignored) and is sent in upper case, because the set of areas belongs to the agent. Prints problems grouped by severity (critical, error, warning, info), then a summary. `--all` also lists passed checks. Offline: works (checks that need the network report `info` "not checked offline").
 ```
 ✗ The AI model service is not running.  [LAI-LLM-001]
   → Fix: Run `aictl restart llama`. If it fails again, run `aictl logs --unit llama`.
@@ -506,7 +541,9 @@ aictl doctor [--area AGT|NET|HW|LLM|CAT|SYN|ARK|SVC|CLD|SEC|…]... [--fast] [--
 
 41 checks passed · 1 warning · 1 error
 ```
-**Doctor code display rules:** the code is always printed (dim, in brackets) after the message; codes are never translated; the fix line is mandatory; `-v` adds `check: <id>` and details. `--json`: response body. Exit **0** all ok/info, **8** warnings only, **9** any error/critical.
+The problems are the result of the command, so they go to stdout (`Printer.Finding`), not stderr. The summary counts passed checks first and then every severity that occurred, least serious first (`41 checks passed · 1 notice · 1 warning · 1 error · 1 critical problem`), wrapped at 80 columns; the counts are the larger of the agent's `summary` and the listed `results`. With no problem at all it is one line, `✓ 42 checks passed.`. `--all` lists the passed check ids as `✓ <id>` before the summary. With `-v` every problem is followed by its `details` and `  check: <id>`. `-q` shows errors and critical problems only (the exit code still reports warnings).
+
+**Doctor code display rules:** the code is always printed (dim, in brackets) after the message; codes are never translated; the fix line is mandatory; `-v` adds `check: <id>` and details. `--json`: response body. Exit **0** all ok/info, **8** warnings only, **9** any error/critical; the exit is decided by the listed results and the summary counts, whichever says more, and is the same with `--json`.
 
 ### 4.17 `aictl drill`  [30 min]
 ```
@@ -545,6 +582,8 @@ Node credential (nod_…):
 ```
 Errors: rejected credential → exit 6 `LAI-CLD-051`; network down → exit 0 with `! Saved. The cloud is not reachable right now; the node will connect by itself.  [LAI-CLD-053]`.
 
+`cloud status` (AICTL-04) prints a key/value block: `State` (`✓ linked`, `! not connected right now, retrying`, `i paused until the computer is online`), `Address`, `Node name`, `Last heartbeat`, `Credential`, `Key synced` (`✓ yes` / `! no`) and `Last error` when there is one. The credential is shown as the agent sends it, masked (`nod_…a1b2`); should an answer ever carry more, only the prefix and the last four characters are printed. A node that is not enrolled prints `i This node is not linked to a cloud app. That is fine: everything works without it.` and exits 0. `--json`: the body.
+
 **Implementation (AICTL-06).** The credential is read first, once, then the request goes through `Call.Admin` (the retry after a PIN sends the same credential). From a terminal: the prompt `Node credential (nod_…): ` (`Credencial del nodo (nod_…): `) on stderr and a read without echo (`Terminal.ReadSecret`). With `--credential-stdin`: one line of stdin; with `--pin-stdin` as well, the credential line comes first and the PIN line second. No terminal (or `--json`) and no `--credential-stdin` → exit 2 with the fix. A value that does not start with `nod_` or is empty is exit 2, and **no message repeats a credential**: a credential given as an argument (`aictl cloud enroll nod_…`) is refused with `The node credential is never given as an argument.`, and an option such as `--credential` does not exist (`Unknown option`). `--url` must be an http or https address with a host and no user name or password (exit 2 otherwise); a trailing `/` is dropped. `✓ Connected to <url> as <name>.` takes the name from `GET /cloud` (the line is worded without it when that fails) and adds `Its earlier record was reused.` for `reattached`. `state: "backoff"` is a warning problem with `[LAI-CLD-053]` and exit 0; `state: "stopped"` is `i Saved. The node connects to the cloud when it is in online mode.` `unenroll` confirms (`Disconnect this node from the cloud? …`) before the PIN; `resend-key` prints `✓ The API key (fingerprint …) was sent to the cloud again.` and exits 1 when `key_synced` is false; `409 LAI-AGT-023` (not linked) is exit 6. `--json`: the body.
 
 ### 4.19 `aictl pin set`  [local] [root]
@@ -553,6 +592,12 @@ Prompts twice (`New admin PIN (4 to 8 digits):`, `Repeat:`), or reads one line f
 ✓ The admin PIN was changed. Keep it somewhere safe (for example, on paper with the ark drive).
 ```
 Exit 2 for a PIN that is not 4–8 digits or the two entries differ.
+
+Details (AICTL-07, `internal/cli/cmd_pin.go`):
+- Checks root first (`LAI-CLI-006`, exit 4) before asking anything or touching a file. The PIN comes only from the terminal (no echo, prompts `New admin PIN (4 to 8 digits):` and `Repeat:` on stderr) or from one line of stdin with `--pin-stdin` (a single entry, no repeat; prompted only on a terminal). A first entry that is not 4 to 8 digits is rejected before `Repeat:` is asked. Without a terminal and without `--pin-stdin`, or with `--json` and no `--pin-stdin`: `LAI-CLI-008`, exit 4. An empty entry or empty stdin: `LAI-CLI-008` "No PIN was entered.", exit 4. Ctrl-C at a prompt: exit 130.
+- The file holds the PHC string and a trailing newline (the agent trims it); it is written with `config.WriteFileAtomic` (temp file, fsync, rename, fsync of the folder), `root:root` 0600, under the lock of §4.11.3. A failed write leaves the old file in place and no temp file (`LAI-CLI-012`, exit 1, naming `/etc/localai`/the file and the reason).
+- Audit: `pin.set`, `actor.kind: cli-root`; a failed write is recorded with `result: "fail"`, `code: "LAI-CLI-012"`. The PIN is in no message, error or audit field.
+- `--json`: `{"changed":true}`. There is no `pin clear`: the agent treats a missing PIN file as "no PIN is set" (`LAI-SEC-005`), and removing it is a deliberate manual act.
 
 ### 4.20 `aictl ui-code`  [10 s]
 `POST /ui-code` (root or a `localai-operators` socket peer). Offline: works.
@@ -567,23 +612,34 @@ Writes a new `lat_…` token to `/etc/localai/agent-token` (0640 root:localai-op
 ```
 ✓ A new agent token was created. ai-desktop picks it up by itself. Scripts that copied the old token must read the file again.
 ```
+Details (AICTL-07, `internal/cli/cmd_token.go`): root check first (exit 4); the group `localai-operators` is looked up **before** anything is written, and a machine without it fails with `LAI-CLI-012` (exit 1, "the group \"localai-operators\" does not exist", fix: `sudo install-node.sh --repair`) and an untouched token file. The token is `lat_` + 43 base64url characters from `crypto/rand` and is **never printed**; the file ends with a newline. Written atomically under the lock of §4.11.3; audit `token.rotate` (`cli-root`). `--json`: `{"rotated":true,"path":"/etc/localai/agent-token"}`. There is no `token show`: scripts read the file.
 
 ### 4.22 `aictl docs render`  [local]  [10 min]
 ```
-aictl docs render [--src <docs-dir>] [--inventory <file>] [--out <dir>]... [--no-pdf]
+aictl docs render [--src <docs-dir>] [--inventory <file>] [--out <dir>]... [--no-pdf] [--node <ai-nN>]
 ```
-Renders runbooks and specs to HTML (+ PDF) with placeholders filled from `inventory.local.yaml` ([security-model.md](../architecture/security-model.md) §5, ADR-0007). **Output is never written inside a git checkout** (the command refuses an `--out` that is inside a directory containing `.git`).
+Renders runbooks and specs to HTML (+ PDF) with placeholders filled from `inventory.local.yaml` ([security-model.md](../architecture/security-model.md) §5, ADR-0007). **Output is never written inside a git checkout** (the command refuses an `--out` that is inside a directory containing `.git`: exit 2, and nothing is written to any `--out`). Implemented in `agent/internal/docsrender` (the engine, no doctor codes) and `agent/internal/cli/cmd_docs.go` (flags, defaults, codes, output). Flags go after `render`; `--json` and `--lang` are global flags and go before `docs`.
 - `--src`: default `./docs` when the current directory is a repo checkout (`./docs/runbooks/` exists); otherwise `--src` is required (exit 2). Sync passes it explicitly ([ark-sync.md](ark-sync.md) §4.9.8).
 - `--inventory`: default, first found: `/etc/localai/inventory.local.yaml`, then `<ark-drive>/inventory.local.yaml`, then `./inventory.local.yaml`. Placeholder ↔ field pairing and the secret markers: [security-model.md](../architecture/security-model.md) §5. Missing → warning `LAI-CLI-013`; placeholders stay as `<UPPER_SNAKE>`. A secret placeholder on the survival card → exit 1 `LAI-CLI-016` (survival-portal.md §4.12).
-- `--out`: default `/srv/localai/docs` plus `<drive>/localai/docs` when a drive is mounted. Requires write access (root for `/srv/localai`).
-- HTML: Markdown rendered by the vendored `github.com/yuin/goldmark` (agent.md §3.2 allowed modules), one page per file, relative links rewritten to `.html`, an `index.html` and `index.json` (agent.md §3.8.29), a printable CSS embedded (no web fonts).
-- Survival card: `docs/runbooks/00-survival-card.md` is rendered per node to `<root>/docs/survival-card-<node-id>.{html,pdf}` with `<NODE_ID>`-style placeholders filled from the inventory and node state ([survival-portal.md](survival-portal.md)); it must fit one page (else `LAI-CLI-015`).
-- PDF: `chromium --headless --no-sandbox --print-to-pdf=<file> <html>` or `google-chrome` if installed; otherwise skipped with `LAI-CLI-014` (info). PDFs are optional: HTML-only output is valid, and sync's docs verification then marks docs yellow instead of failing ([ark-sync.md](ark-sync.md) §4.9.8). (`START-HERE.html` on the drive is written by sync, not by this command: [ark-sync.md](ark-sync.md) §4.15.)
+- `--out` (repeatable): default `/srv/localai/docs` plus `<drive>/localai/docs` for every mounted drive (a mount point named `AI-ARK` in `/proc/mounts`). Requires write access (root for `/srv/localai`). When run as root the files are owned by the `localai` user if it exists. A file or folder that cannot be written is `LAI-CLI-012` (exit 1); the other `--out` folders are still written.
+- `--node <ai-nN>`: the node the survival card is for. Default: `node.id` of `/etc/localai/node.yaml`; else the `nodes[]` entry of the inventory whose `machine` is this host's name; else `unconfigured` (the agent's safe-default id) with a warning, so a node with damaged configuration still gets its manuals.
+- **What is rendered.** Every `.md` file of `--src` except the `source/` folder (the redacted archive, "history only") and the card template. A page is `<slug>.html` in one flat folder (`<root>/docs/<slug>.html`, [ark-sync.md](ark-sync.md) §4.15 links to these names); the slug is the file name without `.md`. Two files with the same name (every folder's `README.md`) both take their folder as a prefix (`runbooks-README`, `docs-README`), so a slug never depends on file order. `title` is the first `# ` heading (the slug when there is none); `title_es` comes from `title_es:` in a front-matter block or from a `<!-- title_es: … -->` comment, else `null`.
+- **Markdown.** The vendored `github.com/yuin/goldmark` (agent.md §3.2 allowed modules, pinned in `go.mod`, vendored under `agent/vendor`) with the GFM tables, strikethrough and task-list extensions only: no linkify, no raw HTML (raw HTML in a source file is dropped, it is never passed through), no hard wraps. Headings get GitHub-style ids (lowercase, letters, digits, `_` and `-`, each space a `-`, repeats numbered `-1`, `-2`), so `#anchor` links written for GitHub work in the output. The one HTML construct kept is the page-break line `<div style="page-break-after: always"></div>`, which becomes `<div class="pagebreak"></div>`.
+- **Placeholders** (`<UPPER_SNAKE_CASE>`, 2 to 64 characters) are replaced in the Markdown source before parsing, in code blocks too. A value is inserted as plain text (it is escaped, never parsed as Markdown or HTML). A placeholder the inventory has no value for stays visible as `<NAME>`. `inventory.example.yaml` is read from `--src`, else from the folder above it (the root of a checkout, `src/` of sync's staging); if it is missing while a local inventory exists the values cannot be paired, nothing is filled and `LAI-CLI-013` is raised with that explanation. An `inventory.local.yaml` that is not valid YAML is `LAI-CLI-012` (exit 1). Inventory pairing: [security-model.md](../architecture/security-model.md) §5; list entries are matched by `id`, and for lists without `id` (`ark_drives`) by `label`, then `name`. A placeholder that is paired under several nodes (`<DESKTOP_USER>`) takes the value of the node chosen above, or the shared value when every node agrees. The node-state placeholders `<NODE_ID>`, `<EMERGENCY_NUMBER>`, `<BRAINS>`, `<CATALOG_VERSION>`, `<RENDER_DATE>` are filled **on the survival card only** (the other documents use `<CATALOG_VERSION>` and `<NODE_ID>` as prose, for example `catalog-<CATALOG_VERSION>`). The committed card template writes the brains as `<BRAINS_INSTALLED>`; both names are filled.
+- **Links.** `foo.md` becomes `foo.html`, `foo.md#sec` becomes `foo.html#sec`; a link to a folder goes to that folder's `README` page, else to `index.html`; a link to the card template goes to `survival-card-<node-id>.html`. A link that leaves the page set (a file outside `--src`, a non-Markdown file, the unrendered `source/` folder) is not a link: its text stays and `(<GitHub URL>)` follows it in plain text, so it can be typed from paper. `http`, `https` and `mailto` links stay links (printed with their address under `@media print`); any other scheme (`javascript:`, `file:`) becomes plain text. A link whose file or `#anchor` does not exist is **reported** (a warning with the count, `-v` lists them) and the run goes on; `scripts/check-links.sh` is what keeps them out of the repository.
+- **Offline rule.** A page links only `print.css` (and `card.css` on the card), by relative `<link>`; there is no `<script>`, no web font, no `url()` or `@import` in the CSS, no inline `style` attribute (the CSP of `/docs/` is `default-src 'self'; img-src 'self' data:`), and table alignment uses the `align` attribute. An image that is not a `data:` URI is replaced by `[alt text]` and never fetched. Tests grep every output page for these.
+- **`index.json`** (written once per `--out`, with that folder as `root`): the shape of agent.md §3.8.29, plus a `kind` per document (`card`, `runbook`, `spec`, `architecture`, `decision`, `other`) so the Portal can list only runbooks under Manuals. The survival card is the first entry (`slug` `survival-card-<node-id>`). `index.html` lists the same documents in sections (English and Spanish headings), with the Spanish title and a PDF link where there is one.
+- **Survival card.** `docs/runbooks/00-survival-card.md` is rendered for this node to `<root>/docs/survival-card-<node-id>.{html,pdf}` ([survival-portal.md](survival-portal.md) §4.12), with `card.css` (US Letter, 0.25 in margins = the 8.0 × 10.5 in safe area, headings 18 pt, body 11 pt, black on white, two columns). Sources of the node state: `node.id` and `portal.emergency_number` (default `911`) from `/etc/localai/node.yaml`; `<BRAINS>` is the display names (from the catalog's `models.yaml`, else the model id) of every `models/<id>/MANIFEST.json` with `state: verified` under the content roots (`/srv/localai` and each drive's `localai/`), or "none yet / ninguno todavía"; `<CATALOG_VERSION>` is the `CATALOG_VERSION` of `/etc/localai/catalog`, else `<root>/kit/catalog`, else a manifest's `catalog_version`, else `unknown`; `<RENDER_DATE>` is the local date; `<DESKTOP_USER>` is `nodes[id=<node>].desktop_user`, else the first `desktop_user` string found in `/var/lib/localai/install/state.json` (installer.md: the installer records the primary desktop user there). A secret placeholder in the template (`secret_fields` of the example inventory or the built-in list, see Placeholders) is refused **before anything is rendered or written**: exit 1, `LAI-CLI-016`, naming the placeholders (never a value). A card whose PDF has more than one page (counted as `/Type /Page` objects) is refused the same way (`LAI-CLI-015`, nothing written); with no PDF printer the check cannot run and the card is HTML only. If the template does not exist the card is skipped with a warning.
+- **PDF.** For every page and the card: `<chromium|chromium-browser|google-chrome|google-chrome-stable> --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --no-pdf-header-footer --user-data-dir=<temp> --print-to-pdf=<file> file://<html>`, found in the fixed PATH of `internal/execx` (no shell, a minimal environment with `HOME` in the scratch folder, 60 s per page, scratch folder removed afterwards). No PDF library is vendored. No browser: `LAI-CLI-014` (info), HTML only, exit 0; `--no-pdf` skips the search and says nothing. A page the browser fails on keeps its HTML, has no PDF and is reported (`pdf: null` in `index.json`). PDFs are optional: HTML-only output is valid, and sync's docs verification then marks docs yellow instead of failing ([ark-sync.md](ark-sync.md) §4.9.8). (`START-HERE.html` on the drive is written by sync, not by this command: [ark-sync.md](ark-sync.md) §4.15.)
+- **Atomic output.** Per `--out`: the files are written to `<out>.tmp-<random>/`, an existing `<out>` is renamed to `<out>.prev`, the new folder is renamed to `<out>`, and only then `.prev` is removed. If a step fails the old `<out>` is put back and the temporary folder is removed. A crash between the two renames is repaired by the next run (`.prev` is restored first). Files are `0644` and folders `0755`.
+- **Order of checks.** (1) every `--out` against the git guard, (2) the card's secret placeholders, (3) the PDFs and the card's page count, (4) the writes. Only (4) touches `--out`.
 - Offline: works.
 ```
-✓ Rendered 14 runbooks and 18 specs to /srv/localai/docs (PDF: 32 files).
+✓ Rendered 12 runbooks, 14 specs and 17 other documents to /srv/localai/docs (PDF: 44 files).
+i Survival card: /srv/localai/docs/survival-card-ai-n3.html
 ! inventory.local.yaml not found; real addresses are shown as placeholders.  [LAI-CLI-013]
 ```
+`--json` (the one document on stdout): `{"outputs": ["/srv/localai/docs"], "pages": 43, "pdf": 44, "inventory": true, "survival_card": "survival-card-ai-n3"}`; `survival_card` is `null` when there is no template; `pages` does not count the card, `pdf` does. The summary line says `N runbooks and M specs` when there are no other documents.
 
 ### 4.23 `aictl rebuild-llama`  [local] [root]  [3 h]
 ```
@@ -654,10 +710,26 @@ API + local exec ([llama-router.md](llama-router.md) §4.13). Asks to unload cur
 aictl backup-config [--out <file>] [--to-ark] [--no-secrets]
 aictl backup-config --restore <file> [--yes]
 ```
-Creates `localai-config-<node-id>-<YYYYMMDDTHHMMSSZ>.tar.gz` (0600 root) containing `/etc/localai/` (node.yaml, catalog/, models.ini, api-key, agent-token, cloud-credential, admin-pin, hf-token if present), `/var/lib/localai/state.json`, the generated unit files, and a `MANIFEST.json` with sha256 per file. `--no-secrets` excludes the five secret files. `--to-ark` writes it to the drive's kit config folder ([rebuild-kit.md](rebuild-kit.md) §Config backups) instead of the current directory. `--restore` verifies the manifest, shows what will be replaced, backs up the current files to `*.pre-restore`, restores with original modes/owners, `daemon-reload`, and restarts the agent. Offline: works.
+Creates `localai-config-<node-id>-<YYYYMMDDTHHMMSSZ>.tar.gz` (0600 root) containing `/etc/localai/` (node.yaml, catalog/, models.ini, api-key, agent-token, cloud-credential, admin-pin, hf-token if present), `/var/lib/localai/state.json`, the generated unit files, and a `MANIFEST.json` with sha256 per file. `--no-secrets` excludes the five secret files. `--to-ark` writes it to the drive's kit config folder ([rebuild-kit.md](rebuild-kit.md) §Config backups) instead of the current directory. `--restore` verifies the manifest, shows what will be replaced, keeps each replaced file as `<file>.pre-restore`, restores with original modes/owners, `daemon-reload`, and restarts the agent. Offline: works.
 ```
 ✓ Saved ./localai-config-ai-n3-20261102T150405Z.tar.gz (14 files, includes secrets — keep it private).
 ```
+Details (AICTL-07, `internal/cli/cmd_backup.go`, `internal/cli/local/backup.go`, `restore.go`):
+
+**Making a backup.**
+- Root check first (exit 4). `--restore` cannot be combined with `--out`, `--to-ark` or `--no-secrets`, and `--to-ark` not with `--out` (exit 2). Without `--out` the file goes to `./`; `--out` may be a file or an existing folder (the generated name is then used inside it). An existing file is **never overwritten** (`LAI-CLI-012`, "it already exists").
+- The `<node-id>` comes from `node.id` of `node.yaml`, read without validating the rest of the file so a damaged `node.yaml` does not stop a backup; an id that is not `ai-n<N>` becomes `unconfigured` (the id ends up in file and folder names). Files that do not exist are skipped (`hf-token`, the drop-in); a source that is a symlink or other non-regular file, or larger than 8 MiB, is an error naming it (a backup never follows a link). A node with nothing to save is an error.
+- `MANIFEST.json` is the first entry. Per file: `path` (no leading slash: `etc/localai/node.yaml`), `sha256`, `size`, `mode` (octal string, `"0600"`), `uid`, `gid`, and `owner`/`group` (the names behind the ids, so a restore on a rebuilt machine gives the file to the same account even when the numeric ids differ); top level `node_id`, `created_at`, `agent_version`, `secrets_included`. The output line says `includes secrets — keep it private` or `no secrets`.
+- `--to-ark` uses the AI-ARK drives found as in §4.11.3 (no drive: exit 5, `LAI-ARK-001`; the first writable one by mount path is used, with an `i` line when several are mounted; a read-only one fails with `LAI-CLI-012`). Unless `--no-secrets`, it asks first (default No, `--yes` skips, no terminal without `--yes` is exit 2): "The AI-ARK drive at <mount> is not encrypted and this backup holds secrets … Save it there anyway?"; declining writes nothing and exits 0. It creates `<root>/kit/config/<node-id>/` (`kit/` 0755, the two below it 0700) and afterwards keeps the newest 5 files named exactly `localai-config-<node-id>-<UTC time>.tar.gz` there (other names and other nodes' backups are never touched; a failed removal is a warning).
+- Audit: `config.backup` with `target.path`, `target.node` and `target.includes_secrets`. `--json`: `{"path","node_id","files","secrets_included"}`.
+
+**Restoring.** The file is read completely and verified **before** anything on the node changes:
+- Refused (`LAI-CLI-012`, exit 1, "This file cannot be restored: …"): not a gzip tar; an entry that is a symlink, hard link or device; a name that is absolute, has a `.`/`..`/empty segment, a backslash or a NUL; a duplicate; an entry over 8 MiB or more than 64 MiB in total; no `MANIFEST.json`; a manifest and an archive that do not list exactly the same files; a size or sha256 that does not match; a `mode` that is not octal, above 0777 or world-writable; a manifest that says `secrets_included: false` but lists a secret file.
+- **Allowlist.** A manifest may name only `etc/localai/{node.yaml,models.ini,api-key,agent-token,cloud-credential,admin-pin,hf-token}`, files below `etc/localai/catalog/`, `var/lib/localai/state.json`, `etc/systemd/system/localai-llama.service` and `…/localai-llama.service.d/50-env.conf`. Anything else (`etc/passwd`, another unit) is refused, so a crafted backup cannot write elsewhere.
+- It then lists what will be written (secret files marked, files already identical left out), warns when the backup is from another node (`This backup is from node ai-n3, and this node is ai-n9.`), and confirms (default No; `--yes`; no terminal without `--yes` is exit 2). If nothing differs it says `Nothing to restore` and exits 0.
+- **`.pre-restore`.** Under the lock of §4.11.3, every file that exists and will change is first copied, with its mode and owner, to `<file>.pre-restore` (for `/etc/localai/admin-pin`: `/etc/localai/admin-pin.pre-restore`; the catalog folder is renamed to `catalog.pre-restore/`); a file that is already identical to the backup gets no copy, so a restore that was interrupted and is run again keeps the true originals. Then each file is written atomically with the manifest's mode and the owner (account names first, then the numeric ids, then root); the catalog is staged in `catalog.restoring/` and swapped in last, so the agent sees `CATALOG_VERSION` as the newest write; files of the live catalog that are not in the backup disappear with the swap (they are in `catalog.pre-restore/`).
+- Finally `systemctl daemon-reload` and `systemctl restart localai-agent.service` (fixed argv through `execx`). If either fails the files are in place, the command prints `! Restored N files, but the agent could not be restarted. Run …` and exits 1.
+- Audit: `config.restore` with `target.path`, `target.node`, `target.files`. `--json`: `{"restored","kept","restarted"}` (`{"restored":0}` when nothing differed).
 
 ### 4.26 `aictl version`  [5 s]
 ```
@@ -665,6 +737,8 @@ aictl 0.1.0 (a1b2c3d, linux/amd64, built 2026-11-01T12:00:00Z)
 agent 0.1.0 · llama.cpp f3586e66b-cuda · catalog 2026.11.02-1
 ```
 CLI line is local; the second line needs the agent (`/health` + `/status`); agent down → `agent  not reachable` and exit 0. `--json`: `{"cli": {…}, "agent": {"version"} | null, "llama_build", "catalog_version"}`.
+
+Details (AICTL-04). `cli` is `{version, commit, os, arch, built_at}`; `llama_build` and `catalog_version` are `null` when unknown (agent down, no llama build, `/status` failing after `/health` answered: the second line then shows the agent version alone). "Agent down" means exit 3 (not reachable, or still starting after 10 s); any other failure of `/health` (not allowed, timed out, undecodable) is that failure with its own exit code, because "your user may not talk to the agent" (`LAI-CLI-002`) is information `version` must not hide. A different agent version raises the usual `LAI-CLI-003` warning on stderr after the two lines (also with `--json`, since the command succeeded).
 
 ### 4.27 `aictl update`  [local] [root]  [15 min]
 ```
@@ -715,6 +789,7 @@ Documented here so nobody re-invents them. They may change between versions with
 | Response not decodable | Print request id | `LAI-CLI-009` / 1 |
 | Clipboard tool missing | Suggest `key show` | `LAI-CLI-011` / 1 |
 | Local file op fails (render/backup/restore) | Name the file and the OS error in plain words | `LAI-CLI-012` / 1 |
+| A local root command runs while another one that changes `/etc/localai` is running | Refuse at once; the lock is dropped by the kernel if the other process dies | `LAI-CLI-012` / 6 |
 | Very long output in a pipe (`aictl logs -n 2000 \| head`) | `EPIPE` → exit 0 silently | — |
 
 ## 6. Security considerations
@@ -761,8 +836,9 @@ Documented here so nobody re-invents them. They may change between versions with
 | Output | golden files for every command's human output in `en` and `es`, colour on/off, UTF-8 and ASCII symbol sets; problem layout (message, code, fix); 80-column wrap |
 | `--json` | every command emits exactly one JSON document; errors as envelope on stdout with empty stderr |
 | Confirmations | default No; `--yes`; non-interactive without `--yes` → exit 2 |
+| Read-only commands (AICTL-04) | golden `en`/`es` for `status` (online, survival, partial), `models`, `models show`, `default`, `services`, `logs`, `doctor` (mixed, warnings, all fine, `--all -v`), `version`, `ark`, `ark drives`, `cloud status`, `profile show/suggest` from fixture bodies that are valid answers of `agent/api/openapi.yaml`; `--json` equals the agent body (or the documented composite); `doctor` exits 0/8/9 with and without `--json`; agent down (exit 3, `version` still 0), 401/403 (exit 4), 503 starting retried, undecodable answer (exit 1 with request id), partial bodies, unknown fields ignored, 2000 long log lines, closed pipe (exit 0, `logs -f` stops), `logs -f` de-duplication and Ctrl-C, `status --watch` redraw on tick, on event and after a failed refresh |
 | Progress | SSE fake over the real event bus: load progress (TTY golden, non-TTY lines, `-q`, `--json`), rollback events, `Last-Event-ID` on reconnect, `gap` and `restart` resync, shutdown, agent down mid-wait (re-read finishes the wait), idle stream, deadline → exit 7, Ctrl-C → exit 130 and no cancel request sent, interrupt hook, SSE parser (multi-line data, comments, missing id, CRLF, oversized line) |
-| Local commands | `pin set` writes argon2id PHC string with mode 0600; `token rotate` format `lat_` + 43 chars; `catalog restore` atomic swap and lint; `backup-config` manifest and modes; `--restore` round trip; `docs render` refuses `.git` output, fills placeholders from a fixture inventory and follows the inventory lookup order of §4.22; `catalog use --test` refuses a failing lint (exit 2), keeps `catalog.prev/` and `restore` puts it back |
+| Local commands | `pin set` writes argon2id PHC string with mode 0600; `token rotate` format `lat_` + 43 chars; `catalog restore` atomic swap and lint; `backup-config` manifest and modes; `--restore` round trip; `docs render` refuses `.git` output, fills placeholders from a fixture inventory and follows the inventory lookup order of §4.22; `catalog use --test` refuses a failing lint (exit 2), keeps `catalog.prev/` and `restore` puts it back (also after two `use --test` in a row); every local root command: not root exits 4 before any file is touched, an interrupted write (injected rename failure) keeps the old file and leaves no temp file, a second concurrent run exits 6, an audit line with `actor.kind: cli-root` for success and failure, and no secret in any output; `pin set` round trip with the agent's verifier, bad length / non-digits / mismatch exit 2, `--pin-stdin`; `--restore` refuses path traversal, absolute paths, links, unlisted paths, hash and mode tampering, and keeps `.pre-restore` copies; `catalog lint` output matches `<file>:<yaml-path>  LAI-CAT-0NN  <message>` and the `--json` shape |
 
 ### 9.2 Integration tests
 Run `aictl` against a real `aiagent serve` started by the integration harness (agent.md §9.2) with fakes behind it: `status`, `load`/`unload` with rollback, `mode survival` progress, `doctor` exit codes 0/8/9, `ark sync --scheduled` in offline mode exits 0 with "skipped"; `drill --scheduled` while busy exits 0 with "skipped"; `ark sync --wait` with one failing item exits 8.
@@ -780,14 +856,24 @@ Run `aictl` against a real `aiagent serve` started by the integration harness (a
 | 8 | `aictl --json models \| jq '.models[0].id'` | a model id; no other output |
 | 9 | `LANG=es_CR.UTF-8 aictl status` | Spanish labels; codes unchanged |
 | 10 | `aictl mode survival`, then `aictl mode online` as operator | survival without PIN; leaving works for an operator over the socket |
-| 11 | `sudo -u nobody aictl mode survival`, then `sudo -u nobody aictl mode online` (a user outside `localai-operators`, token unreadable) | survival starts (`i Survival mode is starting. …`, the Portal opens within a minute) with no PIN and no token; the second command fails with `LAI-CLI-002`, exit 4 |
-| 12 | `aictl ark sync --scheduled; echo $?` in offline mode, then in survival mode | `i Sync skipped: the node is in … mode.`, `0` (never `3`) |
-| 13 | `aictl ui-code`, open the address, type the code; type it again | signed in once; the second time is refused |
-| 14 | `sudo aictl key copy` in a Wayland session, in an X11 session, and with `wl-copy`, `xclip` and `xsel` hidden from `/usr/bin` | the key is pasted in an editor and nothing is printed; with none, OSC 52 in a terminal that supports it, else `LAI-CLI-011` exit 1 |
-| 15 | `aictl ark sync --wait` with the ark drive connected; Ctrl-C and answer `n`; run again, Ctrl-C and answer `y` | `n`: `Still running in the background`, the run continues; `y`: the run stops, `.part` files stay, exit 130 |
-| 16 | `printf '%s\n' "$NODE_CRED" \| sudo aictl cloud enroll --credential-stdin` with the network cable out, then plug it in | `! Saved. … [LAI-CLD-053]`, exit 0; the node appears on the Nodes page by itself |
-| 17 | `aictl ark import` with one drive, then with two | copies from the one; with two, exit 2 and the list of root ids |
-| 18 | `aictl profile set <other-profile>`; answer `y`; `aictl profile show` | the preview lists models and content with sizes; the profile changes; nothing is deleted |
+| 11 | `aictl status --watch` in one terminal; in another `aictl load small-vlm-q4km` | the Brain line changes within about a second of the event (not 2 s later); Ctrl-C leaves with exit 0 |
+| 12 | `aictl models`, `aictl models --all`, `aictl models show qwen3.5-9b-q4km`, `aictl default` | rows agree with `aictl --json models \| jq '.models[] \| {id,status}'`; the default matches the Brain line of `aictl status` |
+| 13 | `sudo systemctl stop localai-whisper; aictl services; aictl status; sudo systemctl start localai-whisper` | whisper `stopped ✗` (with `last exit code` only if it crashed), `✗ whisper` on the Services line; healthy again after the start |
+| 14 | `aictl logs --unit llama -n 20 --since 10m`; `aictl logs -f` while `aictl load …` runs; `aictl logs -n 2000 \| head -3; echo ${PIPESTATUS[0]}` | the last 20 lines of the last 10 minutes; new lines appear once each; Ctrl-C leaves with exit 0; the piped command ends silently with `0` |
+| 15 | `aictl doctor --fast --area HW; echo $?`, then unplug the charger and run `aictl doctor --all -v; echo $?` | `0`, then the battery warning with `check: hw.battery` and exit `8` (or `9` with an error listed) |
+| 16 | `aictl version`; `sudo systemctl stop localai-agent; aictl version; echo $?; sudo systemctl start localai-agent` | both lines; then `agent  not reachable` and `0`; with an older `aictl` binary the skew warning `[LAI-CLI-003]` on stderr |
+| 17 | `aictl ark` and `aictl ark drives` with the ark drive unplugged, then plugged in, then with a non-ext4 stick named AI-ARK | `Ark drive  not connected`; the drive's line `✓ ready`; the stick `✗ cannot be used` with its `[LAI-ARK-002]` problem |
+| 18 | `aictl cloud status` linked, then `aictl mode offline` | `✓ linked`, a heartbeat time, a masked credential; then `i paused until the computer is online` |
+| 19 | `aictl profile show; aictl profile suggest` | the profile in use with its plan; `✓ This computer matches "<id>" (cuda, 8.0 GB graphics memory, 14.0 GB memory).` |
+| 20 | Pull the network cable and stop Tailscale, then `time aictl status; echo $?` | `Internet  not checked`, exit `0`, well under a second (no read-only command waits for the network) |
+| 21 | `sudo -u nobody aictl mode survival`, then `sudo -u nobody aictl mode online` (a user outside `localai-operators`, token unreadable) | survival starts (`i Survival mode is starting. …`, the Portal opens within a minute) with no PIN and no token; the second command fails with `LAI-CLI-002`, exit 4 |
+| 22 | `aictl ark sync --scheduled; echo $?` in offline mode, then in survival mode | `i Sync skipped: the node is in … mode.`, `0` (never `3`) |
+| 23 | `aictl ui-code`, open the address, type the code; type it again | signed in once; the second time is refused |
+| 24 | `sudo aictl key copy` in a Wayland session, in an X11 session, and with `wl-copy`, `xclip` and `xsel` hidden from `/usr/bin` | the key is pasted in an editor and nothing is printed; with none, OSC 52 in a terminal that supports it, else `LAI-CLI-011` exit 1 |
+| 25 | `aictl ark sync --wait` with the ark drive connected; Ctrl-C and answer `n`; run again, Ctrl-C and answer `y` | `n`: `Still running in the background`, the run continues; `y`: the run stops, `.part` files stay, exit 130 |
+| 26 | `printf '%s\n' "$NODE_CRED" \| sudo aictl cloud enroll --credential-stdin` with the network cable out, then plug it in | `! Saved. … [LAI-CLD-053]`, exit 0; the node appears on the Nodes page by itself |
+| 27 | `aictl ark import` with one drive, then with two | copies from the one; with two, exit 2 and the list of root ids |
+| 28 | `aictl profile set <other-profile>`; answer `y`; `aictl profile show` | the preview lists models and content with sizes; the profile changes; nothing is deleted |
 
 ## 10. Implementation breakdown
 

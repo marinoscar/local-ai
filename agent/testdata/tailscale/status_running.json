@@ -1,0 +1,19 @@
+{
+  "Version": "1.0.0",
+  "BackendState": "Running",
+  "Self": {
+    "DNSName": "hp-linux.<TAILNET>.ts.net.",
+    "Online": true
+  },
+  "Peer": {
+    "nodekey:peer-a": {
+      "Online": true
+    },
+    "nodekey:peer-b": {
+      "Online": false
+    }
+  },
+  "FutureField": {
+    "ignored": true
+  }
+}

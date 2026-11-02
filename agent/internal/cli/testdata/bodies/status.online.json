@@ -1,0 +1,22 @@
+{
+  "node": {"id": "ai-n3", "display_name": "HP ZBook (ai-n3)", "hostname": "hp-linux", "profile": "small-8gb",
+           "agent_version": "0.0.0-dev", "backend": "cuda", "llama_mode": "router", "llama_build": "f3586e66b-cuda",
+           "catalog_version": "2026.11.02-1", "uptime_s": 86400, "time": "2026-11-02T15:04:05Z"},
+  "mode": {"value": "online", "since": "{{ago:17h}}", "transition": null},
+  "connectivity": {"value": "full", "checked_at": "{{ago:2m}}", "none_since": null},
+  "hardware": {"gpu": "Example GPU", "vram_total_mib": 8192, "vram_used_mib": 6791,
+               "ram_total_mib": 14336, "ram_available_mib": 5120, "gpu_temp_c": 61, "cpu_temp_c": 72,
+               "power": {"source": "battery", "battery_percent": 64, "charging": false}},
+  "services": [
+    {"name": "llama", "unit": "localai-llama.service", "active": "active", "sub": "running", "since": "{{ago:8h}}", "restarts": 0, "healthy": true},
+    {"name": "kiwix", "unit": "localai-kiwix.service", "active": "active", "sub": "running", "since": "{{ago:8h}}", "restarts": 0, "healthy": true},
+    {"name": "whisper", "unit": "localai-whisper.service", "active": "active", "sub": "running", "since": "{{ago:8h}}", "restarts": 0, "healthy": true}
+  ],
+  "models": {"default": "qwen3.5-9b-q4km", "loaded": ["qwen3.5-9b-q4km"], "loading": [], "present": 5, "loadable": 4, "models_max": 1},
+  "ark": {"roots": [{"path": "/srv/localai", "kind": "internal", "status": "partial", "ready_pct": 82, "updated_at": "{{ago:12h}}"}],
+          "drive": {"mounted": false}, "sync": {"state": "idle", "last_success_at": "{{ago:12h}}"}},
+  "cloud": {"enrolled": true, "state": "linked", "url": "https://cloud.example.test", "last_heartbeat_at": "{{ago:2m}}"},
+  "tailscale": {"manage": true, "pattern": "B", "applied": true, "backend_state": "Running"},
+  "alerts": [{"code": "LAI-HW-012", "severity": "warning", "title": "Running on battery",
+              "fix": "Plug in the charger. A laptop server stops when the battery runs out.", "since": "{{ago:8h}}", "details": {"battery_percent": 64}}]
+}

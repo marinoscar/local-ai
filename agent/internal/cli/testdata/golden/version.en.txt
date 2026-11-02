@@ -1,0 +1,4 @@
+== stdout ==
+aictl 0.0.0-dev (unknown, <os>/<arch>, built unknown)
+agent 0.0.0-dev · llama.cpp f3586e66b-cuda · catalog 2026.11.02-1
+== exit 0 ==

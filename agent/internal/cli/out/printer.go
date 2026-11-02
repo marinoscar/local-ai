@@ -228,6 +228,26 @@ func (p *Printer) Problem(pr Problem) {
 	if !fatal && p.o.Quiet {
 		return
 	}
+	p.writeProblem(p.o.Stderr, pr, sev)
+}
+
+// Finding prints pr in the same layout as Problem, but to stdout: it is for a command whose result
+// is a list of problems (`aictl doctor`, the alerts of `aictl status`), so the findings survive a
+// pipe and a redirect. It is a no-op with --json (the command writes the document itself); --quiet
+// hides info and warning findings, never errors.
+func (p *Printer) Finding(pr Problem) {
+	sev := pr.Severity
+	if sev == "" {
+		sev = SevError
+	}
+	if p.o.JSON || (p.o.Quiet && sev != SevError && sev != SevCritical) {
+		return
+	}
+	p.writeProblem(p.o.Stdout, pr, sev)
+}
+
+// writeProblem is the layout shared by Problem and Finding.
+func (p *Printer) writeProblem(w io.Writer, pr Problem, sev Severity) {
 	var sym, color string
 	switch sev {
 	case SevInfo:
@@ -239,7 +259,6 @@ func (p *Printer) Problem(pr Problem) {
 	default:
 		sym, color = p.sym.Error, codeRed
 	}
-	w := p.o.Stderr
 	lines := Wrap(pr.Message, p.o.Width, sym+" ", strings.Repeat(" ", DisplayWidth(sym)+1))
 	last := len(lines) - 1
 	if pr.Code != "" {

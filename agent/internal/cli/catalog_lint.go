@@ -2,7 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 
@@ -12,8 +11,8 @@ import (
 // The `aictl catalog` group. Only `lint` exists so far (CAT-01, aictl.md 4.11.1): it is a [local]
 // command, so it runs in-process with no agent, no root and no network (except --online), and it
 // never builds the agent client. It returns the two exit codes of the catalog.md section 6
-// contract: 0 valid, 2 invalid. refresh, restore and use --test belong to AICTL-06/07 and register
-// here as stubs so the group's help is complete.
+// contract: 0 valid, 2 invalid. refresh belongs to AICTL-06 and registers here as a stub so the
+// group's help is complete; restore and use --test are AICTL-07 (cmd_catalog_local.go).
 
 // lintCatalog is catalog.Lint; tests replace it to observe the options.
 var lintCatalog = catalog.Lint
@@ -38,12 +37,8 @@ Specification: docs/specs/catalog.md section 6, docs/specs/aictl.md section 4.11
 				},
 				Run: catalogLint,
 			},
-			{Name: "restore", Summary: "Put the previous catalog back (not implemented yet).", Marks: MarkLocal | MarkRoot,
-				Run: notImplemented("catalog restore", "AICTL-07")},
-			{Name: "use", Summary: "Install a catalog directory after testing it (not implemented yet).", Usage: "<dir> --test",
-				Marks: MarkLocal | MarkRoot,
-				Flags: func(fs *flag.FlagSet) { fs.Bool("test", false, "lint the directory first") },
-				Run:   notImplemented("catalog use", "AICTL-07")},
+			catalogRestoreCommand(),
+			catalogUseCommand(),
 		},
 	})
 }
@@ -67,27 +62,33 @@ func catalogLint(c *Call) error {
 	asJSON := c.Global.JSON || c.Bool("json")
 
 	rep := lintCatalog(dir, catalog.LintOptions{Online: c.Bool("online"), Context: c.Ctx})
-	if asJSON {
-		out, err := json.Marshal(rep)
-		if err != nil { // cannot happen: the report is plain data
-			return errors.New("aictl catalog lint: " + err.Error())
-		}
-		fmt.Fprintln(c.Stdout, string(out))
-	} else {
-		for _, line := range rep.FormatLines(dir) {
-			fmt.Fprintln(c.Stdout, line)
-		}
-		switch n := len(rep.Problems); {
-		case n == 0:
-			fmt.Fprintf(c.Stdout, "✓ Catalog %s is valid (%d models, %d content items, %d profiles).\n", rep.Version, rep.Models, rep.Content, rep.Profiles)
-		case n == 1:
-			fmt.Fprintln(c.Stdout, "✗ 1 problem found.")
-		default:
-			fmt.Fprintf(c.Stdout, "✗ %d problems found.\n", n)
-		}
-	}
+	printLintReport(c, dir, rep, asJSON)
 	if rep.Valid() {
 		return nil
 	}
 	return ExitWith(ExitUsage) // exit 2: the catalog is invalid (aictl.md 3.4, catalog.md 6)
+}
+
+// printLintReport prints a lint result the way `catalog lint` does (aictl.md 4.11.1): one line per
+// problem and a summary, or the --json document, on stdout. `catalog use --test` shares it.
+func printLintReport(c *Call, dir string, rep catalog.Report, asJSON bool) {
+	if asJSON {
+		out, err := json.Marshal(rep)
+		if err != nil { // cannot happen: the report is plain data
+			out = []byte(`{"valid":false,"problems":[]}`)
+		}
+		fmt.Fprintln(c.Stdout, string(out))
+		return
+	}
+	for _, line := range rep.FormatLines(dir) {
+		fmt.Fprintln(c.Stdout, line)
+	}
+	switch n := len(rep.Problems); {
+	case n == 0:
+		fmt.Fprintf(c.Stdout, "✓ Catalog %s is valid (%d models, %d content items, %d profiles).\n", rep.Version, rep.Models, rep.Content, rep.Profiles)
+	case n == 1:
+		fmt.Fprintln(c.Stdout, "✗ 1 problem found.")
+	default:
+		fmt.Fprintf(c.Stdout, "✗ %d problems found.\n", n)
+	}
 }

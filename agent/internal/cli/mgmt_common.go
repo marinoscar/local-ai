@@ -62,15 +62,6 @@ func (c *Call) exactArgs(n int, usage string) error {
 	return nil
 }
 
-// usageErr is a CodeUsage error with its own fix sentence.
-func (c *Call) usageErr(msg, fix string) *CLIError {
-	e := c.Err(CodeUsage, msg)
-	if fix != "" {
-		e.Fix = fix
-	}
-	return e
-}
-
 // call sends one request and decodes a 2xx body into v (nil: ignore it). It returns the raw body so
 // --json can print it unchanged. An answer that is not the expected JSON is LAI-CLI-009.
 func (c *Call) call(method, path string, in, v any) (json.RawMessage, *Response, error) {
@@ -137,15 +128,6 @@ func (c *Call) codeProblem(code, fallback string) out.Problem {
 	p.Message = sentence(p.Message)
 	p.Fix = sentence(p.Fix)
 	return p
-}
-
-// sentence makes s end with a full stop ("" stays "").
-func sentence(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" || strings.HasSuffix(s, ".") || strings.HasSuffix(s, "!") || strings.HasSuffix(s, "?") {
-		return s
-	}
-	return s + "."
 }
 
 // codeError is a CLIError for a doctor code with the doctor table's text and fix, for refusals

@@ -1,0 +1,16 @@
+== stdout ==
+Nodo ai-n3 · perfil small-8gb
+Modo       supervivencia (desde hace 3 horas)
+Internet   sin comprobar
+Cerebro    ! ningún modelo cargado · el predeterminado es Tiny Fallback
+           (tiny-fallback-q4km)
+Gráficos   sin memoria gráfica (solo CPU)
+Memoria    8.8 GB libres de 14.0 GB
+Energía    ✓ conectado a la corriente, cargando · batería 100%
+Servicios  ✓ llama   ! kiwix   ✗ whisper
+Ark        ! interno 100% listo, unidad ark 93% listo · nunca sincronizado ·
+           unidad ark conectada
+Nube       i en pausa hasta que el equipo esté en línea ·
+           https://cloud.example.test
+Tailnet    no lo administra este nodo
+== exit 0 ==

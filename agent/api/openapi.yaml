@@ -713,8 +713,6 @@ paths:
       description: agent.md section 3.8.15.
       x-localai-auth: op
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-12
       responses:
         "200":
           description: The mode.
@@ -738,8 +736,6 @@ paths:
       x-localai-auth: op
       x-localai-auth-note: "admin* is required to leave survival (LAI-SEC-002)."
       x-localai-timeout: "20 min if wait, else 5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-12
       requestBody:
         required: true
         content:
@@ -779,7 +775,7 @@ paths:
           description: "LAI-SEC-002: leaving survival needs admin*; plus the generic 403 codes."
         "409":
           $ref: "#/components/responses/Conflict"
-          description: "LAI-AGT-022 another transition is running (a request for survival preempts it)."
+          description: "LAI-AGT-022 another transition is running (a request for survival preempts it); with `wait: true`, also the answer to a transition that survival preempted (`details.preempted` is true, `details.op_id` is the survival operation)."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "500": {$ref: "#/components/responses/Internal"}
@@ -798,8 +794,6 @@ paths:
       x-localai-auth: none
       x-localai-timeout: "5 s"
       x-localai-gate-exempt: true
-      x-localai-status: planned
-      x-localai-issue: AGENT-12
       requestBody:
         required: true
         content:
@@ -2286,13 +2280,25 @@ components:
         op_id: {type: string}
 
     ModeTransition:
+      description: "`op_id`, `from` and `warnings` are present in GET /mode (the steps' warnings so far)."
       type: object
       required: [step, started_at]
       additionalProperties: false
       properties:
+        op_id: {type: string}
+        from: {$ref: "#/components/schemas/ModeValue"}
         target: {$ref: "#/components/schemas/ModeValue"}
         step: {type: string}
         started_at: {type: string, format: date-time}
+        warnings:
+          type: array
+          items:
+            type: object
+            required: [code, message]
+            additionalProperties: false
+            properties:
+              code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+              message: {type: string}
 
     Status:
       description: "GET /status (agent.md section 3.8.4)."
@@ -2745,7 +2751,7 @@ components:
       additionalProperties: false
       properties:
         mode: {$ref: "#/components/schemas/ModeValue"}
-        since: {type: string, format: date-time}
+        since: {description: "When the mode was committed; null on a node that never changed mode.", oneOf: [{type: "null"}, {type: string, format: date-time}]}
         transition:
           oneOf:
             - {type: "null"}

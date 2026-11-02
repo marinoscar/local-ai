@@ -1,0 +1,22 @@
+# Fixture values: obviously fake (documentation address range, .test names).
+schema_version: 1
+lab:
+  owner_email: "person-a@example.test"
+  tailnet: "example-tailnet"
+vps:
+  public_ip: "192.0.2.10"
+  tailnet_ip: "192.0.2.11"
+nodes:
+  - id: ai-n3
+    tailnet_ip: "192.0.2.23"
+    desktop_user: "casey"
+    label_for_card: "Desk three"
+    token_label: "tl-3"
+  - id: ai-n1
+    tailnet_ip: "192.0.2.21"
+    desktop_user: "avery"
+    label_for_card: "Desk one"
+    token_label: "tl-1"
+ark_drives:
+  - label: "AI-ARK"
+    fs_uuid: "fixture-uuid-1"

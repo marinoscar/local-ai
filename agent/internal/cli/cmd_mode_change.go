@@ -95,7 +95,7 @@ func modeChange(c *Call, target string) error {
 			return c.emitRaw(answeredRaw)
 		}
 		if answered.Already {
-			c.Out.Info(pick(c.Lang, "Already in "+modeWord(c.Lang, answered.Mode)+".", "Ya está en "+modeWord(c.Lang, answered.Mode)+"."))
+			c.Out.Info(pick(c.Lang, "Already in "+modePhrase(c.Lang, answered.Mode)+".", "Ya está en "+modePhrase(c.Lang, answered.Mode)+"."))
 			return nil
 		}
 		c.modeDone(target, answered.Warnings)
@@ -157,15 +157,15 @@ func eventsUnavailable(err error) bool {
 func (c *Call) modeStarted(target string, a modeAnswer) {
 	switch {
 	case a.Already:
-		c.Out.Info(pick(c.Lang, "Already in "+modeWord(c.Lang, a.Mode)+".", "Ya está en "+modeWord(c.Lang, a.Mode)+"."))
+		c.Out.Info(pick(c.Lang, "Already in "+modePhrase(c.Lang, a.Mode)+".", "Ya está en "+modePhrase(c.Lang, a.Mode)+"."))
 	case a.Queued:
 		c.Out.Info(pick(c.Lang,
 			"Survival mode was requested. It starts as soon as the agent is ready. Check with `aictl mode`.",
 			"Se pidió el modo supervivencia. Empieza en cuanto el agente esté listo. Revise con `aictl mode`."))
 	default:
 		c.Out.Info(pick(c.Lang,
-			"The change to "+modeWord(c.Lang, target)+" has started. Check it with `aictl mode`.",
-			"El cambio a "+modeWord(c.Lang, target)+" ya empezó. Revíselo con `aictl mode`."))
+			"The change to "+modePhrase(c.Lang, target)+" has started. Check it with `aictl mode`.",
+			"El cambio a "+modePhrase(c.Lang, target)+" ya empezó. Revíselo con `aictl mode`."))
 	}
 }
 
@@ -178,7 +178,7 @@ func (c *Call) modeDone(target string, warnings []agentevents.Warning) {
 			"Survival mode is on. Open "+portal+" for the Survival Portal.",
 			"El modo supervivencia está activo. Abra "+portal+" para el Portal de supervivencia."))
 	default:
-		c.Out.OK(pick(c.Lang, strings.ToUpper(target[:1])+target[1:]+" mode is on.", "El "+modeWord(c.Lang, target)+" está activo."))
+		c.Out.OK(pick(c.Lang, strings.ToUpper(target[:1])+target[1:]+" mode is on.", "El "+modePhrase(c.Lang, target)+" está activo."))
 	}
 	for _, w := range warnings {
 		c.Out.Problem(c.codeProblem(w.Code, w.Message))

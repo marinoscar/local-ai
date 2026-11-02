@@ -1,0 +1,8 @@
+== stdout ==
+Profile    small-8gb — Small GPU laptop (8 GB VRAM)
+Suggested  ✓ the same
+Overrides  ark_budget_gb
+Models     qwen3.5-9b-q4km, small-vlm-q4km
+Content    wikipedia-en-nopic, osm-north-america
+Disk plan  180 GB planned of 220 GB budget
+== exit 0 ==

@@ -210,8 +210,11 @@ func TestCatalogCommandUsage(t *testing.T) {
 		{[]string{"catalog", "lint", "--help"}, 0, "--online", ""},
 		{[]string{"catalog", "nope"}, 2, "", `Unknown subcommand "nope"`},
 		{[]string{"catalog", "refresh", "extra"}, 2, "", "Unexpected argument"},
-		{[]string{"catalog", "restore"}, 1, "", "not implemented yet (AICTL-07)"},
-		{[]string{"catalog", "use", "x", "--test"}, 1, "", "not implemented yet (AICTL-07)"},
+		// restore and use are implemented (AICTL-07, cmd_catalog_local.go); only usage mistakes are
+		// tried here, because anything else would work on the real /etc/localai
+		{[]string{"catalog", "restore", "extra"}, 2, "", "Unexpected argument"},
+		{[]string{"catalog", "use", "--test"}, 2, "", "A catalog directory is required"},
+		{[]string{"catalog", "use", "x"}, 2, "", "needs --test"},
 	}
 	for _, c := range cases {
 		code, out, errOut := run(c.args...)

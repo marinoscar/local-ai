@@ -304,15 +304,6 @@ func TestKeyCopy(t *testing.T) {
 	})
 }
 
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
-
 // --- key rotate -----------------------------------------------------------------------------------
 
 const rotatedBody = `{"fingerprint":"c0de…77aa","rotated_at":"2026-11-02T15:10:00Z","cloud_synced":true,` +

@@ -1,0 +1,5 @@
+{"unit": "localai-llama.service", "lines": [
+  {"at": "2026-11-02T08:00:05Z", "priority": 6, "message": "llama_server: loading model"},
+  {"at": "2026-11-02T08:00:12Z", "priority": 6, "message": "llama_server: model loaded"},
+  {"at": "2026-11-02T08:00:13Z", "priority": 3, "message": "bad\u001b[31m escape\u0007 and\ttab"}
+], "truncated": false}
