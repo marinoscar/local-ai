@@ -1,0 +1,14 @@
+== stdout ==
+Node ai-n3 · profile small-8gb
+Mode      survival    (since 3 hours ago)
+Internet  not checked
+Brain     ! no model loaded · default is Tiny Fallback (tiny-fallback-q4km)
+Graphics  no graphics memory (CPU only)
+Memory    8.8 GB free of 14.0 GB
+Power     ✓ plugged in, charging · battery 100%
+Services  ✓ llama   ! kiwix   ✗ whisper
+Ark       ! internal 100% ready, ark drive 93% ready · never synced · ark drive
+          connected
+Cloud     i paused until the computer is online · https://cloud.example.test
+Tailnet   not managed by this node
+== exit 0 ==

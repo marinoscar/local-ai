@@ -1,0 +1,5 @@
+== stdout ==
+08:00:05  llama_server: loading model
+08:00:12  llama_server: model loaded
+08:00:13  bad [31m escape  and	tab
+== exit 0 ==

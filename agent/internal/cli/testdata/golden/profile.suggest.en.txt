@@ -1,0 +1,4 @@
+== stdout ==
+✓ This computer matches "small-8gb" (cuda, 8.0 GB graphics memory, 14.0 GB
+  memory).
+== exit 0 ==

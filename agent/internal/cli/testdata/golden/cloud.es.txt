@@ -1,0 +1,8 @@
+== stdout ==
+Estado              ✓ vinculado
+Dirección           https://cloud.example.test
+Nombre del nodo     ai-n3
+Último latido       hace 2 minutos
+Credencial          nod_…a1b2
+Clave sincronizada  ✓ sí
+== exit 0 ==

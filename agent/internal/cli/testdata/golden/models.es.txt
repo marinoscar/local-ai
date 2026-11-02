@@ -1,0 +1,8 @@
+== stdout ==
+MODELO                 TAMAÑO  ESTADO    NOTAS
+qwen3.5-9b-q4km        5.9 GB  cargado   predeterminado · chat, reasoning, coder
+small-vlm-q4km         3.2 GB  guardado  vision
+tiny-fallback-q4km     2.1 GB  guardado  chat
+qwen3.6-35b-a3b-q4km  19.0 GB  ausente   ✗ Needs 11.0 GB of graphics memory; th…
+whisper-small          466 MB  guardado  speech-to-text
+== exit 0 ==

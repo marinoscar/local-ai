@@ -1,0 +1,16 @@
+== stdout ==
+✗ The agent cannot write its state.  [LAI-AGT-004]
+  → Solución: Free disk space on the system disk.
+✗ The AI model service is not running.  [LAI-LLM-001]
+  → Solución: Run `aictl restart llama`. If it fails again, run
+              `aictl logs --unit llama`.
+! Running on battery.  [LAI-HW-012]
+  → Solución: Plug in the charger. A laptop server stops when the battery runs
+              out.
+i The internet has been unreachable for a while.  [LAI-NET-011]
+  → Solución: Nothing to do, or switch to survival mode with
+              `aictl mode survival`.
+
+41 comprobaciones superadas · 1 aviso · 1 advertencia · 1 error · 1 problema
+crítico
+== exit 9 ==

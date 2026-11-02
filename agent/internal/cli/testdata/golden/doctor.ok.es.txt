@@ -1,0 +1,5 @@
+== stdout ==
+✓ agt.config
+✓ llm.router_health
+✓ 42 comprobaciones superadas.
+== exit 0 ==

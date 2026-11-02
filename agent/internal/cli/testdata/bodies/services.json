@@ -1,0 +1,5 @@
+{"services": [
+  {"name": "llama", "unit": "localai-llama.service", "active": "active", "sub": "running", "since": "{{ago:8h}}", "restarts": 0, "healthy": true, "enabled": true, "last_exit": {"code": 0, "at": "{{ago:9h}}"}},
+  {"name": "kiwix", "unit": "localai-kiwix.service", "active": "active", "sub": "running", "since": "{{ago:8h}}", "restarts": 0, "healthy": true, "enabled": true},
+  {"name": "whisper", "unit": "localai-whisper.service", "active": "inactive", "sub": "dead", "since": null, "restarts": 0, "healthy": false, "enabled": true, "last_exit": {"code": 1, "at": "{{ago:1h}}"}}
+]}

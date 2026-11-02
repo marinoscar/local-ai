@@ -1,0 +1,3 @@
+== stdout ==
+El modelo predeterminado es Qwen 3.5 9B (qwen3.5-9b-q4km). Está cargado.
+== exit 0 ==
