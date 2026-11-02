@@ -1557,7 +1557,7 @@ The same function scrubs `/logs` output and `logs.tail` results. A table-driven 
  "actor": {"kind": "operator", "via": "bearer", "uid": null, "job_id": null, "fingerprint": "lat_…9xQz"},
  "target": {"model": null}, "op_id": null, "req_id": "req_4f2k9m1q8z0c"}
 ```
-Audited actions: `key.show`, `key.rotate`, `model.load`, `model.unload`, `model.delete`, `model.set_default`, `mode.change`, `pin.verify.ok`, `pin.verify.fail`, `pin.set`, `token.rotate`, `ui_code.mint`, `session.create`, `cloud.enroll`, `cloud.unenroll`, `cloud.job` (every executed job with type and result), `profile.set`, `agent.update.*`, `service.*`, `catalog.refresh`, `migration.*`, `llama.build.switch`.
+Audited actions: `key.show`, `key.rotate`, `model.load`, `model.unload`, `model.delete`, `model.set_default`, `mode.change`, `pin.verify.ok`, `pin.verify.fail`, `pin.set`, `token.rotate`, `ui_code.mint`, `session.create`, `cloud.enroll`, `cloud.unenroll`, `cloud.job` (every executed job with type and result), `profile.set`, `agent.update.*`, `service.*`, `catalog.refresh`, `catalog.restore`, `catalog.use_test`, `config.backup`, `config.restore`, `migration.*`, `llama.build.switch`.
 
 ### 4.12 Graceful shutdown (SIGTERM / SIGINT)
 1. `sd_notify("STOPPING=1")`; set `stopping`; new mutating requests → `503 LAI-AGT-024` (`POST /mode/survival` is still accepted and recorded as a pending transition in `state.json`, so it runs at next start).
