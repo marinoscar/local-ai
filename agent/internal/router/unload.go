@@ -45,6 +45,9 @@ func (o *Orchestrator) Unload(ctx context.Context, id string, force bool, actor 
 // unload then counts as done. As for a load, the work after the lock is taken cannot be cancelled by
 // the caller, only by Shutdown.
 func (o *Orchestrator) UnloadWith(ctx context.Context, req UnloadRequest) (UnloadResult, error) {
+	if o.isClosing() {
+		return UnloadResult{}, ErrInterrupted
+	}
 	in := o.opt.Inputs()
 	m, inCatalog := findModel(in.Catalog, req.ID)
 	if inCatalog && m.Engine != "llama" {

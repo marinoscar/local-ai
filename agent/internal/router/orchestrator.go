@@ -406,9 +406,6 @@ func (o *Orchestrator) auditWrite(action string, actor audit.Actor, id, opID str
 		var oe *OpError
 		if errors.As(err, &oe) {
 			ev.Code = string(oe.Code)
-			if v, ok := oe.Details["op_id"].(string); ok && ev.OpID == "" {
-				ev.OpID = v
-			}
 		}
 	}
 	if werr := o.opt.Audit.Write(ev); werr != nil {

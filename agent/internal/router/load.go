@@ -97,6 +97,9 @@ func (op *loadOp) release() {
 // worse off than finishing. A caller that gives up gets its own context error back and the
 // operation completes on its own. Only Shutdown stops it (no rollback; last_load: interrupted).
 func (o *Orchestrator) LoadWith(ctx context.Context, req LoadRequest) (LoadResult, error) {
+	if o.isClosing() {
+		return LoadResult{}, ErrInterrupted
+	}
 	op, early, err := o.prepareLoad(ctx, req)
 	if err != nil || early != nil {
 		var res LoadResult

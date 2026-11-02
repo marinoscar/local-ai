@@ -725,9 +725,16 @@ func TestShutdownMidLoadLeavesTheRouterAloneAndRecordsInterrupted(t *testing.T) 
 	if _, held := r.o.Lock().Holder(); held || r.sup.anyActive() {
 		t.Error("lock or suppression leaked")
 	}
-	// After the shutdown nothing new starts waiting.
-	if _, err := r.o.Load(bg, "m-c", true, true, sysActor); err == nil {
-		t.Error("a load after Shutdown should not complete")
+	// After the shutdown nothing new starts: no lock, no state, no router call.
+	before := len(r.calls())
+	if _, err := r.o.Load(bg, "m-c", true, true, sysActor); !errors.Is(err, ErrInterrupted) {
+		t.Errorf("a load after Shutdown: %v", err)
+	}
+	if _, err := r.o.Unload(bg, "m-b", false, sysActor); !errors.Is(err, ErrInterrupted) {
+		t.Errorf("an unload after Shutdown: %v", err)
+	}
+	if len(r.calls()) != before || r.lastLoad().ID != "m-b" {
+		t.Errorf("a refused operation left traces: %v %+v", r.calls(), r.lastLoad())
 	}
 }
 
