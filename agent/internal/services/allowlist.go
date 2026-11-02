@@ -3,11 +3,13 @@ package services
 import (
 	"context"
 	"fmt"
+
+	"github.com/marinoscar/local-ai/agent/internal/doctor"
 )
 
 // CodeViolation is the doctor code of an allowlist violation: a bug in the agent, never a user error
 // (agent.md section 4.3.1).
-const CodeViolation = "LAI-AGT-099"
+const CodeViolation = doctor.AGT099
 
 // allowed lists the verbs each unit accepts (agent.md section 4.3.1). Anything else is a programming
 // error. DaemonReload names no unit and is always allowed.

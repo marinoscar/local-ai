@@ -3,6 +3,8 @@ package router
 import (
 	"fmt"
 	"strings"
+
+	"github.com/marinoscar/local-ai/agent/internal/doctor"
 )
 
 // Code is a doctor code (doctor-codes.md) the fit rules can raise.
@@ -10,27 +12,24 @@ type Code string
 
 // Doctor codes of the fit rules (llama-router.md section 4.3, agent.md section 3.8.7).
 //
-// They live in this one file on purpose: scripts/check-doctor-codes.sh forbids a "LAI-..." literal in
-// any other non-test Go file once internal/doctor/codes.go exists. The English and Spanish texts
-// below are the router's own plain-language reasons; the generic title and fix of each code belong
-// to the doctor registry (AGENT-11).
-//
-// TODO(AGENT-11): when internal/doctor lands, take the codes from it and look the message
-// templates up through its localization hook instead of the Reason texts in this file.
+// The constants alias those of internal/doctor/codes.go, the one file allowed to spell a "LAI-..."
+// literal (scripts/check-doctor-codes.sh). The English and Spanish texts below are the router's own
+// plain-language reasons, built from the situation (model names, sizes); the generic title and fix
+// of each code are in the doctor table (doctor.Text).
 const (
 	// CodeNotFit: the model can never load on this node (backend, graphics memory or RAM).
-	CodeNotFit Code = "LAI-CAT-005"
+	CodeNotFit Code = doctor.CAT005
 	// CodeFilesMissing: the model files are missing or not verified.
-	CodeFilesMissing Code = "LAI-LLM-008"
+	CodeFilesMissing Code = doctor.LLM008
 	// CodeNoRoom: not enough room to load without unloading others (and unload_others is false).
-	CodeNoRoom Code = "LAI-LLM-011"
+	CodeNoRoom Code = doctor.LLM011
 	// CodeRouterDown: the router does not answer. Never produced here; the API layer sets it as the
 	// loadable_reason when it cannot reach the router (agent.md section 3.8.7).
-	CodeRouterDown Code = "LAI-LLM-004"
+	CodeRouterDown Code = doctor.LLM004
 	// CodeOthersVRAM: other programs hold a lot of graphics memory; the load goes ahead anyway.
-	CodeOthersVRAM Code = "LAI-HW-005"
+	CodeOthersVRAM Code = doctor.HW005
 	// CodeRAMLow: other programs hold most of the RAM; the load goes ahead anyway.
-	CodeRAMLow Code = "LAI-HW-006"
+	CodeRAMLow Code = doctor.HW006
 )
 
 // Reason is a code with its plain-language message, the shape of loadable_reason in GET /models
