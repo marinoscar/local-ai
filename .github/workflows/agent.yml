@@ -43,6 +43,16 @@ jobs:
       - name: Static builds for linux/amd64 and linux/arm64
         if: steps.detect.outputs.present == 'true'
         run: scripts/agent-ci.sh build
+      - name: Reproducible (build twice, compare sha256)
+        if: steps.detect.outputs.present == 'true'
+        run: scripts/agent-ci.sh repro
+      - name: Builds offline from the vendored tree
+        if: steps.detect.outputs.present == 'true'
+        working-directory: agent
+        env:
+          GOPROXY: 'off'
+          GOFLAGS: -mod=vendor
+        run: go build ./...
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: steps.detect.outputs.present == 'true'
         with:

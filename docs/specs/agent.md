@@ -53,7 +53,7 @@ The same binary is also the CLI: invoked as `aictl` it behaves as described in [
 
 One static Go binary, `CGO_ENABLED=0`, `linux/amd64` and `linux/arm64`, installed at `/opt/localai/bin/aiagent`; `/usr/local/bin/aictl` is a symlink to it.
 
-**Multi-call dispatch** (`agent/cmd/aiagent/main.go`), decided on `filepath.Base(os.Args[0])`:
+**Multi-call dispatch** (`agent/cmd/aiagent/main.go`), decided on `filepath.Base(os.Args[0])`. Only the exact basename `aictl` selects the CLI; **any other name is the agent** (`aiagent`, or a release file name such as `aiagent-linux-amd64`):
 
 | argv[0] basename | argv[1] | Behaviour |
 |---|---|---|
@@ -89,7 +89,8 @@ Inside `serve` the daemon is one process with these long-lived goroutines ("work
 ```
 agent/
   go.mod                       module github.com/marinoscar/local-ai/agent
-  vendor/                      go mod vendor (committed; offline rebuild, ADR-0001)
+  vendor/                      go mod vendor (committed; offline rebuild, ADR-0001). Absent while the module has no
+                               third-party dependency: `go mod vendor` deletes it, and CI fails on any difference from its output
   cmd/aiagent/main.go          multi-call dispatch (§3.1)
   api/openapi.yaml             OpenAPI 3.1, the wire contract (§4.14)
   ui/                          React + Vite source of the local UI and Portal; `npm run build` → ui/dist (embedded).
@@ -132,6 +133,8 @@ agent/
 
 Rules:
 - Only `internal/execx` imports `os/exec`. A linter test (`internal/execx/guard_test.go`) greps the tree and fails otherwise.
+- `execx` API: `Runner.Run(ctx, Cmd) (Result, error)` with `Cmd{Path, Args, Timeout, MaxOut, Env, Stdin}`. `Path` must be absolute and clean; `Timeout` and `MaxOut` are required (> 0); shell binaries (`sh`, `bash`, ...) are refused, so there is no `sh -c`. A nil `Env` means `PATH=/usr/sbin:/usr/bin:/sbin:/bin` only. The child gets its own process group, which is killed on timeout. `stdout` and `stderr` are capped separately at `MaxOut` (first bytes kept, `Truncated` set). A non-zero exit code is a **result**, not an error; `ErrTimeout`, `ErrInvalid` and context cancellation are errors. `Lookup(name)` resolves inside the fixed `PATH` only and refuses relative names with a directory part, `..` and absolute paths outside it.
+- The import guard parses imports (not text), covers test files and sub-packages (`execx/fake` included), and skips `vendor/`.
 - Every external dependency (systemd, router, tailscale, GPU tools, cloud, GitHub, clock, filesystem roots) sits behind an interface with a fake in `internal/<pkg>/fake`.
 - Allowed third-party modules (vendored): `gopkg.in/yaml.v3`, `github.com/godbus/dbus/v5`, `golang.org/x/crypto` (argon2, blake2b for minisign), `golang.org/x/sys/unix` (statfs, peer creds), `golang.org/x/term` (no-echo PIN prompt), `github.com/yuin/goldmark` (`aictl docs render`). All are pure Go. Adding any other module needs an ADR.
 

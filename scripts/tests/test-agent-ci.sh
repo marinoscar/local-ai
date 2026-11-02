@@ -53,6 +53,13 @@ SOURCE_DATE_EPOCH=1700000000 AGENT_VERSION=1.2.3 run scripts/agent-ci.sh build >
 t "AGENT_VERSION injects version, commit and a deterministic build time" 0 "1.2.3 $(git rev-parse --short=7 HEAD) 2023-11-14T22:13:20Z" "$repo/agent/dist/aiagent-linux-amd64"
 rm -rf agent/dist
 
+t "repro: two builds are identical" 0 "builds are reproducible" run scripts/agent-ci.sh repro
+
+echo "== gofmt turns it red"
+printf 'package x\n\nfunc Add(a,b int) int {return a+b}\n' >agent/internal/x/x.go
+t "unformatted file -> exit 1" 1 "gofmt would change" run scripts/agent-ci.sh check
+git checkout -q agent/internal/x/x.go
+
 echo "== failing test turns it red"
 printf 'package x\n\nfunc Add(a, b int) int { return a - b }\n' >agent/internal/x/x.go
 t "go test failure -> exit 1" 1 "" run scripts/agent-ci.sh check

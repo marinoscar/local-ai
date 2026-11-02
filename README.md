@@ -164,7 +164,7 @@ apps/desktop/               the Local AI Electron shell                         
 scripts/                    repo tooling: redaction, links, doctor codes, hooks      (E0)
 ```
 
-Only `docs/`, `scripts/` and the root files exist today.
+Only `docs/`, `scripts/`, the `agent/` skeleton and the root files exist today.
 
 ## 8. Documentation map
 
@@ -198,7 +198,7 @@ The component → spec → epic table is kept in [docs/README.md](docs/README.md
 
 ## 10. Roadmap and status
 
-**Design approved; implementation not started.** The foundation epic (E0) is in progress: its CI guardrails are in place. The first product epic (E1, the agent) has not begun. Update this section, and the 🛠 markers above, whenever an epic ships.
+**Design approved; implementation just started.** The foundation epic (E0) is in progress: its CI guardrails are in place. The first product epic (E1, the agent) has begun: the `agent/` skeleton (a static multi-call `aiagent`/`aictl` binary that prints its version and help, with the process wiring and the `execx` exec guard) exists, and none of the capabilities above work yet. Update this section, and the 🛠 markers above, whenever an epic ships.
 
 | Phase | Goal | Epics |
 |---|---|---|
