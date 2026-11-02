@@ -1,29 +1,30 @@
 package hardware
 
+import "github.com/marinoscar/local-ai/agent/internal/doctor"
+
 // Doctor codes this package raises (agent.md section 8.3, doctor-codes.md).
 //
-// They live in this one file on purpose: scripts/check-doctor-codes.sh forbids a "LAI-..." literal in
-// any non-test Go file outside internal/doctor/codes.go once that file exists. AGENT-11 replaces
-// these constants and the English text below with the doctor registry (en and es); nothing else in
-// this package spells a code.
+// They are aliases of the constants of internal/doctor/codes.go, the one file allowed to spell a
+// "LAI-..." literal (scripts/check-doctor-codes.sh). The English text below is this package's own
+// table until its checks are registered with the doctor, which then localizes from the doctor table.
 const (
-	CodeNVIDIADriver    = "LAI-HW-002"  // nvidia-smi fails while the driver is loaded
-	CodeAMDDevices      = "LAI-HW-003"  // /dev/kfd or /dev/dri/renderD* missing
-	CodeAMDGroups       = "LAI-HW-004"  // localai not in video/render
-	CodeOthersVRAM      = "LAI-HW-005"  // other programs use a lot of GPU memory
-	CodeRAMLow          = "LAI-HW-006"  // MemAvailable almost gone
-	CodeDiskProfile     = "LAI-HW-007"  // internal root free < profile storage.min_free_bytes
-	CodeDiskFull        = "LAI-HW-008"  // a listed filesystem is > 95 % full
-	CodeGPUHot          = "LAI-HW-009"  // GPU >= 87 C
-	CodeCPUHot          = "LAI-HW-010"  // CPU >= 95 C
-	CodeThrottling      = "LAI-HW-011"  // throttling in 3 consecutive samples
-	CodeOnBattery       = "LAI-HW-012"  // running on battery
-	CodeBatteryLow      = "LAI-HW-013"  // battery < 20 %
-	CodeBatteryCrit     = "LAI-HW-014"  // battery < 10 %
-	CodePowerProfile    = "LAI-HW-015"  // profile is not performance (on AC)
-	CodeSwapHeavy       = "LAI-HW-016"  // swap used > 50 %
-	CodeBackendMismatch = "LAI-HW-017"  // llama.backend does not match the hardware
-	CodeOOMKill         = "LAI-LLM-027" // llama-server was OOM-killed
+	CodeNVIDIADriver    = doctor.HW002  // nvidia-smi fails while the driver is loaded
+	CodeAMDDevices      = doctor.HW003  // /dev/kfd or /dev/dri/renderD* missing
+	CodeAMDGroups       = doctor.HW004  // localai not in video/render
+	CodeOthersVRAM      = doctor.HW005  // other programs use a lot of GPU memory
+	CodeRAMLow          = doctor.HW006  // MemAvailable almost gone
+	CodeDiskProfile     = doctor.HW007  // internal root free < profile storage.min_free_bytes
+	CodeDiskFull        = doctor.HW008  // a listed filesystem is > 95 % full
+	CodeGPUHot          = doctor.HW009  // GPU >= 87 C
+	CodeCPUHot          = doctor.HW010  // CPU >= 95 C
+	CodeThrottling      = doctor.HW011  // throttling in 3 consecutive samples
+	CodeOnBattery       = doctor.HW012  // running on battery
+	CodeBatteryLow      = doctor.HW013  // battery < 20 %
+	CodeBatteryCrit     = doctor.HW014  // battery < 10 %
+	CodePowerProfile    = doctor.HW015  // profile is not performance (on AC)
+	CodeSwapHeavy       = doctor.HW016  // swap used > 50 %
+	CodeBackendMismatch = doctor.HW017  // llama.backend does not match the hardware
+	CodeOOMKill         = doctor.LLM027 // llama-server was OOM-killed
 )
 
 // Severities of a Result (doctor-codes.md).

@@ -28,6 +28,9 @@ run wrong-section 1 "listed in the LAI-AGT section but its area is CAT"
 run wrong-owner 1 "defined in gateway.md, which does not own area CAT"
 run bad-range 1 "LAI-CAT-030..039 is a range outside a documented family"
 run codes-go-drift 1 "LAI-CAT-001 is defined twice in codes.go" "LAI-CAT-077 is in codes.go but not in the registry" "LAI-CAT-010 is in the registry but missing from codes.go" "hard-coded LAI code literal outside codes.go"
+run codes-go-no-es 1 "LAI-CAT-001 has no Spanish (ES) title in codes.go" "LAI-CAT-010 has no Spanish (ES) fix in codes.go"
+run codes-go-no-entry 1 "LAI-CAT-010 has no table entry in codes.go"
+run codes-go-severity 1 'LAI-CAT-001 severity in codes.go is "critical" but the registry says "error"'
 
 echo "== real repo =="
 out="$("$CHECK" 2>&1)"; rc=$?
