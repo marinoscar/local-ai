@@ -20,8 +20,8 @@ var ErrNotDurable = errors.New("config: file replaced but the directory sync fai
 const tempMarker = ".tmp-"
 
 // WriteFileAtomic replaces path with data so that a reader (or a crash) sees the old file or the
-// new one, never a mix (agent.md 3.3): it writes path.tmp-<rand> in the same directory, fsyncs it,
-// chowns and chmods it, renames it over path and fsyncs the directory. uid or gid of -1 leaves that
+// new one, never a mix (agent.md 3.3): it writes path.tmp-<rand> in the same directory, chowns and
+// chmods it, fsyncs it, renames it over path and fsyncs the directory. uid or gid of -1 leaves that
 // id alone. On any failure the temp file is removed and path is untouched.
 func WriteFileAtomic(path string, data []byte, mode os.FileMode, uid, gid int) error {
 	return WriteFileAtomicFS(OSFS{}, path, data, mode, uid, gid)
@@ -43,11 +43,14 @@ func WriteFileAtomicFS(fsys FS, path string, data []byte, mode os.FileMode, uid,
 		}
 	}()
 
-	if _, err = f.Write(data); err != nil {
-		return fmt.Errorf("write %s: %w", tmp, err)
+	// Same steps as state.WriteFileAtomic (agent.md 3.3): owner and mode are set before the fsync
+	// so the metadata is durable together with the data.
+	n, err := f.Write(data)
+	if err == nil && n != len(data) {
+		err = fmt.Errorf("short write (%d of %d bytes)", n, len(data))
 	}
-	if err = f.Sync(); err != nil {
-		return fmt.Errorf("sync %s: %w", tmp, err)
+	if err != nil {
+		return fmt.Errorf("write %s: %w", tmp, err)
 	}
 	if uid >= 0 || gid >= 0 {
 		if err = f.Chown(uid, gid); err != nil {
@@ -56,6 +59,9 @@ func WriteFileAtomicFS(fsys FS, path string, data []byte, mode os.FileMode, uid,
 	}
 	if err = f.Chmod(mode.Perm()); err != nil {
 		return fmt.Errorf("chmod %s: %w", tmp, err)
+	}
+	if err = f.Sync(); err != nil {
+		return fmt.Errorf("sync %s: %w", tmp, err)
 	}
 	closed = true
 	if err = f.Close(); err != nil {
