@@ -86,7 +86,7 @@ scripts/                    repo tooling (redaction check, doc rendering)
    - or download a release binary from <https://github.com/gitleaks/gitleaks/releases>
 
    Then run `gitleaks detect --config .gitleaks.toml --redact` from the repo root.
-4. **Check before you push:** `scripts/check-redaction.sh`, `scripts/tests/test-redaction.sh` and `scripts/check-doctor-codes.sh` and `scripts/tests/test-doctor-codes.sh` (registry vs spec tables), `scripts/check-links.sh` (every relative link and `#anchor` in `*.md` must resolve; needs Go; `--external` also fetches https links).
+4. **Check before you push:** `scripts/check-redaction.sh`, `scripts/tests/test-redaction.sh` and `scripts/check-doctor-codes.sh` and `scripts/tests/test-doctor-codes.sh` (registry vs spec tables), `scripts/check-links.sh` (every relative link and `#anchor` in `*.md` must resolve; needs Go; `--external` also fetches https links). Once `agent/` exists, also run `scripts/agent-ci.sh all` (vet, race tests, staticcheck, vendor current, static amd64 and arm64 builds); `scripts/tests/test-agent-ci.sh` tests that pipeline.
 
 The redaction check never prints a matched value: only `LEAK <file>:<line>`. Test fixtures with
 deliberately fake leaks live in `scripts/tests/redaction/`, which `check-redaction.sh` skips only

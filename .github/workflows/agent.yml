@@ -1,0 +1,57 @@
+name: agent
+# Go pipeline for agent/ (ADR-0001: one static binary, vendored deps so the rebuild kit can build offline).
+# The logic lives in scripts/agent-ci.sh so it runs identically by hand. Until AGENT-01 creates agent/go.mod
+# the "go" job detects the missing module and does nothing; the script's own tests always run.
+#
+# TODO(AGENT-xx, with agent/ui): add the offline-asset test in agent/ui that fails when the embedded
+# UI bundle contains http(s):// asset URLs (survival-portal.md, offline asset rule). It runs under
+# `go test ./...` here, so no workflow change is needed.
+on:
+  pull_request:
+    paths: ['agent/**', 'catalog/**', 'scripts/agent-ci.sh', 'scripts/tests/test-agent-ci.sh', '.github/workflows/agent.yml']
+  push:
+    branches: [main]
+    paths: ['agent/**', 'catalog/**', 'scripts/agent-ci.sh', 'scripts/tests/test-agent-ci.sh', '.github/workflows/agent.yml']
+permissions:
+  contents: read
+jobs:
+  script-tests:
+    # Proves the pipeline itself: stale vendor is red, builds are static and reproducible.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.24'
+      - run: scripts/tests/test-agent-ci.sh
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Detect the agent module
+        id: detect
+        run: |
+          if [ -f agent/go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "agent/go.mod not found yet (AGENT-01): nothing to check"; fi
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        if: steps.detect.outputs.present == 'true'
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: vet, test -race, staticcheck, vendor is current
+        if: steps.detect.outputs.present == 'true'
+        run: scripts/agent-ci.sh check
+      - name: Static builds for linux/amd64 and linux/arm64
+        if: steps.detect.outputs.present == 'true'
+        run: scripts/agent-ci.sh build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.detect.outputs.present == 'true'
+        with:
+          name: aiagent-linux-amd64
+          path: agent/dist/aiagent-linux-amd64
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.detect.outputs.present == 'true'
+        with:
+          name: aiagent-linux-arm64
+          path: agent/dist/aiagent-linux-arm64
+          if-no-files-found: error
