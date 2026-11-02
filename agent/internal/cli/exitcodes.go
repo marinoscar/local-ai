@@ -6,6 +6,8 @@ import (
 	"flag"
 	"net/http"
 	"syscall"
+
+	"github.com/marinoscar/local-ai/agent/internal/api"
 )
 
 // Exit codes (aictl.md section 3.4). Commands use these constants; nothing else spells a number.
@@ -77,6 +79,11 @@ func ExitFor(err error) int {
 	}
 	var ae *APIError
 	if errors.As(err, &ae) {
+		if ae.Code == api.CodeRateLimited {
+			// A PIN lockout is "not allowed: PIN locked" (4), not the generic "refused right now" (6)
+			// that other 429 answers get (aictl.md section 3.4).
+			return ExitDenied
+		}
 		return ExitForStatus(ae.Status)
 	}
 	switch {

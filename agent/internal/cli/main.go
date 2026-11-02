@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/app"
+	"github.com/marinoscar/local-ai/agent/internal/cli/i18n"
+	"github.com/marinoscar/local-ai/agent/internal/cli/out"
 )
 
 // Env is everything the CLI reads from the process, so tests can run it hermetically.
@@ -32,8 +34,11 @@ type Env struct {
 	Getenv func(string) string
 	// Geteuid returns the effective user id (RequireRoot).
 	Geteuid func() int
-	// StdoutIsTTY says whether stdout is a terminal (colour and prompts depend on it).
+	// StdoutIsTTY says whether stdout is a terminal (colour depends on it).
 	StdoutIsTTY bool
+	// Terminal is the person at the keyboard for prompts (confirmations and the PIN). Nil means a
+	// non-interactive terminal reading Stdin, so no prompt is ever shown.
+	Terminal Terminal
 	// Version is the CLI version compared with the agent's.
 	Version string
 	// ClientConfig, if set, may adjust the client configuration (test hooks).
@@ -48,12 +53,13 @@ func Main(args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	env := Env{
-		Stdin:   os.Stdin,
-		Stdout:  stdout,
-		Stderr:  stderr,
-		Getenv:  os.Getenv,
-		Geteuid: os.Geteuid,
-		Version: app.Version,
+		Stdin:    os.Stdin,
+		Stdout:   stdout,
+		Stderr:   stderr,
+		Getenv:   os.Getenv,
+		Geteuid:  os.Geteuid,
+		Version:  app.Version,
+		Terminal: NewOSTerminal(os.Stdin),
 	}
 	if f, ok := stdout.(*os.File); ok {
 		if fi, err := f.Stat(); err == nil {
@@ -67,7 +73,7 @@ func Main(args []string, stdout, stderr io.Writer) int {
 type Global struct {
 	JSON    bool
 	Lang    Lang
-	NoColor bool // effective: the flag, NO_COLOR set, TERM=dumb, or stdout not a terminal
+	NoColor bool // effective: the flag, NO_COLOR set, TERM=dumb, --json, or stdout not a terminal
 	Yes     bool
 	Quiet   bool
 	Verbose bool
@@ -83,12 +89,7 @@ type Global struct {
 }
 
 // langFromEnv is the default language: Spanish when $LANG starts with "es", else English.
-func langFromEnv(getenv func(string) string) Lang {
-	if strings.HasPrefix(strings.ToLower(getenv("LANG")), "es") {
-		return LangES
-	}
-	return LangEN
-}
+func langFromEnv(getenv func(string) string) Lang { return i18n.Detect(getenv) }
 
 func firstNonEmpty(vals ...string) string {
 	for _, v := range vals {
@@ -140,7 +141,7 @@ func parseGlobal(env Env, args []string) (Global, []string, error) {
 			g.TimeoutSet = true
 		}
 	})
-	g.NoColor = noColor || env.Getenv("NO_COLOR") != "" || env.Getenv("TERM") == "dumb" || !env.StdoutIsTTY
+	g.NoColor = !out.ColorEnabled(env.StdoutIsTTY, noColor, g.JSON, env.Getenv)
 	if err == nil && g.Timeout < 0 {
 		err = errors.New("invalid value for -timeout: must not be negative")
 	}
@@ -164,6 +165,11 @@ type Call struct {
 	Stdout io.Writer
 	Stderr io.Writer
 	Lang   Lang
+	// Out is the output layer: symbols, colour, problems, tables, the --json writer. Commands print
+	// through it so every command looks and fails the same way (package out).
+	Out *out.Printer
+	// Term is the person at the keyboard for prompts; Confirm, ConfirmTyped and Admin use it.
+	Term Terminal
 	// Timeout is the deadline in force (0: none).
 	Timeout time.Duration
 
@@ -261,12 +267,15 @@ func Run(ctx context.Context, env Env, reg *Registry, args []string) int {
 	if env.Stderr == nil {
 		env.Stderr = io.Discard
 	}
-	out := &guardWriter{w: env.Stdout}
-	env.Stdout = out
-	rep := reporter{env: env}
+	gw := &guardWriter{w: env.Stdout}
+	env.Stdout = gw
+	if env.Terminal == nil {
+		env.Terminal = newStreamTerminal(env.Stdin)
+	}
 
 	g, rest, err := parseGlobal(env, args)
-	rep.g = g
+	printer := newPrinter(env, g)
+	rep := reporter{p: printer, g: g, env: env}
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			writeHelp(env.Stdout, reg)
@@ -351,7 +360,8 @@ func Run(ctx context.Context, env Env, reg *Registry, args []string) int {
 	}
 	c := &Call{
 		Ctx: ctx, Global: g, Command: res.cmd, Path: res.path, Args: positional, Flags: fs,
-		Stdin: env.Stdin, Stdout: env.Stdout, Stderr: env.Stderr, Lang: g.Lang, Timeout: timeout, env: env,
+		Stdin: env.Stdin, Stdout: env.Stdout, Stderr: env.Stderr, Lang: g.Lang, Out: printer, Term: env.Terminal,
+		Timeout: timeout, env: env,
 	}
 	runErr := normalize(res.cmd.Run(c), c)
 	if c.client != nil {

@@ -87,6 +87,19 @@ Implemented in `agent/internal/cli` (`Client`, `Config`, `Registry`, `ExitFor`);
 - **Broken pipe.** A write error `EPIPE` on stdout ends the run with exit 0 and no message; later writes are discarded.
 - **Debug.** `LOCALAI_CLI_DEBUG=1` logs one JSON line per request and response to stderr through the agent's scrubber (`internal/logx`): the `Authorization` value and secret-named body fields are redacted.
 
+#### 3.2.6 Output, prompts and the PIN flow (AICTL-02)
+Implemented in `agent/internal/cli/out` (printing), `agent/internal/cli/i18n` (the en/es labels) and `agent/internal/cli` (`confirm.go`, `admin.go`, `terminal.go`). A command prints through `c.Out` (an `*out.Printer`) and never writes colour or symbols itself; the framework prints the problems a command returns.
+- **Printer.** `OK` and `Info` (stdout), `Warn`, `Error`, `Critical`, `Progress` and `Problem` (stderr), `Table`, `KV`, `Secondary`, `Result` and `Blank` (stdout), `When` (a time for people), `PrintSecretWarning`. `Problem` takes the doctor `Code`, `Message`, `Fix`, `Details`, the request id and a wait time. `--quiet` hides everything except errors, the essential `Result` and `Table`/`KV` output, and the secret warning; `--json` turns every stdout method into a no-op (the `out.JSON` writer owns stdout) and an error-severity problem into the envelope.
+- **`--json` writer** (`c.Out.JSON()`): `Document(v)` or `Raw(body)` once, or `Line(v)` repeatedly for JSON Lines. A second document, or a document after lines, is refused (`ErrSecondDocument`) and writes nothing. If a command has already written its document and then fails, stdout keeps that one document and only the exit code reports the failure; stderr stays empty.
+- **Terminal.** Prompts read through a `Terminal` (`Interactive`, `ReadLine`, `ReadSecret`), real (`golang.org/x/term` on stdin) or scripted in tests (`cli/fake`); the question is written to **stderr**. Interactive means stdin is a terminal; a pipe, `/dev/null` and a closed stdin are not. Nothing is ever read from a non-terminal stdin for a confirmation, so piped data meant for a command is never consumed by one. Reads are bounded (4 KiB per line).
+- **Confirm** (`c.Confirm(question)`). Writes `<question> [y/N] ` (es: `[s/N]`). Yes is `y`/`yes` (es also `s`/`si`/`sí`), case-insensitive; Enter, anything else and end of input (Ctrl-D) are **No** and the command stops without changing anything. `--yes` answers yes without asking. Without `--yes`, `--json` or no terminal is `LAI-CLI-007` (exit 2). **ConfirmTyped** (`c.ConfirmTyped(prompt, expected)`) asks the user to type `expected` exactly (the model id of `delete --allow-last-copy`); `--yes` does **not** answer it (a person decides), so without a terminal it is `LAI-CLI-007` even with `--yes`. Ctrl-C at either prompt ends the command at once with exit 130 and **no message** (nothing had started, so "still running in the background" would be false).
+- **Admin flow** (`c.Admin(fn)`, `fn` being the `[admin]` API call, safe to run twice). `fn` runs; for root over the socket, or with a valid grant, nothing else happens. On `403` with `details.pin_required: true` the CLI obtains the PIN, calls `POST /pin/verify`, keeps the grant **in memory in the client** (every later request of the command carries `X-LocalAI-Pin-Grant`, so a second admin call asks nothing) and runs `fn` once more; that second result is returned, never a third attempt.
+  - *Source of the PIN.* `--pin-stdin`: one line from stdin (on a terminal, without echo). Otherwise `Admin PIN: ` on the terminal, no echo. With `--json`, or stdin not a terminal, and no `--pin-stdin`: `LAI-CLI-008`, exit 4. `--json` with `--pin-stdin` works and prints no prompt, so stderr stays empty. An empty answer (Enter, end of input) is `LAI-CLI-008` with "No PIN was entered." and nothing is sent.
+  - *Tries.* On a terminal without `--json`, up to **3 prompts** per command: after each wrong PIN (`LAI-SEC-003`) the problem is shown as a warning with `Tries left: N.` (from `details.remaining_attempts`) and the PIN is asked again; the third wrong PIN ends the command with the agent's `LAI-SEC-003` error (exit 4). With `--pin-stdin` on a pipe, or with `--json`, there is one try.
+  - *Lockout.* `LAI-SEC-004` ends the command at once; the error carries the `Retry-After` wait and the layout adds `→ Wait: 4 min 12 s` (es: `→ Espere:`). Exit **4** (PIN locked), not the generic 6 of other `429` answers (§3.4).
+  - *Other answers.* `LAI-SEC-005` (no PIN set) and any other error are shown as the agent sent them. A `403` without `pin_required` (not an operator) is not a PIN request and is returned untouched. Ctrl-C at the prompt is exit 130.
+- **Secret hygiene.** The PIN comes only from the terminal or stdin, never from a flag or the environment; it is never printed, never in an error or a `details` object, and never logged: `LOCALAI_CLI_DEBUG=1` logs neither the body of `POST /pin/verify` nor its answer. The grant is never written to disk and is gone when the command ends. `PrintSecretWarning` (used by `key show`, `key snippets --with-key`, AICTL-06) writes `! This is the secret key for this node. Do not paste it in chats or emails.` to stderr, also with `--quiet`, never with `--json`.
+
 ### 3.3 Output style guide (human mode)
 
 **Streams.** Results go to **stdout**; warnings, errors and progress go to **stderr**. A command that succeeds with warnings still exits 0 (except `doctor`/`drill`, §3.4).
@@ -102,7 +115,7 @@ Implemented in `agent/internal/cli` (`Client`, `Config`, `Registry`, `ExitFor`);
 | in progress | `…` (spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` on a TTY) | cyan (36) |
 | secondary text (ids, paths, times) | — | dim (2) |
 
-When the terminal cannot print UTF-8 (`LANG`/`LC_ALL` without `UTF-8`), the symbols become `[ok]`, `[i]`, `[!]`, `[x]`, `...`.
+When the terminal cannot print UTF-8 (the first of `LC_ALL`, `LC_CTYPE`, `LANG` that is set does not name UTF-8, or none is set), the symbols become `[ok]`, `[i]`, `[!]`, `[x]`, `...`, and the arrow of the fix line becomes `->`. Colour is on only when stdout is a terminal and none of `--no-color`, `NO_COLOR` (set and not empty), `TERM=dumb` and `--json` applies; the symbols are printed either way.
 
 **How a problem is shown** (same layout for errors, warnings and doctor results):
 ```
@@ -111,17 +124,18 @@ When the terminal cannot print UTF-8 (`LANG`/`LC_ALL` without `UTF-8`), the symb
 ```
 - Line 1: symbol, the `message` (one sentence, ends with a period), two spaces, the code in brackets (dim).
 - Line 2: two-space indent, `→ Fix:` and the `fix` sentence. Commands inside the fix are in backticks so they can be copied.
-- `-v` adds `  details: {…}` and `  request: req_…`.
-- In Spanish: `→ Solución:`.
+- `-v` adds `  details: {…}` and `  request: req_…` (always for `LAI-CLI-009`). A rate-limited answer adds `  → Wait: 4 min 12 s`.
+- In Spanish: `→ Solución:` (`→ Espere:`); the code and the `details`/`request` labels are never translated.
+- Lines are wrapped at 80 columns: the message continues under its first word, the fix under the text after `→ Fix:`. A `backticked command` stays on one line when it fits, so it can be copied; a word wider than the line (a path) is never cut. The code goes on the last line of the message, or on a line of its own when it does not fit.
 
 **Wording rules.**
 - Say what happened in everyday words first ("The model is loaded."), technical names second ("qwen3.5-9b-q4km").
-- Sizes: decimal units with one decimal, `5.9 GB`, `820 MB`; memory sizes from the GPU in GB too (`8.0 GB of graphics memory`).
-- Times: relative ("12 hours ago", "in 3 minutes"); absolute RFC 3339 only with `-v`.
-- Durations: `7.1 s`, `3 min 20 s`.
+- Sizes: decimal units (kB = 1000 B) with one decimal, `5.9 GB`, `19.0 GB`, `12.3 MB`; from 100 of a unit up the decimal is dropped (`820 MB`, `450 GB`). Memory sizes the agent reports in MiB (graphics memory, RAM) are divided by 1024 and shown in GB with one decimal, so an "8 GB" card reads `8.0 GB`.
+- Times: relative ("12 hours ago", "in 3 minutes", "just now" under 5 s; amounts rounded down); absolute RFC 3339 (UTC) only with `-v`, in parentheses after the relative time.
+- Durations: `7.1 s` under a minute, `3 min 20 s` (`3 min` when the seconds are zero), `2 h 5 min` from an hour.
 - Never print secrets (except `key show`, §4.8.1), stack traces, Go error chains or HTTP status numbers in human mode.
-- Lines ≤ 80 columns; tables use two spaces between columns, headers in plain words, no box drawing.
-- Confirmations: `Delete qwen3.6-35b-a3b-q4km from this computer (19.0 GB)? [y/N] `. Default is always **No**. Non-interactive without `--yes` → exit 2 `LAI-CLI-007`.
+- Lines ≤ 80 columns; tables use two spaces between columns, headers in plain words, no box drawing. A table wider than the line shortens its widest column (not the first) with an ellipsis; sizes and counts are right-aligned. A key/value block (`Label  value`) pads the labels to the longest and wraps a long value under itself.
+- Confirmations: `Delete qwen3.6-35b-a3b-q4km from this computer (19.0 GB)? [y/N] `. Default is always **No**. Non-interactive without `--yes` → exit 2 `LAI-CLI-007` (§3.2.6).
 
 **Progress.** Long operations (load, sync, verify, import, mode survival, rebuild, update, drill) subscribe to `GET /events` and show:
 - TTY: one updating line, e.g. `… Loading Qwen 3.5 9B  ███████░░░  70%  (5 s)`; replaced by the final `✓` line.
@@ -144,12 +158,12 @@ When the terminal cannot print UTF-8 (`LANG`/`LC_ALL` without `UTF-8`), the symb
 | 9 | Finished with errors: `doctor` errors or critical problems; `drill` overall `fail`; `ark sync\|verify\|import` run `failed` or aborted | — |
 | 130 | Interrupted by Ctrl-C | — |
 
-Rules: exit 3 means **only** "agent not reachable". A **skipped** `--scheduled` run (`aictl ark sync --scheduled`, `aictl drill --scheduled`: offline, mode, battery, disabled, busy, survival) prints `i … skipped: <reason>` and exits **0**. The units `localai-sync.service` and `localai-drill.service` set `SuccessExitStatus=8`, so a run with warnings is a success for systemd, while 9 (errors) and 3 (agent down) mark the unit failed and alert ([ark-sync.md](ark-sync.md) §3.7, [drill.md](drill.md) §3.3).
+Rules: a `LAI-SEC-004` answer (PIN locked after too many wrong tries, `429`) is exit **4**, the "PIN locked" of the row above, not the generic 6 of other `429` answers; exit 3 means **only** "agent not reachable". A **skipped** `--scheduled` run (`aictl ark sync --scheduled`, `aictl drill --scheduled`: offline, mode, battery, disabled, busy, survival) prints `i … skipped: <reason>` and exits **0**. The units `localai-sync.service` and `localai-drill.service` set `SuccessExitStatus=8`, so a run with warnings is a success for systemd, while 9 (errors) and 3 (agent down) mark the unit failed and alert ([ark-sync.md](ark-sync.md) §3.7, [drill.md](drill.md) §3.3).
 
 ### 3.5 `--json` mode
 - stdout gets exactly **one JSON document** per command (no extra lines), UTF-8, no colour.
 - For API commands it is the agent's response body unchanged (schemas in agent.md §3.8 / `agent/api/openapi.yaml`), except where §4 says otherwise.
-- On failure stdout gets the error envelope `{"error":{"code","message","fix","details"}}` (the agent's, or one built by the CLI with a `LAI-CLI-*` code) and the exit code is set; stderr stays empty.
+- On failure stdout gets the error envelope `{"error":{"code","message","fix","details"}}` (the agent's, or one built by the CLI with a `LAI-CLI-*` code, whatever the severity of the code) and the exit code is set; stderr stays empty. If the command had already written its document, that document stays the only one.
 - Progress is not printed; the command waits (respecting `--timeout`) and prints the final document.
 - Streaming commands (`logs -f`) print **JSON Lines** (one object per line).
 

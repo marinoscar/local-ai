@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strconv"
+	"time"
 )
 
 // APIError is the agent's error envelope (agent.md section 3.7) decoded, plus the HTTP status and
@@ -16,6 +17,9 @@ type APIError struct {
 	Details   map[string]any
 	RequestID string // X-Request-Id of the response
 	OpID      string // X-LocalAI-Op-Id, when the failed request had created an operation
+	// RetryAfter is the Retry-After header of the answer in seconds (a rate limit or a lockout); zero
+	// when there is none. Human output shows it as "Wait: 4 min 12 s".
+	RetryAfter time.Duration
 }
 
 // Error implements error. The text is for logs and tests; human output goes through the problem

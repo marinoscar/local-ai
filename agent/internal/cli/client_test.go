@@ -214,7 +214,9 @@ func TestExitCodeMap(t *testing.T) {
 		{http.StatusNotFound, api.CodeNotFound, ExitNotFound},
 		{http.StatusConflict, api.CodeBusy, ExitRefused},
 		{http.StatusUnprocessableEntity, api.CodeNotInMode, ExitRefused},
-		{http.StatusTooManyRequests, api.CodeRateLimited, ExitRefused},
+		{http.StatusTooManyRequests, api.CodeBusy, ExitRefused},
+		// A PIN lockout is "PIN locked" (exit 4), not the generic rate limit (aictl.md section 3.4).
+		{http.StatusTooManyRequests, api.CodeRateLimited, ExitDenied},
 		{http.StatusInternalServerError, api.CodeInternal, ExitFailed},
 		{http.StatusBadGateway, api.CodeRouterDown, ExitFailed},
 		{http.StatusServiceUnavailable, api.CodeInternal, ExitUnreachable}, // a 503 that is not "starting": no retry

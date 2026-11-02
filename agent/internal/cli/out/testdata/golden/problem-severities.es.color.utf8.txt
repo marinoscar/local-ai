@@ -1,0 +1,9 @@
+== stderr ==
+\e[34mi\e[0m You stopped waiting.  \e[2m[LAI-CLI-010]\e[0m
+  → Solución: Check with `aictl status`.
+\e[33m!\e[0m Running on battery.  \e[2m[LAI-HW-012]\e[0m
+  → Solución: Plug in the charger.
+\e[31m✗\e[0m Unknown option --x.  \e[2m[LAI-CLI-005]\e[0m
+\e[1;31m✗\e[0m The battery is almost empty.  \e[2m[LAI-AGT-004]\e[0m
+  → Solución: Plug in the charger now.
+\e[31m✗\e[0m No code on this one.

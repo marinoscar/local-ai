@@ -1,14 +1,17 @@
 package cli
 
-import "github.com/marinoscar/local-ai/agent/internal/doctor"
+import (
+	"github.com/marinoscar/local-ai/agent/internal/cli/i18n"
+	"github.com/marinoscar/local-ai/agent/internal/cli/out"
+	"github.com/marinoscar/local-ai/agent/internal/doctor"
+)
 
 // Doctor codes aictl itself raises (aictl.md section 8, doctor-codes.md section 2).
 //
 // The constants alias those of agent/internal/doctor/codes.go, the one file allowed to spell a code
-// literal (scripts/check-doctor-codes.sh).
-//
-// The en/es strings below are this package's own table. internal/doctor holds text for every code
-// (doctor.Text), so the table could become a lookup into it in a later change.
+// literal (scripts/check-doctor-codes.sh). The en/es strings below are this package's own table;
+// internal/doctor holds text for every code (doctor.Text), so the table could become a lookup into
+// it in a later change.
 const (
 	// CodeUnreachable: the agent cannot be reached (socket and TCP both failed, or it is still starting).
 	CodeUnreachable = doctor.CLI001
@@ -22,26 +25,40 @@ const (
 	CodeUsage = doctor.CLI005
 	// CodeNeedRoot: the command must run as root (RequireRoot).
 	CodeNeedRoot = doctor.CLI006
+	// CodeNeedConfirm: the command needs a yes/no confirmation and cannot ask (no terminal, or --json)
+	// and --yes was not given. Raised by Confirm and ConfirmTyped.
+	CodeNeedConfirm = doctor.CLI007
+	// CodeNeedPIN: the admin PIN is needed but there is no terminal to ask for it and --pin-stdin
+	// was not given. Raised by Admin.
+	CodeNeedPIN = doctor.CLI008
 	// CodeBadResponse: the agent sent an answer aictl cannot decode.
 	CodeBadResponse = doctor.CLI009
 	// CodeInterrupted: the user pressed Ctrl-C while waiting.
 	CodeInterrupted = doctor.CLI010
 )
 
-// Severities of a code, as in the doctor registry.
+// Codes of the agent that the PIN flow reacts to (agent.md section 3.8.3). The agent supplies their
+// text; the CLI only needs to recognise them. LAI-SEC-004 is api.CodeRateLimited.
 const (
-	sevError   = "error"
-	sevWarning = "warning"
-	sevInfo    = "info"
+	// CodeWrongPIN: the PIN was wrong (details.remaining_attempts).
+	CodeWrongPIN = doctor.SEC003
 )
 
-// Lang is the language of human output: "en" or "es". Codes and field names never change.
-type Lang string
+// Severities of a code, as in the doctor registry.
+const (
+	sevError   = out.SevError
+	sevWarning = out.SevWarning
+	sevInfo    = out.SevInfo
+)
+
+// Lang is the language of human output: "en" or "es". Codes and field names never change. The
+// strings live in the i18n package.
+type Lang = i18n.Lang
 
 // Supported languages.
 const (
-	LangEN Lang = "en"
-	LangES Lang = "es"
+	LangEN = i18n.EN
+	LangES = i18n.ES
 )
 
 // text is the one-sentence message of a code and its one-sentence fix.
@@ -49,7 +66,7 @@ type text struct{ Message, Fix string }
 
 type codeInfo struct {
 	Exit     int
-	Severity string
+	Severity out.Severity
 	En, Es   text
 }
 
@@ -80,6 +97,16 @@ var codeTable = map[string]codeInfo{
 	CodeNeedRoot: {ExitDenied, sevError,
 		text{"This command must be run as root.", "Run it with sudo: `sudo aictl ...`."},
 		text{"Este comando debe ejecutarse como root.", "Ejecútelo con sudo: `sudo aictl ...`."}},
+	CodeNeedConfirm: {ExitUsage, sevError,
+		text{"This command needs a yes/no confirmation.",
+			"Run it in a terminal, or add `--yes`."},
+		text{"Este comando necesita una confirmación de sí o no.",
+			"Ejecútelo en una terminal o agregue `--yes`."}},
+	CodeNeedPIN: {ExitDenied, sevError,
+		text{"The admin PIN is needed but there is no terminal to ask for it.",
+			"Run it in a terminal, use `sudo`, or pass `--pin-stdin`."},
+		text{"Se necesita el PIN de administrador pero no hay una terminal para pedirlo.",
+			"Ejecútelo en una terminal, use `sudo` o pase `--pin-stdin`."}},
 	CodeBadResponse: {ExitFailed, sevError,
 		text{"The agent sent an answer aictl does not understand.",
 			"Update with `sudo aictl update`, or report the request id."},
