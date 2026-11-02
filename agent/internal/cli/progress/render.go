@@ -38,6 +38,10 @@ type Update struct {
 	Key string
 	// Percent is 0 to 100 for a bar and a percentage; a negative value means "no bar".
 	Percent float64
+	// Detail is optional text for the live line only, shown after the percentage ("4.9/12.0 GB
+	// 18 MB/s 6 min left"). Parts separated by two spaces are cut from the end when the line is too
+	// long. It never changes the Key.
+	Detail string
 }
 
 func (u Update) key() string {
@@ -257,6 +261,18 @@ func (r *TextRenderer) liveLine(now time.Time) string {
 	sym := r.spinner()
 	room := r.o.MaxWidth - 1 - utf8.RuneCountInString(sym) - 1 - utf8.RuneCountInString(tail.String()) - utf8.RuneCountInString(elapsed)
 	label := truncate(r.cur.Label, room, r.o.UTF8)
+	if d := r.cur.Detail; d != "" {
+		// The detail only gets what the label leaves: its parts (separated by two spaces) are
+		// dropped from the end until the rest fits, the whole detail when nothing fits.
+		left := room - utf8.RuneCountInString(label) - 2
+		parts := strings.Split(d, "  ")
+		for len(parts) > 0 && utf8.RuneCountInString(strings.Join(parts, "  ")) > left {
+			parts = parts[:len(parts)-1]
+		}
+		if len(parts) > 0 {
+			tail.WriteString("  " + strings.Join(parts, "  "))
+		}
+	}
 	return r.paint(36, sym) + " " + label + tail.String() + r.paint(2, elapsed)
 }
 

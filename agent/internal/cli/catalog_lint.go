@@ -37,7 +37,6 @@ Specification: docs/specs/catalog.md section 6, docs/specs/aictl.md section 4.11
 				},
 				Run: catalogLint,
 			},
-			{Name: "refresh", Summary: "Fetch the newest catalog (not implemented yet).", Run: notImplemented("catalog refresh", "AICTL-06")},
 			catalogRestoreCommand(),
 			catalogUseCommand(),
 		},

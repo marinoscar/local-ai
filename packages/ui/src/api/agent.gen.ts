@@ -1768,6 +1768,16 @@ export interface components {
                 size_bytes: number;
                 status: string;
             }[];
+            /** @description Every profile of the installed catalog and the ids it includes (catalog.md section 4). `aictl profile set` shows them, with sizes from `models` and `content`, before it asks. */
+            profiles?: {
+                id: string;
+                display_name: string;
+                include: {
+                    models: string[];
+                    content: string[];
+                };
+                budget_bytes: number;
+            }[];
         };
         CatalogRefresh: {
             version: string;

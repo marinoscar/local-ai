@@ -58,6 +58,12 @@ func TestLiveLineLayout(t *testing.T) {
 			progress.Update{Label: "Waiting", Percent: progress.NoBar}, "\r⠋ Waiting  (0 s)\x1b[K"},
 		{"percent over 100 is capped", progress.RenderOptions{TTY: true, UTF8: true},
 			progress.Update{Label: "X", Percent: 250}, "\r⠋ X  ██████████  100%  (0 s)\x1b[K"},
+		{"detail after the percentage", progress.RenderOptions{TTY: true, UTF8: true},
+			progress.Update{Label: "Downloading wiki", Percent: 41, Detail: "4.9/12.0 GB  18 MB/s"},
+			"\r⠋ Downloading wiki  ████░░░░░░   41%  4.9/12.0 GB  18 MB/s  (0 s)\x1b[K"},
+		{"detail loses its last parts first", progress.RenderOptions{TTY: true, UTF8: true},
+			progress.Update{Label: "Downloading wikipedia-es-nopic", Percent: 41, Detail: "4.9/12.0 GB  18 MB/s  6 min left"},
+			"\r⠋ Downloading wikipedia-es-nopic  ████░░░░░░   41%  4.9/12.0 GB  18 MB/s  (0 s)\x1b[K"},
 		{"colour", progress.RenderOptions{TTY: true, UTF8: true, Color: true},
 			progress.Update{Label: "X", Percent: progress.NoBar}, "\r\x1b[36m⠋\x1b[0m X\x1b[2m  (0 s)\x1b[0m\x1b[K"},
 	}
