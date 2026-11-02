@@ -11,7 +11,7 @@ const (
 	KeyTriesLeft Key = "pin.tries_left"
 	// KeyPromptPIN is the prompt for the admin PIN (no trailing newline).
 	KeyPromptPIN Key = "pin.prompt"
-	// KeyNoPIN is the message when standard input held no PIN.
+	// KeyNoPIN is the message when nothing was typed or piped in as the PIN.
 	KeyNoPIN Key = "pin.none_read"
 	// KeyConfirmSuffix follows a yes/no question (default No).
 	KeyConfirmSuffix Key = "confirm.suffix"
@@ -38,7 +38,7 @@ var en = map[Key]string{
 	KeyWaitLabel:     "Wait:",
 	KeyTriesLeft:     "Tries left: %d.",
 	KeyPromptPIN:     "Admin PIN: ",
-	KeyNoPIN:         "No PIN was read from standard input.",
+	KeyNoPIN:         "No PIN was entered.",
 	KeyConfirmSuffix: " [y/N] ",
 	KeySecretWarning: "This is the secret key for this node. Do not paste it in chats or emails.",
 

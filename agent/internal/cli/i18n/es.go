@@ -5,7 +5,7 @@ var es = map[Key]string{
 	KeyWaitLabel:     "Espere:",
 	KeyTriesLeft:     "Intentos restantes: %d.",
 	KeyPromptPIN:     "PIN de administrador: ",
-	KeyNoPIN:         "No se leyó ningún PIN de la entrada estándar.",
+	KeyNoPIN:         "No se ingresó ningún PIN.",
 	KeyConfirmSuffix: " [s/N] ",
 	KeySecretWarning: "Esta es la clave secreta de este nodo. No la pegue en chats ni correos.",
 
