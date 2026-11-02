@@ -574,7 +574,17 @@ func (m *TailscaleManager) applyPattern(ctx context.Context, s TailscaleSettings
 	case listenerForeign, listenerMixed:
 		// Another listener uses the port the pattern needs: never touch it, never apply.
 		m.recordObserved(cfg, host, t, want)
-		return []doctor.Result{res(doctor.NET005, blockedDetails(want, state0))}, nil
+		blocked := []doctor.Result{res(doctor.NET005, blockedDetails(want, state0))}
+		if state0 == listenerMixed {
+			// Our "/" handler is published beside others: if Funnel is on for the port it is public.
+			// Never changed (not ours alone), always reported.
+			fr, err := m.funnelGuard(ctx, s, cfg, host)
+			if err != nil {
+				return nil, err
+			}
+			blocked = append(blocked, fr...)
+		}
+		return blocked, nil
 	case listenerFree:
 		if !s.Manage {
 			m.recordObserved(cfg, host, t, want)

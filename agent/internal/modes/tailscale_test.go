@@ -503,6 +503,49 @@ func TestOnFailures(t *testing.T) {
 	}
 }
 
+func TestFunnelOnForAMixedPortIsReportedNotChanged(t *testing.T) {
+	r := newTSRig(t, "B", true, "")
+	cfg := `{"TCP":{"443":{"HTTPS":true}},"Web":{"` + fakeHost + `:443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:8080"},"/docs":{"Proxy":"http://127.0.0.1:3000"}}}},` +
+		`"AllowFunnel":{"` + fakeHost + `:443":true}}`
+	if err := r.cli.LoadServe([]byte(cfg)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.on(); err != nil {
+		t.Fatal(err)
+	}
+	rs := r.mgr.ServeResults()
+	if got := resultCodes(rs); !reflect.DeepEqual(got, []string{doctor.NET005, doctor.NET009}) {
+		t.Fatalf("codes = %v", got)
+	}
+	if d := find(rs, doctor.NET009).Details; d["turned_off"] != false {
+		t.Errorf("details = %v", d)
+	}
+	if len(r.cli.Changes()) != 0 || !r.has("AllowFunnel") {
+		t.Errorf("a shared port was changed: %v", r.cli.Changes())
+	}
+	r.noForbidden()
+}
+
+func TestOnFunnelOnWithoutOurListenerIsNotOursToJudge(t *testing.T) {
+	r := newTSRig(t, "A", true, "")
+	cfg := `{"TCP":{"443":{"HTTPS":true}},"Web":{"` + fakeHost + `:443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:3000"}}}},` +
+		`"AllowFunnel":{"` + fakeHost + `:443":true}}`
+	if err := r.cli.LoadServe([]byte(cfg)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.on(); err != nil {
+		t.Fatal(err)
+	}
+	// A is applied; the foreign funnel on 443 is someone else's decision.
+	if got := r.cli.Changes(); !reflect.DeepEqual(got, []string{applyA}) {
+		t.Errorf("changes = %v", got)
+	}
+	if got := resultCodes(r.mgr.ServeResults()); len(got) != 0 {
+		t.Errorf("codes = %v", got)
+	}
+	r.noForbidden()
+}
+
 func TestOnFunnelOffFailureIsStillReported(t *testing.T) {
 	r := newTSRig(t, "B", true, "funnel_on")
 	r.cli.Script(funnelB, fake.Step{NoEffect: true})
