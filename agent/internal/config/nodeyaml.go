@@ -237,24 +237,28 @@ func (c Config) CloudEnabled() bool { return c.Cloud.URL != "" }
 func (c Config) Clone() Config {
 	out := c
 	out.Node.PublicHost = cloneStrPtr(c.Node.PublicHost)
-	out.ProfileOverrides.AddModels = append([]string(nil), c.ProfileOverrides.AddModels...)
-	out.ProfileOverrides.RemoveModels = append([]string(nil), c.ProfileOverrides.RemoveModels...)
-	out.ProfileOverrides.AddContent = append([]string(nil), c.ProfileOverrides.AddContent...)
-	out.ProfileOverrides.RemoveContent = append([]string(nil), c.ProfileOverrides.RemoveContent...)
+	out.ProfileOverrides.AddModels = cloneStrs(c.ProfileOverrides.AddModels)
+	out.ProfileOverrides.RemoveModels = cloneStrs(c.ProfileOverrides.RemoveModels)
+	out.ProfileOverrides.AddContent = cloneStrs(c.ProfileOverrides.AddContent)
+	out.ProfileOverrides.RemoveContent = cloneStrs(c.ProfileOverrides.RemoveContent)
 	if c.ProfileOverrides.BudgetBytes != nil {
 		v := *c.ProfileOverrides.BudgetBytes
 		out.ProfileOverrides.BudgetBytes = &v
 	}
 	out.Llama.CudaArch = cloneStrPtr(c.Llama.CudaArch)
-	out.Llama.LegacyAliases = make(map[string][]string, len(c.Llama.LegacyAliases))
-	for k, v := range c.Llama.LegacyAliases {
-		out.Llama.LegacyAliases[k] = append([]string(nil), v...)
+	if c.Llama.LegacyAliases != nil {
+		out.Llama.LegacyAliases = make(map[string][]string, len(c.Llama.LegacyAliases))
+		for k, v := range c.Llama.LegacyAliases {
+			out.Llama.LegacyAliases[k] = cloneStrs(v)
+		}
 	}
-	out.Llama.ExtraEnv = make(map[string]string, len(c.Llama.ExtraEnv))
-	for k, v := range c.Llama.ExtraEnv {
-		out.Llama.ExtraEnv[k] = v
+	if c.Llama.ExtraEnv != nil {
+		out.Llama.ExtraEnv = make(map[string]string, len(c.Llama.ExtraEnv))
+		for k, v := range c.Llama.ExtraEnv {
+			out.Llama.ExtraEnv[k] = v
+		}
 	}
-	out.Cloud.Allow = append([]string(nil), c.Cloud.Allow...)
+	out.Cloud.Allow = cloneStrs(c.Cloud.Allow)
 	if c.Blocks != nil {
 		out.Blocks = make(map[string]RawBlock, len(c.Blocks))
 		for k, v := range c.Blocks {
@@ -262,6 +266,14 @@ func (c Config) Clone() Config {
 		}
 	}
 	return out
+}
+
+// cloneStrs copies a slice and keeps nil nil, so a clone compares equal to its original.
+func cloneStrs(s []string) []string {
+	if s == nil {
+		return nil
+	}
+	return append([]string{}, s...)
 }
 
 func cloneStrPtr(p *string) *string {

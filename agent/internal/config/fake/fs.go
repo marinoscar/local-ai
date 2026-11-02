@@ -22,13 +22,17 @@ type FaultFS struct {
 	config.FS
 	Crash bool
 
-	mu   sync.Mutex
-	fail map[string]int // operation -> remaining failures (-1 = always)
-	dead bool
+	mu    sync.Mutex
+	fail  map[string]int // operation -> remaining failures (-1 = always)
+	nth   map[string]int // operation -> the call number that fails
+	calls map[string]int
+	dead  bool
 }
 
 // New wraps inner.
-func New(inner config.FS) *FaultFS { return &FaultFS{FS: inner, fail: map[string]int{}} }
+func New(inner config.FS) *FaultFS {
+	return &FaultFS{FS: inner, fail: map[string]int{}, nth: map[string]int{}, calls: map[string]int{}}
+}
 
 // FailOn makes the next n calls of op fail (n < 0: all of them).
 func (f *FaultFS) FailOn(op string, n int) *FaultFS {
@@ -38,11 +42,22 @@ func (f *FaultFS) FailOn(op string, n int) *FaultFS {
 	return f
 }
 
+// FailNth makes only the n-th call of op (counted from now, starting at 1) fail.
+func (f *FaultFS) FailNth(op string, n int) *FaultFS {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.nth[op] = n
+	f.calls[op] = 0
+	return f
+}
+
 // Reset clears all injected failures and the crash state (the process "restarted").
 func (f *FaultFS) Reset() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.fail = map[string]int{}
+	f.nth = map[string]int{}
+	f.calls = map[string]int{}
 	f.dead = false
 }
 
@@ -52,12 +67,16 @@ func (f *FaultFS) hit(op string) error {
 	if f.dead && op == "remove" {
 		return ErrInjected
 	}
-	n, ok := f.fail[op]
-	if !ok || n == 0 {
-		return nil
+	f.calls[op]++
+	failing := f.nth[op] != 0 && f.calls[op] == f.nth[op]
+	if n := f.fail[op]; n != 0 {
+		failing = true
+		if n > 0 {
+			f.fail[op] = n - 1
+		}
 	}
-	if n > 0 {
-		f.fail[op] = n - 1
+	if !failing {
+		return nil
 	}
 	if f.Crash {
 		f.dead = true

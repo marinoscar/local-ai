@@ -1,0 +1,108 @@
+schema_version: 1
+
+node:
+  id: ai-n3 # REQUIRED. ^ai-n[1-9][0-9]{0,3}$. Never reused. Also the EAB node name.
+  display_name: "HP ZBook (ai-n3)" # shown in UIs; default = id
+  public_host: ai-n3.marin.cr # informational; used in `aictl key snippets`; null if not published
+
+profile: cpu-only # REQUIRED. catalog/profiles/<id>.yaml (catalog.md §4)
+profile_overrides: # catalog.md §4 "Node overrides"
+  add_models: []
+  remove_models: []
+  add_content: []
+  remove_content: []
+  budget_bytes: null # null = use profile storage.budget_bytes
+
+catalog:
+  channel: stable # stable | catalog-<CATALOG_VERSION> (pin) ; catalog.md §1
+  base_url: https://raw.githubusercontent.com/marinoscar/local-ai # used when not enrolled
+
+llama:
+  mode: router # router | single   (llama-router.md §4.8)
+  build: /opt/localai/llama.cpp/current # informational; the unit always uses current/bin/llama-server
+  commit: f3586e66b # llama.cpp commit the node should run; rebuild-llama builds this
+  backend: cuda # cuda | vulkan | cpu
+  cuda_arch: null # e.g. "75"; null = auto-detect from nvidia-smi compute_cap (llama-router.md §4.10)
+  load_timeout_seconds: 300 # per model load (30..3600)
+  legacy_aliases: # written by migration; extra router aliases so old clients keep working
+    qwen3.5-9b-q4km: [qwen3.5-9b]
+  extra_env: {} # node-level env for llama-server, e.g. {GGML_VK_SUBALLOCATION_BLOCK_SIZE: "4294967296"}
+  # keys must match ^(GGML|LLAMA|CUDA)_[A-Z0-9_]+$ ; LLAMA_ARG_* is refused
+
+tailscale:
+  manage: true # false = the agent never runs `tailscale serve` (doctor still reports)
+  serve_pattern: B # A = --tcp=18080 ; B = --https=443 ; none = not published
+
+cloud:
+  url: https://ai.marin.cr # https only (http://127.0.0.1:<port> allowed only with dev_insecure: true)
+  dev_insecure: false
+  allow: [status.refresh, model.load, model.unload, model.set_default, model.download, model.delete, ark.sync, ark.verify, mode.offline, key.rotate, service.restart, logs.tail, catalog.refresh, agent.update] # node-side job allowlist, names WITHOUT the "localai." prefix (security-model.md §4)
+  concurrency: 1 # EAB concurrency (1..4); local ops serialize anyway (§4.12)
+  poll: # the cloud's handshake (GET …/localai/config) overrides these when present
+    heartbeat_seconds: 15 # 5..60
+    claim_seconds: 3 # 1..30
+    state_seconds: 60 # 15..600 (plus immediate push on change)
+
+# ---- blocks owned by other specs (included verbatim; their spec defines validation) ----
+sync: # owned by ark-sync.md §3.3
+  enabled: true # false = scheduled runs exit "skipped: disabled"
+  concurrency: 2 # max simultaneous network downloads (all roots together), 1..4
+  per_root_writers: 1 # max simultaneous writers per root; drives are slow on parallel writes
+  bandwidth_limit: "0" # "0" = unlimited, else e.g. "20MiB/s", "100Mbit/s"
+  allow_on_battery: false # scheduled runs skip when on battery
+  verify_reread: true # re-read the file from disk after download before staging
+  reverify_days: 30 # every verified item is re-hashed at least this often
+  reverify_budget_minutes: 90 # max time per scheduled run spent on re-verification
+  trash_days: 14 # how long a superseded version is kept
+  quarantine_days: 7
+  max_run_hours: 12 # scheduled run stops gracefully after this
+  hf_token_file: /etc/localai/hf-token # optional; used only for huggingface.co requests
+  ark_drive:
+    enabled: true # false = drives are detected and served but never written
+    default_profile: ark-drive-full
+    copy_inventory: true
+
+kiwix: # owned by companion-services.md §3.1
+  enabled: true
+  threads: 4
+whisper:
+  enabled: true
+  commit: "<40-hex whisper.cpp commit>"
+  backend: auto
+  device: auto
+  model: auto
+  threads: auto
+  max_audio_seconds: 120
+piper:
+  enabled: true
+  version: "2023.11.14-2"
+  length_scale: 1.05
+  default_voice: {en: auto, es: auto}
+maps:
+  enabled: true
+  default_map: auto
+  gps: auto
+  default_center: {lat: 9.93, lon: -84.08, zoom: 8}
+
+portal: # owned by survival-portal.md §3.4
+  language: auto
+  emergency_number: "911"
+  kiosk: false
+# ---- end of blocks owned by other specs ----
+
+update:
+  repo: marinoscar/local-ai # GitHub repo of agent releases
+  channel: stable # stable | prerelease
+  allow_downgrade: false
+
+ui:
+  language: auto # auto | en | es  (auto = Accept-Language, then OS locale)
+
+ports: # canonical values (overview §3.4). Changing them is unsupported on lab nodes;
+  agent: 7070 # they exist so tests and dev machines can run side by side.
+  llama: 8080
+  kiwix: 8888
+  whisper: 8081
+
+logging:
+  level: info # debug | info | warn | error
