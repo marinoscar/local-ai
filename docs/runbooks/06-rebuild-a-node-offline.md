@@ -146,11 +146,16 @@ From [rebuild-kit.md §5](../specs/rebuild-kit.md#5-limits-what-cant-be-rebuilt-
     Then open `http://127.0.0.1:7070` and try buttons 1 (Chat), 4 (Library) and 5 (Maps) ([01](01-survival-mode.md)).
 19. **Optional: print the manuals with the real values:**
 
+    Do this from a copy of the repository (for example `~/git/local-ai`); the command needs the `docs` folder of that copy:
+
     ```
+    cd ~/git/local-ai
     sudo aictl docs render
     ```
 
-    It reads `inventory.local.yaml` from the drive and writes HTML (and PDF if Chromium is installed) to `/srv/localai/docs`.
+    It reads `inventory.local.yaml` (from `/etc/localai/`, else from the drive, else from the current folder) and writes HTML (and PDF if Chromium is installed) to `/srv/localai/docs`, and also to the drive if it is plugged in. It never writes inside the repository copy. It also makes this computer's one-page survival card, `survival-card-<computer-name>.html` (and `.pdf`).
+    - **What you should see:** a line starting with `✓ Rendered`, then `Survival card:` and the file name. If it says `LAI-CLI-013`, the real values were not found: plug in the AI-ARK drive or add `--inventory <file>`, and run it again. `LAI-CLI-014` only means no Chromium is installed, so you get web pages but no PDF files; open the pages in a browser and print from there.
+    - **If it doesn't work:** `LAI-CLI-016` or `LAI-CLI-015` means the survival card text must be changed by the maintainers ([07](07-troubleshooting.md)). Without a copy of the repository, skip this step: `aictl ark sync --item docs-bundle` makes the manuals on its own.
 
 ---
 
