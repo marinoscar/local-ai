@@ -475,6 +475,13 @@ func TestStartRunsAtOnceThenEveryInterval(t *testing.T) {
 	if err := m.Stop(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	// A check that was already running when Stop cancelled the pass may still be finishing; wait
+	// for it, then no check may run again.
+	waitFor(t, "in-flight checks to finish", func() bool {
+		m.reg.mu.Lock()
+		defer m.reg.mu.Unlock()
+		return len(m.reg.running) == 0
+	})
 	n := runs.get()
 	time.Sleep(50 * time.Millisecond)
 	if runs.get() != n {

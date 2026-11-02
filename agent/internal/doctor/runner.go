@@ -165,29 +165,52 @@ func (r *Registry) runOne(ctx context.Context, c Check) []Result {
 
 	done := make(chan []Result, 1)
 	go func() {
-		defer func() {
-			r.mu.Lock()
-			delete(r.running, c.ID)
-			r.mu.Unlock()
-		}()
-		defer func() {
-			if p := recover(); p != nil {
-				done <- []Result{problem(c.ID, "panic: "+firstLine(fmt.Sprint(p)))}
-			}
-		}()
-		done <- c.Run(cctx)
+		var res []Result
+		// A run that was abandoned before its goroutine got to start (its context is already
+		// done) must not call the check at all: starting it after Stop or after a budget ran out
+		// would run a check nobody waits for. It still answers with the abandoned run's
+		// LAI-AGT-099, never with an empty result, which would read as a pass.
+		if cctx.Err() == nil {
+			res = safeRun(cctx, c)
+		} else {
+			res = []Result{abandoned(ctx, c.ID)}
+		}
+		// Unmark the check BEFORE the result is delivered. The caller may start the next run the
+		// moment it has the result; if the mark were still set it would take a finished check for a
+		// stuck one and report LAI-AGT-099 (#207). An abandoned run unmarks itself here when it
+		// finally returns.
+		r.mu.Lock()
+		delete(r.running, c.ID)
+		r.mu.Unlock()
+		done <- res
 	}()
 
 	select {
 	case res := <-done:
 		return res
 	case <-cctx.Done():
-		reason := "timeout"
-		if ctx.Err() != nil && ctx.Err() != context.DeadlineExceeded {
-			reason = "canceled"
-		}
-		return []Result{problem(c.ID, reason)}
+		return []Result{abandoned(ctx, c.ID)}
 	}
+}
+
+// abandoned is the LAI-AGT-099 result of a run the caller gave up on: "timeout" when the check's own
+// timeout or the run's budget passed, "canceled" when the caller's context was cancelled.
+func abandoned(ctx context.Context, check string) Result {
+	reason := "timeout"
+	if err := ctx.Err(); err != nil && err != context.DeadlineExceeded {
+		reason = "canceled"
+	}
+	return problem(check, reason)
+}
+
+// safeRun runs c and turns a panic into the LAI-AGT-099 result of a panicking check.
+func safeRun(ctx context.Context, c Check) (res []Result) {
+	defer func() {
+		if p := recover(); p != nil {
+			res = []Result{problem(c.ID, "panic: "+firstLine(fmt.Sprint(p)))}
+		}
+	}()
+	return c.Run(ctx)
 }
 
 // problem is the LAI-AGT-099 result of a check that did not finish properly.

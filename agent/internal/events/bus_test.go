@@ -50,9 +50,28 @@ func recv(t *testing.T, ch <-chan Event) Event {
 	return Event{}
 }
 
-// drain reads events until none arrives for a short while.
-func drain(ch <-chan Event) []Event {
+// collect reads the events a subscription must deliver: exactly want of them, however slowly the
+// delivery goroutine is scheduled (it fails after 10 s, not after a pause), and then whatever else
+// arrives within a short quiet window, so a test that expects "nothing more" still sees an extra
+// event. Only the last part is time-based, and it can miss an extra event but never invent one.
+//
+// It replaces an idle-timeout drain: that stopped at the first 50 ms pause, which a loaded machine
+// (-race, several packages at once) produces in the middle of a 1000-event replay.
+func collect(t *testing.T, ch <-chan Event, want int) []Event {
+	t.Helper()
 	var out []Event
+	deadline := time.After(10 * time.Second)
+	for len(out) < want {
+		select {
+		case ev, ok := <-ch:
+			if !ok {
+				return out
+			}
+			out = append(out, ev)
+		case <-deadline:
+			t.Fatalf("got %d events, want %d (timed out)", len(out), want)
+		}
+	}
 	for {
 		select {
 		case ev, ok := <-ch:
@@ -191,7 +210,7 @@ func TestRingKeepsExactlyTheLastThousand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := drain(ch)
+	got := collect(t, ch, 1000)
 	if len(got) != 1000 || got[0].ID != 501 || got[999].ID != 1500 {
 		t.Fatalf("replay from 500: %d events, first %d, last %d; want 1000 events 501..1500", len(got), got[0].ID, got[len(got)-1].ID)
 	}
@@ -202,7 +221,7 @@ func TestRingKeepsExactlyTheLastThousand(t *testing.T) {
 	}
 	// 499 is one too old.
 	ch2, _ := b.Subscribe(ctx, AllTypes(), 499)
-	got = drain(ch2)
+	got = collect(t, ch2, 1001)
 	if len(got) != 1001 || got[0].Type != TypeResync || got[0].ID != 0 || got[1].ID != 501 {
 		t.Fatalf("replay from 499: %d events, first %+v", len(got), got[0])
 	}
@@ -214,12 +233,12 @@ func TestIDsStartAtOneAndRingOfOneEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ch, _ := b.Subscribe(ctx, AllTypes(), 2)
-	got := drain(ch)
+	got := collect(t, ch, 1)
 	if !reflect.DeepEqual(ids(got), []uint64{3}) {
 		t.Fatalf("ids = %v, want [3]", ids(got))
 	}
 	ch, _ = b.Subscribe(ctx, AllTypes(), 1)
-	got = drain(ch)
+	got = collect(t, ch, 2)
 	if !reflect.DeepEqual(ids(got), []uint64{0, 3}) || got[0].Type != TypeResync {
 		t.Fatalf("ids = %v, want a gap resync then 3", ids(got))
 	}
@@ -271,7 +290,7 @@ func TestReplayTable(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := drain(ch)
+			got := collect(t, ch, len(tc.wantIDs))
 			if !reflect.DeepEqual(ids(got), tc.wantIDs) && !(len(got) == 0 && len(tc.wantIDs) == 0) {
 				t.Fatalf("ids = %v, want %v", ids(got), tc.wantIDs)
 			}
@@ -294,13 +313,13 @@ func TestReplayIsFilteredAndAnEmptyRingIsARestart(t *testing.T) {
 	defer cancel()
 	f, _ := ParseFilter("mode.*")
 	ch, _ := b.Subscribe(ctx, f, 1)
-	if got := ids(drain(ch)); !reflect.DeepEqual(got, []uint64{3}) {
+	if got := ids(collect(t, ch, 1)); !reflect.DeepEqual(got, []uint64{3}) {
 		t.Fatalf("filtered replay = %v, want [3]", got)
 	}
 
 	empty := newBus()
 	ch, _ = empty.Subscribe(ctx, AllTypes(), 5)
-	got := drain(ch)
+	got := collect(t, ch, 1)
 	if len(got) != 1 || resyncReason(t, got[0]) != ResyncRestart {
 		t.Fatalf("a client from a previous process on a fresh bus must get resync restart, got %+v", got)
 	}
@@ -330,7 +349,7 @@ func TestResyncBroadcastReachesEveryFilterAndIsReplayed(t *testing.T) {
 	// A client of the previous process, with an older id, finds it in its replay.
 	_ = b.Publish(TypeModelLoaded, "", ModelLoaded{Model: "m"})
 	stale, _ := b.Subscribe(ctx, AllTypes(), 1)
-	if got := ids(drain(stale)); !reflect.DeepEqual(got, []uint64{2}) {
+	if got := ids(collect(t, stale, 1)); !reflect.DeepEqual(got, []uint64{2}) {
 		t.Fatalf("ids = %v", got)
 	}
 }
@@ -460,7 +479,7 @@ func TestSubscriberFilterAppliesToLiveEvents(t *testing.T) {
 	_ = b.Publish(TypeCloudState, "", CloudState{State: "linked"})
 	_ = b.Publish(TypeModeChanged, "", ModeChanged{From: "online", To: "offline"})
 	_ = b.Publish(TypeModeStep, "", ModeStep{Target: "offline", Step: "s", State: "done"})
-	got := ids(drain(ch))
+	got := ids(collect(t, ch, 2))
 	if !reflect.DeepEqual(got, []uint64{2, 4}) {
 		t.Fatalf("ids = %v, want [2 4]", got)
 	}
@@ -532,7 +551,7 @@ func TestSlowSubscriberLimitIsExactly256(t *testing.T) {
 				expectClosed(t, ch)
 				return
 			}
-			if got := drain(ch); len(got) != tc.wantQueue {
+			if got := collect(t, ch, tc.wantQueue); len(got) != tc.wantQueue {
 				t.Fatalf("read %d events, want %d", len(got), tc.wantQueue)
 			}
 		})
@@ -567,7 +586,7 @@ func TestReplayDoesNotCountAgainstTheLiveLimit(t *testing.T) {
 	defer cancel()
 	ch, _ := b.Subscribe(ctx, AllTypes(), 1) // 999 events to replay, over the 256 live limit
 	pub(t, b, 100)
-	got := drain(ch)
+	got := collect(t, ch, 999+100)
 	if len(got) != 999+100 || got[len(got)-1].ID != 1100 {
 		t.Fatalf("got %d events, last %d; want 1099 ending at 1100", len(got), got[len(got)-1].ID)
 	}

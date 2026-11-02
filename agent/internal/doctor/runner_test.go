@@ -478,3 +478,64 @@ func TestRunHonoursACancelledContext(t *testing.T) {
 		t.Errorf("results = %+v", rep.Results)
 	}
 }
+
+// Regression for #207. runOne marks a check as running while its goroutine lives, so that a stuck
+// check is never started twice. The goroutine used to send its result first and unmark itself in a
+// deferred call after it, so the caller could get the result, start the next run at once and find the
+// check still marked: it then reported LAI-AGT-099 "timeout" for a check that had just passed, and
+// the alert manager raised LAI-AGT-099 instead of what the check found. The mark must be gone by the
+// time the result is delivered.
+func TestACheckIsNotRunningOnceItsResultIsDelivered(t *testing.T) {
+	r := newReg(t,
+		okCheck("agt.fine", "AGT", true),
+		Check{ID: "agt.panics", Area: "AGT", Fast: true, Run: func(context.Context) []Result { panic("boom") }},
+	)
+	for i := 0; i < 1500; i++ {
+		mustRun(t, r, RunOptions{})
+		r.mu.Lock()
+		n := len(r.running)
+		r.mu.Unlock()
+		if n != 0 {
+			t.Fatalf("run %d: %d check(s) still marked running after their results were delivered", i, n)
+		}
+	}
+}
+
+// Found by the stress run for #207: a run whose context is already done when the check's goroutine
+// starts (Stop, or a budget that ran out) was abandoned by the caller but the goroutine still called
+// the check, so a check ran after the manager had stopped. The check must not be called at all.
+func TestACheckIsNotCalledOnceItsRunIsAlreadyOver(t *testing.T) {
+	var calls atomic.Int32
+	c := Check{ID: "hw.battery", Area: "HW", Fast: true, Run: func(context.Context) []Result {
+		calls.Add(1)
+		return nil
+	}}
+	r := newReg(t, c)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for i := 0; i < 200; i++ {
+		res := r.runOne(ctx, c)
+		if len(res) != 1 || res[0].Code != AGT099 {
+			t.Fatalf("result = %+v, want the abandoned run's LAI-AGT-099", res)
+		}
+	}
+	waitFor(t, "the abandoned goroutines to finish", func() bool {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		return len(r.running) == 0
+	})
+	if n := calls.Load(); n != 0 {
+		t.Fatalf("the check was called %d time(s) after its run was over", n)
+	}
+}
+
+// The same race seen from the outside: a check that passes must pass on every consecutive run.
+func TestConsecutiveRunsOfAPassingCheckNeverReportAGT099(t *testing.T) {
+	r := newReg(t, okCheck("hw.battery", "HW", true))
+	for i := 0; i < 1500; i++ {
+		rep := mustRun(t, r, RunOptions{})
+		if len(rep.Results) != 0 || len(rep.Passed) != 1 {
+			t.Fatalf("run %d: results %v, passed %v, want a pass", i, codesOf(rep), rep.Passed)
+		}
+	}
+}
