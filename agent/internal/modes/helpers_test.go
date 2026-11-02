@@ -59,6 +59,7 @@ type rigCfg struct {
 	opts     modes.Options
 	deps     func(*modes.Deps)
 	skipOpen bool
+	noSeed   bool
 	fs       *statefake.MemFS
 }
 
@@ -66,6 +67,12 @@ func withMode(m state.Mode) func(*rigCfg)         { return func(c *rigCfg) { c.m
 func withSeed(f func(*state.State)) func(*rigCfg) { return func(c *rigCfg) { c.seed = f } }
 func withDeps(f func(*modes.Deps)) func(*rigCfg)  { return func(c *rigCfg) { c.deps = f } }
 func notOpen() func(*rigCfg)                      { return func(c *rigCfg) { c.skipOpen = true } }
+
+// noSeed keeps the state file exactly as it is on the filesystem (a restart).
+func noSeed() func(*rigCfg) { return func(c *rigCfg) { c.noSeed = true } }
+
+// withFS runs the rig over an existing filesystem.
+func withFS(fs *statefake.MemFS) func(*rigCfg) { return func(c *rigCfg) { c.fs = fs } }
 func withWrap(f func(*state.Store) modes.StateStore) func(*rigCfg) {
 	return func(c *rigCfg) { c.wrap = f }
 }
@@ -79,6 +86,8 @@ type rig struct {
 	env  *fake.Env
 	eng  *modes.Engine
 	logs *syncBuf
+	// abandon marks an engine that was "killed": it is not shut down at the end of the test.
+	abandon bool
 }
 
 func newRig(t *testing.T, mods ...func(*rigCfg)) *rig {
@@ -89,14 +98,16 @@ func newRig(t *testing.T, mods ...func(*rigCfg)) *rig {
 	}
 	clk := cfake.NewClock(t0)
 	st := openStore(t, cfg.fs, clk)
-	if err := st.MutateSync(func(s *state.State) error {
-		s.Mode = cfg.mode
-		if cfg.seed != nil {
-			cfg.seed(s)
+	if !cfg.noSeed {
+		if err := st.MutateSync(func(s *state.State) error {
+			s.Mode = cfg.mode
+			if cfg.seed != nil {
+				cfg.seed(s)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
 		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
 	}
 	env := fake.NewEnv()
 	var store modes.StateStore = st
@@ -116,9 +127,11 @@ func newRig(t *testing.T, mods ...func(*rigCfg)) *rig {
 	}
 	r := &rig{t: t, fs: cfg.fs, st: st, clk: clk, env: env, eng: eng, logs: logs}
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-		defer cancel()
-		_ = eng.Shutdown(ctx)
+		if !r.abandon {
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+			_ = eng.Shutdown(ctx)
+		}
 		_ = st.Close()
 	})
 	if !cfg.skipOpen {
@@ -340,6 +353,8 @@ func hasCode(ws []modes.Warning, code string) bool {
 func joined(s []string) string { return strings.Join(s, ", ") }
 
 var _ = fake.Joined
+
+func newFS() *statefake.MemFS { return statefake.New() }
 
 // without returns calls minus every entry equal to drop.
 func without(calls []string, drop string) []string {
