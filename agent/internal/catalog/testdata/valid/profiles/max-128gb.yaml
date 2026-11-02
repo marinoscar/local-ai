@@ -1,0 +1,23 @@
+schema_version: 1
+id: max-128gb
+display_name: "Large unified-memory node (128 GB)"
+match:
+  backends: [vulkan]
+  vram_mib: {min: 65536}
+  ram_mib: {min: 65536}
+router:
+  models_max: 3
+  memory_margin_mib: 1024
+  autoload: false
+storage:
+  target: internal
+  budget_bytes: 1800000000000
+  min_free_bytes: 100000000000
+include:
+  models: [model-alpha-9b-q4, model-beta-27b-q4, model-gamma-vl-q4, model-delta-embed, whisper-small, piper-en-medium]
+  content: [wiki-alpha-en, wiki-alpha-es, medical-alpha-en, map-region-alpha, map-assets, places-region-alpha, kit-llama-cpp, kit-debs-resolute-amd64, kit-ubuntu-iso-26.04, docs-bundle]
+default_model: model-beta-27b-q4
+survival:
+  models: [model-alpha-9b-q4, model-beta-27b-q4]
+  default_model: model-beta-27b-q4
+  portal_language: auto
