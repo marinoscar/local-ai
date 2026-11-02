@@ -35,13 +35,7 @@ func oneOf(v string, set []string) bool {
 
 func contains(list []string, v string) bool { return oneOf(v, list) }
 
-func quoted(set []string) string {
-	q := make([]string, len(set))
-	for i, s := range set {
-		q[i] = s
-	}
-	return strings.Join(q, " | ")
-}
+func quoted(set []string) string { return strings.Join(set, " | ") }
 
 func validHTTPURL(s string) bool {
 	u, err := url.Parse(s)

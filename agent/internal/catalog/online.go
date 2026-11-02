@@ -37,10 +37,9 @@ type onlineCheck struct {
 	path string
 	url  string
 	// hf: read X-Linked-Size / X-Linked-Etag from the first response (no redirect followed).
-	hf    bool
-	size  int64  // size_bytes to compare, 0 = none
-	oid   string // sha256 to compare with the LFS oid, "" = none
-	label string
+	hf   bool
+	size int64  // size_bytes to compare, 0 = none
+	oid  string // sha256 to compare with the LFS oid, "" = none
 }
 
 func checkOnline(cat *Catalog, opts LintOptions) []Problem {

@@ -27,7 +27,7 @@ func TestLoadAndLookups(t *testing.T) {
 	if !ok || m.Llama == nil || !m.Llama.NGPULayers.All || m.Llama.Speculative.DraftNGL.N != 99 {
 		t.Fatalf("model lookup: %+v", m)
 	}
-	if m.Summaries != nil && len(m.Summaries) != 0 {
+	if len(m.Summaries) != 0 {
 		t.Errorf("model-beta has no translations, got %v", m.Summaries)
 	}
 	alpha, _ := cat.Model("model-alpha-9b-q4")
