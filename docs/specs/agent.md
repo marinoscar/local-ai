@@ -848,7 +848,9 @@ The agent never sends `Access-Control-Allow-*` headers and answers `OPTIONS` wit
 ### 3.10 Server-sent events (`GET /events`)
 
 - Content type `text/event-stream`, `Cache-Control: no-store`, `X-Accel-Buffering: no`.
-- Query `?types=model.*,mode.changed` (comma-separated, `*` suffix wildcard). Default: all.
+- Query `?types=model.*,mode.changed` (comma-separated, may repeat; each pattern is an exact type or ends in a single `*`; `*` alone is everything). Default: all. A pattern with other characters (anything but `a-z 0-9 _ - .`, or a `*` that is not last) → `400 LAI-AGT-020`, `details.param: "types"`. `resync` and `shutdown` always pass the filter.
+- Auth `op` (any operator, admin included) or `portal`. For a Portal principal the requested patterns are **intersected** with `mode.*`, `model.*`, `service.state`, `drive.*`, `alert.*`: the rest are dropped silently, never refused, so `?types=*` and no `types` yield exactly the allowed set, and a request for only forbidden types (`sync.*`) is a valid stream that carries nothing but pings. The same restriction applies to the replay. Nothing outside the set is ever sent to a Portal session.
+- No handler timeout (the route has `Timeout: 0`) and no `503` while starting (a `GET`). The server's write timeout does not apply: the handler sets a 10 s deadline per write instead, so a client that stopped reading is cut off after 10 s and its goroutine ends.
 - Each event:
 ```
 id: 1042
@@ -856,15 +858,20 @@ event: model.loaded
 data: {"id":1042,"type":"model.loaded","at":"2026-11-02T15:04:05Z","node":"ai-n3","op_id":"op_7k2m9q4r8t1c","data":{"model":"qwen3.5-9b-q4km","load_ms":7100}}
 
 ```
-- `id` is a per-process monotonic integer; the bus keeps the last 1000 events. A client reconnecting with `Last-Event-ID: <n>` gets every buffered event after `n`; if `n` is older than the buffer, the first event is `event: resync` (`data: {"reason":"gap"}`), meaning "re-read `/status`". After an agent restart ids restart at 1 and the first event to every client is `resync` (`reason: "restart"`). A `Last-Event-ID` **greater** than the current newest id (the client saw ids from a previous agent process) also gets `resync` with `reason: "restart"` as its first event.
-- Keepalive comment `: ping` every 15 s. Slow clients (send buffer > 256 events) are disconnected.
-- On shutdown: `event: shutdown` (`data: {}`) then close.
+- `id` is a per-process monotonic integer starting at 1; the bus keeps the last 1000 events. `at` is UTC to the second. `op_id` is omitted when the event belongs to no operation. `node` is `node.id`.
+- **Replay.** A new client (no `Last-Event-ID`) gets live events only. A client reconnecting with `Last-Event-ID: <n>` gets every buffered event after `n`, in order and without a gap or a duplicate when the replay hands over to live events, filtered like the live stream. A missing, non-numeric, negative or oversized header means "no replay"; it never fails the request.
+- **`resync`** means "re-read `/status`". Its frame carries only its payload as `data` (`{"reason":"gap"}` or `{"reason":"restart"}`), not the envelope. Three cases:
+  - `n` is older than the buffer (event `n+1` was evicted): first a synthetic `resync` with `reason: "gap"` and **no `id:` line** (so it does not move the client's `Last-Event-ID`), then everything the buffer holds.
+  - `n` is **greater** than the newest id (the client saw ids from a previous agent process): a synthetic `resync` with `reason: "restart"` (no `id:` line), then live events.
+  - After an agent restart ids restart at 1 and the agent publishes `resync` (`reason: "restart"`) at startup step 17 (§4.1). It is a real ring event with an id, delivered live to the clients already connected, and found in the replay of a client that reconnects with an older id. A client from a previous process whose `Last-Event-ID` is *below* that event's id therefore sees it; one whose id is above it cannot be told apart from a current one (ids carry no process marker), which is why clients re-read `/status` after any reconnect that begins with a `resync` and after every agent restart they notice through `/health`.
+- Keepalive comment `: ping` every 15 s. **Slow clients** are disconnected, never waited for: each subscriber has its own queue of at most 256 undelivered live events (the replay is not counted); the 257th closes the stream and counts in `dropped_clients`. The client reconnects with `Last-Event-ID` and gets a replay or a `resync`. Publishing never blocks, whatever the clients do, and the bus lock is never held while writing to a connection.
+- On shutdown (§4.12 step 7): `event: shutdown` (`data: {}`, no `id:` line) then close. A request that arrives while the agent is stopping gets `503 LAI-AGT-024`.
 
 | Type | `data` | Emitted by |
 |---|---|---|
 | `mode.changed` | `{from, to, op_id, warnings:[{code,message}]}` | modes |
 | `mode.step` | `{target, step, state: started\|done\|failed, code?}` | modes |
-| `model.loading` | `{model, unloading:[ids], op_id}` | router |
+| `model.loading` | `{model, unloading:[ids], op_id}`, plus `progress` (the router's `progress.value`, at most once per second) on the updates sent while the load runs ([llama-router.md](llama-router.md) §4.2) | router |
 | `model.loaded` | `{model, load_ms}` | router |
 | `model.unloaded` | `{model, reason: request\|evicted\|rollback\|crash\|preset_changed\|drive_removed}` (`preset_changed`: the INI section changed and the router dropped the model, [llama-router.md](llama-router.md) §4.2 step 8; `drive_removed`: its files were on an ark drive that was unplugged, llama-router.md §5) | router |
 | `model.failed` | `{model, code, message, rolled_back, restored:[ids]}` | router |
@@ -876,13 +883,19 @@ data: {"id":1042,"type":"model.loaded","at":"2026-11-02T15:04:05Z","node":"ai-n3
 | `drive.mounted` / `drive.unmounted` | `{root_id, mount, state, read_only}` / `{root_id, safe_to_unplug}` ([ark-sync.md](ark-sync.md) §3.6) | sync |
 | `alert.raised` / `alert.cleared` | `{code, severity, title, fix}` | doctor |
 | `cloud.state` | `{state, previous, last_error}` | cloud |
-| `hardware.power` | `{source, battery_percent, charging}` (on change) | hardware |
+| `hardware.power` | `{source, battery_percent, charging}` (on change; `battery_percent` is `null` without a battery) | hardware |
 | `key.rotated` | `{fingerprint}` | router |
 | `update.state` | `{state, from, to}` | update |
 | `drill.started` | `{run_id, trigger, quick}` | drill ([drill.md](drill.md) §4.5) |
 | `drill.check_done` | `{run_id, id, result: pass\|warn\|fail\|skip, code?}` | drill |
 | `drill.done` | `{run_id, overall, survival_ready}` | drill |
 | `resync`, `shutdown` | see above | bus |
+
+#### 3.10.1 `internal/events` and the handler (AGENT-08)
+
+- **Bus.** `events.New(events.Options{Node, Capacity, SubscriberBuffer, Now})` (defaults 1000 and 256). `Publish(type, opID string, data any) error` accepts only the struct registered for the type (`events.ModelLoaded` for `events.TypeModelLoaded`, a value or a pointer, `events.Types()` lists them): an unknown type, a wrong or free-form payload, or `resync`/`shutdown` is refused with an error and counted in `rejected`, so a publisher cannot invent a shape. Callers log the error and carry on. `Resync(reason)` publishes the ring `resync` (`events.ResyncRestart` at step 17). `Subscribe(ctx, filter, lastID) (<-chan Event, error)` implements the replay rules above; the channel closes when `ctx` ends, when the subscriber is dropped for being slow, or on `Close`. `Close()` ends every subscription and makes `Subscribe` fail with `ErrClosed`; `Publish` stays harmless afterwards. `Counters()` → `{published, dropped_clients, rejected, subscribers}` for `/status?counters=1`. `ParseFilter`, `NewFilter`, `Filter.Match`, `Filter.Restrict` and `PortalTypes()` implement the `types` rules.
+- **Wiring (AGENT-20).** The routes are registered before the `Server` exists, so the handler takes the stop channel as a function: `api.RegisterEvents(reg, api.EventsOptions{Bus: bus, Stopping: func() <-chan struct{} { return srv.Stopping() }})`, then `api.New(api.Options{Registry: reg, ...})`. At step 9 the agent creates the bus; at step 17 it calls `bus.Resync(events.ResyncRestart)`; at shutdown the server stops first (every stream sends `shutdown` and returns), then `bus.Close()`.
+- **Secrets.** Event payloads are the typed structs of `internal/events/types.go`; a test publishes one example per type and asserts `logx.ScrubString` leaves the JSON unchanged. A new event type needs a struct, an entry in the registry and an example in that test.
 
 ### 3.11 Non-API paths and reverse proxies
 
@@ -1409,7 +1422,7 @@ Audited actions: `key.show`, `key.rotate`, `model.load`, `model.unload`, `model.
 4. Mode transition in progress: let the current step finish, max 10 s; the recorded step stays in `state.json` for resume.
 5. Sync: cancel gracefully (journal flushed, `.part` kept), max 10 s.
 6. Model operation in progress: do not abort the router call; the router keeps running independently. `state.models.last_load` keeps `result: "interrupted"`.
-7. SSE: send `shutdown`, close. `http.Server.Shutdown` with 5 s; then close the socket listener and remove the socket file.
+7. SSE: `Server.Stop` closes the `Stopping()` channel, every open `/events` stream writes `event: shutdown` and returns (a client that stopped reading is cut off by its 10 s write deadline), then `http.Server.Shutdown` with 5 s; then close the socket listener and remove the socket file. `Bus.Close()` runs after the server stopped, so no subscriber goroutine outlives the process's shutdown.
 8. Flush state store and audit log. Exit 0.
 Total budget 25 s (< `TimeoutStopSec=30`). Child services (llama, kiwix, whisper) are **not** stopped: inference survives agent restarts.
 
@@ -1614,6 +1627,7 @@ The `LAI-CLD` area belongs to [cloud-app.md](cloud-app.md). The block **050–06
 | `cloud` | against `cloud/fake`: register 200 reattached true/false, 401, 400; handshake `config` (both planes, 404 → eab + capabilities fallback, `keyReported: false` → key push, clock skew); `localai` plane long poll with `waitMs` and immediate re-claim; snapshot `boot_id`/`seq`, 409 stale_seq ignored, strict schema conformance with `state.v1.schema.json`, scrubber drop; heartbeat 15 s cadence (fake clock); `extra` exactly ≤ 16 keys matching regex; 400-with-extra fallback; host/power only after `node_host_vitals`; claim → execute → result with claimToken; assignment without token → body omits key (never null); renew 409 → stop renewing, operation completes; result 409 → dropped; disallowed type → failure; strict params; backoff sequence with jitter bounds and Retry-After; 401 → revoked; 403 claim → disabled; 404 heartbeat → re-register; offline stop sends heartbeat offline + deregister; mode.offline settles before transition; agent.update settles after health |
 | `hardware` | nvidia-smi CSV fixtures (normal, `[N/A]`, 2 GPUs, throttle bitmask); AMD sysfs trees (dedicated, Strix Halo unified); battery sysfs (AC, discharging with energy_now/power_now, charge_now/current_now, missing → upower fallback); thermal zones; hysteresis for battery thresholds |
 | `logx` | scrubber on every token family, Bearer, 64-hex, tailnet IP and name; key-name redaction on whole words (`api_key`, `pin`, `agent-token` redacted; `pinned`, `spinner`, `monkey` not); exemptions `*_synced`, `*fingerprint*`, `*_sha256`; `*_sha256` exemption does not cover the live key; nested groups, `With` attributes, errors, byte slices, structs; no `time` key; level change at runtime; the scanners agree with the regular expressions above on random input |
+| `events` | Bus: ids monotonic from 1; the ring keeps exactly the last 1000; replay table (none, up to date, buffered, evicted → `resync gap` first, newer than the newest → `resync restart`, filtered); `Publish` refuses unknown, reserved and wrong-struct payloads; filters (exact, wildcard, multiple, default all, invalid pattern, `resync`/`shutdown` always pass); Portal restriction by intersection; slow subscriber dropped at the 257th queued event while the publishers never wait; replay not counted against the limit; context cancel and `Close` leave no goroutine; 50 concurrent subscribers under `-race`; gapless replay-to-live hand-over while publishing; every payload type has a typed example and `logx.ScrubString` leaves it unchanged. Handler (`api`, real server): headers and exact wire frame, type filter and `400` on a bad pattern, `Last-Event-ID` replay and reconnect, Portal sees only its types (also on replay), `: ping` at 15 s on a fake clock, client disconnect frees the subscription and ticker, blocked writer → slow client dropped, write deadline cuts off a stalled write, `shutdown` then close with `Server.Stop` not held up, `503` while stopping |
 | `audit` | line shape equals the example above; one `write(2)` and one `fsync` per record (fake FS records both); mode `0600` (a looser existing file is fixed); rotation at the threshold keeps exactly `.1`…`.5` and drops `.5` first; open failure → `LAI-AGT-013`, record still on slog, recovery on the next write; full disk and failing `fsync` (fake); partial line never glued to the next record; `WithoutRotation` never renames; two writers (agent and CLI) on one file never interleave; secrets never reach the file or the mirror; line cap 4096 |
 | `update` | minisign `Ed` and `ED` valid; wrong key id; tampered SHA256SUMS; tampered binary; version smoke mismatch; rollback paths: health fail, boot_attempts ≥ 3, timer fires |
 | `services` | dbus fake job results `done`/`failed`/`timeout`; systemctl argv; allowlist rejects other units |
