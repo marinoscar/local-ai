@@ -1,0 +1,353 @@
+# Spec: Rebuild kit
+
+> **Status:** approved design · **Epic:** E5 · **Code:** `agent/internal/kit/` (verification, builders), `catalog/ark.yaml` (kit items) · **Doctor area:** `LAI-KIT`
+> Canonical names: [overview.md](../architecture/overview.md) §3. Download and verification mechanics: [ark-sync.md](ark-sync.md). Building llama.cpp (source location, cmake flags, timeout, smoke test, install, switch and post-switch check): [llama-router.md](llama-router.md) §4.10, which is authoritative; this spec only adds the offline source, preflight and prebuilt extensions. CLI flags: [aictl.md](aictl.md) §4.23. Installer: [installer.md](installer.md).
+
+---
+
+## 1. Purpose and scope
+
+The rebuild kit is everything, besides an Ubuntu install medium, needed to rebuild a working node **with no internet**: source code, toolchains, prebuilt binaries, Ubuntu packages, GPU driver packages, the catalog and the manuals. It lives at `<root>/kit/` on every content root (a per-node subset internally, everything on the ark drive) and is downloaded, verified and refreshed by ark sync like any other content.
+
+In scope: the exact layout and contents; how each part is refreshed; the CUDA toolkit size problem; `aictl rebuild-llama` (and its siblings for whisper and the agent); verification; and the honest list of what can't be rebuilt offline.
+
+Non-goals: building Ubuntu itself; replacing the Ubuntu installer; keeping a full Ubuntu archive mirror; cross-compiling GPU builds for other machines (prebuilt binaries are exported only by the node that built them).
+
+## 2. Concepts
+
+| Term | Meaning |
+|---|---|
+| **Kit item** | A catalog `ark.yaml` entry with `kind: kit` (always tier 1, catalog.md §3) |
+| **Per-node kit** | The subset of kit items an internal root keeps: those matching this node's codename, arch and backend |
+| **Pins** | `kit/catalog/pins.json`: the commits and versions every node in the lab currently uses, so the drive keeps sources for all of them |
+| **Prebuilt** | A node's own built llama.cpp/whisper.cpp binaries, exported into the kit as tarballs (not from the catalog; produced locally) |
+
+## 3. Interfaces
+
+### 3.1 Layout (§Layout)
+```
+<root>/kit/
+  README.txt                                   plain-text guide: what is here, where to start (generated)
+  MANIFEST.json                                index of kit items present (generated from the per-item manifests)
+  catalog/                                     item kit-catalog, written by the repo_docs resolver (ark-sync.md §4.9.8) from the same
+                                               tag tarball as docs/, in the same item install (copy of catalog/ at CATALOG_VERSION)
+    models.yaml  ark.yaml  profiles/*.yaml  CATALOG_VERSION
+    pins.json                                  §Pins
+    MANIFEST.json
+  installers/                                  item kit-agent-binaries (same GitHub release)
+    install-node.sh                            the offline installer entry point; once installed it lives at
+                                               /opt/localai/installers/install-node.sh (+ /usr/local/sbin symlink, installer.md P2)
+  bin/                                         item kit-agent-binaries
+    aiagent-linux-amd64  aiagent-linux-arm64
+    SHA256SUMS  SHA256SUMS.minisig  minisign.pub
+    MANIFEST.json
+  src/                                         tarballs, one file each, reproducible (gzip -n)
+    llama.cpp-<commit>.tar.gz                  from kit-llama-cpp (git_mirror, also_tarball_of: pinned)
+    whisper.cpp-<commit>.tar.gz                from kit-whisper-cpp
+    local-ai-<agent-tag>-src.tar.gz            from kit-agent-source: agent source WITH vendor/ AND prebuilt agent/ui/dist/
+    MANIFEST.json
+  git/
+    llama.cpp.git/   whisper.cpp.git/   local-ai.git/       bare mirrors (git_mirror items)
+  toolchains/
+    go<ver>.linux-amd64.tar.gz  go<ver>.linux-arm64.tar.gz  (kit-go-toolchain; url, pinned sha256 from go.dev/dl JSON)
+  tools/
+    kiwix-tools/kiwix-tools_linux-x86_64-<ver>.tar.gz   (+ aarch64)       kit-kiwix-tools
+    pmtiles/go-pmtiles_<ver>_Linux_x86_64.tar.gz       (+ arm64)        kit-pmtiles
+    piper/piper_linux_x86_64.tar.gz                    (+ aarch64)       kit-piper
+  desktop/
+    ai-desktop_<ver>_amd64.deb   ai-desktop-<ver>-x86_64.AppImage   SHA256SUMS   kit-desktop (github_release)
+  debs/<codename>-<arch>/                      kit-debs-<codename>-<arch> (apt_closure)
+    pool/*.deb  Packages  Packages.gz  PACKAGES.lock  README.txt  MANIFEST.json
+  nvidia/<codename>-<arch>-<branch>/           kit-nvidia-<codename>-<arch>-<branch> (apt_closure) §Driver packages
+    pool/*.deb  Packages  Packages.gz  PACKAGES.lock  README.txt  MANIFEST.json
+  cuda/<codename>-<arch>/                      optional kit-cuda-redist-… (§CUDA, option B)
+  prebuilt/
+    llama.cpp-<commit9>-<backend>-<codename>-<arch>[-sm<cc>].tar.gz      exported by nodes (§4.2)
+    whisper.cpp-<commit9>-<backend>-<codename>-<arch>[-sm<cc>].tar.gz
+    MANIFEST.json
+  iso/                                         tier 3, drive only: kit-ubuntu-iso
+    ubuntu-<ver>-desktop-amd64.iso  SHA256SUMS  SHA256SUMS.gpg
+  config/<node-id>/                            NOT a sync item (§Config backups): written only by `aictl backup-config --to-ark`
+    localai-config-<node-id>-<UTC-ts>.tar.gz   0600 root; contains secrets unless --no-secrets
+```
+**Config backups** (§Config backups): `kit/config/` holds the node config backups of [aictl.md](aictl.md) §4.25. It has no MANIFEST, so sync, verify, prune and READY ignore it ([ark-sync.md](ark-sync.md) §4.10 R9); the last 5 backups per node are kept by `aictl backup-config` itself. Because the drive is unencrypted by design ([security-model.md](../architecture/security-model.md) §1 T9), the command warns before writing secrets there.
+The **rendered docs** are not duplicated in the kit: they are `<root>/docs/` (item `docs-bundle`, [ark-sync.md](ark-sync.md) §4.9.8), and `README.txt` points to them.
+
+### 3.2 Kit items (catalog `ark.yaml`)
+| Item id | Source type | Refresh | Profiles |
+|---|---|---|---|
+| `kit-catalog` | `repo_docs` variant: the `repo_docs` resolver ([ark-sync.md](ark-sync.md) §4.9.8) writes `kit/catalog/` (`models.yaml`, `ark.yaml`, `profiles/`, `CATALOG_VERSION`, `pins.json`, `MANIFEST.json`) from the same `catalog-<V>` tag tarball as `docs/`, in the same item install; `pins.json` from the release is then merged with the node entries of §3.3 | every catalog change | all |
+| `kit-agent-binaries` | `github_release` (`marinoscar/local-ai`, tag = the agent version in use; assets `aiagent-linux-*`, `SHA256SUMS*`, `install-node.sh`) | when the agent self-updates | all |
+| `kit-agent-source` | `github_release` (asset `local-ai-<tag>-src.tar.gz`, built by the release CI: `git archive` + `go mod vendor` + `npm ci && npm run build` for the UI) | with the agent | all |
+| `kit-llama-cpp` | `git_mirror` + tarball of pinned commits | mirror: every run (cheap fetch); tarball: when a pin changes | all |
+| `kit-whisper-cpp` | `git_mirror` + tarball | same | all |
+| `kit-local-ai-repo` | `git_mirror` (`https://github.com/marinoscar/local-ai.git`) | every run | ark-drive-full |
+| `kit-go-toolchain` | `url` (pinned per Go version listed in `agent/go.mod` `toolchain`) | when `go.mod` changes | all (own arch internally) |
+| `kit-kiwix-tools`, `kit-pmtiles`, `kit-piper` | `url` / `github_release`, pinned | when the catalog pin changes | all |
+| `kit-desktop` | `github_release` (`marinoscar/local-ai`, desktop tag) | with each desktop release | all with a desktop |
+| `kit-debs-<codename>-<arch>` | `apt_closure` | `refresh_days: 30` | own codename/arch internally; all on the drive |
+| `kit-nvidia-<codename>-<arch>-<branch>` | `apt_closure` | `refresh_days: 30` | CUDA nodes; all on the drive |
+| `kit-cuda-redist-<ver>-<arch>` | `url` set (optional, §CUDA option B) | when pinned | off by default |
+| `kit-ubuntu-iso-<ver>` | `url` + sidecar `SHA256SUMS` (tier 3) | each point release | ark-drive-full only |
+
+The catalog sizes (`expected_size_bytes`) are approximate and only used for planning:
+
+| Part | Approx. size |
+|---|---|
+| sources + mirrors (llama.cpp, whisper.cpp, local-ai) | 1.5–2.5 GB |
+| Go toolchains (2 arches) | 0.15 GB |
+| agent binaries, tools, piper, desktop | 0.6 GB |
+| debs closure per codename/arch (incl. Vulkan/Mesa, build tools, tailscale) | 1–2 GB |
+| NVIDIA driver closure per branch | 0.4–0.6 GB |
+| CUDA toolkit (Ubuntu `nvidia-cuda-toolkit` closure) | 2.5–4 GB |
+| prebuilt binaries per node | 0.05–0.5 GB each |
+| Ubuntu ISO | 6 GB |
+
+### 3.3 Pins (§Pins)
+`kit/catalog/pins.json`, written by the cloud into the catalog release (or, unenrolled, by each node into its own roots and merged on the drive):
+```json
+{
+  "schema_version": 1,
+  "updated_at": "2026-11-02T00:00:00Z",
+  "llama_cpp": [{"commit": "f3586e66b…(40 hex)", "nodes": ["ai-n1", "ai-n2", "ai-n3"]}],
+  "whisper_cpp": [{"commit": "<40 hex>", "nodes": ["ai-n3"]}],
+  "agent": [{"tag": "node-v0.4.0", "nodes": ["ai-n3"]}],
+  "codenames": [{"codename": "resolute", "arch": "amd64", "nodes": ["ai-n1", "ai-n2", "ai-n3"]}],
+  "nvidia_branches": [{"branch": "595-open", "codename": "resolute", "arch": "amd64", "nodes": ["ai-n2", "ai-n3"]}]
+}
+```
+The drive keeps a source tarball for **every** pinned commit; an internal root keeps the one for its own node. Pins are merged on the drive: each node that syncs the drive adds its own entries and never removes others' (entries older than 180 days without a node reporting them are dropped).
+
+### 3.4 Keys (§Keys)
+Embedded in the agent binary (`agent/internal/kit/keys/`) and also copied to `kit/bin/`:
+- `minisign.pub`: the Local AI release signing key (verifies `SHA256SUMS.minisig`).
+- `ubuntu-archive-keyring.gpg` (copied from the build machine's `/usr/share/keyrings/` at release time) for `apt_closure`.
+- `tailscale-archive-keyring.gpg` and the NVIDIA CUDA repo key (`nvidia-cuda-archive-keyring.gpg`), for third-party `extra_repos` (these file names are what catalog.md §3 `extra_repos[].key` refers to).
+Rotating a key is a catalog/agent release; old keys stay embedded for 2 years so older kits still verify.
+
+### 3.5 CLI
+| Command | Notes |
+|---|---|
+| `aictl kit` / `aictl kit status [--root <id>]` | which kit parts are present and verified for this node, and for every pinned node on a drive |
+| `aictl kit verify [--root <id>] [--part <name>] [--full]` | §4.4. `--part` limits the run to one top-level kit part of §3.1: `catalog`, `installers`, `bin`, `src`, `git`, `toolchains`, `tools`, `desktop`, `debs`, `nvidia`, `cuda`, `prebuilt`, `iso`; an unknown name → exit 2 |
+| `aictl kit install <tool>` | installs a tool from the kit into `/opt/localai` (`kiwix-tools`, `pmtiles`, `piper`, `agent`), verifying first. The per-tool install functions come from companion-services (SVC-02 kiwix-tools/pmtiles, SVC-08 piper); the CLI dispatcher is KIT-06 |
+| `aictl kit install-debs [--root <id>] [--packages …]` | installs packages from the kit's local apt repo (§Offline apt) |
+| `aictl kit export-build` | exports this node's current llama/whisper builds into `kit/prebuilt/` on every writable root (also done by sync after a new build) |
+| `aictl rebuild-llama …` | §4.3 |
+| `aictl rebuild-whisper …` | same flags, for whisper.cpp ([companion-services.md](companion-services.md) §4.2.1, which owns the whisper build target, smoke and base command; this spec adds `--prebuilt`, `--from-kit`, `--dry-run` and export) |
+| `aictl rebuild-agent [--from-kit]` | builds the agent from `kit/src/local-ai-<tag>-src.tar.gz` with the kit Go toolchain (§4.3.4) |
+
+All `rebuild-*` and `kit install*` need root (they write `/opt/localai`). They run in-process in `aictl` ([aictl.md](aictl.md) §4.23–§4.23c, which owns the CLI syntax) and use the agent API only to restart the service and take the model lock when the agent runs; when it doesn't they use `systemctl` directly (a rebuild must work even when the agent doesn't).
+
+## 4. Behaviour
+
+### 4.1 Contents in detail (§Contents)
+
+#### 4.1.1 Sources
+- **llama.cpp**: bare mirror `kit/git/llama.cpp.git` plus a tarball per pinned commit. The tarball is enough to rebuild; the mirror allows moving to a different commit offline (for instance one that a newer model needs, if it was fetched before the internet went away).
+- **whisper.cpp**: same.
+- **Agent source**: a release asset made by CI with the vendored Go modules (`vendor/`) **and** the already-built UI (`agent/ui/dist/`), because Node.js and npm packages are not in the kit: rebuilding the agent offline needs only Go.
+- **local-ai repo mirror** (drive only): full history, including the docs and catalog sources.
+
+#### 4.1.2 Toolchains
+- Go: the exact version from `agent/go.mod` (`toolchain go1.x.y`), `linux-amd64` and `linux-arm64` tarballs from `https://go.dev/dl/` with the sha256 from the `https://go.dev/dl/?mode=json&include=all` listing pinned in the catalog.
+- C/C++ (gcc, cmake, ninja, pkg-config, ccache) come from the Ubuntu debs closure.
+
+#### 4.1.3 Binaries
+- `aiagent` for both arches with `SHA256SUMS` and its minisign signature; `install-node.sh` of the same release.
+- kiwix-tools, pmtiles (go-pmtiles), piper tarballs for both arches (versions pinned in the catalog).
+- ai-desktop `.deb` and AppImage (amd64; arm64 when released).
+- **Prebuilt llama.cpp and whisper.cpp** per node (§4.2): the fastest recovery when the OS and driver are unchanged.
+
+#### 4.1.4 Ubuntu packages (§Offline apt)
+`kit/debs/<codename>-<arch>/` is a flat local repository produced by the `apt_closure` resolver ([ark-sync.md](ark-sync.md) §4.9.7). Its package list (catalog) covers:
+- build: `build-essential cmake ninja-build pkg-config ccache git`,
+- Vulkan/Mesa: `libvulkan-dev glslc spirv-headers vulkan-tools mesa-vulkan-drivers`,
+- tools: `curl jq ca-certificates iw network-manager pciutils usbutils minisign zstd udisks2 openssh-server python3`,
+- CUDA (codenames with CUDA nodes): `nvidia-cuda-toolkit` (§CUDA option A),
+- `tailscale` (from its repo),
+- optional: `gpsd`.
+Use offline (also what the installer does):
+```bash
+REPO=<root>/kit/debs/<codename>-<arch>
+aictl kit verify --part debs            # re-hash every .deb against PACKAGES.lock first
+echo "deb [trusted=yes] file:$REPO ./" | sudo tee /etc/apt/sources.list.d/localai-ark.list
+sudo apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/localai-ark.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
+sudo apt-get install -y --no-install-recommends -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/localai-ark.list -o Dir::Etc::sourceparts=- <packages>
+sudo rm /etc/apt/sources.list.d/localai-ark.list
+```
+`aictl kit install-debs` wraps exactly this. Versions in the closure may be **newer** than what's installed on an old system (the closure is taken from `-updates`/`-security`); apt upgrades the dependencies it needs, which is intended.
+
+#### 4.1.5 NVIDIA driver packages (§Driver packages)
+One `apt_closure` per `(codename, arch, driver branch)` in the pins, e.g. `kit-nvidia-resolute-amd64-595-open` with packages `nvidia-driver-595-open`, `nvidia-utils-595`, `libnvidia-compute-595`, `nvidia-dkms-595-open`, `dkms`, and `linux-headers-generic` plus the **prebuilt signed module packages for the current kernel flavours** (`linux-modules-nvidia-595-open-generic` and the meta package for the node's kernel series). Prebuilt signed modules matter: they work with Secure Boot and don't need DKMS to compile. DKMS is the fallback when the kernel is newer than the prebuilt modules, and needs the headers for that exact kernel (§5 limits).
+
+#### 4.1.6 CUDA toolkit (§CUDA)
+Building llama.cpp/whisper.cpp with CUDA needs `nvcc`, the CUDA runtime headers and cuBLAS. The Ubuntu `nvidia-cuda-toolkit` package (12.4 on the current nodes) pulls a closure of about 2.5–4 GB of debs (about 5–7 GB installed). Options:
+| Option | Size | Pros | Cons |
+|---|---|---|---|
+| **A. Ubuntu `nvidia-cuda-toolkit` closure** (in `kit-debs`) | 2.5–4 GB per codename | same packages the nodes use today; apt handles everything; signed indexes | big; version tied to the Ubuntu release |
+| **B. NVIDIA redistributable tarballs** (`developer.download.nvidia.com/compute/cuda/redist/`, only `cuda_nvcc`, `cuda_cudart`, `cuda_cccl`, `libcublas`, `cuda_crt`, pinned by `redistrib_<ver>.json` sha256s) | ~1.2–1.8 GB | smaller; version independent of Ubuntu; checksums published | needs manual `CUDAToolkit_ROOT` wiring; must match driver compatibility |
+| **C. Prebuilt binaries only** | ~0.1 GB per node | tiny; fastest recovery | can't build a *different* commit; useless after a driver/OS change that needs a rebuild |
+
+**Decision:** C always (every CUDA node exports its builds), plus **A** on every root that serves a CUDA node (internal budgets of 220 GB absorb 4 GB easily). B is defined as an optional item (`kit-cuda-redist-…`, off by default) for small drives; its builder support is specified in §4.3.2 so it can be turned on without code changes.
+
+#### 4.1.7 Ubuntu ISO (tier 3)
+`kit-ubuntu-iso-<ver>`: the desktop ISO of the codename the nodes use, from `https://releases.ubuntu.com/<ver>/`. Verified against `SHA256SUMS`; `SHA256SUMS.gpg` is checked with `gpgv` against the Ubuntu CD image signing key (embedded in the agent like the other keys) when present. Drive only. The runbook explains writing it to a USB stick (`dd` / Startup Disk Creator) — [runbooks/06-rebuild-a-node-offline.md](../runbooks/06-rebuild-a-node-offline.md).
+
+#### 4.1.8 Catalog and docs
+`kit/catalog/` is the catalog the root was planned with (so a drive is self-describing), plus `pins.json`. `aictl catalog restore` (catalog.md `LAI-CAT-001`) copies it back to `/etc/localai/catalog/`. The rendered docs are `<root>/docs/`.
+
+### 4.2 Prebuilt export
+After every successful build activation (installer, `rebuild-llama`, `rebuild-whisper`), the agent runs `aictl kit export-build`:
+1. `tar -C /opt/localai/llama.cpp/builds/<build-dir> -cf - bin | gzip -n > <root>/kit/prebuilt/.staging/llama.cpp-<commit9>-<backend>-<codename>-<arch>[-sm<cc>].tar.gz` (`-sm<cc>` only for CUDA, e.g. `-sm75`).
+2. Record in `kit/prebuilt/MANIFEST.json`: sha256, size, build flags, `llama-server --version` output, CUDA version (`nvcc --version`), driver version, kernel (`uname -r`), node id, built_at.
+3. Swap in like any item (atomic rename), on every writable root. Old prebuilts for the same node and backend are kept (max 2).
+Restoring a prebuilt: `aictl rebuild-llama --prebuilt <file>` verifies sha256, extracts to `builds/`, runs the smoke test (§4.3.3) and activates. It is offered first when the commit, backend, codename and arch match.
+
+### 4.3 `aictl rebuild-llama` (§rebuild-llama)
+
+Synopsis and flags are owned by [aictl.md](aictl.md) §4.23 (`--cuda-arch <list>`: semicolon-separated compute capabilities such as `75;86`; `--yes`; the global `--json`). The build itself (source location `/opt/localai/llama.cpp/src/<commit>/`, cmake flags including `-G Ninja`, 3 h timeout, smoke test, install, switch, post-switch check, `LAI-LLM-018`/`019`) is [llama-router.md](llama-router.md) §4.10; this section only adds the offline source, the preflight (`--dry-run`) and the prebuilt path. Defaults: commit = `node.yaml: llama.commit`; backend = node backend; cuda-arch = detected compute capability; source = kit tarball if present on any root, else the mirror (`git archive` from `kit/git/llama.cpp.git`), else (online only) GitHub; `--activate` on; keep 2 builds.
+
+#### 4.3.1 Procedure
+1. **Preflight** (also the whole of `--dry-run`, which prints each check with ✓/✗ and exits 0 only if all pass):
+   - source available and its sha256 matches `kit/src/MANIFEST.json` (`LAI-KIT-001`); for the mirror, `git cat-file -e <commit>^{commit}` (`LAI-KIT-002`);
+   - build tools: `gcc`, `g++`, `cmake ≥ 3.21`, `ninja`, `pkg-config` (`LAI-KIT-010`, fix: `aictl kit install-debs`);
+   - backend deps: cuda → `nvcc` present and its version ≤ the driver's supported CUDA version (from `nvidia-smi` header "CUDA Version: X.Y") (`LAI-KIT-011`); vulkan → `glslc`, `libvulkan` headers, `vulkaninfo --summary` lists a non-llvmpipe device (`LAI-KIT-012`);
+   - GPU driver loaded (cuda: `nvidia-smi` works; `LAI-KIT-013`);
+   - disk: 5 GB free in `/opt/localai` (source tree under `llama.cpp/src/` and the `.tmp` build tree under `llama.cpp/builds/`) and 1 GB in `/var/lib/localai/build` (`LAI-KIT-014`);
+   - RAM: jobs = min(`--jobs`, nproc, floor(MemAvailable_GiB / 2)), at least 1;
+   - **offline simulation of missing packages**: if a tool is missing, `apt-get -s install` against the kit repo (§4.1.4 options) proves it can be installed offline; the dry run prints the exact `aictl kit install-debs --packages …` command.
+2. **Extract** the chosen kit source (tarball, or `git archive <commit>` from `kit/git/llama.cpp.git`) into `/opt/localai/llama.cpp/src/<commit>/`, the only source location ([llama-router.md](llama-router.md) §4.10.1); an existing incomplete tree is removed first.
+3. **Configure, build, install, smoke test** exactly as [llama-router.md](llama-router.md) §4.10.2–§4.10.3 steps 1–5 (flags, `-G Ninja`, `-DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF`, 3 h timeout, smoke `--version` containing the first 7 hex of the commit, move-aside name `<build-id>.old-<ts>`). Build failure → `LAI-LLM-018`; smoke failure → `LAI-LLM-019` (`current` untouched). The kit adds only the option B wiring of §4.3.2 and the unprivileged compile of §7.
+4. **Activate** (unless `--no-activate`): [llama-router.md](llama-router.md) §4.10.3 step 6 (atomic `current` switch, restart through the agent or `systemctl` when the agent is down, post-switch check: `/health` within 60 s, then default model loaded and a 16-token completion, all within 180 s). Failure → switch back, restart, `LAI-LLM-019`.
+5. **Record** `node.yaml: llama.commit` (if changed), export the prebuilt (§4.2), prune old builds beyond `--keep` (never the active one or the previous one).
+
+#### 4.3.2 CUDA option B wiring
+When `kit/cuda/<codename>-<arch>/` exists and `nvcc` is not installed, the builder extracts the redist tarballs to `/var/lib/localai/build/cuda-<ver>/` and adds `-DCUDAToolkit_ROOT=<that dir> -DCMAKE_CUDA_COMPILER=<that dir>/bin/nvcc`; the resulting binary needs `libcudart`/`libcublas` from the same tree at runtime, so they are copied into the build's `bin/../lib/` and the unit gets `LD_LIBRARY_PATH` via llama-router's unit template.
+
+#### 4.3.3 Smoke test (shared by all rebuilds)
+- `--version` and `--list-devices` checks: [llama-router.md](llama-router.md) §4.10.3 step 3 (output contains the first 7 hex of the commit; expected device, not `llvmpipe`). The same rule applies to whisper.cpp builds with their own binaries.
+- `bin/llama-cli -m <smallest verified llama model> -n 8 -p "Hello" -ngl 99 --no-warmup` (timeout 120 s) exits 0 and prints tokens. If no model is available locally, this step is skipped with a warning.
+
+#### 4.3.4 Agent rebuild (`aictl rebuild-agent`)
+1. Extract `kit/toolchains/go<ver>.linux-<arch>.tar.gz` to `/var/lib/localai/build/go/`.
+2. Extract `kit/src/local-ai-<tag>-src.tar.gz` to `/var/lib/localai/build/local-ai-<tag>/`.
+3. `GOTOOLCHAIN=local GOFLAGS=-mod=vendor CGO_ENABLED=0 GOPROXY=off /var/lib/localai/build/go/bin/go build -trimpath -ldflags "-s -w -X …version=<tag>" -o aiagent.new ./agent/cmd/aiagent` (no network: `GOPROXY=off` makes it fail fast if anything isn't vendored, `LAI-KIT-030`).
+4. `aiagent.new version` must report the tag; then the same swap and rollback rules as self-update ([agent.md](agent.md) §4.10): keep `aiagent.prev`, restart, health check within 60 s.
+An offline rebuild of the *same* tag produces a binary equivalent to the release; that's not needed for recovery (the release binary is in `kit/bin/`), but it proves the source is buildable, which the drill checks with `--dry-run` (toolchain and vendor present).
+
+### 4.4 Verification (§Verification)
+`aictl kit verify` (and the drill):
+1. **Integrity:** re-hash every kit file against its MANIFEST (`--full`), or only files not re-verified in `reverify_days` (default). Uses ark-sync's verifier.
+2. **Signatures:** `kit/bin/SHA256SUMS.minisig` verifies with the embedded key; `SHA256SUMS` matches the binaries.
+3. **Completeness for this node** (`§Per-node kit`): present and verified are
+   - the source tarball for `node.yaml: llama.commit` and `whisper.commit`,
+   - the agent binary for this arch and the agent source for the running version,
+   - the Go toolchain for this arch,
+   - `kit-debs-<this codename>-<this arch>` (and `kit-nvidia-…-<this branch>` on CUDA nodes),
+   - the CUDA toolkit packages (option A in the debs list) or option B tarballs on CUDA nodes,
+   - kiwix-tools, pmtiles, piper for this arch,
+   - a prebuilt for this node's current build (warning only if missing).
+   Missing → `LAI-KIT-040` naming the parts.
+4. **Completeness for the lab** (drive roots): the same for every entry in `pins.json` (`LAI-KIT-041`, yellow).
+5. **Consistency:** the debs closure codename equals this node's codename (internal roots), else `LAI-KIT-042` (error, red: the kit is for a different Ubuntu release); `nvcc` version in the closure is supported by the installed driver (`LAI-KIT-043`).
+6. **Buildability:** `aictl rebuild-llama --dry-run` passes (all preflight checks, with packages resolvable from the kit repo).
+Result: a JSON report `{overall, parts:[{part, status, code?}]}` used by the drill and by READY.json: the kit rows of [ark-sync.md](ark-sync.md) §4.12.2 combine age and codename with this report's completeness and CUDA results (`LAI-KIT-040` red, `LAI-KIT-041` yellow, `LAI-KIT-042` red, `LAI-KIT-043` red).
+
+## 5. Limits: what can't be rebuilt offline
+
+Plain list, also printed in the rebuild runbook:
+| Situation | Why it can't be fixed offline | Mitigation |
+|---|---|---|
+| **Kernel upgraded, NVIDIA module missing for it** (an update installed a new kernel, the kit has no prebuilt module for it, and no headers for that exact kernel) | DKMS needs the headers of the running kernel; the kit has only what was current at sync time | Boot the previous kernel from the GRUB "Advanced options" menu (Ubuntu keeps one or two); the kit's prebuilt modules match it. The runbook explains this first |
+| **Ubuntu release upgraded** (e.g. 26.04 → 28.04) | The debs closure and driver packages are for the old codename; prebuilt binaries may link a newer glibc/libstdc++ | Don't do release upgrades on an ark node without internet. A drive synced after the upgrade fixes it |
+| **CUDA toolkit newer than the driver** | `nvcc` builds code the old driver can't run ("CUDA driver version is insufficient") | The kit pins toolkit and driver from the same Ubuntu release; verify step 5 checks it |
+| **A GPU newer than the toolkit** (new compute capability) | The old `nvcc` can't target it | Use the Vulkan or CPU backend; the kit includes Vulkan/Mesa |
+| **A new model architecture** | Needs a newer llama.cpp than any commit in the mirror | None offline. The catalog only includes models that run on the pinned commit |
+| **Secure Boot with DKMS-built modules** | Needs MOK enrollment at the next boot with a keyboard | Prefer the prebuilt signed module packages (§4.1.5); the runbook covers MOK |
+| **Firmware/BIOS problems, dead disk, dead GPU** | Hardware | The ark drive + another machine + the ISO (tier 3) |
+| **Desktop app on a different arch** | Only amd64 builds exist today | Use any browser at `http://127.0.0.1:7070` |
+| **Agent UI changes** | Rebuilding the UI needs Node/npm, not in the kit | The agent source tarball contains the built UI; UI changes need internet |
+
+## 6. Failure handling and edge cases
+
+| Situation | Behaviour | Code |
+|---|---|---|
+| Source tarball hash mismatch | refuse; use mirror if it has the commit | `LAI-KIT-001` |
+| Commit not in mirror | refuse | `LAI-KIT-002` |
+| Build tools missing | dry run prints the offline install command | `LAI-KIT-010` |
+| nvcc missing or too new for driver | refuse CUDA build; suggest vulkan/cpu | `LAI-KIT-011` |
+| Vulkan only shows llvmpipe | refuse vulkan build | `LAI-KIT-012` |
+| NVIDIA driver not loaded | refuse CUDA build; runbook: boot previous kernel | `LAI-KIT-013` |
+| Not enough disk for the build | refuse | `LAI-KIT-014` |
+| Compile error | keep logs ([llama-router.md](llama-router.md) §4.10) | `LAI-LLM-018` (`LAI-KIT-020` for whisper/agent kit builds) |
+| Smoke test fails | `current` untouched | `LAI-LLM-019` (`LAI-KIT-021` for whisper builds) |
+| New build fails after activation | rollback | `LAI-LLM-019` |
+| Agent source not fully vendored | fails with GOPROXY=off | `LAI-KIT-030` |
+| Kit incomplete for this node / for the lab | READY red / yellow | `LAI-KIT-040` / `041` |
+| Kit debs for another codename | red (error) | `LAI-KIT-042` |
+| Toolkit/driver mismatch | red | `LAI-KIT-043` |
+| Signature check of agent binaries fails | refuse to install from the kit | `LAI-KIT-044` |
+| Power loss mid-build | scratch dir is discarded on the next run; `current` never pointed at a partial build | — |
+
+## 7. Security considerations
+- Every kit artifact is verified before use: catalog pins, signed apt indexes, minisign for agent binaries, GitHub digests where available.
+- The agent never executes anything from the kit automatically; only explicit root commands (`rebuild-*`, `kit install*`, the installer) do, and they verify first.
+- Builds run as root (they install to `/opt`) but the compile itself runs as the `localai` user (the `/opt/localai/llama.cpp/builds/<build-id>.tmp/` tree is created owned by `localai` for the compile and `chown -R root:root` before the rename; scratch for whisper/agent builds stays in `/var/lib/localai/build`) (dropped with `setpriv --reuid localai --regid localai --clear-groups`), so a malicious build script can't write system files.
+- Signing keys are embedded and also shipped in the kit for humans; the embedded copies are authoritative.
+
+## 8. Doctor codes (shown in the desktop; English and Spanish)
+
+| Code | Sev | Meaning | Fix (en) | Fix (es) |
+|---|---|---|---|---|
+| LAI-KIT-001 | error | A source package in the kit is damaged | Run `aictl kit verify --full`; sync the drive on a computer with internet. | Ejecute `aictl kit verify --full`; sincronice el disco con internet. |
+| LAI-KIT-002 | error | The kit doesn't have the needed llama.cpp version | Sync the kit with internet, or choose a commit that is in the kit. | Sincronice el kit con internet, o elija una versión que esté en el kit. |
+| LAI-KIT-010 | error | Build tools are missing | Run `sudo aictl kit install-debs`. | Ejecute `sudo aictl kit install-debs`. |
+| LAI-KIT-011 | error | The CUDA compiler is missing or doesn't match the driver | Run `sudo aictl kit install-debs`, or rebuild with `--backend vulkan`. | Ejecute `sudo aictl kit install-debs`, o reconstruya con `--backend vulkan`. |
+| LAI-KIT-012 | error | No real Vulkan graphics device was found | Install the graphics driver from the kit, or use `--backend cpu`. | Instale el controlador gráfico del kit, o use `--backend cpu`. |
+| LAI-KIT-013 | error | The NVIDIA driver isn't loaded | Restart and choose the previous kernel in "Advanced options", or install the driver from the kit. | Reinicie y elija el kernel anterior en "Opciones avanzadas", o instale el controlador del kit. |
+| LAI-KIT-014 | error | Not enough disk space to build | Free 5 GB and try again. | Libere 5 GB e intente otra vez. |
+| LAI-KIT-020 | error | The build failed | Read the build log shown; run `aictl rebuild-llama --dry-run`. | Lea el registro mostrado; ejecute `aictl rebuild-llama --dry-run`. |
+| LAI-KIT-021 | error | The new build doesn't work; the old one is still in use | Nothing breaks. Report the log. | Nada se dañó. Reporte el registro. |
+| LAI-KIT-022 | retired (v0.1) | The new build failed after switching; the old one was restored (replaced by `LAI-LLM-019`) | No longer used. | Ya no se usa. |
+| LAI-KIT-030 | error | The agent source in the kit isn't complete | Sync the kit with internet. | Sincronice el kit con internet. |
+| LAI-KIT-040 | warning | The rebuild kit is missing parts for this computer | Run `aictl ark sync` with internet, or `aictl ark import` from a good drive. | Ejecute `aictl ark sync` con internet, o `aictl ark import` desde un buen disco. |
+| LAI-KIT-041 | warning | The ark drive lacks kit parts for another lab computer | Plug the drive into that computer while online, or sync it here. | Conecte el disco a esa computadora con internet, o sincronícelo aquí. |
+| LAI-KIT-042 | error | The kit is for a different Ubuntu version | Sync the kit after the upgrade, with internet. | Sincronice el kit después de la actualización, con internet. |
+| LAI-KIT-043 | warning | The kit's CUDA version doesn't fit this driver | Sync the kit with internet; meanwhile use the prebuilt or Vulkan. | Sincronice el kit con internet; mientras tanto use el precompilado o Vulkan. |
+| LAI-KIT-044 | critical | The kit's agent files failed their signature check | Don't install them. Use another drive and report it. | No los instale. Use otro disco y repórtelo. |
+
+## 9. Test plan
+
+### 9.1 Unit
+- Completeness rules (§4.4 step 3–5) for fixtures of ai-n1 (vulkan), ai-n2/n3 (cuda) and a drive with all pins.
+- Pins merge (add, keep others, drop stale after 180 d).
+- `rebuild-llama` preflight matrix with fake exec (tools present/missing, nvcc vs driver versions, llvmpipe only).
+- Activation rollback state machine with a fake systemd and a failing health check.
+- Prebuilt naming and MANIFEST fields.
+
+### 9.2 Integration
+- CI (amd64, no GPU): build llama.cpp `cpu` from a kit tarball with networking disabled (`unshare -n`), smoke test with a tiny GGUF, activation and rollback (inject a failing `llama-server` wrapper).
+- `rebuild-agent` in `unshare -n` from a CI-built source tarball: binary version matches.
+- Offline apt: install `cmake` from a fixture kit repo in a clean container with no network.
+
+### 9.3 Manual on ai-n3
+1. `aictl kit status` → all parts for `resolute/amd64/cuda sm75` present.
+2. `sudo aictl rebuild-llama --dry-run` → every check ✓.
+3. Network off: `sudo aictl rebuild-llama --from-kit --no-activate` → build completes (~15–25 min), smoke test passes.
+4. `sudo aictl rebuild-llama --from-kit` → activates; `curl -s http://127.0.0.1:8080/health` OK; `ls -l /opt/localai/llama.cpp/current`.
+5. `aictl kit verify --full` → green.
+
+## 10. Implementation breakdown
+
+1. **KIT-01 Kit items and layout in the catalog** (1 d). Scope: all §3.2 entries in `catalog/ark.yaml` with pins and sizes; `pins.json` schema and merge; `kit/README.txt` and `kit/MANIFEST.json` generation. Acceptance: catalog lint passes; ark-sync plans them into the §3.1 layout.
+2. **KIT-02 Release CI artifacts** (1 d). Scope: release job producing `aiagent-linux-*`, `SHA256SUMS`, minisign signature, `install-node.sh`, and `local-ai-<tag>-src.tar.gz` with `vendor/` and built UI. Acceptance: `rebuild-agent` in `unshare -n` works from the asset.
+3. **KIT-03 Kit verification and status** (1.5 d). Depends on: KIT-01. Scope: §4.4 incl. per-node and lab completeness, codename and CUDA consistency, `aictl kit status|verify`. Acceptance: fixture tests for 3 node types.
+4. **KIT-04 Offline extensions to `rebuild-llama`** (2 d). Depends on: ROUTER-08. Split: ROUTER-08 owns the build engine (configure, build, smoke, switch, post-switch check, rollback; [llama-router.md](llama-router.md) §4.10); AICTL-09 owns the `aictl rebuild-llama` command surface ([aictl.md](aictl.md) §4.23); this item adds the offline source resolution and extraction into `/opt/localai/llama.cpp/src/<commit>/`, `--from-kit`, `--prebuilt`, `--dry-run` kit preflight (§4.3.1 step 1), option B wiring and the unprivileged compile. It does not write a second builder. Acceptance: CI offline cpu build and rollback test; manual on ai-n3.
+5. **KIT-05 `rebuild-whisper` kit flags, `rebuild-agent`, prebuilt export/restore** (1.5 d). Depends on: KIT-04. Scope: §4.2, §4.3.4, `aictl kit export-build`, `--prebuilt`; for `rebuild-whisper` only `--prebuilt`, `--from-kit`, `--dry-run` and export (SVC-05 owns the whisper build target, smoke, unit and the base `aictl rebuild-whisper` command, [companion-services.md](companion-services.md) §10). Acceptance: export → restore round trip; agent rebuild offline.
+6. **KIT-06 Offline apt and `kit install*`** (1 d). Scope: §4.1.4 `aictl kit install-debs`, the `aictl kit install <tool>` CLI dispatcher (calls the install functions provided by SVC-02 for kiwix-tools/pmtiles and SVC-08 for piper; `agent` from `kit/bin/`); driver closure items. AICTL-10 only adds `kit status|verify|export-build` and `verify-release`. Acceptance: container test with no network.
+
+## 11. Open questions (with proposed defaults)
+
+1. **CUDA option B by default on drives?** *Default:* no (option A on all roots serving CUDA nodes). Revisit if the drive budget gets tight.
+2. **Who writes `pins.json` when not enrolled?** *Default:* each node adds itself when syncing a drive (§3.3); enrolled labs get it from the cloud catalog release.

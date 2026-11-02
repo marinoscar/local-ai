@@ -1,0 +1,75 @@
+# inventory.example.yaml: schema and placeholders for the real lab inventory.
+#
+# Copy this to inventory.local.yaml (git-ignored) and fill in the real values.
+# inventory.local.yaml exists ONLY on the owner's machines and on the AI-ARK drive.
+#
+# Uses:
+#   * scripts/check-redaction.sh builds its "forbidden strings" list from every
+#     field named in `secret_fields` below (all IPs, tailnet, zone id, host ids).
+#   * `aictl docs render` never puts a value whose field is in `secret_fields`
+#     on the printed survival card (docs/specs/survival-portal.md §4.12,
+#     docs/architecture/security-model.md §5).
+#   * `aictl docs render` replaces <PLACEHOLDER> tokens in docs/ with real values
+#     to produce filled-in, printable runbooks on the node and on the ark drive
+#     (see docs/specs/aictl.md §docs).
+#   * installers/install-node.sh reads node entries to pre-fill node.yaml.
+#
+# Placeholder convention used across docs/:  <UPPER_SNAKE_CASE>
+
+schema_version: 1
+
+# Explicit secret marker: every field with one of these names, at any depth, is secret.
+# Keep this list identical to the field list in scripts/check-redaction.sh.
+secret_fields: [owner_email, tailnet, route53_zone_id, hostname, public_ip, tailnet_ip, lan_ip, fs_uuid]
+
+lab:
+  owner_email: "<ADMIN_EMAIL>"            # placeholder in docs: <ADMIN_EMAIL>
+  public_domain: "marin.cr"               # public, may be committed
+  tailnet: "<TAILNET>"                    # e.g. tailXXXXXX ; MagicDNS suffix <TAILNET>.ts.net
+  route53_zone_id: "<ROUTE53_ZONE_ID>"
+  cloud_url: "https://ai.marin.cr"        # public
+
+vps:
+  name: "prod-server"                     # tailnet machine name
+  hostname: "<VPS_HOSTNAME>"
+  public_ip: "<VPS_PUBLIC_IP>"
+  tailnet_ip: "<TAILNET_IP_VPS>"
+
+nodes:
+  # One entry per AI node. id is the stable lab id used everywhere (node.yaml, cloud, gateway).
+  - id: ai-n1
+    public_host: "ai-n1.marin.cr"
+    machine: "ai-marin-linux"             # tailnet machine name
+    hardware: "MINISFORUM MS-S1 Max, Ryzen AI Max+ 395, 128 GB unified, Radeon 8060S"
+    backend: vulkan                       # vulkan | cuda | cpu
+    profile: max-128gb                    # catalog/profiles/<profile>.yaml
+    tailnet_ip: "<TAILNET_IP_AI_N1>"
+    lan_ip: "<LAN_IP_AI_N1>"
+    desktop_user: "<DESKTOP_USER>"        # primary desktop login (placeholder in docs: <DESKTOP_USER>)
+    serve_pattern: A                      # A = tailscale serve --tcp=18080 ; B = --https=443
+  - id: ai-n2
+    public_host: "ai-n2.marin.cr"
+    machine: "msi-linux"
+    hardware: "MSI Stealth 17 Studio, RTX 4080 Laptop 12 GB (dual-boot Windows)"
+    backend: cuda
+    profile: cuda-12gb
+    tailnet_ip: "<TAILNET_IP_AI_N2>"
+    lan_ip: "<LAN_IP_AI_N2>"
+    desktop_user: "<DESKTOP_USER>"
+    serve_pattern: B
+  - id: ai-n3
+    public_host: "ai-n3.marin.cr"
+    machine: "hp-linux"
+    hardware: "HP ZBook Create G7, i7-10850H, 16 GB (14 usable), RTX 2070 Max-Q 8 GB"
+    backend: cuda
+    profile: small-8gb
+    tailnet_ip: "<TAILNET_IP_AI_N3>"
+    lan_ip: "<LAN_IP_AI_N3>"
+    desktop_user: "<DESKTOP_USER>"
+    serve_pattern: B
+
+ark_drives:
+  # Portable SSDs formatted ext4 with filesystem label AI-ARK (see docs/specs/ark-sync.md §Ark drive)
+  - label: "AI-ARK"
+    description: "Primary portable ark drive (e.g. 2 TB USB-C SSD)"
+    fs_uuid: "<ARK_DRIVE_UUID>"

@@ -1,0 +1,29 @@
+name: Bug
+description: Something doesn't work as the spec or runbook says
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: input
+    id: node
+    attributes: {label: Node id / component, placeholder: "ai-n3 / aiagent 0.3.1"}
+    validations: {required: true}
+  - type: input
+    id: code
+    attributes: {label: Doctor code (if shown), placeholder: "LAI-SYN-004"}
+  - type: textarea
+    id: what
+    attributes: {label: What happened vs. what was expected}
+    validations: {required: true}
+  - type: textarea
+    id: repro
+    attributes: {label: Steps to reproduce}
+    validations: {required: true}
+  - type: textarea
+    id: logs
+    attributes: {label: "Output of `aictl doctor --json` / relevant logs (REDACT IPs, keys, tokens!)", render: text}
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Does this affect offline/survival operation?
+      options: ["Yes — doomsday-critical", "No — online/lab only", "Not sure"]
+    validations: {required: true}
