@@ -1,0 +1,10 @@
+== stdout ==
+Internal disk  internal      ! 82% ready
+  (180 GB of 220 GB budget, 273 GB free)
+  missing: wikipedia-es-nopic (12.0 GB), osm-central-america (2.5 GB)
+  last sync 12 hours ago: ok
+Ark drive      not connected
+
+! An update couldn't be downloaded. The older copy is still here and works.
+  [LAI-SYN-031]
+== exit 0 ==

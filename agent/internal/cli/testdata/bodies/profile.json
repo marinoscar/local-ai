@@ -1,0 +1,4 @@
+{"profile": "small-8gb", "display_name": "Small GPU laptop (8 GB VRAM)", "overrides": {"ark_budget_gb": 220},
+ "suggested": "small-8gb", "match_reasons": ["backend cuda", "vram 8192 MiB in 7000..11999"],
+ "effective": {"models": ["qwen3.5-9b-q4km", "small-vlm-q4km"], "content": ["wikipedia-en-nopic", "osm-north-america"],
+               "planned_bytes": 180000000000, "budget_bytes": 220000000000}}

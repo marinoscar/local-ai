@@ -1,0 +1,9 @@
+{"ran_at": "2026-11-02T15:04:05Z", "duration_ms": 2310,
+ "summary": {"ok": 41, "info": 1, "warning": 1, "error": 1, "critical": 1},
+ "results": [
+  {"check": "net.cloud_reach", "code": "LAI-NET-011", "severity": "info", "title": "The internet has been unreachable for a while", "fix": "Nothing to do, or switch to survival mode with `aictl mode survival`.", "details": {}},
+  {"check": "hw.battery", "code": "LAI-HW-012", "severity": "warning", "title": "Running on battery", "fix": "Plug in the charger. A laptop server stops when the battery runs out.", "details": {"battery_percent": 64}},
+  {"check": "llm.router_health", "code": "LAI-LLM-001", "severity": "error", "title": "The AI model service is not running", "fix": "Run `aictl restart llama`. If it fails again, run `aictl logs --unit llama`.", "details": {}},
+  {"check": "agt.state", "code": "LAI-AGT-004", "severity": "critical", "title": "The agent cannot write its state", "fix": "Free disk space on the system disk.", "details": {"path": "/var/lib/localai"}}
+ ],
+ "passed": ["agt.config", "llm.router_health", "net.loopback_only"]}

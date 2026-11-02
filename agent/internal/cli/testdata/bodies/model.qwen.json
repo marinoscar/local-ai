@@ -1,0 +1,7 @@
+{"id": "qwen3.5-9b-q4km", "display_name": "Qwen 3.5 9B", "summary": "Fast general assistant for chat and code.", "engine": "llama",
+ "roles": ["chat", "reasoning", "coder"], "in_profile": true, "size_bytes": 5868826976, "present": true, "verified": true,
+ "locations": [{"root": "/srv/localai", "complete": true, "verified_at": "{{ago:30h}}"}, {"root": "/media/user/AI-ARK/localai", "complete": false}],
+ "loadable": true, "loadable_reason": null, "status": "loaded", "loaded": true, "default": true, "aliases": ["qwen3.5-9b"],
+ "requirements": {"backends": ["cuda", "vulkan", "cpu"], "min_vram_mib": 6400, "min_ram_mib": 8192}, "last_load_ms": 7100,
+ "files": [{"kind": "weights", "name": "model.gguf", "size_bytes": 5868826976, "sha256": "{{sha256}}", "path": "/srv/localai/models/model.gguf"}],
+ "preset": "[qwen3.5-9b-q4km]\nmodel = model.gguf\n"}

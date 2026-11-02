@@ -1,0 +1,5 @@
+== stdout ==
+AI-ARK  ark-3f9c0a12  /media/user/AI-ARK   ext4   900 GB free of 2.0 TB  ✓ ready
+AI-ARK  —             /media/user/AI-ARK1  exfat                         ✗ cannot be used
+  ✗ This drive is not formatted as ext4.  [LAI-ARK-002]
+== exit 0 ==

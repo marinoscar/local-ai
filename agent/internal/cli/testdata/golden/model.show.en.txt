@@ -1,0 +1,16 @@
+== stdout ==
+Qwen 3.5 9B (qwen3.5-9b-q4km)
+Fast general assistant for chat and code.
+
+Engine     llama
+Status     loaded
+Size       5.9 GB
+Roles      chat, reasoning, coder
+Default    ✓ yes
+Loadable   ✓ yes
+Stored in  /srv/localai, /media/user/AI-ARK/localai (incomplete)
+Needs      6.2 GB graphics memory · 8.0 GB memory · cuda/vulkan/cpu
+Aliases    qwen3.5-9b
+Last load  7.1 s
+Files      1
+== exit 0 ==

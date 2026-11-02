@@ -1,0 +1,3 @@
+== stdout ==
+The default model is Qwen 3.5 9B (qwen3.5-9b-q4km). It is loaded.
+== exit 0 ==

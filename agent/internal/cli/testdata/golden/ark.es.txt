@@ -1,0 +1,10 @@
+== stdout ==
+Disco interno  internal      ! 82% listo
+  (180 GB de 220 GB de presupuesto, 273 GB libres)
+  falta: wikipedia-es-nopic (12.0 GB), osm-central-america (2.5 GB)
+  última sincronización hace 12 horas: ok
+Unidad ark     no conectada
+
+! An update couldn't be downloaded. The older copy is still here and works.
+  [LAI-SYN-031]
+== exit 0 ==
