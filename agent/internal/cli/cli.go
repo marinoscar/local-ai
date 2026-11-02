@@ -1,5 +1,6 @@
-// Package cli is the aictl implementation (docs/specs/aictl.md). This is the AGENT-01 stub: it only
-// knows help. Real commands and the agent transport arrive with AICTL-01 onwards.
+// Package cli is the aictl implementation (docs/specs/aictl.md). This is still the AGENT-01 stub: it
+// knows help and the local `catalog lint` hook (CAT-01). Real commands and the agent transport arrive
+// with AICTL-01 onwards.
 package cli
 
 import (
@@ -18,6 +19,7 @@ const helpText = `aictl: command line for the Local AI node agent.
 Usage:
   aictl help
   aictl --help
+  aictl catalog lint [--online] [--json] <dir>
 
 The real commands (status, doctor, mode, models, ark, ...) are not implemented yet.
 Specification: docs/specs/aictl.md
@@ -33,6 +35,8 @@ func Main(args []string, stdout, stderr io.Writer) int {
 	case "--help", "-h", "help":
 		fmt.Fprint(stdout, helpText)
 		return ExitOK
+	case "catalog":
+		return catalogCommand(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "aictl: unknown command %q (try 'aictl --help')\n", args[0])
 		return ExitUsage
