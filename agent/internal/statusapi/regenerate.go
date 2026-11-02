@@ -75,6 +75,12 @@ func resultOf(res router.Result) RegenResult {
 	return out
 }
 
+// Regenerate runs r (a nil r does nothing) and returns what to tell the caller: the warnings of the
+// regeneration, or one generic warning when it failed. The change that triggered it is already
+// written, so a failure never fails the request. Other route packages (modelsapi, after a model
+// delete) use it, so every trigger reports a regeneration the same way.
+func Regenerate(ctx context.Context, r Regenerator) []WarningBlock { return regenerate(ctx, r) }
+
 // regenerate runs the optional Regenerator and returns its warnings; an error becomes a warning too,
 // because the change that triggered it is already written.
 func regenerate(ctx context.Context, r Regenerator) []WarningBlock {
