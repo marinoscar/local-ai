@@ -1,56 +1,57 @@
 package api
 
+import "github.com/marinoscar/local-ai/agent/internal/doctor"
+
 // Doctor codes this package emits (agent.md sections 3.7 and 8, doctor-codes.md).
 //
-// They live in this one file on purpose: scripts/check-doctor-codes.sh forbids a "LAI-..." literal in
-// any non-test Go file outside internal/doctor/codes.go once that file exists. AGENT-11 replaces
-// these constants with the ones from internal/doctor; nothing else in this package spells a code.
+// They are aliases of the constants of internal/doctor/codes.go, the one file allowed to spell a
+// "LAI-..." literal (scripts/check-doctor-codes.sh). Nothing else in this package spells a code.
 const (
 	// CodeSocketBind: the unix socket could not be created (a bind error, not an HTTP status).
-	CodeSocketBind = "LAI-AGT-005"
+	CodeSocketBind = doctor.AGT005
 	// CodeTCPBind: the TCP port is used by another program (a bind error, not an HTTP status).
-	CodeTCPBind = "LAI-AGT-006"
+	CodeTCPBind = doctor.AGT006
 	// CodeInvalidRequest: malformed JSON, unknown field, invalid value, wrong content type, wrong method.
-	CodeInvalidRequest = "LAI-AGT-020"
+	CodeInvalidRequest = doctor.AGT020
 	// CodeNotFound: unknown route or entity.
-	CodeNotFound = "LAI-AGT-021"
+	CodeNotFound = doctor.AGT021
 	// CodeBusy: another operation is already running.
-	CodeBusy = "LAI-AGT-022"
+	CodeBusy = doctor.AGT022
 	// CodeNotInMode: this action is not allowed in the current mode.
-	CodeNotInMode = "LAI-AGT-023"
+	CodeNotInMode = doctor.AGT023
 	// CodeStarting: the agent is starting or stopping (503 with Retry-After: 5).
-	CodeStarting = "LAI-AGT-024"
+	CodeStarting = doctor.AGT024
 	// CodeTooLarge: the request body is over the limit.
-	CodeTooLarge = "LAI-AGT-025"
+	CodeTooLarge = doctor.AGT025
 	// CodeInternal: a bug; details.request_id is always present.
-	CodeInternal = "LAI-AGT-099"
+	CodeInternal = doctor.AGT099
 
 	// CodeUnauthenticated: missing or invalid credentials.
-	CodeUnauthenticated = "LAI-SEC-001"
+	CodeUnauthenticated = doctor.SEC001
 	// CodeAdminRequired: the action needs the admin PIN.
-	CodeAdminRequired = "LAI-SEC-002"
+	CodeAdminRequired = doctor.SEC002
 	// CodeWrongPIN: the admin PIN is wrong.
-	CodeWrongPIN = "LAI-SEC-003"
+	CodeWrongPIN = doctor.SEC003
 	// CodeRateLimited: too many wrong PIN or login-code attempts.
-	CodeRateLimited = "LAI-SEC-004"
+	CodeRateLimited = doctor.SEC004
 	// CodeNoPIN: no admin PIN has been set (or its file cannot be used).
-	CodeNoPIN = "LAI-SEC-005"
+	CodeNoPIN = doctor.SEC005
 	// CodeBadHost: the Host header is not the agent's own address (DNS rebinding defence).
-	CodeBadHost = "LAI-SEC-006"
+	CodeBadHost = doctor.SEC006
 	// CodeBadOrigin: the request came from another website.
-	CodeBadOrigin = "LAI-SEC-007"
+	CodeBadOrigin = doctor.SEC007
 	// CodeBadLoginCode: the login (UI) code is wrong, used or expired.
-	CodeBadLoginCode = "LAI-SEC-008"
+	CodeBadLoginCode = doctor.SEC008
 	// CodeSessionExpired: the session cookie names a session that has expired.
-	CodeSessionExpired = "LAI-SEC-012"
+	CodeSessionExpired = doctor.SEC012
 	// CodePeerNotOperator: the socket peer is not in localai-operators.
-	CodePeerNotOperator = "LAI-SEC-013"
+	CodePeerNotOperator = doctor.SEC013
 
 	// CodePortalSessionEnded: a Portal session was used where it is not allowed, or has ended.
-	CodePortalSessionEnded = "LAI-SVC-110"
+	CodePortalSessionEnded = doctor.SVC110
 
 	// CodeRouterDown: the llama router is running but not answering (502).
-	CodeRouterDown = "LAI-LLM-004"
+	CodeRouterDown = doctor.LLM004
 	// CodeUpstreamTimeout: an upstream took too long (504).
-	CodeUpstreamTimeout = "LAI-LLM-010"
+	CodeUpstreamTimeout = doctor.LLM010
 )

@@ -332,20 +332,3 @@ func serviceActor(info *RequestInfo) audit.Actor {
 	}
 	return a
 }
-
-func init() {
-	// The messages of the codes a failed start or restart answers with, in both languages
-	// (companion-services.md section 8 and doctor-codes.md). AGENT-11 replaces the table.
-	messages[services.CodeLlamaNotRunning] = map[string]text{
-		langEN: {"The AI model service (localai-llama) is not running.", "Run `aictl restart llama`. If it fails again, run `aictl logs --unit llama`."},
-		langES: {"El servicio del modelo de IA (localai-llama) no está en marcha.", "Ejecute `aictl restart llama`. Si falla otra vez, ejecute `aictl logs --unit llama`."},
-	}
-	messages[services.CodeLibraryNotRunning] = map[string]text{
-		langEN: {"The library service isn't running.", "Press Restart library, or run `aictl services restart kiwix`."},
-		langES: {"El servicio de la biblioteca no está en marcha.", "Presione Reiniciar biblioteca, o ejecute `aictl services restart kiwix`."},
-	}
-	messages[services.CodeSpeechNotRunning] = map[string]text{
-		langEN: {"The speech-recognition service isn't running.", "Run `aictl services restart whisper`."},
-		langES: {"El servicio de reconocimiento de voz no está en marcha.", "Ejecute `aictl services restart whisper`."},
-	}
-}

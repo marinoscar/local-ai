@@ -10,10 +10,14 @@
 #  3. a code is defined twice, or its area prefix is unknown, or it sits in the wrong registry
 #     section or in a spec that does not own its area;
 #  4. (only once agent/internal/doctor/codes.go exists) codes.go differs from the registry, defines
-#     a code twice, or a non-test Go file outside codes.go hard-codes a "LAI-..." literal;
+#     a code twice, a registry code has no table entry with a non-empty Spanish (`ES:`) title and
+#     fix, an entry's Severity differs from the first word of the registry severity, or a non-test
+#     Go file outside codes.go hard-codes a "LAI-..." literal;
 #  5. a range (LAI-AAA-NNN..MMM) is used but is not a documented family (FAMILIES below).
 #
-# Not checked yet: the Spanish (`es`) text in codes.go. AGENT-11 adds that check with the codes.go layout.
+# codes.go layout read by rule 4: a const block `AGT001 = "LAI-AGT-001"` and a table of entries
+# `ID: AGT001,` / `Severity: Warning,` / `Title: Msg{EN: "...", ES: "..."},` / `Fix: Msg{...},`,
+# one field per line (see agent/internal/doctor/codes.go).
 #
 # Usage: scripts/check-doctor-codes.sh [--root DIR]     (DIR defaults to the git toplevel; tests use fixtures)
 # Exit:  0 consistent, 1 problems (printed as `ERROR <file>:<line>: ...`), 2 usage error.
@@ -23,7 +27,7 @@ root=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:-}"; [[ -n "$root" ]] || { echo "usage: $0 [--root DIR]" >&2; exit 2; }; shift 2 ;;
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "usage: $0 [--root DIR]" >&2; exit 2 ;;
   esac
 done
@@ -84,9 +88,23 @@ if [[ -f "$CODES_GO" ]]; then
     grep -rnE --include='*.go' --exclude='*_test.go' --exclude-dir=vendor '"LAI-[A-Z]+-[0-9]{3}"' agent 2>/dev/null \
       | grep -v "^$CODES_GO:" | cut -d: -f1,2 >"$tmp/golit.txt" || true
   fi
+  # The table entries: `C name code line` for each constant, `E name line severity title_es fix_es`
+  # for each entry (ID: NAME, ... Severity: X, ... Title: Msg{EN: "..", ES: ".."}, Fix: Msg{...}).
+  awk '
+    /^[ \t]*[A-Za-z][A-Za-z0-9_]*[ \t]*=[ \t]*"LAI-[A-Z]+-[0-9][0-9][0-9]"/ {
+      name = $1; match($0, /"LAI-[A-Z]+-[0-9][0-9][0-9]"/)
+      printf "C\t%s\t%s\t%d\n", name, substr($0, RSTART + 1, RLENGTH - 2), NR; next
+    }
+    function flush() { if (cur != "") printf "E\t%s\t%d\t%s\t%d\t%d\n", cur, line, sev, tes, fes }
+    /^[ \t]*ID:[ \t]*[A-Za-z][A-Za-z0-9_]*,/ { flush(); cur = $2; sub(/,$/, "", cur); line = NR; sev = ""; tes = 0; fes = 0; next }
+    /^[ \t]*Severity:/ { v = $2; sub(/,$/, "", v); sev = tolower(v); next }
+    /^[ \t]*Title:/ { if ($0 ~ /ES:[ \t]*"[^"]/) tes = 1; next }
+    /^[ \t]*Fix:/   { if ($0 ~ /ES:[ \t]*"[^"]/) fes = 1; next }
+    END { flush() }
+  ' "$CODES_GO" >"$tmp/goentries.tsv"
 fi
 
-awk -v owners="$OWNERS" -v families="$FAMILIES" -v hasgo="$has_go" -v reg="$REG" -v tmp="$tmp" '
+awk -v owners="$OWNERS" -v families="$FAMILIES" -v hasgo="$has_go" -v reg="$REG" -v tmp="$tmp" -v CODES_GO_LOC="$CODES_GO" '
   function area(code,   p) { split(code, p, "-"); return p[2] }
   function num(code,   p)  { split(code, p, "-"); return p[3] + 0 }
   function err(loc, msg)   { print "ERROR " loc ": " msg; bad++ }
@@ -157,6 +175,23 @@ awk -v owners="$OWNERS" -v families="$FAMILIES" -v hasgo="$has_go" -v reg="$REG"
         if (!(code in rsev)) err(loc, code " is in codes.go but not in the registry")
       }
       for (c in rsev) if (!(c in goseen)) err(reg ":" rline[c], c " is in the registry but missing from codes.go")
+      # table entries: each registry code needs one, with a severity and a Spanish title and fix
+      while ((getline line < (tmp "/goentries.tsv")) > 0) {
+        split(line, f, "\t")
+        if (f[1] == "C") gname[f[2]] = f[3]
+        else ent[f[2]] = f[3] "\t" f[4] "\t" f[5] "\t" f[6]
+      }
+      for (nm in ent) if (!(nm in gname)) { split(ent[nm], g, "\t"); err("agent/internal/doctor/codes.go:" g[1], "table entry " nm " is not a constant defined in codes.go") }
+      for (nm in gname) {
+        c = gname[nm]
+        if (!(c in rsev)) continue
+        if (!(nm in ent)) { err(goseen[c], c " has no table entry in codes.go (needs Severity, and Title and Fix with a Spanish ES text)"); continue }
+        split(ent[nm], g, "\t")
+        split(rsev[c], rs, " ")
+        if (g[2] != rs[1]) err(CODES_GO_LOC ":" g[1], c " severity in codes.go is \"" g[2] "\" but the registry says \"" rs[1] "\"")
+        if (g[3] != 1) err(CODES_GO_LOC ":" g[1], c " has no Spanish (ES) title in codes.go")
+        if (g[4] != 1) err(CODES_GO_LOC ":" g[1], c " has no Spanish (ES) fix in codes.go")
+      }
       while ((getline line < (tmp "/golit.txt")) > 0)
         err(line, "hard-coded LAI code literal outside codes.go; use the constant defined in codes.go")
     }

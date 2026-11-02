@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
+	"github.com/marinoscar/local-ai/agent/internal/api/apitest"
 	"github.com/marinoscar/local-ai/agent/internal/auth/fake"
 	cfake "github.com/marinoscar/local-ai/agent/internal/config/fake"
 )
@@ -145,8 +146,14 @@ func (q req) build() *http.Request {
 
 // do serves q and returns the recorded response.
 func (e *env) do(q req) *httptest.ResponseRecorder {
+	r := q.build()
 	rec := httptest.NewRecorder()
-	e.h.ServeHTTP(rec, q.build())
+	e.h.ServeHTTP(rec, r)
+	// The documented routes and every error are recorded against openapi.yaml (agent.md section 4.14);
+	// the probe routes of this package are not part of the document.
+	if rec.Code >= 400 || apitest.Serves(r.Method, r.URL.RequestURI()) {
+		apitest.RecordResult(e.t, r, rec)
+	}
 	return rec
 }
 

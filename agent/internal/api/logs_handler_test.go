@@ -49,8 +49,10 @@ func logsHandler(t *testing.T, j LogTailer) http.Handler {
 	return s.Handler()
 }
 
-func getLogs(h http.Handler, query string) *httptest.ResponseRecorder {
-	return do(h, req{target: "/api/v1/logs" + query, header: map[string]string{"X-Test-Principal": "bearer"}})
+// getLogs serves GET /logs; a success is recorded against openapi.yaml (an error is, by expectError).
+func getLogs(t testing.TB, h http.Handler, query string) *httptest.ResponseRecorder {
+	t.Helper()
+	return recordOK(t, do(h, req{target: "/api/v1/logs" + query, header: map[string]string{"X-Test-Principal": "bearer"}}))
 }
 
 func TestLogsResponseShape(t *testing.T) {
@@ -58,7 +60,7 @@ func TestLogsResponseShape(t *testing.T) {
 		{At: time.Date(2026, 11, 2, 8, 0, 12, 500_000_000, time.UTC), Priority: 6, Message: "llama_server: model loaded"},
 		{At: time.Date(2026, 11, 2, 8, 0, 13, 0, time.FixedZone("x", 3600)), Priority: 4, Message: "slot 0: context shift"},
 	}}}
-	rec := getLogs(logsHandler(t, f), "?unit=llama&lines=5")
+	rec := getLogs(t, logsHandler(t, f), "?unit=llama&lines=5")
 	if rec.Code != 200 || rec.Header().Get("Content-Type") != "application/json; charset=utf-8" {
 		t.Fatalf("status %d, Content-Type %q: %s", rec.Code, rec.Header().Get("Content-Type"), rec.Body)
 	}
@@ -75,7 +77,7 @@ func TestLogsResponseShape(t *testing.T) {
 
 func TestLogsEmptyAndTruncated(t *testing.T) {
 	f := &fakeTailer{tail: services.JournalTail{Lines: nil, Truncated: true}}
-	rec := getLogs(logsHandler(t, f), "?unit=kiwix")
+	rec := getLogs(t, logsHandler(t, f), "?unit=kiwix")
 	if got, want := rec.Body.String(), `{"unit":"localai-kiwix.service","lines":[],"truncated":true}`+"\n"; got != want {
 		t.Errorf("body:\n got %s\nwant %s", got, want)
 	}
@@ -88,7 +90,7 @@ func TestLogsUnitMappingAndDefaults(t *testing.T) {
 	}
 	for short, unit := range want {
 		f := &fakeTailer{}
-		rec := getLogs(logsHandler(t, f), "?unit="+short)
+		rec := getLogs(t, logsHandler(t, f), "?unit="+short)
 		if rec.Code != 200 {
 			t.Fatalf("%s: status %d: %s", short, rec.Code, rec.Body)
 		}
@@ -101,7 +103,7 @@ func TestLogsUnitMappingAndDefaults(t *testing.T) {
 func TestLogsLinesBoundaries(t *testing.T) {
 	h := logsHandler(t, &fakeTailer{})
 	for _, ok := range []string{"1", "2", "200", "1999", "2000"} {
-		if rec := getLogs(h, "?unit=llama&lines="+ok); rec.Code != 200 {
+		if rec := getLogs(t, h, "?unit=llama&lines="+ok); rec.Code != 200 {
 			t.Errorf("lines=%s: status %d: %s", ok, rec.Code, rec.Body)
 		}
 	}
@@ -114,7 +116,7 @@ func TestLogsLinesBoundaries(t *testing.T) {
 		{"99999999999999999999", "not_an_integer"},
 	}
 	for _, tc := range tests {
-		e := expectError(t, getLogs(h, "?unit=llama&lines="+tc.lines), 400, CodeInvalidRequest)
+		e := expectError(t, getLogs(t, h, "?unit=llama&lines="+tc.lines), 400, CodeInvalidRequest)
 		if e.Error.Details["field"] != "lines" || e.Error.Details["reason"] != tc.reason {
 			t.Errorf("lines=%q: details = %v", tc.lines, e.Error.Details)
 		}
@@ -124,12 +126,12 @@ func TestLogsLinesBoundaries(t *testing.T) {
 func TestLogsUnitValidation(t *testing.T) {
 	f := &fakeTailer{}
 	h := logsHandler(t, f)
-	e := expectError(t, getLogs(h, ""), 400, CodeInvalidRequest)
+	e := expectError(t, getLogs(t, h, ""), 400, CodeInvalidRequest)
 	if e.Error.Details["field"] != "unit" || e.Error.Details["reason"] != "missing" {
 		t.Errorf("details = %v", e.Error.Details)
 	}
 	for _, unit := range []string{"sshd", "localai-llama.service", "LLAMA", "llama%3Bls", "..%2F..%2Fetc", "tailscaled", "-f", "agent%20-f", "piper", "maps"} {
-		e := expectError(t, getLogs(h, "?unit="+unit), 400, CodeInvalidRequest)
+		e := expectError(t, getLogs(t, h, "?unit="+unit), 400, CodeInvalidRequest)
 		if e.Error.Details["field"] != "unit" || e.Error.Details["reason"] != "unknown_unit" {
 			t.Errorf("unit=%q: details = %v", unit, e.Error.Details)
 		}
@@ -147,7 +149,7 @@ func TestLogsSince(t *testing.T) {
 	h := logsHandler(t, f)
 	for _, ok := range []string{"2026-11-02T08:00:00Z", "2026-11-02T08:00:00.123Z", "2026-11-02T02:00:00-06:00"} {
 		f.calls = nil
-		rec := getLogs(h, "?unit=llama&since="+strings.ReplaceAll(ok, "+", "%2B"))
+		rec := getLogs(t, h, "?unit=llama&since="+strings.ReplaceAll(ok, "+", "%2B"))
 		if rec.Code != 200 {
 			t.Fatalf("since=%s: status %d: %s", ok, rec.Code, rec.Body)
 		}
@@ -157,13 +159,13 @@ func TestLogsSince(t *testing.T) {
 	}
 	// The same instant, written in two zones, reaches the journal as the same time.
 	f.calls = nil
-	getLogs(h, "?unit=llama&since=2026-11-02T08:00:00Z")
-	getLogs(h, "?unit=llama&since=2026-11-02T02:00:00-06:00")
+	getLogs(t, h, "?unit=llama&since=2026-11-02T08:00:00Z")
+	getLogs(t, h, "?unit=llama&since=2026-11-02T02:00:00-06:00")
 	if len(f.calls) != 2 || !f.calls[0].since.Equal(f.calls[1].since) {
 		t.Errorf("calls = %+v", f.calls)
 	}
 	for _, bad := range []string{"", "yesterday", "2026-11-02", "2026-11-02 08:00:00", "1793606405", "2026-11-02T08:00:00", "2026-13-02T08:00:00Z", "2026-11-02T08:00:00Z%3Brm"} {
-		e := expectError(t, getLogs(h, "?unit=llama&since="+strings.ReplaceAll(bad, " ", "%20")), 400, CodeInvalidRequest)
+		e := expectError(t, getLogs(t, h, "?unit=llama&since="+strings.ReplaceAll(bad, " ", "%20")), 400, CodeInvalidRequest)
 		if e.Error.Details["field"] != "since" || e.Error.Details["reason"] != "not_rfc3339" {
 			t.Errorf("since=%q: details = %v", bad, e.Error.Details)
 		}
@@ -193,7 +195,7 @@ func TestLogsJournalFailures(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			e := expectError(t, getLogs(logsHandler(t, &fakeTailer{err: tc.err}), "?unit=llama"), tc.status, tc.code)
+			e := expectError(t, getLogs(t, logsHandler(t, &fakeTailer{err: tc.err}), "?unit=llama"), tc.status, tc.code)
 			if e.Error.Details["reason"] != tc.reason {
 				t.Errorf("details = %v", e.Error.Details)
 			}
@@ -203,7 +205,7 @@ func TestLogsJournalFailures(t *testing.T) {
 		})
 	}
 	// Anything else is a bug: 500 with the internal code.
-	expectError(t, getLogs(logsHandler(t, &fakeTailer{err: errors.New("boom")}), "?unit=llama"), 500, CodeInternal)
+	expectError(t, getLogs(t, logsHandler(t, &fakeTailer{err: errors.New("boom")}), "?unit=llama"), 500, CodeInternal)
 }
 
 // End to end with the real journal reader over a fake journalctl: the credentials in the fixture never
@@ -219,7 +221,7 @@ func TestLogsScrubsCredentialsEndToEnd(t *testing.T) {
 	runner := execfake.New().Expect(execfake.Key("/usr/bin/journalctl", argv...), execx.Result{Stdout: out}, nil)
 	h := logsHandler(t, services.NewJournal(runner, "/usr/bin/journalctl"))
 
-	rec := getLogs(h, "?unit=llama")
+	rec := getLogs(t, h, "?unit=llama")
 	if rec.Code != 200 {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body)
 	}
@@ -254,7 +256,7 @@ func TestLogsTruncatedByTheCap(t *testing.T) {
 	out := []byte(line + line + `{"__REALTIME_TIMESTAMP":"17936064`)
 	argv := []string{"-u", services.UnitWhisper, "-n", "2000", "-o", "json", "--no-pager"}
 	runner := execfake.New().Expect(execfake.Key("/usr/bin/journalctl", argv...), execx.Result{Stdout: out, Truncated: true}, nil)
-	rec := getLogs(logsHandler(t, services.NewJournal(runner, "/usr/bin/journalctl")), "?unit=whisper&lines=2000")
+	rec := getLogs(t, logsHandler(t, services.NewJournal(runner, "/usr/bin/journalctl")), "?unit=whisper&lines=2000")
 	var body struct {
 		Lines     []json.RawMessage `json:"lines"`
 		Truncated bool              `json:"truncated"`

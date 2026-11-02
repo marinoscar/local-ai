@@ -1,20 +1,21 @@
 package services
 
+import "github.com/marinoscar/local-ai/agent/internal/doctor"
+
 // Doctor codes this package emits or maps (agent.md sections 4.3.3 and 8, doctor-codes.md).
 //
-// They live in this one file on purpose: scripts/check-doctor-codes.sh forbids a "LAI-..." literal in
-// any non-test Go file outside internal/doctor/codes.go once that file exists. AGENT-11 replaces these
-// constants with the ones from internal/doctor; nothing else in this package spells a code.
+// They are aliases of the constants of internal/doctor/codes.go, the one file allowed to spell a
+// "LAI-..." literal (scripts/check-doctor-codes.sh).
 const (
 	// CodeLlamaNotRunning: the AI model service (localai-llama) is not running (critical).
-	CodeLlamaNotRunning = "LAI-LLM-001"
+	CodeLlamaNotRunning = doctor.LLM001
 	// CodeLlamaNotAnswering: llama is running but its /health does not answer.
-	CodeLlamaNotAnswering = "LAI-LLM-004"
+	CodeLlamaNotAnswering = doctor.LLM004
 	// CodeLibraryNotRunning: the library service (kiwix) is not running, or runs and does not answer.
-	CodeLibraryNotRunning = "LAI-SVC-002"
+	CodeLibraryNotRunning = doctor.SVC002
 	// CodeSpeechNotRunning: the speech-recognition service (whisper) is not running, or runs and does
 	// not answer.
-	CodeSpeechNotRunning = "LAI-SVC-011"
+	CodeSpeechNotRunning = doctor.SVC011
 )
 
 // NotAnsweringCode is the doctor code raised when the service is active but does not answer its

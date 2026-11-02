@@ -55,17 +55,12 @@ func (e *Error) Error() string {
 	return e.Code + ": " + msg
 }
 
-// envelope is the JSON body of every non-2xx response.
-type envelope struct {
-	Error envelopeBody `json:"error"`
-}
-
-type envelopeBody struct {
-	Code    string         `json:"code"`
-	Message string         `json:"message"`
-	Fix     string         `json:"fix"`
-	Details map[string]any `json:"details"`
-}
+// envelope and envelopeBody are the JSON body of every non-2xx response; the wire types are
+// ErrorEnvelope and ErrorBody (types.go), which mirror #/components/schemas/ErrorEnvelope.
+type (
+	envelope     = ErrorEnvelope
+	envelopeBody = ErrorBody
+)
 
 // ErrorFrom classifies err into an *Error. An *Error passes through; a body over the limit becomes
 // 413; a handler that ran past its route deadline becomes 504 with the internal code; anything else
