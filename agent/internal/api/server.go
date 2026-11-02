@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -145,7 +146,15 @@ func (s *Server) buildRoutes() (err error) {
 	s.methodMux = map[string]*http.ServeMux{}
 	add := func(rt Route) {
 		pattern := rt.Path()
+		// An absolute "/" route is the SPA catch-all (agent.md section 3.11): it must never answer
+		// under /api/, where an unknown path is 404 LAI-AGT-021 and a known path with another
+		// method is 405, exactly as when no catch-all is registered.
+		catchAll := rt.Absolute && rt.Pattern == "/"
 		s.mux.Handle(rt.Method+" "+pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if catchAll && (r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/")) {
+				s.unmatched(w, r)
+				return
+			}
 			s.serveRoute(&rt, w, r)
 		}))
 		m := s.methodMux[rt.Method]
