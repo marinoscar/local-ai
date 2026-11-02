@@ -138,9 +138,19 @@ When the terminal cannot print UTF-8 (the first of `LC_ALL`, `LC_CTYPE`, `LANG` 
 - Confirmations: `Delete qwen3.6-35b-a3b-q4km from this computer (19.0 GB)? [y/N] `. Default is always **No**. Non-interactive without `--yes` → exit 2 `LAI-CLI-007` (§3.2.6).
 
 **Progress.** Long operations (load, sync, verify, import, mode survival, rebuild, update, drill) subscribe to `GET /events` and show:
-- TTY: one updating line, e.g. `… Loading Qwen 3.5 9B  ███████░░░  70%  (5 s)`; replaced by the final `✓` line.
-- Not a TTY: one line per state change, no carriage returns.
-- `Ctrl-C` stops **waiting**, never the operation (it keeps running in the agent), prints `i Still running in the background. Check with \`aictl status\`.` and exits 130. Exception: `ark sync` in the foreground asks `Cancel the sync too? [y/N]`.
+- TTY (stderr is a terminal and `TERM` is not `dumb`): one updating line, e.g. `… Loading Qwen 3.5 9B  ███████░░░  70%  (5 s)` (a spinner instead of `…`, redraws at most 10 times a second, cut to 79 columns); a new state keeps the finished one on its own line above; the line is cleared at the end and the command prints its own final `✓` line.
+- Not a TTY: one line per state change (a change of the state key, not of the percentage), no carriage returns and no escape sequences.
+- `-q`: no progress lines. `--json`: nothing on stderr; the command waits (respecting `--timeout`) and prints the final document.
+- `Ctrl-C` stops **waiting**, never the operation (it keeps running in the agent), prints `i Still running in the background. Check with \`aictl status\`.` and exits 130 (`LAI-CLI-010`); no cancel or `DELETE` request is ever sent. With `--json` the `LAI-CLI-010` envelope is the output. Exception: `ark sync` in the foreground asks `Cancel the sync too? [y/N]` through the interrupt hook below.
+
+#### 3.3.1 Following an operation (AICTL-03)
+Implemented by `internal/cli/events` (SSE parser and client), `internal/cli/progress` (the `Waiter` and the renderer) and `Call.Follow` in `internal/cli`; commands (AICTL-05, 06, 09, 10) only say *which* events they watch and how to word them.
+- **Order.** `Follow` opens `GET /events?types=…` first (so no event is missed), then issues the command's mutating request, then correlates by the `op_id` / `run_id` of the answer (also `X-LocalAI-Op-Id`). Events that arrive before the key is known are held and matched afterwards. The request must be quick (`wait: false`, answer `202`): a request that blocks until the operation ends cannot be left behind on Ctrl-C.
+- **Parsing.** `id:`, `event:`, `data:` (multi-line data joined with `\n`), `: ping` comments, LF/CRLF/CR line ends; unknown fields and unknown event types are ignored; a frame whose data is not JSON does not end the stream. `resync` and `shutdown` carry only their payload; a frame without `id:` never moves `Last-Event-ID`.
+- **Never trust events for correctness.** After a `resync` (`gap` or `restart`), a `shutdown`, a dropped or idle stream, and after every reconnect, the command's re-read function (`GET /models/{id}`, `GET /mode`, `GET /ark/sync`, …) is called and its answer, not the events, decides how the wait ends.
+- **Reconnect.** A lost stream (EOF, error, `shutdown`, or no byte, pings included, for 45 s = three keepalives) is reopened with `Last-Event-ID: <last id seen>`; the first attempt is immediate (after `shutdown`: after the backoff), then every 1 s until the deadline. While the stream is down the re-read function is polled once per attempt, so an operation that finished while the agent was restarting is still reported. Outage and recovery print one `i` line each (not with `-q`/`--json`). Only "agent unreachable" is retried; an answer from the agent (404, 403, 500) ends the wait with that error.
+- **Deadline.** `--timeout` (else the command's default) is measured from the subscription; expiry is `LAI-CLI-004`, exit 7, and sends nothing.
+- **Interrupt hook.** A command may supply `OnInterrupt` (ark sync): on Ctrl-C the live line is cleared and the hook decides to `Leave` (the normal Ctrl-C result) or `KeepWaiting`; `Follow` then takes over the signals (`cli.Interrupts`) so every later press reaches the hook.
 
 ### 3.4 Exit codes
 
@@ -660,7 +670,7 @@ Documented here so nobody re-invents them. They may change between versions with
 | Agent not running | Socket and TCP both fail; message tells the user to run `sudo systemctl start localai-agent` | `LAI-CLI-001` / 3 |
 | User not in `localai-operators` | Socket `EACCES`, token unreadable | `LAI-CLI-002` / 4 (fix: `sudo usermod -aG localai-operators $USER`, then log out and in) |
 | Agent restarting during a command | Retries for 10 s | — / 3 if still down |
-| Agent restarts during a long wait (load, sync) | SSE `resync`/disconnect → the CLI re-reads the resource status and reports it; an interrupted load shows the router's real state | — |
+| Agent restarts during a long wait (load, sync) | SSE `resync`/`shutdown`/disconnect → the CLI reconnects with `Last-Event-ID` every 1 s, re-reads the resource status (also while the stream is down) and reports it; an interrupted load shows the router's real state (§3.3.1) | — |
 | Admin command, no TTY | No prompt possible | `LAI-CLI-008` / 4 |
 | `--json` with a command that needs confirmation and no `--yes` | Refuse | `LAI-CLI-007` / 2 |
 | Ctrl-C while waiting | Stop waiting, operation continues | `LAI-CLI-010` / 130 |
@@ -714,7 +724,7 @@ Documented here so nobody re-invents them. They may change between versions with
 | Output | golden files for every command's human output in `en` and `es`, colour on/off, UTF-8 and ASCII symbol sets; problem layout (message, code, fix); 80-column wrap |
 | `--json` | every command emits exactly one JSON document; errors as envelope on stdout with empty stderr |
 | Confirmations | default No; `--yes`; non-interactive without `--yes` → exit 2 |
-| Progress | SSE fake: load progress, rollback events, agent restart mid-wait (`resync`), Ctrl-C → exit 130 and no cancel request sent |
+| Progress | SSE fake over the real event bus: load progress (TTY golden, non-TTY lines, `-q`, `--json`), rollback events, `Last-Event-ID` on reconnect, `gap` and `restart` resync, shutdown, agent down mid-wait (re-read finishes the wait), idle stream, deadline → exit 7, Ctrl-C → exit 130 and no cancel request sent, interrupt hook, SSE parser (multi-line data, comments, missing id, CRLF, oversized line) |
 | Local commands | `pin set` writes argon2id PHC string with mode 0600; `token rotate` format `lat_` + 43 chars; `catalog restore` atomic swap and lint; `backup-config` manifest and modes; `--restore` round trip; `docs render` refuses `.git` output, fills placeholders from a fixture inventory and follows the inventory lookup order of §4.22; `catalog use --test` refuses a failing lint (exit 2), keeps `catalog.prev/` and `restore` puts it back |
 
 ### 9.2 Integration tests

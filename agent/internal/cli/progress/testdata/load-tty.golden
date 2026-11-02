@@ -1,0 +1,2 @@
+\e[?25l\r⠋ Unloading Small VLM to make room  (0 s)\e[K\r⠙ Unloading Small VLM to make room  (1 s)\e[K\r\e[K… Unloading Small VLM to make room
+\r⠹ Loading Qwen 3.5 9B  ░░░░░░░░░░    0%  (1 s)\e[K\r⠸ Loading Qwen 3.5 9B  ░░░░░░░░░░    0%  (3 s)\e[K\r⠼ Loading Qwen 3.5 9B  ███████░░░   70%  (5 s)\e[K\r\e[K\e[?25h✓ Qwen 3.5 9B is ready.
