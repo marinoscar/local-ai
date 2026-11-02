@@ -1,0 +1,6 @@
+Name:	aiagent
+Umask:	0022
+State:	S (sleeping)
+VmPeak:	  900000 kB
+VmRSS:	   51200 kB
+Threads:	8
