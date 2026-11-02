@@ -693,6 +693,6 @@ Directive notes (both nodes):
 
 ## 14. References
 
-- [VPS server setup](server-setup.md) · [Certificate renewal](certificate-renewal-setup.md) · [Tailscale setup](tailscale-setup.md)
+- VPS server setup (`server-setup.md`) · Certificate renewal (`certificate-renewal-setup.md`) · Tailscale setup (`tailscale-setup.md`): these live in the VPS repository and are not archived here
 - Open WebUI deployment: `apps/openwebui/DEPLOY.md`
 - [Local AI llama.cpp setup runbook (node install)](https://gist.githubusercontent.com/marinoscar/8c39bd470eb5d29cb43771d6f58b2454/raw/7b76bade8b9e82a50d1b9ead288002bbb37fe021/ms-s1-max-local-ai-llamacpp-runbook.md)
