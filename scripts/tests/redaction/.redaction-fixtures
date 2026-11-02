@@ -1,0 +1,3 @@
+Marker file. scripts/check-redaction.sh skips this directory in tree and staged scans
+because the fail-*.txt fixtures here contain deliberately forbidden, fake values.
+It is honoured ONLY in scripts/tests/redaction/. Tests: scripts/tests/test-redaction.sh

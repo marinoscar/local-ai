@@ -1,0 +1,2 @@
+# fake tailnet name
+tailnet is tail0a1b2c here

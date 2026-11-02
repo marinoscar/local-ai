@@ -1,0 +1,4 @@
+# every non-comment line must be reported
+host 100.100.0.99
+low edge 100.64.0.1
+high edge 100.127.255.254
