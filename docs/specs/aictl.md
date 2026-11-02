@@ -291,14 +291,15 @@ Tailnet URL  https://hp-linux.<TAILNET>.ts.net/v1
 Public URL   https://ai-n3.marin.cr/v1
 Models       qwen3.5-9b-q4km, small-vlm-q4km
 ```
-(`<TAILNET>` is shown here as a placeholder; the real command prints the machine's real MagicDNS name.) `--json`: `GET /key` body.
+(`<TAILNET>` is shown here as a placeholder; the real command prints the machine's real MagicDNS name.) An address the node does not have (`null` in the body) is shown as `not available` (`no disponible`). `--json`: `GET /key` body. `LOCALAI_CLI_DEBUG` logs never hold the key (the debug log scrubs 64-hex values), and a `|` to a closed pipe is exit 0.
 
 #### 4.8.2 `aictl key copy`  [10 s]
-`GET /key`, then puts the key on the clipboard, trying in order: `wl-copy` (if `WAYLAND_DISPLAY`), `xclip -selection clipboard` / `xsel --clipboard --input` (if `DISPLAY`), OSC 52 escape sequence (if stdout is a TTY). Never prints the key. Under `sudo` the clipboard tools run as `$SUDO_USER` with that user's display variables.
+`GET /key`, then puts the key on the clipboard, trying in order: `wl-copy` (if `WAYLAND_DISPLAY`), `xclip -selection clipboard` / `xsel --clipboard --input` (if `DISPLAY`), OSC 52 escape sequence (if stdout is a TTY). Never prints the key. The tool is run through `execx` with a fixed argv and the key on **stdin**, never in argv or in its environment; a tool that forks into the background and keeps our pipes open (xclip, wl-copy do) still counts as success. Under `sudo` the clipboard tools run as `$SUDO_USER` (`execx.Cmd.Credential`) with `HOME` and `XDG_RUNTIME_DIR=/run/user/<uid>` of that user and the `DISPLAY` / `WAYLAND_DISPLAY` / `XAUTHORITY` that sudo kept. OSC 52 is written to stdout only when stdout is a terminal and never with `--json`, where stdout is the one document.
 ```
 ✓ The API key is on the clipboard. Paste it where it is needed, then copy something else.
 ```
-None available → exit 1 `LAI-CLI-011` ("Use `aictl key show` instead"). `--json`: `{"copied": true, "method": "wl-copy"}`.
+(Wrapped at 80 columns like every line, §3.3: the second half goes on a second line.)
+None available → exit 1 `LAI-CLI-011` ("Use `aictl key show` instead"). `--json`: `{"copied": true, "method": "wl-copy"}`; `method` is the program (`wl-copy`, `xclip`, `xsel`) or `osc52`.
 
 #### 4.8.3 `aictl key rotate`  [15 min]  [admin]
 `POST /key/rotate` after confirmation ("Programs using the old key will stop working until you update them. Continue? [y/N]"). Offline: works (the cloud is updated on the next link start).
@@ -309,7 +310,7 @@ None available → exit 1 `LAI-CLI-011` ("Use `aictl key show` instead"). `--jso
    • Any script that uses the old key directly
   The cloud and the gateway were updated automatically.
 ```
-`--json`: response body. Exit 1 if llama did not restart (key is still rotated, `details.key_rotated: true`).
+`--json`: response body. The sentence about the model says `The models were started again.` for several and is left out when none was running; `cloud_synced: false` replaces the last line with a warning (`! The cloud has not received the new key yet … run `aictl cloud resend-key``). Exit 1 if llama did not restart (key is still rotated, `details.key_rotated: true`): the error is shown after `! The new key is in place, but the model service did not start with it …`. The confirmation comes before the PIN: a person who answers No is never asked for the PIN.
 
 #### 4.8.4 `aictl key snippets`  [10 s]
 ```
@@ -323,7 +324,7 @@ curl -s http://127.0.0.1:8080/v1/chat/completions -H "Authorization: Bearer $LLA
   -H 'Content-Type: application/json' \
   -d '{"model":"qwen3.5-9b-q4km","messages":[{"role":"user","content":"Hello"}]}'
 ```
-`--json`: `{"snippets": {…}, "base_url": "…"}`.
+`--json`: `{"snippets": {…}, "base_url": "…"}` (keys `curl`, `env`, `opencode`, `openai_python`; one line per snippet, no `export` helper line). The `# <kind>` headers appear only when all kinds are printed; the agent's one-line `curl` is split before its `-H 'Content-Type` and `-d '` parts as shown; the python snippet reads `os.environ["LLAMA_API_KEY"]` (with `import os`) unless `--with-key`; `opencode` is pretty-printed JSON whose `apiKey` is the `{file:…}` reference. `--url tailnet|public` replaces the local address inside every snippet; an address the node does not have is exit 2 (`This node has no tailnet address right now.`). An unknown `--for` or `--url` is exit 2.
 
 ### 4.9 `aictl mode [online|offline|survival]`  [show 10 s; change 20 min]
 ```
@@ -348,6 +349,13 @@ Mode  online (since yesterday 22:10)
       Switch with: aictl mode offline | aictl mode survival
 ```
 `--json`: `GET /mode` body, or the final `200` body of `POST /mode`. Exit 6 if another change is running; 4 if leaving survival without permission.
+
+**Implementation (AICTL-06).** `aictl mode` with extra arguments or an unknown mode is `LAI-CLI-005` / exit 2 before any request.
+- **Show.** The line is `Mode  <mode> (since <day> <hh:mm>)` with the day as `today`, `yesterday` or a date (local time; `-v` adds the RFC 3339 time), then `Switch with:` the `allowed_targets`. A running `transition` adds `Changing to <target>: <step>`, `leave_requires_admin` adds `Leaving this mode needs the admin PIN (not with sudo).`, `suggest_survival` adds an `i` line (no internet for 30 minutes). Deadline 10 s unless `--timeout` is given.
+- **Change.** Deadline 20 min. `POST /mode` carries `{"target", "wait": !no-wait}` plus `"reapply": true` with `--reapply`; the `200 {op_id, from, mode, warnings}` of a waiting request is the result (no progress is drawn: the answer is already in hand), and a `202` is followed through the events like survival. `--no-wait` returns after the answer with `i The change to <mode> mode has started. Check it with `aictl mode`.` Leaving survival goes through `Call.Admin`, which asks for the PIN only when the agent answers 403 with `pin_required` (root and socket operators never see a prompt); the other targets use it too, harmlessly.
+- **Survival.** `POST /mode/survival` with `{}` or `{"reapply": true}`, no `Call.Admin`. `Follow` watches `mode.step`, `mode.changed` and `model.loading` (correlated by `op_id`; a `mode.changed` whose `to` is the target also counts) and re-reads `GET /mode` after a lost stream. Labels: `link_stop` Stopping cloud connection, `sync_cancel` Stopping the running sync, `tailscale_off` Unpublishing this node from the tailnet, `survival_services` Starting the library and speech, `tailscale_on` Publishing this node on the tailnet, `link_start` Connecting to the cloud; `survival_models` has no line of its own: each `model.loading` of that step reads `Starting <display name>` (names from `GET /models`, the id when that fails). `prober_*`, `persist`, `emit` and `sync_catchup` are silent. Warnings of `mode.changed` are printed after the `✓` line in the problem layout, with the title and fix of the doctor table in the user's language. `--json` prints `{"op_id","from","mode","warnings"}` built from `mode.changed`.
+- **`202 {queued: true}`** (the agent is still starting): `… Survival mode will start as soon as the agent is ready.` and the wait goes on.
+- **Anyone at the keyboard.** The client is told `AllowAnonymous` for this route only: when the socket cannot be opened and the token cannot be read (a user outside `localai-operators`), the TCP request goes out **without** an `Authorization` header, which the route accepts. If the event stream is then refused (401/403) or not yet available (the agent is starting), aictl sends the request without following it and prints `i Survival mode is starting. In a minute, open <portal> for the Survival Portal.` (exit 0). Every other command, and every other mode target, still needs the token and fails the usual way. If the agent is down: `LAI-CLI-001` and its fix, exit 3.
 
 ### 4.10 `aictl ark …`
 The ark commands are summarized in [ark-sync.md](ark-sync.md) §3.4, which is authoritative for their flags and semantics; this section adds the CLI-side details. Roots are given as root ids (`internal`, `ark-<8 hex>`) or paths.
@@ -378,12 +386,24 @@ Ark drive      not connected
 
 $ aictl ark sync --wait
 … Downloading wikipedia-es-nopic  ████░░░░░░  41%  4.9/12.0 GB  18 MB/s  6 min left
-✓ Sync finished: 2 downloaded, 14 already up to date, 0 failed. Internal disk is 100% ready.
+✓ Sync finished: 2 downloaded, 14 already up to date, 0 failed. Internal disk is ready.
 
 $ aictl ark drives
 AI-ARK  ark-3f9c0a12  /media/<user>/AI-ARK   ext4   900 GB free of 2.0 TB   ✓ ready
 ```
-`--json`: the API body (`ark status` prints `{"ark": <GET /ark>, "sync": <GET /ark/sync>}`; `sync --wait` prints the final run summary). Verify mismatches are shown with their `LAI-SYN-*` codes and exit 1.
+`--json`: the API body (`ark status` prints `{"ark": <GET /ark>, "sync": <GET /ark/sync>}`; `sync --wait` prints the final run summary). Verify mismatches are shown with their `LAI-SYN-*` codes; with `--wait` the run ends 0, 8 or 9 like every other run (the earlier "exit 1" for a mismatch is replaced by that rule: a finished verify with failed items is 8, a verify that failed or was stopped is 9).
+
+**Implementation of the state-changing commands (AICTL-06).**
+- **Flags.** `--root` and `--item` repeat; a root is `internal`, `ark-<8 hex>` or an absolute path, an item id is `[a-z0-9][a-z0-9.-]{2,63}`; anything else is `LAI-CLI-005` / exit 2 before a request. `ark sync`, `verify` and `import` take no positional argument.
+- **Starting.** Without `--wait` the command returns after the `202` with `✓ Sync started (run <id>). It keeps running in the background; follow it with `aictl ark status`.` (`Check`, `Import` for the others); the deadline of that request is 30 s. `--scheduled` implies `--wait` (the unit runs `aictl ark sync --scheduled --wait` anyway) and sends `"trigger": "scheduled"`, otherwise `"manual"`.
+- **Following.** `Follow` opens `GET /events?types=sync.*` first, then the `POST`, and correlates by `run_id`. One progress line per item: `Downloading <item>` (`Copying` for import, `Checking` for verify and for a `verifying` state) with the bar and, after it, `4.8/12.0 GB  20.0 MB/s  6 min left` (sizes in the style of §3.3, so `20.0 MB/s`, not `20 MB/s`; the parts are dropped from the right when the line is too long). After a lost stream `GET /ark/sync` decides. Deadline: none unless `--timeout`.
+- **The end.** `done` with nothing failed or skipped: `✓ Sync finished: <n> downloaded, <n> already up to date, <n> failed.` (`, <n> skipped` when some were) and, per root, `Internal disk is ready.` (green), `… is usable but needs attention (yellow).`, `… is not ready (red): run `aictl ark status`.`: `sync.done` carries the colour of `READY.json`, not a percentage. Exit 0. `done` with failures or skips: the same line behind `!`, one problem per item (title and fix of its `LAI-SYN-*` code, at most ten), exit 8. `failed`: `✗ Sync did not finish. Run `aictl doctor` to see why.`, exit 9. `cancelled` by the agent: `i Sync stopped. …`, exit 9; cancelled because this command sent the cancel (below): exit 130. `verify` words the line `Check finished: <n> verified, <n> with problems.`, `import` `Import finished: <n> copied, <n> already here, <n> failed.` "Downloaded" is the number of items that reported progress and ended verified; the rest of `totals.done` is "already up to date". `--json` prints `{run_id, state, totals, ready}` (the `sync.done` data) and the exit code carries 0/8/9.
+- **`--scheduled` skips.** A refusal `409 LAI-SYN-010` or `LAI-SYN-011` (mode) or `LAI-SYN-005` (another run holds the slot), a `POST` answered `state: "skipped"` with its `reason`, and a `sync.done` with `state: "skipped"` (the reason is then read from `GET /ark/sync`) all print `i Sync skipped: <why>.` and exit **0**: `the node is in <mode> mode`, `offline`, `the computer is running on battery`, `it is turned off (sync.enabled is false)`, `there is no place to store the content`, `another sync is already running`. A manual `ark sync` gets the refusal as an error (exit 6) instead. `--json` prints `{"run_id"?, "state": "skipped", "reason"}`. Exit 3 stays "agent not reachable".
+- **Ctrl-C.** A followed sync takes the interrupt over (`Follow` with `OnInterrupt`): `Cancel the sync too? [y/N] ` (`[s/N]`) on stderr, read with the context Follow hands over (the process context is already cancelled by the first press). Yes → `DELETE /ark/sync`, and the wait goes on until the run reports `cancelled` (exit 130). No, or no terminal and not `--scheduled`, or `--json` → `Still running in the background` and exit 130 with nothing sent. `--scheduled` (a SIGTERM from `systemctl stop localai-sync`) cancels at once without asking. `verify` and `import` use the plain rule (stop waiting, send nothing).
+- **`--cancel`.** `DELETE /ark/sync` → `✓ The sync is stopping. Downloads in progress are kept and continue next time.`
+- **`--dry-run`** (sync and import) prints §4.4.4 of [ark-sync.md](ark-sync.md): the table `# Item Tier Action Version Size Note` (the table must fit 80 columns, so the note is a word or two: `refresh due`, `budget`, `local copy`, `orphan` with a line below naming `aictl ark prune --orphans`; versions are cut to 10 characters), `Downloads: <n> items, <size> from the internet, <size> local copy.`, the peak line and `Nothing was changed (dry run).` Sizes follow §3.3 (`220 GB` from 100 up, no decimal). The answer is one plan object, or `{"plans": [...]}` / an array for several roots (the spec leaves the several-roots shape open; both are accepted). `--json` is the body.
+- **`ark import --from`.** Without it, `GET /ark/drives` and the one drive that has a `root_id` and state `ready` or `read_only`; several → exit 2 with `LAI-ARK-015` and the ids; none → exit 5 `No ark drive is connected.` `--from` must be a root id.
+- **`ark drives set-profile <root-id> <profile>`** checks both ids (exit 2), then `PUT /ark/drives/{root_id}/profile` through the admin PIN flow; an unknown profile is `422 LAI-CAT-003` → exit 6.
 
 ### 4.11 `aictl catalog …`
 #### 4.11.1 `aictl catalog lint <dir>`  [local]
@@ -400,6 +420,7 @@ The CAT-01 implementation is a `[local]` command registered with the AICTL-01 fr
 ```
 ✓ Catalog updated: 2026.10.20-1 → 2026.11.02-1 (from the cloud).
 ```
+The body is `{}`. `changed: false` prints `i The catalog is already up to date (<version>).`; no `previous` prints `Catalog updated to <version> (from GitHub).`; the source words are `from the cloud`, `from GitHub`, `from the rebuild kit`. `--json`: the body. `409 LAI-AGT-023` (offline or survival) and `422 LAI-CAT-002` (rejected, the previous catalog stays) are exit 6. The command replaces the "not implemented yet" stub through `RegisterLate` (`internal/cli/register_late.go`): the `ark`, `catalog`, `profile` and `cloud` groups get subcommands from several issues, so a file that only adds subcommands queues a hook that `Main` applies once after every `init`, and a real command replaces a stub of the same name.
 
 #### 4.11.3 `aictl catalog restore`  [local] [root]  [30 s]
 Copies the last good catalog from the kit (`<root>/kit/catalog/`, internal root first, then the drive; [rebuild-kit.md](rebuild-kit.md)) into `/etc/localai/catalog/` atomically (write `catalog.new/`, lint it, rename the old one to `catalog.prev/`, rename `catalog.new/` → `catalog/`). The agent notices the `CATALOG_VERSION` change within 10 s (agent.md §3.3); the CLI waits until `GET /catalog` reports the restored version (if the agent is running). Offline: works (this is the offline fix for `LAI-CAT-001`).
@@ -426,6 +447,20 @@ Installs a **draft** catalog on a test node so a new entry can be measured with 
 | `aictl profile set <id> [--yes]` [admin] | `GET /catalog`, then `PUT /profile {"profile": id}` | confirmation listing the target profile's models and content with their sizes (from `GET /catalog`; no sync plan is computed), then `✓ Profile set to cuda-12gb. Run \`aictl ark sync\` to fetch the new content.` |
 
 All work offline. Exit 2/6 for unknown or invalid profile (`LAI-CAT-003`). `--json`: `GET /profile` / `PUT` body.
+
+**Implementation of `profile set` (AICTL-06).** A malformed id (`[a-z0-9][a-z0-9-]*`) is exit 2 before any request. Without `--yes`: no terminal (or `--json`) → `LAI-CLI-007` / exit 2 before any request; else `GET /profile` (the same profile → `i The profile is already <id>.`, no `PUT`) and `GET /catalog`, then the preview on **stderr**:
+```
+Profile now:  small-8gb (Small GPU laptop)
+Switch to:    cuda-12gb (CUDA 12 GB)
+Models (3, 13.1 GB):
+  qwen3.5-9b-q4km   5.9 GB
+  ...
+Content (1, 12.0 GB):
+  wikipedia-es-nopic  12.0 GB
+Total 25.1 GB of a 300 GB budget. Nothing is deleted now.
+Switch to the profile cuda-12gb? [y/N]
+```
+The lists are the target profile's `include` lists plus the node's `profile_overrides` (`add_*`, minus `remove_*`; `budget_bytes` replaces the profile's budget), sorted, with the size of each id from `models[]` / `content[]` of the catalog (`?` when unknown). `GET /catalog` therefore carries a `profiles` array (added to [agent.md](agent.md) §3.8.21 and the OpenAPI `Catalog` schema, optional): `[{"id", "display_name", "include": {"models": [], "content": []}, "budget_bytes"}]`. A target that is not in that array is `LAI-CAT-003`, exit 6, nothing asked; a catalog without the array (an older agent) gets the question without the lists. `--yes` skips the reads and the preview and sends only the `PUT {"profile": id}` (through the admin PIN flow, after the confirmation).
 
 ### 4.13 `aictl services`  [10 s]
 ```
@@ -510,6 +545,8 @@ Node credential (nod_…):
 ```
 Errors: rejected credential → exit 6 `LAI-CLD-051`; network down → exit 0 with `! Saved. The cloud is not reachable right now; the node will connect by itself.  [LAI-CLD-053]`.
 
+**Implementation (AICTL-06).** The credential is read first, once, then the request goes through `Call.Admin` (the retry after a PIN sends the same credential). From a terminal: the prompt `Node credential (nod_…): ` (`Credencial del nodo (nod_…): `) on stderr and a read without echo (`Terminal.ReadSecret`). With `--credential-stdin`: one line of stdin; with `--pin-stdin` as well, the credential line comes first and the PIN line second. No terminal (or `--json`) and no `--credential-stdin` → exit 2 with the fix. A value that does not start with `nod_` or is empty is exit 2, and **no message repeats a credential**: a credential given as an argument (`aictl cloud enroll nod_…`) is refused with `The node credential is never given as an argument.`, and an option such as `--credential` does not exist (`Unknown option`). `--url` must be an http or https address with a host and no user name or password (exit 2 otherwise); a trailing `/` is dropped. `✓ Connected to <url> as <name>.` takes the name from `GET /cloud` (the line is worded without it when that fails) and adds `Its earlier record was reused.` for `reattached`. `state: "backoff"` is a warning problem with `[LAI-CLD-053]` and exit 0; `state: "stopped"` is `i Saved. The node connects to the cloud when it is in online mode.` `unenroll` confirms (`Disconnect this node from the cloud? …`) before the PIN; `resend-key` prints `✓ The API key (fingerprint …) was sent to the cloud again.` and exits 1 when `key_synced` is false; `409 LAI-AGT-023` (not linked) is exit 6. `--json`: the body.
+
 ### 4.19 `aictl pin set`  [local] [root]
 Prompts twice (`New admin PIN (4 to 8 digits):`, `Repeat:`), or reads one line from stdin with `--pin-stdin`. Writes `/etc/localai/admin-pin` (argon2id, agent.md §3.9.2) atomically, 0600 root, and appends an audit line (`pin.set`, `actor.kind: cli-root`). The agent reads the file on every verify, so no restart is needed. Offline: works.
 ```
@@ -523,7 +560,7 @@ Exit 2 for a PIN that is not 4–8 digits or the two entries differ.
 Login code  482 913   (valid for 5 minutes, one use)
 Open http://127.0.0.1:7070 in a browser and type this code.
 ```
-`--json`: response body.
+`--json`: response body. The code is shown in groups of three digits, the minutes are rounded from `expires_at` (5 when it cannot be read), and the two lines are the essential result: `-q` keeps them. The portal address is the `--url` in force (`http://127.0.0.1:7070` by default).
 
 ### 4.21 `aictl token rotate`  [local] [root]
 Writes a new `lat_…` token to `/etc/localai/agent-token` (0640 root:localai-operators) atomically and appends an audit line. The agent re-reads the file when its mtime changes (≤ 10 s); existing sessions stay valid; ai-desktop re-reads the token on its next 401. Offline: works.
@@ -743,6 +780,14 @@ Run `aictl` against a real `aiagent serve` started by the integration harness (a
 | 8 | `aictl --json models \| jq '.models[0].id'` | a model id; no other output |
 | 9 | `LANG=es_CR.UTF-8 aictl status` | Spanish labels; codes unchanged |
 | 10 | `aictl mode survival`, then `aictl mode online` as operator | survival without PIN; leaving works for an operator over the socket |
+| 11 | `sudo -u nobody aictl mode survival`, then `sudo -u nobody aictl mode online` (a user outside `localai-operators`, token unreadable) | survival starts (`i Survival mode is starting. …`, the Portal opens within a minute) with no PIN and no token; the second command fails with `LAI-CLI-002`, exit 4 |
+| 12 | `aictl ark sync --scheduled; echo $?` in offline mode, then in survival mode | `i Sync skipped: the node is in … mode.`, `0` (never `3`) |
+| 13 | `aictl ui-code`, open the address, type the code; type it again | signed in once; the second time is refused |
+| 14 | `sudo aictl key copy` in a Wayland session, in an X11 session, and with `wl-copy`, `xclip` and `xsel` hidden from `/usr/bin` | the key is pasted in an editor and nothing is printed; with none, OSC 52 in a terminal that supports it, else `LAI-CLI-011` exit 1 |
+| 15 | `aictl ark sync --wait` with the ark drive connected; Ctrl-C and answer `n`; run again, Ctrl-C and answer `y` | `n`: `Still running in the background`, the run continues; `y`: the run stops, `.part` files stay, exit 130 |
+| 16 | `printf '%s\n' "$NODE_CRED" \| sudo aictl cloud enroll --credential-stdin` with the network cable out, then plug it in | `! Saved. … [LAI-CLD-053]`, exit 0; the node appears on the Nodes page by itself |
+| 17 | `aictl ark import` with one drive, then with two | copies from the one; with two, exit 2 and the list of root ids |
+| 18 | `aictl profile set <other-profile>`; answer `y`; `aictl profile show` | the preview lists models and content with sizes; the profile changes; nothing is deleted |
 
 ## 10. Implementation breakdown
 
