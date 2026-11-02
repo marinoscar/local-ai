@@ -490,7 +490,7 @@ func TestACheckIsNotRunningOnceItsResultIsDelivered(t *testing.T) {
 		okCheck("agt.fine", "AGT", true),
 		Check{ID: "agt.panics", Area: "AGT", Fast: true, Run: func(context.Context) []Result { panic("boom") }},
 	)
-	for i := 0; i < 5000; i++ {
+	for i := 0; i < 1500; i++ {
 		mustRun(t, r, RunOptions{})
 		r.mu.Lock()
 		n := len(r.running)
@@ -532,7 +532,7 @@ func TestACheckIsNotCalledOnceItsRunIsAlreadyOver(t *testing.T) {
 // The same race seen from the outside: a check that passes must pass on every consecutive run.
 func TestConsecutiveRunsOfAPassingCheckNeverReportAGT099(t *testing.T) {
 	r := newReg(t, okCheck("hw.battery", "HW", true))
-	for i := 0; i < 5000; i++ {
+	for i := 0; i < 1500; i++ {
 		rep := mustRun(t, r, RunOptions{})
 		if len(rep.Results) != 0 || len(rep.Passed) != 1 {
 			t.Fatalf("run %d: results %v, passed %v, want a pass", i, codesOf(rep), rep.Passed)

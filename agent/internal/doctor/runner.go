@@ -167,10 +167,13 @@ func (r *Registry) runOne(ctx context.Context, c Check) []Result {
 	go func() {
 		var res []Result
 		// A run that was abandoned before its goroutine got to start (its context is already
-		// done: the caller has its LAI-AGT-099 result) must not call the check at all. Starting it
-		// after Stop or after a budget ran out would run a check nobody waits for.
+		// done) must not call the check at all: starting it after Stop or after a budget ran out
+		// would run a check nobody waits for. It still answers with the abandoned run's
+		// LAI-AGT-099, never with an empty result, which would read as a pass.
 		if cctx.Err() == nil {
 			res = safeRun(cctx, c)
+		} else {
+			res = []Result{abandoned(ctx, c.ID)}
 		}
 		// Unmark the check BEFORE the result is delivered. The caller may start the next run the
 		// moment it has the result; if the mark were still set it would take a finished check for a
@@ -186,12 +189,18 @@ func (r *Registry) runOne(ctx context.Context, c Check) []Result {
 	case res := <-done:
 		return res
 	case <-cctx.Done():
-		reason := "timeout"
-		if ctx.Err() != nil && ctx.Err() != context.DeadlineExceeded {
-			reason = "canceled"
-		}
-		return []Result{problem(c.ID, reason)}
+		return []Result{abandoned(ctx, c.ID)}
 	}
+}
+
+// abandoned is the LAI-AGT-099 result of a run the caller gave up on: "timeout" when the check's own
+// timeout or the run's budget passed, "canceled" when the caller's context was cancelled.
+func abandoned(ctx context.Context, check string) Result {
+	reason := "timeout"
+	if err := ctx.Err(); err != nil && err != context.DeadlineExceeded {
+		reason = "canceled"
+	}
+	return problem(check, reason)
 }
 
 // safeRun runs c and turns a panic into the LAI-AGT-099 result of a panicking check.
