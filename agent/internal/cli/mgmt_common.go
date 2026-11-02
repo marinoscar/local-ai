@@ -164,12 +164,3 @@ func (c *Call) codeError(code string, exit int, extra string) *CLIError {
 
 // sizeText is a byte count in the decimal units of the style guide.
 func sizeText(n int64) string { return out.Size(n) }
-
-// noticeLine writes an info line to stderr in the user's language (never hidden by --json: stderr is
-// not part of the document; --quiet hides it).
-func (c *Call) noticeInfo(msg string) {
-	if c.Global.Quiet || c.Global.JSON {
-		return
-	}
-	fmt.Fprintln(c.Stderr, c.Out.Symbols().Info+" "+msg)
-}

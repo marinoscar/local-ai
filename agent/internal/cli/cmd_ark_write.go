@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/doctor"
 )
 
 // The state-changing `aictl ark` commands of AICTL-06 (aictl.md section 4.10, ark-sync.md section
@@ -235,13 +237,13 @@ func (c *Call) onlyDrive() (string, error) {
 	case 1:
 		return ids[0], nil
 	case 0:
-		e := c.codeError("LAI-ARK-001", ExitNotFound, "")
+		e := c.codeError(doctor.ARK001, ExitNotFound, "")
 		e.Message = pick(c.Lang, "No ark drive is connected.", "No hay ninguna unidad del arca conectada.")
 		e.Fix = pick(c.Lang, "Plug in the AI-ARK drive and check it with `aictl ark drives`.",
 			"Conecte la unidad AI-ARK y revísela con `aictl ark drives`.")
 		return "", e
 	}
-	return "", c.codeError("LAI-ARK-015", ExitUsage, pick(c.Lang, "Connected: ", "Conectadas: ")+strings.Join(ids, ", ")+".")
+	return "", c.codeError(doctor.ARK015, ExitUsage, pick(c.Lang, "Connected: ", "Conectadas: ")+strings.Join(ids, ", ")+".")
 }
 
 func arkSetProfile(c *Call) error {
