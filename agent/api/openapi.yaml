@@ -240,11 +240,19 @@ paths:
       tags: [status]
       operationId: getStatus
       summary: The full node snapshot
-      description: Also the body pushed to the cloud (agent.md section 4.8.4), minus `alerts[].details` and `hardware.gpus[].processes`. agent.md section 3.8.4.
+      description: |
+        Also the body pushed to the cloud (agent.md section 4.8.4), minus `alerts[].details` and
+        `hardware.gpus[].processes`. Built from cached values only, so it answers within the deadline even when
+        the router or Tailscale hang; a subsystem that is not available has its documented empty state (empty
+        lists, `null`), never an error. Alert titles and fixes follow `Accept-Language` or `ui.language`.
+        agent.md section 3.8.4.
       x-localai-auth: op
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-14
+      parameters:
+        - name: counters
+          in: query
+          description: "1 adds `node.counters` (agent.md section 7); 0 or absent leaves it out. Any other value is 400."
+          schema: {type: string, enum: ["0", "1"]}
       responses:
         "200":
           description: The snapshot.
@@ -258,7 +266,7 @@ paths:
                     node: {id: ai-n3, display_name: "HP ZBook (ai-n3)", hostname: hp-linux, profile: small-8gb, agent_version: "0.1.0", backend: cuda, llama_mode: router, llama_build: "f3586e66b-cuda", catalog_version: "2026.11.02-1", uptime_s: 86400, time: "2026-11-02T15:04:05Z"}
                     mode: {value: online, since: "2026-11-01T22:10:00Z", transition: null}
                     connectivity: {value: full, checked_at: "2026-11-02T15:04:00Z", none_since: null}
-                    hardware: {gpu: "NVIDIA GeForce RTX 2070 with Max-Q Design", vram_total_mib: 8192, vram_used_mib: 6791, ram_total_mib: 14336, ram_available_mib: 5120, gpu_temp_c: 61, cpu_temp_c: 72, power: {source: ac, battery_percent: 100, charging: false}}
+                    hardware: {gpu: "NVIDIA GeForce RTX 2070 with Max-Q Design", vram_total_mib: 8192, vram_used_mib: 6791, ram_total_mib: 14336, ram_available_mib: 5120, gpu_temp_c: 61, cpu_temp_c: 72, power: {source: ac, battery_percent: 100, charging: false, time_remaining_s: null, profile: performance}, gpus: [{index: 0, vendor: nvidia, name: "NVIDIA GeForce RTX 2070 with Max-Q Design", vram_total_mib: 8192, vram_used_mib: 6791, temp_c: 61, util_pct: 0, throttling: [], processes: [{pid: 4242, name: llama-server, vram_mib: 6581}]}]}
                     services:
                       - {name: llama, unit: "localai-llama.service", active: active, sub: running, since: "2026-11-02T08:00:05Z", restarts: 0, healthy: true}
                       - {name: whisper, unit: "localai-whisper.service", active: inactive, sub: dead, since: null, restarts: 0, healthy: false}
@@ -271,6 +279,9 @@ paths:
                     tailscale: {manage: true, pattern: B, applied: true, backend_state: Running}
                     alerts:
                       - {code: LAI-HW-012, severity: warning, title: "Running on battery", fix: "Plug in the charger. A laptop server stops when the battery runs out.", since: "2026-11-02T08:00:30Z", details: {battery_percent: 64}}
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+          description: "LAI-AGT-020: counters is not 0 or 1 (details.field is counters)."
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "500": {$ref: "#/components/responses/Internal"}
@@ -283,18 +294,49 @@ paths:
       description: |
         No auth. The schema and example are owned by survival-portal.md section 3.5 (AGENT-14 provides the
         route, the 2 s cache and a minimal builder; PORTAL-01 the full schema). It never contains paths, keys,
-        hostnames, ids beyond model ids, or cloud details. agent.md section 3.8.5.
+        hostnames, ids beyond model ids, or cloud details. Cached for 2 s per language and session kind.
+        The language is `?lang=`, else `portal.language` (when `en` or `es`), else the profile's
+        `survival.portal_language`, else `Accept-Language` or `ui.language`. `session` tells the SPA what it may
+        call: `none`, `portal` (a Portal session cookie) or `full` (an operator or admin credential).
+        agent.md section 3.8.5.
       x-localai-auth: none
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-14
+      parameters:
+        - name: lang
+          in: query
+          description: "en or es overrides the resolved language. Any other value is 400."
+          schema: {type: string, enum: [en, es]}
       responses:
         "200":
           description: The Portal status.
-          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            Cache-Control: {description: "no-store: the body is rebuilt at most every 2 s and must not be kept by a cache.", schema: {type: string, enum: [no-store]}}
           content:
             application/json:
               schema: {$ref: "#/components/schemas/PortalStatus"}
+              examples:
+                survival:
+                  value:
+                    schema_version: 1
+                    generated_at: "2026-11-02T14:05:11Z"
+                    node_id: ai-n3
+                    mode: survival
+                    language: es
+                    emergency_number: "911"
+                    session: portal
+                    power: {on_ac: false, battery_pct: 72, minutes_left: 145, state: discharging, low: false, critical: false}
+                    clock_ok: true
+                    brain:
+                      loaded: [{id: qwen3.5-9b-q4km, display_name: "Qwen 3.5 9B", roles: [chat, reasoning, coder], vision: false}]
+                      loading: null
+                      choices: []
+                    capabilities: {chat: {state: ready}}
+                    first_aid: []
+                    alerts: [{code: LAI-SVC-013, severity: info, title: "El reconocimiento de voz usa el procesador.", fix: "Nada que hacer."}]
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+          description: "LAI-AGT-020: lang is not en or es (details.field is lang)."
         "403": {$ref: "#/components/responses/Forbidden"}
         "500": {$ref: "#/components/responses/Internal"}
 
@@ -1290,8 +1332,6 @@ paths:
       description: catalog.md section 1 defines the sources. agent.md section 3.8.21.
       x-localai-auth: op
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-14
       responses:
         "200":
           description: The catalog.
@@ -1311,8 +1351,6 @@ paths:
       description: Needs network; `aictl catalog restore` works offline. A rejected new catalog keeps the previous one. agent.md section 3.8.21.
       x-localai-auth: op
       x-localai-timeout: "120 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-14
       requestBody:
         required: true
         content:
@@ -1329,6 +1367,7 @@ paths:
               schema: {$ref: "#/components/schemas/CatalogRefresh"}
               examples:
                 changed: {value: {version: "2026.11.02-1", previous: "2026.10.20-2", changed: true, source: cloud}}
+                unchanged: {value: {version: "2026.11.02-1", previous: "2026.11.02-1", changed: false, source: github}}
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -1339,8 +1378,11 @@ paths:
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "422":
           $ref: "#/components/responses/Unprocessable"
-          description: "LAI-CAT-002: the new catalog was rejected; the previous one is kept."
+          description: "LAI-CAT-002: the new catalog was rejected; the previous one is kept (details.problems lists the first ten)."
         "500": {$ref: "#/components/responses/Internal"}
+        "502":
+          $ref: "#/components/responses/BadGateway"
+          description: "LAI-CLD-013: no source could deliver a catalog (details.reason is no_source or fetch_failed); the node keeps its catalog."
         "503": {$ref: "#/components/responses/Starting"}
 
   /services:
@@ -1950,8 +1992,6 @@ paths:
       description: agent.md section 3.8.30.
       x-localai-auth: op
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-14
       responses:
         "200":
           description: The profile.
@@ -1964,12 +2004,15 @@ paths:
                   value:
                     profile: small-8gb
                     display_name: "Small GPU laptop (8 GB VRAM)"
-                    overrides: {}
+                    overrides: {add_models: [], remove_models: [], add_content: [], remove_content: [], budget_bytes: null}
                     suggested: small-8gb
                     match_reasons: ["backend cuda", "vram 8192 MiB in 7000..11999"]
-                    effective: {models: [qwen3.5-9b-q4km], content: [wikipedia-en-nopic], planned_bytes: 180000000000, budget_bytes: 220000000000}
+                    effective: {models: [qwen3.5-9b-q4km], content: [wikipedia-en-nopic], skipped: [], planned_bytes: 180000000000, budget_bytes: 220000000000}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+          description: "LAI-CAT-003 (the profile of node.yaml is not in the catalog) or LAI-CAT-004 (an id is not in the catalog). details carries the profile, the unknown ids, and the suggested profile with its match_reasons, so a node with a broken node.yaml can still be told what fits."
         "500": {$ref: "#/components/responses/Internal"}
     put:
       tags: [catalog]
@@ -1981,8 +2024,6 @@ paths:
         agent.md section 3.8.30.
       x-localai-auth: admin
       x-localai-timeout: "30 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-14
       requestBody:
         required: true
         content:
@@ -1990,6 +2031,7 @@ paths:
             schema: {$ref: "#/components/schemas/ProfileRequest"}
             examples:
               cuda: {value: {profile: cuda-12gb, profile_overrides: null}}
+              overrides: {value: {profile_overrides: {add_models: [], remove_models: [], add_content: [], remove_content: [], budget_bytes: 200000000000}}}
       responses:
         "200":
           description: The new profile.
@@ -2006,7 +2048,7 @@ paths:
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "422":
           $ref: "#/components/responses/Unprocessable"
-          description: "LAI-CAT-003 or LAI-CAT-004: the profile or an override is invalid."
+          description: "LAI-CAT-003 or LAI-CAT-004: the profile or an override is not in the catalog; nothing is written (details as for GET)."
         "500": {$ref: "#/components/responses/Internal"}
         "503": {$ref: "#/components/responses/Starting"}
 
@@ -2322,13 +2364,14 @@ components:
             catalog_version: {type: [string, "null"]}
             uptime_s: {type: integer, minimum: 0}
             time: {type: string, format: date-time}
+            counters: {type: object, additionalProperties: true, description: "Only with ?counters=1 (agent.md section 7); the keys belong to their producers."}
         mode:
           type: object
           required: [value, since, transition]
           additionalProperties: false
           properties:
             value: {$ref: "#/components/schemas/ModeValue"}
-            since: {type: string, format: date-time}
+            since: {type: [string, "null"], format: date-time, description: "Null on a fresh node whose mode was never committed."}
             transition:
               oneOf:
                 - {type: "null"}
@@ -2354,6 +2397,32 @@ components:
             gpu_temp_c: {type: [number, "null"]}
             cpu_temp_c: {type: [number, "null"]}
             power: {$ref: "#/components/schemas/Power"}
+            gpus:
+              description: "Each GPU (this agent always sends it; optional so that a reduced status of an older agent still validates); `processes` is left out of the state pushed to the cloud."
+              type: array
+              items:
+                type: object
+                required: [index, vendor, name, vram_total_mib, vram_used_mib, temp_c, util_pct, throttling]
+                additionalProperties: false
+                properties:
+                  index: {type: integer, minimum: 0}
+                  vendor: {type: string}
+                  name: {type: string}
+                  vram_total_mib: {type: integer, minimum: 0}
+                  vram_used_mib: {type: integer, minimum: 0}
+                  temp_c: {type: [number, "null"]}
+                  util_pct: {type: [integer, "null"]}
+                  throttling: {type: array, items: {type: string}}
+                  processes:
+                    type: array
+                    items:
+                      type: object
+                      required: [pid, name, vram_mib]
+                      additionalProperties: false
+                      properties:
+                        pid: {type: integer}
+                        name: {type: string}
+                        vram_mib: {type: integer, minimum: 0}
         services: {type: array, items: {$ref: "#/components/schemas/Service"}}
         models:
           type: object
@@ -2441,9 +2510,40 @@ components:
         mode: {$ref: "#/components/schemas/ModeValue"}
         language: {type: string, enum: [en, es]}
         session: {type: string, enum: [none, portal, full]}
-        brain: {type: object, additionalProperties: true}
+        emergency_number: {type: string}
+        power:
+          type: object
+          required: [on_ac, battery_pct, minutes_left, state, low, critical]
+          additionalProperties: false
+          properties:
+            on_ac: {type: boolean}
+            battery_pct: {type: [integer, "null"], minimum: 0, maximum: 100}
+            minutes_left: {type: [integer, "null"], minimum: 0}
+            state: {type: string, enum: [discharging, charging, full, no_battery]}
+            low: {type: boolean, description: "On battery and under 20 %."}
+            critical: {type: boolean, description: "On battery and under 10 %."}
+        clock_ok: {type: boolean}
+        brain:
+          type: object
+          required: [loaded, loading, choices]
+          additionalProperties: true
+          properties:
+            loaded: {type: array, items: {type: object, additionalProperties: true}}
+            loading: {type: [object, "null"], additionalProperties: true}
+            choices: {type: array, items: {type: object, additionalProperties: true}}
         capabilities: {type: object, additionalProperties: true}
-        alerts: {type: array, items: {type: object, additionalProperties: true}}
+        first_aid: {type: array, items: {type: object, additionalProperties: true}}
+        alerts:
+          type: array
+          items:
+            type: object
+            required: [code, severity, title, fix]
+            additionalProperties: false
+            properties:
+              code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+              severity: {$ref: "#/components/schemas/Severity"}
+              title: {type: string}
+              fix: {type: string}
 
     Hardware:
       description: "GET /hardware (agent.md section 3.8.6)."
@@ -3081,6 +3181,16 @@ components:
         previous: {type: [string, "null"]}
         changed: {type: boolean}
         source: {type: string, enum: [cloud, github, offline, kit, test]}
+        warnings:
+          description: "Present when the router reload after a changed catalog had a problem; the catalog is installed regardless."
+          type: array
+          items:
+            type: object
+            required: [code, message]
+            additionalProperties: false
+            properties:
+              code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+              message: {type: string}
 
     Logs:
       type: object
@@ -3320,22 +3430,63 @@ components:
       properties:
         profile: {type: string}
         display_name: {type: string}
-        overrides: {type: object, additionalProperties: true, description: "node.yaml profile_overrides."}
-        suggested: {type: [string, "null"]}
+        overrides:
+          description: "node.yaml profile_overrides, with empty lists instead of null."
+          type: object
+          additionalProperties: true
+          properties:
+            add_models: {type: array, items: {type: string}}
+            remove_models: {type: array, items: {type: string}}
+            add_content: {type: array, items: {type: string}}
+            remove_content: {type: array, items: {type: string}}
+            budget_bytes: {type: [integer, "null"], minimum: 1}
+        suggested: {type: [string, "null"], description: "The profile the hardware matches; null only when the catalog has no profile that fits (not even cpu-only)."}
         match_reasons: {type: array, items: {type: string}}
         effective:
+          description: "What the plan keeps after the budget (catalog.md section 4); never filtered by hardware fit."
           type: object
           required: [models, content, planned_bytes, budget_bytes]
           additionalProperties: false
           properties:
             models: {type: array, items: {type: string}}
             content: {type: array, items: {type: string}}
+            skipped:
+              description: "What the budget dropped, in the order it was dropped; this agent always sends it (an empty list when nothing was dropped)."
+              type: array
+              items:
+                type: object
+                required: [kind, id, reason, size_bytes]
+                additionalProperties: false
+                properties:
+                  kind: {type: string, enum: [model, content]}
+                  id: {type: string}
+                  reason: {type: string, enum: [budget]}
+                  size_bytes: {type: integer, minimum: 0}
             planned_bytes: {type: integer, minimum: 0}
             budget_bytes: {type: integer, minimum: 0}
+        warnings:
+          description: "PUT only, present when the router reload had a problem. node.yaml is already written; the next reload retries."
+          type: array
+          items:
+            type: object
+            required: [code, message]
+            additionalProperties: false
+            properties:
+              code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+              message: {type: string}
 
     ProfileRequest:
       type: object
       additionalProperties: false
       properties:
-        profile: {type: string}
-        profile_overrides: {type: [object, "null"], additionalProperties: true, description: "null means unchanged."}
+        profile: {type: [string, "null"], minLength: 1, description: "null or absent means unchanged."}
+        profile_overrides:
+          description: "Replaces the whole profile_overrides block; null or absent means unchanged."
+          type: [object, "null"]
+          additionalProperties: false
+          properties:
+            add_models: {type: array, items: {type: string}}
+            remove_models: {type: array, items: {type: string}}
+            add_content: {type: array, items: {type: string}}
+            remove_content: {type: array, items: {type: string}}
+            budget_bytes: {type: [integer, "null"], minimum: 1}

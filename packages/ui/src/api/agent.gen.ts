@@ -122,7 +122,12 @@ export interface paths {
         };
         /**
          * The full node snapshot
-         * @description Also the body pushed to the cloud (agent.md section 4.8.4), minus `alerts[].details` and `hardware.gpus[].processes`. agent.md section 3.8.4.
+         * @description Also the body pushed to the cloud (agent.md section 4.8.4), minus `alerts[].details` and
+         *     `hardware.gpus[].processes`. Built from cached values only, so it answers within the deadline even when
+         *     the router or Tailscale hang; a subsystem that is not available has its documented empty state (empty
+         *     lists, `null`), never an error. Alert titles and fixes follow `Accept-Language` or `ui.language`.
+         *     agent.md section 3.8.4.
+         *
          */
         get: operations["getStatus"];
         put?: never;
@@ -144,7 +149,11 @@ export interface paths {
          * The reduced, localized status of the Survival Portal
          * @description No auth. The schema and example are owned by survival-portal.md section 3.5 (AGENT-14 provides the
          *     route, the 2 s cache and a minimal builder; PORTAL-01 the full schema). It never contains paths, keys,
-         *     hostnames, ids beyond model ids, or cloud details. agent.md section 3.8.5.
+         *     hostnames, ids beyond model ids, or cloud details. Cached for 2 s per language and session kind.
+         *     The language is `?lang=`, else `portal.language` (when `en` or `es`), else the profile's
+         *     `survival.portal_language`, else `Accept-Language` or `ui.language`. `session` tells the SPA what it may
+         *     call: `none`, `portal` (a Portal session cookie) or `full` (an operator or admin credential).
+         *     agent.md section 3.8.5.
          *
          */
         get: operations["getPortalStatus"];
@@ -1204,11 +1213,18 @@ export interface components {
                 uptime_s: number;
                 /** Format: date-time */
                 time: string;
+                /** @description Only with ?counters=1 (agent.md section 7); the keys belong to their producers. */
+                counters?: {
+                    [key: string]: unknown;
+                };
             };
             mode: {
                 value: components["schemas"]["ModeValue"];
-                /** Format: date-time */
-                since: string;
+                /**
+                 * Format: date-time
+                 * @description Null on a fresh node whose mode was never committed.
+                 */
+                since: string | null;
                 transition: null | components["schemas"]["ModeTransition"];
             };
             connectivity: {
@@ -1228,6 +1244,22 @@ export interface components {
                 gpu_temp_c: number | null;
                 cpu_temp_c: number | null;
                 power: components["schemas"]["Power"];
+                /** @description Each GPU (this agent always sends it; optional so that a reduced status of an older agent still validates); `processes` is left out of the state pushed to the cloud. */
+                gpus?: {
+                    index: number;
+                    vendor: string;
+                    name: string;
+                    vram_total_mib: number;
+                    vram_used_mib: number;
+                    temp_c: number | null;
+                    util_pct: number | null;
+                    throttling: string[];
+                    processes?: {
+                        pid: number;
+                        name: string;
+                        vram_mib: number;
+                    }[];
+                }[];
             };
             services: components["schemas"]["Service"][];
             models: {
@@ -1302,14 +1334,43 @@ export interface components {
             language: "en" | "es";
             /** @enum {string} */
             session: "none" | "portal" | "full";
+            emergency_number?: string;
+            power?: {
+                on_ac: boolean;
+                battery_pct: number | null;
+                minutes_left: number | null;
+                /** @enum {string} */
+                state: "discharging" | "charging" | "full" | "no_battery";
+                /** @description On battery and under 20 %. */
+                low: boolean;
+                /** @description On battery and under 10 %. */
+                critical: boolean;
+            };
+            clock_ok?: boolean;
             brain: {
+                loaded: {
+                    [key: string]: unknown;
+                }[];
+                loading: {
+                    [key: string]: unknown;
+                } | null;
+                choices: {
+                    [key: string]: unknown;
+                }[];
+            } & {
                 [key: string]: unknown;
             };
             capabilities: {
                 [key: string]: unknown;
             };
-            alerts: {
+            first_aid?: {
                 [key: string]: unknown;
+            }[];
+            alerts: {
+                code: string;
+                severity: components["schemas"]["Severity"];
+                title: string;
+                fix: string;
             }[];
         } & {
             [key: string]: unknown;
@@ -1785,6 +1846,11 @@ export interface components {
             changed: boolean;
             /** @enum {string} */
             source: "cloud" | "github" | "offline" | "kit" | "test";
+            /** @description Present when the router reload after a changed catalog had a problem; the catalog is installed regardless. */
+            warnings?: {
+                code: string;
+                message: string;
+            }[];
         };
         Logs: {
             unit: string;
@@ -1986,24 +2052,51 @@ export interface components {
         Profile: {
             profile: string;
             display_name: string;
-            /** @description node.yaml profile_overrides. */
+            /** @description node.yaml profile_overrides, with empty lists instead of null. */
             overrides: {
+                add_models?: string[];
+                remove_models?: string[];
+                add_content?: string[];
+                remove_content?: string[];
+                budget_bytes?: number | null;
+            } & {
                 [key: string]: unknown;
             };
+            /** @description The profile the hardware matches; null only when the catalog has no profile that fits (not even cpu-only). */
             suggested: string | null;
             match_reasons: string[];
+            /** @description What the plan keeps after the budget (catalog.md section 4); never filtered by hardware fit. */
             effective: {
                 models: string[];
                 content: string[];
+                /** @description What the budget dropped, in the order it was dropped; this agent always sends it (an empty list when nothing was dropped). */
+                skipped?: {
+                    /** @enum {string} */
+                    kind: "model" | "content";
+                    id: string;
+                    /** @enum {string} */
+                    reason: "budget";
+                    size_bytes: number;
+                }[];
                 planned_bytes: number;
                 budget_bytes: number;
             };
+            /** @description PUT only, present when the router reload had a problem. node.yaml is already written; the next reload retries. */
+            warnings?: {
+                code: string;
+                message: string;
+            }[];
         };
         ProfileRequest: {
-            profile?: string;
-            /** @description null means unchanged. */
+            /** @description null or absent means unchanged. */
+            profile?: string | null;
+            /** @description Replaces the whole profile_overrides block; null or absent means unchanged. */
             profile_overrides?: {
-                [key: string]: unknown;
+                add_models?: string[];
+                remove_models?: string[];
+                add_content?: string[];
+                remove_content?: string[];
+                budget_bytes?: number | null;
             } | null;
         };
     };
@@ -2357,7 +2450,10 @@ export interface operations {
     };
     getStatus: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 1 adds `node.counters` (agent.md section 7); 0 or absent leaves it out. Any other value is 400. */
+                counters?: "0" | "1";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2374,6 +2470,8 @@ export interface operations {
                     "application/json": components["schemas"]["Status"];
                 };
             };
+            /** @description LAI-AGT-020: counters is not 0 or 1 (details.field is counters). */
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["Internal"];
@@ -2381,7 +2479,10 @@ export interface operations {
     };
     getPortalStatus: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description en or es overrides the resolved language. Any other value is 400. */
+                lang?: "en" | "es";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2392,12 +2493,16 @@ export interface operations {
             200: {
                 headers: {
                     "X-Request-Id": components["headers"]["XRequestId"];
+                    /** @description no-store: the body is rebuilt at most every 2 s and must not be kept by a cache. */
+                    "Cache-Control"?: "no-store";
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["PortalStatus"];
                 };
             };
+            /** @description LAI-AGT-020: lang is not en or es (details.field is lang). */
+            400: components["responses"]["InvalidRequest"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["Internal"];
         };
@@ -3352,9 +3457,11 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
-            /** @description LAI-CAT-002: the new catalog was rejected; the previous one is kept. */
+            /** @description LAI-CAT-002: the new catalog was rejected; the previous one is kept (details.problems lists the first ten). */
             422: components["responses"]["Unprocessable"];
             500: components["responses"]["Internal"];
+            /** @description LAI-CLD-013: no source could deliver a catalog (details.reason is no_source or fetch_failed); the node keeps its catalog. */
+            502: components["responses"]["BadGateway"];
             503: components["responses"]["Starting"];
         };
     };
@@ -3929,6 +4036,8 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            /** @description LAI-CAT-003 (the profile of node.yaml is not in the catalog) or LAI-CAT-004 (an id is not in the catalog). details carries the profile, the unknown ids, and the suggested profile with its match_reasons, so a node with a broken node.yaml can still be told what fits. */
+            422: components["responses"]["Unprocessable"];
             500: components["responses"]["Internal"];
         };
     };
@@ -3961,7 +4070,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
-            /** @description LAI-CAT-003 or LAI-CAT-004: the profile or an override is invalid. */
+            /** @description LAI-CAT-003 or LAI-CAT-004: the profile or an override is not in the catalog; nothing is written (details as for GET). */
             422: components["responses"]["Unprocessable"];
             500: components["responses"]["Internal"];
             503: components["responses"]["Starting"];
