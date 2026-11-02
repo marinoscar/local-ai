@@ -337,6 +337,7 @@ export interface paths {
          * The llama API key
          * @description The only route that returns the full llama key. Writes audit `key.show` with the principal.
          *     `Cache-Control: no-store`. Snippets embed `$KEY` placeholders, never the key. agent.md section 3.8.13.
+         *     There is deliberately no example: a 64-hex key literal in the repository trips scripts/check-redaction.sh.
          *
          */
         get: operations["getKey"];
