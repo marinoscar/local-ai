@@ -3,11 +3,14 @@ package services_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	cfgfake "github.com/marinoscar/local-ai/agent/internal/config/fake"
+	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/services"
 	"github.com/marinoscar/local-ai/agent/internal/services/fake"
 )
@@ -39,13 +42,19 @@ func (p *fakeProber) count(service string) int {
 	return p.calls[service]
 }
 
-type recPub struct{ ch chan services.StateEvent }
+type recPub struct{ ch chan events.ServiceState }
 
-func newPub() *recPub { return &recPub{ch: make(chan services.StateEvent, 64)} }
+func newPub() *recPub { return &recPub{ch: make(chan events.ServiceState, 64)} }
 
-func (p *recPub) PublishServiceState(e services.StateEvent) { p.ch <- e }
+func (p *recPub) Publish(typ, opID string, data any) error {
+	if typ != events.TypeServiceState || opID != "" {
+		return fmt.Errorf("unexpected event %s (op %q)", typ, opID)
+	}
+	p.ch <- data.(events.ServiceState)
+	return nil
+}
 
-func (p *recPub) next(t *testing.T) services.StateEvent {
+func (p *recPub) next(t *testing.T) events.ServiceState {
 	t.Helper()
 	select {
 	case e := <-p.ch:
@@ -53,7 +62,7 @@ func (p *recPub) next(t *testing.T) services.StateEvent {
 	case <-time.After(2 * time.Second):
 		t.Fatal("no service.state event")
 	}
-	return services.StateEvent{}
+	return events.ServiceState{}
 }
 
 func (p *recPub) none(t *testing.T) {
@@ -385,6 +394,46 @@ func TestWatcherStartFailsWithoutASubscription(t *testing.T) {
 	r.mgr.Fail(services.VerbSubscribe, "", errors.New("no bus"))
 	if err := r.w.Start(context.Background()); err == nil {
 		t.Fatal("Start succeeded without a subscription")
+	}
+}
+
+// The real event bus accepts what the watcher publishes: the payload is the registered struct.
+func TestWatcherPublishesOnTheRealBus(t *testing.T) {
+	bus := events.New(events.Options{})
+	defer bus.Close()
+	r := newRig(t)
+	r.w = services.NewWatcher(services.WatcherOptions{
+		Manager: r.mgr, Prober: r.prober, Ports: services.Ports{Llama: 8080, Kiwix: 8888, Whisper: 8081},
+		Publisher: bus, Clock: r.clock,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	filter, err := events.NewFilter(events.TypeServiceState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch, err := bus.Subscribe(ctx, filter, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.active(services.UnitKiwix)
+	r.start(t)
+	eventually(t, "kiwix healthy", func() bool { return r.status(t, "kiwix").Healthy })
+	r.mgr.Set(services.UnitState{Unit: services.UnitKiwix, ActiveState: "failed", SubState: "failed"})
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case ev := <-ch:
+			if ev.Type != events.TypeServiceState {
+				continue
+			}
+			if !strings.Contains(string(ev.Data), `"name":"kiwix"`) || !strings.Contains(string(ev.Data), `"active":"failed"`) {
+				continue
+			}
+			return
+		case <-deadline:
+			t.Fatal("no service.state event for kiwix on the bus")
+		}
 	}
 }
 

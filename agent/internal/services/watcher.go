@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/config"
+	"github.com/marinoscar/local-ai/agent/internal/events"
 )
 
 // Health states of a service (companion-services.md section 4.6). The watcher reports the four that
@@ -65,21 +66,10 @@ type Status struct {
 	Code string
 }
 
-// StateEvent is the payload of the service.state event (agent.md section 3.10).
-type StateEvent struct {
-	Name    string `json:"name"`
-	Unit    string `json:"unit"`
-	From    string `json:"from"`
-	To      string `json:"to"`
-	Active  string `json:"active"`
-	Sub     string `json:"sub"`
-	Healthy bool   `json:"healthy"`
-	Code    string `json:"code,omitempty"`
-}
-
-// Publisher receives service.state events. AGENT-08's event bus implements it.
+// Publisher receives events; *events.Bus implements it. The watcher publishes service.state with an
+// events.ServiceState payload (agent.md section 3.10).
 type Publisher interface {
-	PublishServiceState(StateEvent)
+	Publish(typ, opID string, data any) error
 }
 
 // AlertSink is the alert manager hook (AGENT-11): Raise reports a doctor code for a service, Clear
@@ -306,12 +296,13 @@ func (w *Watcher) check(ctx context.Context, unit string) {
 	enter, probe := e.st.ActiveEnterTimestamp, e.probe
 	w.mu.Unlock()
 
+	// The answer is dated when the probe started: that is the moment it describes.
+	now := w.clock.Now()
 	err := w.opt.Prober.Check(ctx, probe)
 	if ctx.Err() != nil {
 		return
 	}
 
-	now := w.clock.Now()
 	w.mu.Lock()
 	if !e.st.Active() || !e.st.ActiveEnterTimestamp.Equal(enter) {
 		// The unit changed state while the probe ran: its answer says nothing about the new process.
@@ -340,7 +331,7 @@ type alertChange struct {
 
 // recompute derives the service's health state and returns the event to publish (nil when nothing
 // changed, or on the first observation) and the alert change. w.mu must be held.
-func (w *Watcher) recompute(e *entry, now time.Time) (*StateEvent, alertChange) {
+func (w *Watcher) recompute(e *entry, now time.Time) (*events.ServiceState, alertChange) {
 	var health, code string
 	switch {
 	case e.st.ActiveState == ActiveActivating:
@@ -369,10 +360,10 @@ func (w *Watcher) recompute(e *entry, now time.Time) (*StateEvent, alertChange) 
 		e.alerted = code
 	}
 
-	var ev *StateEvent
+	var ev *events.ServiceState
 	changed := e.health != health || e.active != e.st.ActiveState || e.sub != e.st.SubState
 	if e.published && changed {
-		ev = &StateEvent{
+		ev = &events.ServiceState{
 			Name: e.svc.Name, Unit: e.svc.Unit, From: e.health, To: health,
 			Active: e.st.ActiveState, Sub: e.st.SubState, Healthy: health == HealthOK, Code: code,
 		}
@@ -382,7 +373,7 @@ func (w *Watcher) recompute(e *entry, now time.Time) (*StateEvent, alertChange) 
 }
 
 // emit publishes the event and tells the alert sink, outside the lock.
-func (w *Watcher) emit(svc Service, ev *StateEvent, a alertChange) {
+func (w *Watcher) emit(svc Service, ev *events.ServiceState, a alertChange) {
 	if a.clear != "" && w.opt.Alerts != nil {
 		w.opt.Alerts.Clear(a.clear, svc.Name)
 	}
@@ -397,7 +388,9 @@ func (w *Watcher) emit(svc Service, ev *StateEvent, a alertChange) {
 	}
 	w.log.Info("service state changed", "unit", ev.Unit, "from", ev.From, "to", ev.To, "active", ev.Active, "sub", ev.Sub)
 	if w.opt.Publisher != nil {
-		w.opt.Publisher.PublishServiceState(*ev)
+		if err := w.opt.Publisher.Publish(events.TypeServiceState, "", *ev); err != nil {
+			w.log.Warn("service.state event refused", "error", err.Error())
+		}
 	}
 }
 
