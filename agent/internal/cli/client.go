@@ -72,6 +72,8 @@ type Client struct {
 	token     string
 	// pinGrant is the admin PIN grant of this process (SetPinGrant): memory only, never written.
 	pinGrant string
+	// anonymous lets the TCP fallback go on without a token (AllowAnonymous).
+	anonymous bool
 
 	healthOnce sync.Once
 	health     api.Health
@@ -127,6 +129,23 @@ func NewClient(cfg Config) (*Client, error) {
 func (c *Client) Close() {
 	c.sock.CloseIdleConnections()
 	c.tcp.CloseIdleConnections()
+}
+
+// AllowAnonymous lets a request that falls back to TCP be sent without an Authorization header when
+// the token file cannot be read. It is for the one route that needs no authentication and must work
+// for anyone at the keyboard, POST /mode/survival (agent.md section 3.8.16): a user outside
+// localai-operators can neither open the socket nor read the token. Any other route answers 401
+// without a token, which is the honest answer. The default is off.
+func (c *Client) AllowAnonymous() {
+	c.mu.Lock()
+	c.anonymous = true
+	c.mu.Unlock()
+}
+
+func (c *Client) allowsAnonymous() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.anonymous
 }
 
 const (
@@ -501,7 +520,10 @@ func (c *Client) attempt(ctx context.Context, method, path string, body []byte, 
 	case viaTCP:
 		tok, err := c.readToken()
 		if err != nil {
-			return nil, c.unreachable(err, nil)
+			if !c.allowsAnonymous() {
+				return nil, c.unreachable(err, nil)
+			}
+			tok = ""
 		}
 		resp, err := c.once(ctx, viaTCP, tok, method, path, body, hdr)
 		if err != nil {
@@ -520,7 +542,10 @@ func (c *Client) attempt(ctx context.Context, method, path string, body []byte, 
 	}
 	tok, tokErr := c.readToken()
 	if tokErr != nil {
-		return nil, c.unreachable(sockErr, tokErr)
+		if !c.allowsAnonymous() {
+			return nil, c.unreachable(sockErr, tokErr)
+		}
+		tok = ""
 	}
 	resp, tcpErr := c.once(ctx, viaTCP, tok, method, path, body, hdr)
 	if tcpErr == nil {
@@ -574,7 +599,9 @@ func (c *Client) once(ctx context.Context, kind transportKind, token, method, pa
 		req.Header.Set(pinGrantHeader, g)
 	}
 	if kind == viaTCP {
-		req.Header.Set("Authorization", "Bearer "+token)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
 		req.Host = req.URL.Host
 	}
 	if c.log != nil {
