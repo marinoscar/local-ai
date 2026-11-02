@@ -39,7 +39,14 @@ type Cmd struct {
 	MaxOut  int64         // required, > 0: cap in bytes for stdout and for stderr, each
 	Env     []string      // nil = minimal environment (PATH=FixedPath only)
 	Stdin   io.Reader     // optional
+	// Credential, when set, runs the program as this user and group with no supplementary groups
+	// (the caller must be root; the start fails otherwise). `aictl key copy` uses it to run the
+	// clipboard tool as $SUDO_USER.
+	Credential *Credential
 }
+
+// Credential is the user and group a program runs as.
+type Credential struct{ UID, GID uint32 }
 
 // Result is what a finished run produced. A non-zero ExitCode is NOT an error: callers decide.
 type Result struct {
@@ -120,6 +127,9 @@ func (Exec) Run(ctx context.Context, c Cmd) (Result, error) {
 	}
 	cmd.Stdin = c.Stdin
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if c.Credential != nil {
+		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: c.Credential.UID, Gid: c.Credential.GID}
+	}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 2 * time.Second // do not hang on pipes a grandchild might still hold
 	stdout, stderr := &capBuffer{max: c.MaxOut}, &capBuffer{max: c.MaxOut}
@@ -142,6 +152,12 @@ func (Exec) Run(ctx context.Context, c Cmd) (Result, error) {
 		return res, fmt.Errorf("%w after %s: %s", ErrTimeout, c.Timeout, c.Path)
 	case ctx.Err() != nil:
 		return res, ctx.Err()
+	}
+	// A program that forks into the background and keeps our pipes open (xclip, wl-copy) has
+	// still finished successfully: Go reports ErrWaitDelay once WaitDelay passed with the pipes
+	// open and the process itself exited with status 0.
+	if errors.Is(err, exec.ErrWaitDelay) {
+		err = nil
 	}
 	var exitErr *exec.ExitError
 	if err != nil && !errors.As(err, &exitErr) {
