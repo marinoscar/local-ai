@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -107,24 +106,26 @@ func TestSurvivalRequestJoinsARunningSurvival(t *testing.T) {
 	r := newRig(t, withMode(modes.Online))
 	b := newBlocker()
 	r.env.Models.LoadB.SetHook(b.hook)
-	first := r.mustRequest(modes.Survival, false)
+	// The waiting caller starts the transition itself, so it is attached by construction (nothing to
+	// race against); a second, non-waiting request then joins it while the step is parked.
+	type outcome struct {
+		res modes.Result
+		err error
+	}
+	waited := make(chan outcome, 1)
+	go func() {
+		res, err := r.request(modes.Survival, true)
+		waited <- outcome{res, err}
+	}()
 	b.waitEntered(t)
 	joined := r.mustRequest(modes.Survival, false)
-	if !joined.Joined || joined.OpID != first.OpID {
+	if !joined.Joined || joined.OpID == "" {
 		t.Fatalf("joined %+v", joined)
 	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	var waited modes.Result
-	go func() {
-		defer wg.Done()
-		waited = r.mustRequest(modes.Survival, true)
-	}()
-	time.Sleep(20 * time.Millisecond)
 	b.open()
-	wg.Wait()
-	if !waited.Done || waited.OpID != first.OpID {
-		t.Fatalf("waiter %+v", waited)
+	w := <-waited
+	if w.err != nil || !w.res.Done || w.res.OpID != joined.OpID {
+		t.Fatalf("waiter %+v / %v, want Done under %s", w.res, w.err, joined.OpID)
 	}
 	if r.env.Rec.Count("models.load") != 1 {
 		t.Fatal("a joined request started a second transition")
@@ -294,7 +295,12 @@ func TestShutdownLetsTheCurrentStepFinishThenLeavesTheRestForResume(t *testing.T
 		defer cancel()
 		done <- r1.eng.Shutdown(ctx)
 	}()
-	time.Sleep(20 * time.Millisecond)
+	// Shutdown has begun once a non-survival request is refused as "not accepting" (before that it
+	// is "busy"); both answers are free of side effects.
+	waitFor(t, "Shutdown to start", func() bool {
+		_, err := r1.request(modes.Online, false)
+		return errors.Is(err, modes.ErrNotAccepting)
+	})
 	b.open() // the running step finishes inside the budget
 	if err := <-done; err != nil {
 		t.Fatalf("Shutdown: %v", err)
@@ -396,9 +402,9 @@ func TestSurvivalIsNeverRefusedWhateverIsRunning(t *testing.T) {
 				r.env.Tailscale.OnB.SetHook(b.hook)
 				if running != committed || running == modes.Survival {
 					r.mustRequest(running, false)
-					select {
-					case <-b.entered:
-					case <-time.After(300 * time.Millisecond): // survival from some modes blocks nowhere
+					// Survival requested while already in survival is "already": no step, no hook.
+					if !(running == modes.Survival && committed == modes.Survival) {
+						b.waitEntered(t)
 					}
 				}
 				if _, err := r.request(modes.Survival, false); err != nil {

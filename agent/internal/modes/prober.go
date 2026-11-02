@@ -230,7 +230,8 @@ func (p *ConnectivityProber) Probe(ctx context.Context) {
 	p.probe(ctx, p.gen.Load())
 }
 
-// Probes is the number of passes run, for tests and diagnostics.
+// Probes is the number of passes whose result is recorded in state.connectivity, for tests and
+// diagnostics.
 func (p *ConnectivityProber) Probes() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -265,7 +266,6 @@ func (p *ConnectivityProber) probe(ctx context.Context, gen uint64) {
 		p.mu.Unlock()
 		return
 	}
-	p.passes++
 	p.lastChecked = now
 	p.cloudKnown = raw.cloudConfigured
 	if raw.cloudDNS {
@@ -314,6 +314,13 @@ func (p *ConnectivityProber) probe(ctx context.Context, gen uint64) {
 	}); err != nil {
 		p.log.Warn("state.connectivity not recorded", "error", err.Error())
 	}
+	// A pass counts once its result is recorded, so Probes is a completion signal: a reader that
+	// sees the count reach n also sees the value of the n-th pass in state.connectivity.
+	p.mu.Lock()
+	if p.gen.Load() == gen {
+		p.passes++
+	}
+	p.mu.Unlock()
 	if next != prev {
 		p.log.Info("connectivity changed", "from", prev, "to", next)
 	}

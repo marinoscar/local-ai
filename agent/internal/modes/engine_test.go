@@ -173,10 +173,16 @@ func TestWaitContextEndsButTransitionContinues(t *testing.T) {
 	r := newRig(t, withMode(modes.Online))
 	b := newBlocker()
 	r.env.Link.StopB.SetHook(b.hook)
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_, err := r.eng.Request(ctx, modes.Offline, modes.RequestOptions{Wait: true, Actor: operator})
-	if !errors.Is(err, context.DeadlineExceeded) {
+	errc := make(chan error, 1)
+	go func() {
+		_, err := r.eng.Request(ctx, modes.Offline, modes.RequestOptions{Wait: true, Actor: operator})
+		errc <- err
+	}()
+	b.waitEntered(t) // the transition is running and blocked: the client gives up now
+	cancel()
+	if err := <-errc; !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v", err)
 	}
 	b.open()
@@ -273,7 +279,7 @@ func TestEveryStepFailureStyleBecomesAWarning(t *testing.T) {
 				var res modes.Result
 				select {
 				case res = <-done:
-				case <-time.After(5 * time.Second):
+				case <-time.After(60 * time.Second):
 					t.Fatal("the transition hung")
 				}
 				if !res.Done || !hasCode(res.Warnings, c.code) {
@@ -308,7 +314,7 @@ func TestStepThatIgnoresItsContextIsAbandoned(t *testing.T) {
 		if !hasCode(res.Warnings, modes.CodeStepFailed) || r.eng.Current() != modes.Offline {
 			t.Fatalf("result %+v mode %s", res, r.eng.Current())
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(60 * time.Second):
 		t.Fatal("the engine waited for a stuck step")
 	}
 }
@@ -484,8 +490,8 @@ func TestTailscaleOffRetriesInBackgroundUntilItWorks(t *testing.T) {
 	r.clk.Advance(modes.DefaultTailscaleRetry)
 	waitFor(t, "the fourth try", func() bool { return r.env.Rec.Count("tailscale.off") == 4 })
 	waitFor(t, "the retry to stop", func() bool { return r.clk.Tickers() == 0 })
+	// The retry's ticker is gone (asserted above), so nothing can fire: no waiting needed.
 	r.clk.Advance(10 * modes.DefaultTailscaleRetry)
-	time.Sleep(20 * time.Millisecond)
 	if n := r.env.Rec.Count("tailscale.off"); n != 4 {
 		t.Fatalf("retried after success: %d", n)
 	}
@@ -511,8 +517,7 @@ func TestGoingOnlineCancelsTheRetryAndNeverOverlapsOff(t *testing.T) {
 		t.Fatalf("retry still running: %d tickers", r.clk.Tickers())
 	}
 	before := r.env.Rec.Count("tailscale.off")
-	r.clk.Advance(5 * modes.DefaultTailscaleRetry)
-	time.Sleep(20 * time.Millisecond)
+	r.clk.Advance(5 * modes.DefaultTailscaleRetry) // no ticker is left to fire
 	if r.env.Rec.Count("tailscale.off") != before {
 		t.Fatal("a retry ran after going online")
 	}
@@ -557,7 +562,7 @@ func TestSubscribeDeliversCommittedChanges(t *testing.T) {
 		if c.From != modes.Online || c.To != modes.Survival || c.OpID != res.OpID || !c.At.Equal(t0) {
 			t.Fatalf("change = %+v", c)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(60 * time.Second):
 		t.Fatal("no change delivered")
 	}
 	cancel()

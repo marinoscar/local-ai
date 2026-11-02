@@ -152,3 +152,34 @@ func TestRestartAndDownAndStreams(t *testing.T) {
 		t.Errorf("removed model: %s", got)
 	}
 }
+
+func TestStickAndRejectLoad(t *testing.T) {
+	f := fake.New(testBearer)
+	defer f.Close()
+	f.Add(fake.Model{ID: "a", Status: fake.Loaded})
+
+	f.Stick("a", true)
+	if code, _ := do(t, "POST", f.URL()+"/models/unload", testBearer, `{"model":"a"}`); code != 200 {
+		t.Fatalf("a stuck unload is still answered with success, got %d", code)
+	}
+	if got := statusOf(t, f, "a"); got != "loaded" {
+		t.Errorf("a stuck child keeps running: %s", got)
+	}
+	f.Stick("a", false)
+	do(t, "POST", f.URL()+"/models/unload", testBearer, `{"model":"a"}`)
+	if got := statusOf(t, f, "a"); got != "unloaded" {
+		t.Errorf("after Stick(false): %s", got)
+	}
+
+	f.RejectLoad("a", 500)
+	if code, _ := do(t, "POST", f.URL()+"/models/load", testBearer, `{"model":"a"}`); code != 500 {
+		t.Errorf("a rejected load = %d, want 500", code)
+	}
+	if got := statusOf(t, f, "a"); got != "unloaded" {
+		t.Errorf("a rejected load starts nothing: %s", got)
+	}
+	f.RejectLoad("a", 0)
+	if code, _ := do(t, "POST", f.URL()+"/models/load", testBearer, `{"model":"a"}`); code != 200 {
+		t.Errorf("after RejectLoad(0) = %d", code)
+	}
+}
