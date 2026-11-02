@@ -331,6 +331,8 @@ Evaluated in order; the first failing rule gives `loadable_reason`:
 6. Present (§4.1 step 2), else `LAI-LLM-008`.
 `G_others` is deliberately ignored here: a desktop session using 300 MiB must not make a model "never loadable".
 
+**Other engines** (`whisper`, `piper`): the same rules run for every catalog model in `GET /models`, but rule 2 is skipped, because these engines have no graphics-memory requirement (`min_vram_mib` is 0 for them by [catalog.md](catalog.md) §2, and a stray value is ignored). `router.Env.Loadable` and `LoadableAll` (`internal/router/loadable.go`) apply this.
+
 **Messages.** `router.Env.StaticFit` returns `loadable_reason` as `{code, message}` (agent.md §3.8.7) plus the Spanish text (`Reason.Text("es")`; the doctor localization hook of AGENT-11 replaces the two in-package texts when it lands). Sizes are decimal GB with one decimal (`MiB × 1048576 / 1e9`; Spanish uses a decimal comma):
 
 | Rule | English message | Code |
