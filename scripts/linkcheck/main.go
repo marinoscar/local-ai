@@ -16,12 +16,27 @@ import (
 	"strings"
 )
 
+// skippedDirs hold files we do not author: third-party source (agent/vendor/, node_modules) and other
+// checkouts (worktrees). The same names are skipped by the directory walk and by the git listing.
+var skippedDirs = map[string]bool{".git": true, "node_modules": true, "vendor": true, "worktrees": true}
+
+// inSkippedDir reports whether a slash-separated repo-relative path has a skipped directory in it.
+func inSkippedDir(rel string) bool {
+	parts := strings.Split(rel, "/")
+	for _, d := range parts[:len(parts)-1] {
+		if skippedDirs[d] {
+			return true
+		}
+	}
+	return false
+}
+
 func listMarkdown(root string) ([]string, error) {
 	cmd := exec.Command("git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "--", "*.md")
 	if out, err := cmd.Output(); err == nil {
 		var files []string
 		for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			if l != "" {
+			if l != "" && !inSkippedDir(l) {
 				if _, err := os.Stat(filepath.Join(root, l)); err == nil {
 					files = append(files, l)
 				}
@@ -36,8 +51,7 @@ func listMarkdown(root string) ([]string, error) {
 			return err
 		}
 		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "vendor", "worktrees":
+			if skippedDirs[d.Name()] {
 				return filepath.SkipDir
 			}
 			return nil

@@ -1,0 +1,7 @@
+ActiveState=active
+SubState=running
+MainPID=311
+ExecMainStatus=0
+ExecMainExitTimestamp=n/a
+ActiveEnterTimestamp=Sun 2026-11-01 22:10:00.123456 UTC
+UnitFileState=enabled-runtime
