@@ -129,7 +129,7 @@ func (f *docsFixture) render(t *testing.T, args ...string) runResult {
 // flat joins the wrapped lines of the output into one.
 func flat(s string) string { return strings.Join(strings.Fields(s), " ") }
 
-func readFile(t *testing.T, p string) string {
+func readDocsFile(t *testing.T, p string) string {
 	t.Helper()
 	b, err := os.ReadFile(p)
 	if err != nil {
@@ -153,10 +153,10 @@ func TestDocsRenderHuman(t *testing.T) {
 		t.Errorf("stdout: %q", r.out)
 	}
 	// The inventory came from <etc>/inventory.local.yaml; the card is for the node of node.yaml.
-	if s := readFile(t, filepath.Join(out, "01-start.html")); !strings.Contains(s, "SSH to 192.0.2.23 as casey") {
+	if s := readDocsFile(t, filepath.Join(out, "01-start.html")); !strings.Contains(s, "SSH to 192.0.2.23 as casey") {
 		t.Errorf("page not filled: %s", s)
 	}
-	card := readFile(t, filepath.Join(out, "survival-card-ai-n3.html"))
+	card := readDocsFile(t, filepath.Join(out, "survival-card-ai-n3.html"))
 	if !strings.Contains(card, "Computer ai-n3") || !strings.Contains(card, "Call 112.") || !strings.Contains(card, "Printed 2026-11-02") {
 		t.Errorf("card: %s", card)
 	}
@@ -191,7 +191,7 @@ func TestDocsRenderMissingInventoryWarns(t *testing.T) {
 	if r.code != ExitOK || !strings.Contains(r.errOut, "LAI-CLI-013") {
 		t.Fatalf("exit %d stderr %q", r.code, r.errOut)
 	}
-	if s := readFile(t, filepath.Join(out, "01-start.html")); !strings.Contains(s, "&lt;TAILNET_IP_AI_N3&gt;") {
+	if s := readDocsFile(t, filepath.Join(out, "01-start.html")); !strings.Contains(s, "&lt;TAILNET_IP_AI_N3&gt;") {
 		t.Errorf("placeholders must stay: %s", s)
 	}
 	// --json: the warning goes to stderr, stdout stays one document with inventory false.
@@ -219,7 +219,7 @@ func TestDocsRenderInventoryFlagAndLookupOrder(t *testing.T) {
 
 	check := func(label, out, want string) {
 		t.Helper()
-		if s := readFile(t, filepath.Join(out, "01-start.html")); !strings.Contains(s, "as "+want) {
+		if s := readDocsFile(t, filepath.Join(out, "01-start.html")); !strings.Contains(s, "as "+want) {
 			t.Errorf("%s: expected %s in %s", label, want, s)
 		}
 	}
