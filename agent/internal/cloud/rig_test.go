@@ -369,6 +369,23 @@ func (r *rig) waitCount(route string, n int) {
 	}
 }
 
+// waitHeartbeatApplied blocks until the fake has received the nth heartbeat and the heartbeat loop has
+// applied the answer. waitCount alone is not enough before a test acts on the link: the fake logs a
+// request before it answers it, so the client may still be applying the answer (heartbeatOK moves
+// backoff to linked, and calls the claim loop's Probe while disabled) when waitCount returns, and that
+// can undo what the test did in between (issue #237). The loop arms its next timer only after
+// heartbeatOnce has returned, so a timer due within disabledInterval (the longest period the loop
+// waits) is the proof that the answer was applied; nothing sleeps. It counts on the other loops'
+// timers being longer than that, which holds in the default rig (the state loop waits 600 s) but not
+// after quickState.
+func (r *rig) waitHeartbeatApplied(n int) {
+	r.t.Helper()
+	r.waitCount(fake.RouteHeartbeat, n)
+	if err := r.clk.WaitDue(r.ctx, disabledInterval); err != nil {
+		r.t.Fatalf("waiting for heartbeat %d to be applied (next timer %v): %v", n, func() any { d, _ := r.clk.NextDelay(); return d }(), err)
+	}
+}
+
 // waitTimers blocks until the code under test has armed n timers.
 func (r *rig) waitTimers(n int) {
 	r.t.Helper()

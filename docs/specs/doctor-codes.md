@@ -162,6 +162,9 @@ The script reads the `codes.go` layout described in its header: a const block (`
 | LAI-CAT-003 | error | The profile in node.yaml doesn't exist | Run `aictl profile suggest`, then `aictl profile set <id>` |
 | LAI-CAT-004 | error | The profile references an unknown model/content id | Catalog bug. Fix it in the repo |
 | LAI-CAT-005 | warning | A model doesn't fit this node (VRAM/RAM/backend) | Choose a smaller model. `aictl models --loadable` lists the ones that fit |
+| LAI-CAT-006 | warning | Couldn't download the catalog from GitHub | The node keeps its current catalog. Check the internet connection, then run `aictl catalog refresh` |
+| LAI-CAT-007 | warning | The catalog version named in node.yaml does not exist on GitHub | Set `catalog.channel` in node.yaml to `stable` or to an existing `catalog-<version>` |
+| LAI-CAT-008 | warning | The catalog from GitHub was incomplete or inconsistent, so nothing was installed | The node keeps its current catalog. Run `aictl catalog refresh` again; if it repeats, report it to the maintainer |
 | LAI-CAT-010 | error | Lint: schema problem (unknown key, missing required field, wrong type, `schema_version` not 1) | Fix the YAML at the reported path |
 | LAI-CAT-011 | error | Lint: pinning problem (`source.revision` not 40-hex, `sha256` not 64 hex, `size_bytes` missing) | Fix the YAML at the reported path |
 | LAI-CAT-012 | error | Lint: bad id format or duplicate id across models and ark | Fix the YAML at the reported path |
