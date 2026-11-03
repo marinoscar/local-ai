@@ -1,6 +1,6 @@
 # Spec: Drill (monthly offline-readiness self-test)
 
-> **Status:** approved design · **Epic:** E9 · **Code:** `agent/internal/drill/`, test media `agent/internal/drill/media/` (embedded) · **Doctor area:** `LAI-DRL`
+> **Status:** approved design · **Epic:** E9 · **Code:** `agent/internal/drill/`, `agent/internal/api/drill.go`, unit templates `agent/internal/setup/units/`, test media `agent/internal/drill/media/` (embedded) · **Doctor area:** `LAI-DRL`
 > Canonical names: [overview.md](../architecture/overview.md) §3. Depends on: [ark-sync.md](ark-sync.md), [companion-services.md](companion-services.md), [survival-portal.md](survival-portal.md), [rebuild-kit.md](rebuild-kit.md), [llama-router.md](llama-router.md).
 
 ---
@@ -37,11 +37,14 @@ Request:
 ```json
 {"quick": false, "only": [], "trigger": "manual"}
 ```
-`409 LAI-DRL-002` if a drill or an ark run is active; `409 LAI-DRL-003` in survival mode.
+`409 LAI-DRL-002` if a drill or an ark run is active; `409 LAI-DRL-003` in survival mode; `409 LAI-DRL-004` when llama is busy and `409 LAI-DRL-005` on a low battery (§4.1). `trigger` is `manual` (the default) or `scheduled`; `cloud` and `manual_plug` are not requested over this route. `only` entries select a check by id and, at a dot boundary, the checks under it (`drl.stt` selects `drl.stt.en` and `drl.stt.es`); an entry that selects nothing is `400 LAI-AGT-020` (`details.reason: unknown_check`, `details.unknown`). The body is optional (every field defaults).
+
+`202 {"run_id"}` means the run started; progress follows `drill.*` events and `GET /drill?run_id=` answers while it runs (the in-flight document has `state: running`, §3.4). A **scheduled** run that a precondition holds back is also `202`, with `{"run_id", "state": "skipped", "code", "reason", "retry_at"?}` and no events: the skipped document (§3.4) is written before the answer, so `aictl drill --scheduled` prints `i Drill skipped: <reason>.` and exits 0 without waiting. `retry_at` is when the agent tries again (§4.1) and is absent when it will not.
 
 ### 3.2 Files
-- `/var/lib/localai/drill/<run-id>.json`: results (§3.4), localai 0640. The last 24 are kept.
-- `/var/lib/localai/drill/latest.json`: symlink to the last finished run.
+- `/var/lib/localai/drill/<run-id>.json`: results (§3.4), localai 0640, written atomically. The newest 24 are kept; of the skipped runs (§4.1) only the newest one, so a month of retries never pushes a real result out.
+- `/var/lib/localai/drill/latest.json`: relative symlink to the last finished run (`pass`, `warn`, `fail` or `aborted`). A skipped run and a `manual_plug` entry (§4.6) never move it. When the link is missing or dangling, `GET /drill` falls back to the newest finished document; the document `latest.json` names is never pruned.
+- `/var/lib/localai/drill/<run-id>.partial`: the checkpoint of the run in flight, rewritten after every check. Crash recovery (§4.3) turns it into the aborted run's document; a successful run removes it.
 - Embedded test media (`go:embed`, CC0 or self-made, licence noted in `media/README.md`):
   - `en.wav`: 16 kHz mono, about 4 s, a speaker saying "The quick brown fox jumps over the lazy dog." (expected text stored next to it),
   - `es.wav`: "El veloz murciélago hindú comía feliz cardillo y kiwi.",
@@ -118,7 +121,9 @@ ProtectHome=yes
   "network_fence": {"enabled": true, "blocked_dials": 0}
 }
 ```
-`overall` = `fail` if any check fails, else `warn` if any warns, else `pass`. `survival_ready` = every check in the **critical set** (§4.2, marked ★) passed or warned.
+`overall` = `fail` if any check fails, else `warn` if any warns, else `pass`; a run whose restore failed (`restored.ok: false`) is `fail`, and one with `network_fence.blocked_dials > 0` is at least `warn`. `survival_ready` = at least one check of the **critical set** (§4.2, marked ★) ran and every one of them passed or warned. A critical check that was skipped counts against it, except one skipped by `--quick`; so `--only` and `--quick` runs answer for the checks they ran, and a run that ran no critical check is never ready.
+
+A run that did not complete has the same document plus `state` (`skipped`, `aborted`, or `running` for the in-flight snapshot `GET` serves while the run is active), and, for the first two, `code`, a plain English `reason` and, when a skipped scheduled run will be retried, `retry_at`. `overall` is then `skipped`, `aborted` or `running`, `checks` holds what finished, and `survival_ready` is false. A completed run has no `state`, so its document is exactly the example above. The `network_fence` block also carries `code: LAI-DRL-091` and `callers` when a dial was refused.
 
 ## 4. Behaviour
 
@@ -129,7 +134,16 @@ ProtectHome=yes
 | an ark sync/verify/import run is active | `LAI-DRL-002` |
 | llama busy: any slot processing (router `/slots` per loaded model) or a chat request in the last 10 minutes | `LAI-DRL-004` (scheduled: retried every 2 h for up to 48 h, then runs anyway as `--quick`) |
 | on battery below 50 % | `LAI-DRL-005` |
-`offline` mode is fine: the drill needs no network.
+`offline` mode is fine: the drill needs no network. A node heading to survival counts as in survival. A router that cannot answer is not busy.
+
+The first failing row in table order wins. A **scheduled** run is recorded as a skipped document (§3.4) and the retry schedule below is persisted in `state.json` (`drill.deferred`: `code`, `first_at`, `next_retry_at`, `deadline_at`, `attempts`, `quick`, `only`), so an agent restart keeps it; the agent calls the retry on a one-minute tick, never systemd. Survival, battery and another drill running are not retried.
+
+| Held back by | Retried | When the window ends |
+|---|---|---|
+| `LAI-DRL-002` (a sync, verify or import run) | daily | after 7 days the attempt is recorded as `given up`; the 45-day alert (`LAI-DRL-006`) covers a node that never gets its drill |
+| `LAI-DRL-004` (llama busy) | every 2 h, the last attempt at 48 h | the drill runs anyway as `--quick`, without asking whether llama is busy (the other rows still apply) |
+
+A run that starts (a retry, or a manual run that is not `--quick`) ends the wait. While a drill is active, `Running` tells the sync engine to refuse a start (sync and drill never overlap, §4.1 table).
 
 ### 4.2 Checks (in order)
 ★ = critical set for `survival_ready`.
@@ -159,7 +173,7 @@ ProtectHome=yes
 | 21 | `drl.clock` | clock plausible (not before the newest `verified_at`) | ok | wrong (`LAI-DRL-081`) | — |
 | 22 | `drl.restore` ★ | restore state (§4.3) and verify it | restored | — | not restored (`LAI-DRL-090`) |
 
-Every check has a timeout (model load 300 s, completions 120 s, others 30 s). A timed-out check fails with its own code and the drill continues. Checks never mutate content (no downloads, no deletes); check 4 may cause quarantine only through ark-sync's normal verify path.
+Every check has a timeout (model load 300 s, completions 120 s, others 30 s). A timed-out check, and a check that panics, fails with its own code (the check declares it) and the drill continues; the framework never waits on a check that ignores its context, it cancels it and goes on. A check can end the main phase (`drl.fence` does when the fence is broken): the checks after it are recorded as `skip` (`details.reason: run_stopped`), the state is restored and the post-restore checks still run. `drl.restore` (22) is a post-restore check: it runs after the restore and reads its result. Checks never mutate content (no downloads, no deletes); check 4 may cause quarantine only through ark-sync's normal verify path.
 
 ### 4.3 State capture and restore
 Before check 5, the drill records `loaded_models`, the default model and whether whisper is running. Model checks load and unload as needed. At the end (also on abort, SIGTERM or a panic in a check, via `defer`), it:
@@ -167,7 +181,9 @@ Before check 5, the drill records `loaded_models`, the default model and whether
 2. reloads the previously loaded models in their original order and waits for `ready` (300 s each),
 3. resets the default model,
 4. restarts whisper if it was stopped.
-The run start sets `state.json: drill.in_progress` (`{"run_id", "started_at", "captured": {loaded_models, default_model, whisper_running}}`, [agent.md](agent.md) §3.5) and the end clears it. If the agent restarts mid-drill, it finds `drill.in_progress` and performs the restore on start. Check 22 verifies the result; failure raises `LAI-DRL-090` (red) because the node might be left without its normal brain.
+The run start sets `state.json: drill.in_progress` (`{"run_id", "started_at", "captured": {loaded_models, default_model, whisper_running}}`, [agent.md](agent.md) §3.5) and the end clears it. If the agent restarts mid-drill, it finds `drill.in_progress` and performs the restore on start. Check 22 verifies the result; failure raises `LAI-DRL-090` (red) because the node might be left without its normal brain. A restore that errors makes the document `restored.ok: false`, the run `fail` and carries `LAI-DRL-090`; the marker is cleared after one attempt, or every start would retry forever. If the capture itself fails nothing is changed and nothing is restored, and the document says `restored.ok: false` the same way. The restore runs under a context an abort cannot cancel, and it is idempotent: the agent can crash after it and before the marker is cleared.
+
+Recovery (`Recover`, called once at startup): when `drill.in_progress` is non-null the restore runs with the recorded `captured`, the run's document is its last checkpoint finished as `aborted` (`reason: the agent restarted during the drill`), and the marker is cleared. When the run's final document is already on disk, only the marker is cleared. A run stopped by `Abort` or by the agent stopping (`Shutdown`) does the same restore on its way out and is `aborted` too; an aborted run is not a drill result (`last_run_at` and `last_result` are not written).
 
 ### 4.4 Network fence
 While a run is active, the agent's shared outbound `http.Transport` uses a `DialContext` that allows only loopback and Unix sockets and records every refused dial (`network_fence.blocked_dials`, with host names in the details). The cloud link is paused for the drill's duration (heartbeats resume after; a heartbeat gap of up to the drill's length is normal and the cloud shows "running drill" from the last heartbeat before it). Sync can't run concurrently (§4.1). Subprocesses started by checks get no proxy and an environment with `HTTPS_PROXY=http://127.0.0.1:9` (a closed port) so a tool that tries the network fails quickly. Any `blocked_dials > 0` turns the run `warn` with `LAI-DRL-091` and names the caller, because it means some feature tried to reach the internet.
@@ -207,8 +223,8 @@ Anything that failed: note the doctor code shown and follow its fix, or [runbook
 | Situation | Behaviour | Code |
 |---|---|---|
 | Node in survival mode at drill time | skip (scheduled) / refuse | `LAI-DRL-003` |
-| Sync running | skip, retry next day (timer is monthly, so `Persistent` + an agent-side retry daily for 7 days) | `LAI-DRL-002` |
-| User chatting | defer up to 48 h, then `--quick` | `LAI-DRL-004` |
+| Sync running | skip, retry next day (timer is monthly, so `Persistent` + an agent-side retry daily for 7 days, then give up) | `LAI-DRL-002` |
+| User chatting | defer, retry every 2 h up to 48 h, then run `--quick` | `LAI-DRL-004` |
 | On battery < 50 % | skip | `LAI-DRL-005` |
 | Model load OOM | check fails, next model continues, restore still runs | `LAI-DRL-020` |
 | A check hangs | its timeout fails it; the run continues | — |
@@ -224,7 +240,7 @@ Anything that failed: note the doctor code shown and follow its fix, or [runbook
 - Results contain no secrets (model ids, timings, fixed test strings).
 
 ## 7. Observability
-Logs (component `drill`): `check_id`, `result`, `ms`, `code`. Events §4.5. Metrics: `localai_drill_last_overall` (0 pass / 1 warn / 2 fail), `localai_drill_last_finished_timestamp`, `localai_drill_check_ms{check}`.
+Logs (component `drill`): `check_id`, `result`, `ms`, `code`, with the `run_id`. Events §4.5: a skipped scheduled run publishes none; a run stopped by `Abort`, by `Shutdown` or by recovery ends with `drill.done` with `overall: aborted`. The gauges `localai_drill_last_*` are set by a completed run only. The agent has no Prometheus endpoint in phase 1 (agent.md §7), so the engine hands the gauges to a `Metrics` hook that the daemon wiring routes (counters in `GET /status`, the heartbeat). Metrics: `localai_drill_last_overall` (0 pass / 1 warn / 2 fail), `localai_drill_last_finished_timestamp`, `localai_drill_check_ms{check}`.
 
 ## 8. Doctor codes (shown in the desktop; English and Spanish)
 | Code | Sev | Meaning | Fix (en) | Fix (es) |

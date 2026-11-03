@@ -1,6 +1,7 @@
 package statusapi
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
@@ -114,7 +115,9 @@ type GPUProcess struct {
 	VRAMMiB int64  `json:"vram_mib"`
 }
 
-// ServiceRow is one entry of status.services.
+// ServiceRow is one entry of status.services. State is the health state of companion-services.md
+// section 4.6 (ok, degraded, down, missing_content, disabled, starting); Unit is empty, and sent as
+// null, for a service without a unit (piper, maps).
 type ServiceRow struct {
 	Name     string  `json:"name"`
 	Unit     string  `json:"unit"`
@@ -123,6 +126,19 @@ type ServiceRow struct {
 	Since    *string `json:"since"`
 	Restarts int     `json:"restarts"`
 	Healthy  bool    `json:"healthy"`
+	State    string  `json:"state,omitempty"`
+}
+
+// MarshalJSON writes an empty Unit as null; every other field is encoded as the struct tags say.
+func (r ServiceRow) MarshalJSON() ([]byte, error) {
+	type plain ServiceRow
+	if r.Unit != "" {
+		return json.Marshal(plain(r))
+	}
+	return json.Marshal(struct {
+		plain
+		Unit *string `json:"unit"`
+	}{plain: plain(r)})
 }
 
 // ModelsBlock is status.models.

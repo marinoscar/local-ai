@@ -120,7 +120,7 @@ The drive keeps a source tarball for **every** pinned commit; an internal root k
 
 ### 3.4 Keys (§Keys)
 Embedded in the agent binary (`agent/internal/kit/keys/`) and also copied to `kit/bin/`:
-- `minisign.pub`: the Local AI release signing key (verifies `SHA256SUMS.minisig`).
+- `minisign.pub`: the Local AI release signing key (verifies `SHA256SUMS.minisig`). `agent/internal/kit/keys/minisign.pub` is its **only** committed copy: the release workflow verifies with it and stamps it into `install-node.sh`, and the agent embeds it ([release-signing.md](../architecture/release-signing.md)).
 - `ubuntu-archive-keyring.gpg` (copied from the build machine's `/usr/share/keyrings/` at release time) for `apt_closure`.
 - `tailscale-archive-keyring.gpg` and the NVIDIA CUDA repo key (`nvidia-cuda-archive-keyring.gpg`), for third-party `extra_repos` (these file names are what catalog.md §3 `extra_repos[].key` refers to).
 Rotating a key is a catalog/agent release; old keys stay embedded for 2 years so older kits still verify.
@@ -147,6 +147,8 @@ All `rebuild-*` and `kit install*` need root (they write `/opt/localai`). They r
 - **llama.cpp**: bare mirror `kit/git/llama.cpp.git` plus a tarball per pinned commit. The tarball is enough to rebuild; the mirror allows moving to a different commit offline (for instance one that a newer model needs, if it was fetched before the internet went away).
 - **whisper.cpp**: same.
 - **Agent source**: a release asset made by CI with the vendored Go modules (`vendor/`) **and** the already-built UI (`agent/ui/dist/`), because Node.js and npm packages are not in the kit: rebuilding the agent offline needs only Go.
+  The release workflow ([release-node.yml](../../.github/workflows/release-node.yml), KIT-02) builds `local-ai-node-v<semver>-src.tar.gz` with [`scripts/release/build-src-tarball.sh`](../../scripts/release/build-src-tarball.sh): `git archive` of the tag, `go mod vendor` (the committed `agent/vendor/` must already equal it), and the built UI. The archive has **no top-level folder** (extract it straight into the build directory, §4.3.4). It is reproducible (entries sorted bytewise, owner 0:0, every mtime the commit time, modes 0644/0755, `gzip -n`): building twice from one tag gives one sha256, which the workflow asserts. `scripts/check-redaction.sh` runs on the assembled tree before packaging. While `agent/ui/` does not exist yet (the survival portal epic), the tarball carries no UI build and says so; once `agent/ui/package.json` exists, a missing or empty `agent/ui/dist/` fails the release.
+  A CI job (`offline-build`, [`scripts/release/offline-build-check.sh`](../../scripts/release/offline-build-check.sh)) extracts the tarball and runs the §4.3.4 build inside `unshare -n` with `GOPROXY=off`, then checks that `aiagent.new version` reports the release version; a module missing from `vendor/` is `LAI-KIT-030` there, before any node meets it.
 - **local-ai repo mirror** (drive only): full history, including the docs and catalog sources.
 
 #### 4.1.2 Toolchains
@@ -231,9 +233,9 @@ When `kit/cuda/<codename>-<arch>/` exists and `nvcc` is not installed, the build
 
 #### 4.3.4 Agent rebuild (`aictl rebuild-agent`)
 1. Extract `kit/toolchains/go<ver>.linux-<arch>.tar.gz` to `/var/lib/localai/build/go/`.
-2. Extract `kit/src/local-ai-<tag>-src.tar.gz` to `/var/lib/localai/build/local-ai-<tag>/`.
-3. `GOTOOLCHAIN=local GOFLAGS=-mod=vendor CGO_ENABLED=0 GOPROXY=off /var/lib/localai/build/go/bin/go build -trimpath -ldflags "-s -w -X …version=<tag>" -o aiagent.new ./agent/cmd/aiagent` (no network: `GOPROXY=off` makes it fail fast if anything isn't vendored, `LAI-KIT-030`).
-4. `aiagent.new version` must report the tag; then the same swap and rollback rules as self-update ([agent.md](agent.md) §4.10): keep `aiagent.prev`, restart, health check within 60 s.
+2. Extract `kit/src/local-ai-<tag>-src.tar.gz` (`<tag>` is the full release tag, `node-v<semver>`) to `/var/lib/localai/build/local-ai-<tag>/`. The archive has no top-level folder, so the build directory holds `agent/`, `docs/`, … directly.
+3. From `/var/lib/localai/build/local-ai-<tag>/agent/` (the Go module is `agent/`; the tree root has no `go.mod`): `GOTOOLCHAIN=local GOFLAGS=-mod=vendor CGO_ENABLED=0 GOPROXY=off /var/lib/localai/build/go/bin/go build -trimpath -ldflags "-s -w -X <module>/internal/app.Version=<semver>" -o ../aiagent.new ./cmd/aiagent`, where `<module>` is the `module` line of `agent/go.mod` and `<semver>` is the tag without `node-v` (no network: `GOPROXY=off` makes it fail fast if anything isn't vendored, `LAI-KIT-030`). The CI job `offline-build` runs exactly this command in `unshare -n` ([§4.1.1](#411-sources)).
+4. `aiagent.new version` must report `<semver>` (the same string the release binaries report); then the same swap and rollback rules as self-update ([agent.md](agent.md) §4.10): keep `aiagent.prev`, restart, health check within 60 s.
 An offline rebuild of the *same* tag produces a binary equivalent to the release; that's not needed for recovery (the release binary is in `kit/bin/`), but it proves the source is buildable, which the drill checks with `--dry-run` (toolchain and vendor present).
 
 ### 4.4 Verification (§Verification)

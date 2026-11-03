@@ -1,11 +1,13 @@
 name: release-tooling
-# Tests the signing script (scripts/release-sign.sh) with throwaway keys. No secrets are used.
+# Tests the release scripts with throwaway keys and a tiny fixture repository. No secrets are used.
+#   scripts/release-sign.sh                                   checksums, signing, verification
+#   scripts/release/{build-src-tarball,stamp-installer,assemble-node-release,offline-build-check}.sh   node release
 on:
   pull_request:
-    paths: ['scripts/release-sign.sh', 'scripts/tests/test-release-sign.sh', '.github/workflows/release-*.yml']
+    paths: ['scripts/release-sign.sh', 'scripts/release/**', 'scripts/check-redaction.sh', 'scripts/tests/test-release-sign.sh', 'scripts/tests/test-release-node.sh', '.github/workflows/release-*.yml']
   push:
     branches: [main]
-    paths: ['scripts/release-sign.sh', 'scripts/tests/test-release-sign.sh', '.github/workflows/release-*.yml']
+    paths: ['scripts/release-sign.sh', 'scripts/release/**', 'scripts/check-redaction.sh', 'scripts/tests/test-release-sign.sh', 'scripts/tests/test-release-node.sh', '.github/workflows/release-*.yml']
 permissions:
   contents: read
 jobs:
@@ -15,3 +17,16 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
       - run: scripts/tests/test-release-sign.sh
+  node-release-tests:
+    # Source tarball (reproducible, vendored, redaction-checked), installer stamping, asset assembly and signing, and
+    # the offline build inside `unshare -n` (the runner has passwordless sudo).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.24'
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign shellcheck
+      - name: shellcheck the release scripts and their tests
+        run: shellcheck -S style scripts/release-sign.sh scripts/release/*.sh && shellcheck -S warning scripts/tests/test-release-node.sh
+      - run: scripts/tests/test-release-node.sh

@@ -150,7 +150,8 @@ type SyncDone struct {
 }
 
 // ServiceState is the data of service.state. From and To are the previous and new health states
-// (companion-services.md section 4.6); Code is set when unhealthy.
+// (companion-services.md section 4.6); Code is set when unhealthy. Unit is empty for a service
+// without a systemd unit (piper, maps) and is sent as null.
 type ServiceState struct {
 	Name    string `json:"name"`
 	Unit    string `json:"unit"`
@@ -160,6 +161,19 @@ type ServiceState struct {
 	Sub     string `json:"sub"`
 	Healthy bool   `json:"healthy"`
 	Code    string `json:"code,omitempty"`
+}
+
+// MarshalJSON writes an empty Unit as null (agent.md section 3.10: the unit of piper and maps is
+// null); every other field is encoded as the struct tags say.
+func (s ServiceState) MarshalJSON() ([]byte, error) {
+	type plain ServiceState
+	if s.Unit != "" {
+		return json.Marshal(plain(s))
+	}
+	return json.Marshal(struct {
+		plain
+		Unit *string `json:"unit"`
+	}{plain: plain(s)})
 }
 
 // DriveMounted is the data of drive.mounted.
