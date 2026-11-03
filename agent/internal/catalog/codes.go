@@ -16,6 +16,15 @@ const (
 	// CodeUnknownRef: a profile references an unknown model or content id (also in lint).
 	CodeUnknownRef = doctor.CAT004
 
+	// CodeGitHubFetch: the GitHub source could not be reached or answered with an error (rate limit,
+	// outage, timeout); the previous catalog is kept.
+	CodeGitHubFetch = doctor.CAT006
+	// CodeGitHubNotFound: node.yaml catalog.channel names a catalog tag that does not exist.
+	CodeGitHubNotFound = doctor.CAT007
+	// CodeGitHubIncomplete: what GitHub delivered was truncated, too large or inconsistent with its
+	// tag; nothing was installed.
+	CodeGitHubIncomplete = doctor.CAT008
+
 	// CodeSchema: schema problem (unknown key, missing required field, wrong type, schema_version).
 	CodeSchema = doctor.CAT010
 	// CodePinning: source.revision, sha256 or size_bytes problem (and --online mismatches).

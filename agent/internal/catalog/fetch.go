@@ -93,7 +93,7 @@ type CloudSource interface {
 }
 
 // GitHubSource is priority 2: the catalog at a GitHub tag. channel is node.yaml catalog.channel
-// ("stable" or "catalog-<CATALOG_VERSION>"); resolving it to a tag is CAT-04's job.
+// ("stable" or "catalog-<CATALOG_VERSION>"); *GitHub (fetch_github.go) resolves it to a tag.
 type GitHubSource interface {
 	FetchCatalog(ctx context.Context, channel string) (*Bundle, error)
 }
