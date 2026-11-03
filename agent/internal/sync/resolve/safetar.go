@@ -190,10 +190,16 @@ func matchRule(rules []tarRule, rel string, isDir bool) (tarRule, string, bool) 
 
 // writeExtracted writes one file below root, creating its directories, never following a symlink.
 func writeExtracted(root, rel string, src io.Reader, size int64) error {
+	return writeExtractedMode(root, rel, src, size, 0o644)
+}
+
+// writeExtractedMode is writeExtracted with the file mode chosen by the caller (0644, or 0755 for an
+// archive's executable file; never a setuid or setgid bit).
+func writeExtractedMode(root, rel string, src io.Reader, size int64, mode os.FileMode) error {
 	full := filepath.Join(root, filepath.FromSlash(rel))
 	dir := filepath.Dir(full)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("%w: cannot create %s: %v", ErrUnsafeArchive, rel, err)
+		return fmt.Errorf("%w: cannot create %s: %w", ErrUnsafeArchive, rel, err)
 	}
 	// Nothing below root may be a symlink: it would redirect a later write.
 	for p := dir; len(p) > len(root); p = filepath.Dir(p) {
@@ -205,16 +211,16 @@ func writeExtracted(root, rel string, src io.Reader, size int64) error {
 	if fi, err := os.Lstat(full); err == nil && !fi.Mode().IsRegular() {
 		return fmt.Errorf("%w: %s exists and is not a regular file", ErrUnsafeArchive, rel)
 	}
-	f, err := os.OpenFile(full, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	f, err := os.OpenFile(full, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
-		return fmt.Errorf("%w: cannot write %s: %v", ErrUnsafeArchive, rel, err)
+		return fmt.Errorf("%w: cannot write %s: %w", ErrUnsafeArchive, rel, err)
 	}
 	n, err := io.Copy(f, io.LimitReader(src, size+1))
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
 	if err != nil {
-		return fmt.Errorf("%w: writing %s: %v", ErrUnsafeArchive, rel, err)
+		return fmt.Errorf("%w: writing %s: %w", ErrUnsafeArchive, rel, err)
 	}
 	if n != size {
 		return fmt.Errorf("%w: %s has an inconsistent size", ErrUnsafeArchive, rel)

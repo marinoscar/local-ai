@@ -207,6 +207,7 @@ type pstack struct {
 	evs       *recorder
 	planner   *fakePlanner
 	producers map[string]resolve.Producer
+	itemRes   map[string]ItemResolver
 	jr        *journal.Journal
 	idx       *ark.Index
 	eng       *Engine
@@ -214,8 +215,14 @@ type pstack struct {
 
 func newPStack(t *testing.T, withDrive bool, producers map[string]resolve.Producer, items ...plan.CatalogItem) *pstack {
 	t.Helper()
+	return newPStackRes(t, withDrive, producers, nil, items...)
+}
+
+// newPStackRes is newPStack with plain item resolvers (huggingface, url, ...) registered as well.
+func newPStackRes(t *testing.T, withDrive bool, producers map[string]resolve.Producer, itemRes map[string]ItemResolver, items ...plan.CatalogItem) *pstack {
+	t.Helper()
 	base := t.TempDir()
-	s := &pstack{t: t, base: base, clk: newFakeClock(), evs: &recorder{}, producers: producers}
+	s := &pstack{t: t, base: base, clk: newFakeClock(), evs: &recorder{}, producers: producers, itemRes: itemRes}
 	s.internal = ark.Root{ID: ark.InternalID, Kind: ark.KindInternal, Path: filepath.Join(base, "srv"), State: ark.StateReady}
 	roots := []ark.Root{s.internal}
 	if withDrive {
@@ -267,6 +274,11 @@ func (s *pstack) open() {
 	resolvers := NewItemResolvers()
 	for typ, p := range s.producers {
 		if err := RegisterProducer(resolvers, typ, p); err != nil {
+			s.t.Fatal(err)
+		}
+	}
+	for typ, r := range s.itemRes {
+		if err := resolvers.Register(typ, r); err != nil {
 			s.t.Fatal(err)
 		}
 	}
