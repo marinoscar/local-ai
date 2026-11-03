@@ -712,6 +712,63 @@ func TestThePlannerSeesTheParts(t *testing.T) {
 	}
 }
 
+// TestAptShapedProductAndKeep: a producer of the apt kind (one tree, signed-index trust, the closure in
+// the source fields) installs through the engine, and when it says the present version is already the
+// target (Keep) the item ends verified with no swap and the manifest untouched.
+func TestAptShapedProductAndKeep(t *testing.T) {
+	files := map[string][]byte{"pool/a.deb": data(3000, 51), "Packages": data(400, 52), "PACKAGES.lock": data(60, 53)}
+	var mu sync.Mutex
+	var presentSeen []string
+	apt := producerFunc(func(_ context.Context, req resolve.Request) (resolve.Product, error) {
+		mu.Lock()
+		presentSeen = append(presentSeen, req.PresentVersion)
+		mu.Unlock()
+		prod := resolve.Product{Version: req.Version, SortKey: "2026-11-02T00:00:00Z", Trust: manifest.TrustSignedIndex,
+			Source: map[string]any{"codename": "resolute", "arch": "amd64", "packages": []string{"build-essential"}}}
+		if req.PresentDir != "" && req.PresentVersion == req.Version {
+			prod.Keep = true
+			return prod, nil
+		}
+		prod.Parts = []resolve.Part{treePart(t, "debs", req.StagingDir(), "tree", req.ItemDir, files)}
+		return prod, nil
+	})
+	debs := plan.ContentItem(&catalog.ContentItem{ID: "kit-debs-resolute-amd64", Kind: "kit", Source: catalog.ContentSource{Type: "apt_closure", Codename: "resolute", Arch: "amd64"}})
+	s := newPStack(t, false, map[string]resolve.Producer{"apt_closure": apt}, debs)
+	row := dlRow("kit-debs-resolute-amd64", "kit", "closure1")
+	s.setRows(map[string][]plan.ItemPlan{ark.InternalID: {row}})
+	if st := s.sync(); st.Result != ResultOK || st.Totals.Done != 1 {
+		t.Fatalf("first run = %+v (%+v)", st, st.Items)
+	}
+	m, err := s.load(s.internal, "kit/debs/resolute-amd64")
+	if err != nil || m.Trust != manifest.TrustSignedIndex || m.Version != "closure1" || m.SortKey != "2026-11-02T00:00:00Z" || m.Source.String("codename") != "resolute" || m.FileCount != len(files) {
+		t.Fatalf("manifest = %+v, %v", m, err)
+	}
+	before, _ := os.ReadFile(filepath.Join(s.internal.Path, "kit", "debs", "resolute-amd64", manifest.FileName))
+
+	// A refresh that finds the same closure: the producer says Keep, the item is verified, nothing moves.
+	row.Action = plan.ActionUpdate
+	s.setRows(map[string][]plan.ItemPlan{ark.InternalID: {row}})
+	if st := s.sync(); st.Result != ResultOK || st.Totals.Done != 1 {
+		t.Fatalf("keep run = %+v (%+v)", st, st.Items)
+	}
+	after, _ := os.ReadFile(filepath.Join(s.internal.Path, "kit", "debs", "resolute-amd64", manifest.FileName))
+	if !bytes.Equal(before, after) {
+		t.Fatal("the manifest of a kept item was rewritten")
+	}
+	if _, err := os.Stat(filepath.Join(s.internal.Path, ".trash", "kit-debs-resolute-amd64")); err == nil {
+		t.Fatal("a kept item has a trash entry")
+	}
+	if rec, _ := s.jr.Items.Get(ark.InternalID, "kit-debs-resolute-amd64"); rec.State != journal.StateVerified || rec.Version != "closure1" {
+		t.Fatalf("record = %+v", rec)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(presentSeen) != 2 || presentSeen[0] != "" || presentSeen[1] != "closure1" {
+		t.Fatalf("the producer saw the present versions %v", presentSeen)
+	}
+	s.assertStagingClean(s.internal)
+}
+
 // TestProductResolverMapsParts is the table of how a product's parts become what the machine installs.
 func TestProductResolverMapsParts(t *testing.T) {
 	tarballs := resolve.Part{Name: "tarballs", Kind: resolve.PartFile, From: "src", To: "kit/src",
