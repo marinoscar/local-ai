@@ -164,10 +164,15 @@ func boolQuery(r *http.Request, name string) (bool, error) {
 
 // auditWrite records ev, logging a failure to write instead of failing the request.
 func (h *handlers) auditWrite(info *api.RequestInfo, action string, result audit.Result, code string, target map[string]string) {
+	h.auditWriteAs(api.AuditActor(info), info.ID, action, result, code, target)
+}
+
+// auditWriteAs is auditWrite for an actor that is not a request's principal (a cloud command).
+func (h *handlers) auditWriteAs(actor audit.Actor, reqID, action string, result audit.Result, code string, target map[string]string) {
 	if h.Audit == nil {
 		return
 	}
-	ev := audit.Event{Action: action, Result: result, Code: code, Actor: api.AuditActor(info), Target: target, ReqID: info.ID}
+	ev := audit.Event{Action: action, Result: result, Code: code, Actor: actor, Target: target, ReqID: reqID}
 	if err := h.Audit.Write(ev); err != nil {
 		h.log().Warn("audit write failed", "action", action, "error", err.Error())
 	}
