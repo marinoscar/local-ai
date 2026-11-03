@@ -538,12 +538,9 @@ func TestCrashBetweenAppendAndSideEffect(t *testing.T) {
 		journal.StatePlanned, journal.StateResolving, journal.StateDownloading, journal.StateVerifying,
 		journal.StateStaged, journal.StateSwapping, journal.StateSwapped, journal.StateVerified,
 	}
-	type crash struct {
-		name string
-		// where: "none" (clean kill after n steps), "after-append" (appended, killed before the
-		// side effect), "append-fails" (the append itself fails), "update-fails" (append ok, items.json write fails)
-		where string
-	}
+	// where: "none" (clean kill after n steps), "after-append" (appended, killed before the side
+	// effect), "append-fails-*" (the append itself fails at its write or its fsync), "update-fails"
+	// (append ok, the items.json write fails).
 	for n := range script {
 		for _, where := range []string{"none", "after-append", "append-fails-write", "append-fails-sync", "update-fails"} {
 			t.Run(fmt.Sprintf("step=%d/%s", n, where), func(t *testing.T) {
