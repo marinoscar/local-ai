@@ -22,6 +22,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/modes"
 	"github.com/marinoscar/local-ai/agent/internal/portal"
 	"github.com/marinoscar/local-ai/agent/internal/router"
+	"github.com/marinoscar/local-ai/agent/internal/router/migrate"
 	"github.com/marinoscar/local-ai/agent/internal/services"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
@@ -257,6 +258,9 @@ func (d *Daemon) build(ctx context.Context) error {
 		return fmt.Errorf("connectivity prober: %w", err)
 	}
 	if err := doctor.RegisterNetChecks(c.Checks, doctor.NetSources{Serve: c.Tailscale, Reachable: c.Tailscale, Connectivity: c.Prober}); err != nil {
+		return err
+	}
+	if err := migrate.RegisterChecks(c.Checks, migrate.CheckSources{Systemd: c.Systemd, State: c.State, Paths: migrate.DefaultPaths(env.Root)}); err != nil {
 		return err
 	}
 
