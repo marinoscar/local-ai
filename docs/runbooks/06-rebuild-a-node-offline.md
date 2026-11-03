@@ -183,13 +183,13 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
     - **If it doesn't work:**
       - `LAI-KIT-002` (the kit doesn't have the needed llama.cpp version): choose a commit the kit has. `ls /media/$USER/AI-ARK/localai/kit/src/` shows `llama.cpp-<commit>.tar.gz` files; run `sudo aictl rebuild-llama --from-kit --commit <commit>`. `LAI-KIT-001` (the source in the kit is damaged): `aictl kit verify --full`, or use another drive.
       - `LAI-KIT-010` (build tools missing) or `LAI-LLM-018` (the build failed; the message names a missing package): install it from the kit with `sudo aictl kit install-debs --packages <package>` (step 29), then run step 21 again.
-      - **Faster, if this computer exported its own build before:** `ls /media/$USER/AI-ARK/localai/kit/prebuilt/` shows `llama.cpp-<commit>-<backend>-….tar.gz`; restore it with `sudo aictl rebuild-llama --prebuilt <that file>`. It works only with the same Ubuntu version and GPU driver.
+      - **Faster, if this computer exported its own build before:** `ls /media/$USER/AI-ARK/localai/kit/prebuilt/` shows `llama.cpp-<commit>-<backend>-….tar.gz`; restore it with `sudo aictl rebuild-llama --prebuilt <that file>`. It works only with the same Ubuntu version, processor, backend and graphics chip: otherwise it stops with `LAI-KIT-048`, says what is different and names the files the kit has, and changes nothing. `sudo aictl rebuild-whisper` offers a file that fits exactly by itself.
       - Build fails on an NVIDIA computer (CUDA tools missing or not matching the driver): build for Vulkan or the processor instead: `sudo aictl rebuild-llama --from-kit --backend vulkan` (or `--backend cpu`, slow but always works).
       - `LAI-HW-019` (GPU type not detected): give it, for example `--cuda-arch 75` for an RTX 20xx, `86` for RTX 30xx, `89` for RTX 40xx.
       - Runs out of memory while building: `--jobs 2`.
       - `LAI-LLM-019` (or `LAI-KIT-021` for the speech-to-text build): the new build didn't work; the previous one is still in use. Nothing broke.
 22. **Build without switching** (to test first): `sudo aictl rebuild-llama --from-kit --no-activate`. It builds and tests the new version but keeps the running one. Old builds are kept too (2 by default; `--keep <n>` changes it).
-23. **Speech-to-text has its own build:** `sudo aictl rebuild-whisper --from-kit` (same idea and flags; `LAI-SVC-012` asks for it).
+23. **Speech-to-text has its own build:** `sudo aictl rebuild-whisper --from-kit` (same idea and flags, including `--prebuilt <file>`; `LAI-SVC-012` asks for it).
 24. **Save the working builds into the kit** (so the next rebuild of this computer can skip compiling): `sudo aictl kit export-build`. It also happens by itself after each successful build.
 
 ---

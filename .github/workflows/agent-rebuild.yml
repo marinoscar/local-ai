@@ -1,0 +1,46 @@
+name: agent-rebuild
+# Rebuilds the agent for real, the way `aictl rebuild-agent` does (KIT-05, rebuild-kit.md section 4.3.4):
+# from the source tarball of the release layout (scripts/release/build-src-tarball.sh: agent/ with
+# go.mod, cmd/aiagent and vendor/, no top-level folder), with the build manager of
+# agent/internal/router/build (AgentBuilder) and the NETWORK DISABLED for the whole rebuild: the test
+# binary runs inside `unshare -n`, so the checks, the extraction, `go build` with GOPROXY=off and
+# -mod=vendor, the static-link check, the start-up test (`aiagent.new version --json` must report the
+# tag's version) and the swap cannot reach the internet. A second case injects a new agent that never
+# becomes healthy and proves the rollback to aiagent.prev. Only the preparation (the tarball) has network.
+on:
+  pull_request:
+    paths: ['agent/internal/router/build/**', 'agent/internal/kit/**', 'scripts/release/build-src-tarball.sh', '.github/workflows/agent-rebuild.yml']
+  push:
+    branches: [main]
+    paths: ['agent/internal/router/build/**', 'agent/internal/kit/**', 'scripts/release/build-src-tarball.sh', '.github/workflows/agent-rebuild.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  TAG: node-v0.0.1-ci
+jobs:
+  offline-rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: Build the agent source tarball of this commit (network)
+        run: |
+          set -euo pipefail
+          scripts/release/build-src-tarball.sh --tag "$TAG" --ref "$GITHUB_SHA" --out "$RUNNER_TEMP/src"
+          echo "AGENT_TARBALL=$RUNNER_TEMP/src/local-ai-$TAG-src.tar.gz" >> "$GITHUB_ENV"
+      - name: Compile the test binary (network)
+        working-directory: agent
+        run: go test -c -o "$RUNNER_TEMP/build.test" ./internal/router/build
+      - name: Rebuild the agent inside a network namespace (unshare -n)
+        run: |
+          set -euo pipefail
+          sudo unshare -n env \
+            LOCALAI_EXPECT_NO_NETWORK=1 \
+            LOCALAI_AGENT_GO="$(command -v go)" \
+            LOCALAI_AGENT_KIT_TARBALL="$AGENT_TARBALL" \
+            "$RUNNER_TEMP/build.test" -test.run '^TestAgentRealBuild$' -test.v -test.timeout 20m
