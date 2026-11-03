@@ -4,14 +4,26 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/execx"
+	"github.com/marinoscar/local-ai/agent/internal/update"
 )
 
 func runCmd(t *testing.T, ctx context.Context, args ...string) (int, string, string) {
 	t.Helper()
+	// No test starts the real daemon: it is root-only and listens on the machine's ports.
+	old := serve
+	serve = func(context.Context, io.Writer) int { return 0 }
+	t.Cleanup(func() { serve = old })
 	var out, errb bytes.Buffer
 	code := run(ctx, args, &out, &errb)
 	return code, out.String(), errb.String()
@@ -37,12 +49,12 @@ func TestDispatch(t *testing.T) {
 		{"aictl anything", []string{"aictl", "bogus"}, 2, "", "Unknown command"},
 		{"aictl no args", []string{"aictl"}, 2, "", "aictl: command line"},
 		{"aiagent ctl --help", []string{"aiagent", "ctl", "--help"}, 0, "aictl: command line", ""},
-		{"aiagent serve stops on cancel", []string{"aiagent", "serve"}, 0, "", ""},
+		{"aiagent serve runs the daemon", []string{"aiagent", "serve"}, 0, "", ""},
 		{"aiagent version", []string{"aiagent", "version"}, 0, "aiagent ", ""},
 		{"release file name is the agent, not the cli", []string{"./aiagent-linux-amd64", "version"}, 0, "aiagent ", ""},
 		{"migrate llama-qwen is a stub", []string{"aiagent", "migrate", "llama-qwen", "--dry-run"}, 1, "", "not implemented"},
 		{"migrate without target", []string{"aiagent", "migrate"}, 2, "", "usage:"},
-		{"update-rollback-check is a stub", []string{"aiagent", "update-rollback-check"}, 1, "", "not implemented"},
+		{"update-rollback-check takes no argument", []string{"aiagent", "update-rollback-check", "now"}, 2, "", "usage:"},
 		{"no argument prints usage", []string{"aiagent"}, 2, "", "usage:"},
 		{"unknown subcommand prints usage", []string{"aiagent", "bogus"}, 2, "", "usage:"},
 		{"version with a bad flag", []string{"aiagent", "version", "--yaml"}, 2, "", "usage:"},
@@ -89,4 +101,82 @@ func TestVersionJSONHasExactlyFiveKeys(t *testing.T) {
 	if len(m) != 5 || m["os"] != runtime.GOOS || m["arch"] != runtime.GOARCH {
 		t.Errorf("unexpected document: %v", m)
 	}
+}
+
+type recordExec struct{ calls []string }
+
+func (r *recordExec) Run(_ context.Context, c execx.Cmd) (execx.Result, error) {
+	r.calls = append(r.calls, filepath.Base(c.Path)+" "+strings.Join(c.Args, " "))
+	return execx.Result{}, nil
+}
+
+// useRollbackRunner points update-rollback-check at a temp node for the duration of the test.
+func useRollbackRunner(t *testing.T) (update.Paths, *recordExec) {
+	t.Helper()
+	root := t.TempDir()
+	paths := update.Paths{UpdateDir: filepath.Join(root, "update"), BinDir: filepath.Join(root, "bin")}
+	for _, d := range []string{paths.UpdateDir, paths.BinDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := &recordExec{}
+	old := rollbackRunner
+	rollbackRunner = func(stderr io.Writer) *update.Runner {
+		return &update.Runner{
+			Paths: paths, Current: "0.1.0", Exec: rec, Systemctl: "/usr/bin/systemctl",
+			Log: slog.New(slog.NewJSONHandler(stderr, nil)),
+		}
+	}
+	t.Cleanup(func() { rollbackRunner = old })
+	return paths, rec
+}
+
+func TestUpdateRollbackCheck(t *testing.T) {
+	writeMarker := func(t *testing.T, paths update.Paths) {
+		t.Helper()
+		now := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+		b, _ := json.Marshal(update.Pending{From: "0.1.0", To: "0.2.0", StartedAt: now, Deadline: now.Add(2 * time.Minute)})
+		if err := os.WriteFile(paths.Pending(), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Run("the update was confirmed: nothing to do", func(t *testing.T) {
+		_, rec := useRollbackRunner(t)
+		code, _, errs := runCmd(t, context.Background(), "aiagent", "update-rollback-check")
+		if code != 0 || !strings.Contains(errs, "none") || len(rec.calls) != 0 {
+			t.Fatalf("exit %d, stderr %q, calls %v", code, errs, rec.calls)
+		}
+	})
+	t.Run("the update was not confirmed: roll back and restart", func(t *testing.T) {
+		paths, rec := useRollbackRunner(t)
+		writeMarker(t, paths)
+		if err := os.WriteFile(paths.Agent(), []byte("new"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(paths.Prev(), []byte("old"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		code, _, errs := runCmd(t, context.Background(), "aiagent", "update-rollback-check")
+		if code != 0 || !strings.Contains(errs, "rolled_back") {
+			t.Fatalf("exit %d, stderr %q", code, errs)
+		}
+		if got, _ := os.ReadFile(paths.Agent()); string(got) != "old" {
+			t.Fatalf("aiagent holds %q", got)
+		}
+		if len(rec.calls) != 1 || rec.calls[0] != "systemctl --no-block restart localai-agent.service" {
+			t.Fatalf("calls %v", rec.calls)
+		}
+	})
+	t.Run("no previous binary: exit 1 with the doctor code", func(t *testing.T) {
+		paths, _ := useRollbackRunner(t)
+		writeMarker(t, paths)
+		if err := os.WriteFile(paths.Agent(), []byte("new"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		code, _, errs := runCmd(t, context.Background(), "aiagent", "update-rollback-check")
+		if code != 1 || !strings.Contains(errs, "LAI-AGT-009") {
+			t.Fatalf("exit %d, stderr %q", code, errs)
+		}
+	})
 }

@@ -1,0 +1,37 @@
+[Unit]
+Description=Local AI node agent (aiagent)
+Documentation=https://github.com/marinoscar/local-ai/blob/main/docs/specs/agent.md
+After=local-fs.target network.target tailscaled.service
+# No Requires/Wants on tailscaled or network-online: the agent must start with no network at all.
+StartLimitIntervalSec=600
+StartLimitBurst=20
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/opt/localai/bin/aiagent serve
+Restart=always
+RestartSec=2
+TimeoutStartSec=90
+TimeoutStopSec=30
+WatchdogSec=60
+RuntimeDirectory=localai
+RuntimeDirectoryMode=0755
+UMask=0027
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aiagent
+# Moderate hardening. The agent is root by design (overview §3.1): it manages units, /etc/localai and tailscale serve.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+
+[Install]
+WantedBy=multi-user.target
