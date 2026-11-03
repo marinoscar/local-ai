@@ -1066,11 +1066,16 @@ paths:
       tags: [ark]
       operationId: verifyArk
       summary: Re-verify content (bit rot)
-      description: Runs as a run of trigger `verify`, sharing the run slot with sync. ark-sync.md section 3.5. agent.md section 3.8.19.
+      description: |
+        Starts a run of trigger `verify` that re-hashes what is stored, oldest `last_reverified_at` first, and
+        shares the run slot with sync (`409 LAI-SYN-005`). It reads local disks only, so it is allowed in every
+        mode. Without `full` and `items` it checks the copies not checked in `sync.reverify_days`, within
+        `sync.reverify_budget_minutes`; `full: true` checks everything with no budget; a named item is checked
+        whatever its age. A copy that no longer matches its MANIFEST is `LAI-SYN-025`: on a writable root it is
+        moved to quarantine (an older version in `.trash` is put back first), on a read-only root it is excluded
+        in memory and nothing is written. ark-sync.md sections 3.5 and 4.13. agent.md section 3.8.19.
       x-localai-auth: op
       x-localai-timeout: "10 s"
-      x-localai-status: planned
-      x-localai-issue: SYNC-13
       requestBody:
         required: true
         content:
@@ -1086,15 +1091,15 @@ paths:
             X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/RunAccepted"}
+              schema: {$ref: "#/components/schemas/SyncAccepted"}
               examples:
-                run: {value: {run_id: "run-20261102T031500Z-a1f3"}}
+                run: {value: {run_id: "run-20261102T031500Z-a1f3", state: running, events: "/api/v1/events?types=sync.*"}}
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "409":
           $ref: "#/components/responses/Conflict"
-          description: "LAI-SYN-005: a run is already active."
+          description: "LAI-SYN-005: a run is already active (details.run_id). LAI-ARK-001: no root can be read."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "500": {$ref: "#/components/responses/Internal"}
@@ -1106,13 +1111,17 @@ paths:
       operationId: importArk
       summary: Import content from another root
       description: |
-        Works in every mode (no network). With `dry_run: true` the answer is `200` with the plan. `from_root`
-        absent and several drives mounted is `409 LAI-ARK-015` with `details.roots`. ark-sync.md section 3.5
-        and 4.14. agent.md section 3.8.20.
+        Copies verified items from an AI-ARK drive to the internal root. Works in every mode (no network is
+        used, and the downloader of an import refuses every dial). With `dry_run: true` the answer is `200`
+        with the plan (a list with the plan of the internal root; nothing is written) and no run slot is
+        taken. `from_root` absent and several drives mounted is `409 LAI-ARK-015` with `details.roots`.
+        `catalog: true` installs the drive's catalog first when it is newer and valid (an invalid one is
+        `LAI-CAT-002` in the run's `warnings` and the import goes on). An item the profile does not list is
+        refused (`not_in_profile`) unless `add_to_profile` is set, which needs `items` and admin* (`403`
+        with `details.pin_required` for an operator without the PIN; not needed for a dry run). The run has
+        trigger `import`. ark-sync.md sections 3.5 and 4.14. agent.md section 3.8.20.
       x-localai-auth: op
       x-localai-timeout: "10 s"
-      x-localai-status: planned
-      x-localai-issue: SYNC-13
       requestBody:
         required: true
         content:
@@ -1128,7 +1137,9 @@ paths:
             X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/SyncPlan"}
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/SyncPlan"}
         "202":
           description: The run started.
           headers:
@@ -1136,14 +1147,18 @@ paths:
             X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/RunAccepted"}
+              schema: {$ref: "#/components/schemas/SyncAccepted"}
+              examples:
+                run: {value: {run_id: "run-20261102T031500Z-b7c2", state: running, events: "/api/v1/events?types=sync.*"}}
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
         "409":
           $ref: "#/components/responses/Conflict"
-          description: "LAI-SYN-005 a run is already active; LAI-ARK-015 several drives are mounted and from_root is absent (details.roots)."
+          description: "LAI-SYN-005 a run is already active (details.run_id); LAI-ARK-015 several drives are mounted and from_root is absent (details.roots); LAI-ARK-004 the drive is unclean; LAI-ARK-001 the internal root cannot be written."
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+          description: "LAI-CAT-003: the profile of the internal root is not in the catalog."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "500": {$ref: "#/components/responses/Internal"}
@@ -3264,13 +3279,6 @@ components:
         run_id: {type: string}
         state: {type: string, enum: [cancelling, idle], description: "`idle`: no run was active, so nothing was cancelled (run_id is the last run's, or empty)."}
 
-    RunAccepted:
-      type: object
-      required: [run_id]
-      additionalProperties: false
-      properties:
-        run_id: {type: string, pattern: "^run-"}
-
     VerifyRequest:
       type: object
       additionalProperties: false
@@ -3283,9 +3291,9 @@ components:
       type: object
       additionalProperties: false
       properties:
-        from_root: {type: string, description: "A root id. Absent with several drives mounted is 409 LAI-ARK-015."}
-        items: {type: array, items: {type: string}}
-        add_to_profile: {type: boolean, default: false}
+        from_root: {type: string, description: "A root id. Absent means the only mounted drive; with several mounted it is 409 LAI-ARK-015 (details.roots)."}
+        items: {type: array, items: {type: string}, description: "Catalog ids; empty means everything the profile wants that the drive holds."}
+        add_to_profile: {type: boolean, default: false, description: "Append the named items the profile does not list to node.yaml profile_overrides. Needs items and admin* (not for a dry run)."}
         catalog: {type: boolean, default: false}
         dry_run: {type: boolean, default: false}
 

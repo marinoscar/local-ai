@@ -82,6 +82,8 @@ const (
 	ActionArkInit       = "ark.init"
 	ActionArkMount      = "ark.mount"
 	ActionArkProfileSet = "ark.profile.set"
+	// ActionArkImport is an import from an ark drive (aictl ark import, POST /ark/import).
+	ActionArkImport = "ark.import"
 )
 
 // Actor is the "actor" object of an audit line.
