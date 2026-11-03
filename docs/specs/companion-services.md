@@ -465,6 +465,13 @@ State values: `ok`, `degraded` (works with a problem), `down` (should run but do
 - A unit in systemd `failed` state is restarted under the same budget.
 - In survival mode, `require_services` from the profile (modes.md §3) that are `down` or `missing_content` are shown in the Portal status strip.
 
+**How the supervisor applies them** (SVC-01, `internal/svc/health`):
+- *State.* Per service, in this order: not enabled in `node.yaml` → `disabled` (never probed, never restarted); `Content` says nothing to serve → `missing_content` (never probed, never restarted, with the code the probe names: `LAI-SVC-001`, `010`, `022`, `030`); a unit that is `activating` → `starting`; a unit that is not active (stopped by the operator, or `failed`) → `down` with `LAI-SVC-002` / `011`; active but not probed yet → `starting`; probe passes → `ok`, or `degraded` when the readiness reports a problem of warning or worse; probe fails within 60 s of the unit's start → `starting` and the failure does not count; fails after that → `degraded` for failures 1 and 2, and at the 3rd the unit is restarted (state `starting` again). `down` also is the state of an active unit that fails while the restart budget is spent. A service without a unit (piper, maps) has no restart: its liveness failure is `down` at once, with the code the probe names (`LAI-SVC-020`, `034`).
+- *Probes.* Liveness every 30 s, and on every 10 s tick while the service is `starting` and has not answered, so it is `ok` within one tick of answering; each probe call is bounded to 3 s. A unit that just became active (seen through `Manager.Subscribe`) is probed at once. A unit stopped on purpose is never restarted: only `failed` and an active-but-unresponsive unit are.
+- *Budget.* A sliding 1-hour window per service, in memory; a restart that fails to run counts too. When it is spent the supervisor does not restart, raises `LAI-SVC-051` (first in `problems`, then the `down` code) and waits: the window frees by itself an hour after the oldest restart, and the supervisor then tries again. `LAI-SVC-050` (info) stays in `problems` while the service has a restart inside the window, and never makes it `degraded`.
+- *Events.* `service.state` is published once per change of the health state (a change of the systemd `active`/`sub` alone is not a transition); the first observation after agent start is the baseline and publishes nothing. `code` is the first problem of the new state, only when the new state is not `ok`; `unit` is `null` for piper and maps.
+- *Where the Go seams are.* A service plugs in with `health.Spec{Name, Unit, Enabled, Probe, DownCode, Interval}` and a `health.Probe` of four methods (`Liveness`, `Content`, `Readiness`, `Deep`; `health.FuncProbe` fills the ones a service does not need). `health.KiwixSpec` and `health.WhisperSpec` carry the unit and the HTTP liveness of this table; the readiness, content and deep checks of kiwix, whisper, piper and maps are plugged in by SVC-03, SVC-06, SVC-08, SVC-09 and SVC-11. `Supervisor` (an `app.Worker` named `svc-health`) serves `Records` (the rows of `GET /services`, via `api.ServicesDeps.Health`), `Snapshot` (`services.Status` rows for `/status`; `health.Combine(watcher, supervisor)` merges them with llama's), `Reduced` (the cloud heartbeat form), `Flagged` (the survival `require_services` that are `down` or `missing_content`, for the Portal), `Deep`, and the doctor checks `svc.health` (fast, cached) and `svc.deep` (slow, on demand). When the supervisor is wired, `services.Watcher` is limited to llama (`WatcherOptions.Only`) so only one component publishes `service.state` per service.
+
 **Surfaced in:**
 - `GET /api/v1/services`:
   ```json
@@ -477,7 +484,7 @@ State values: `ok`, `degraded` (works with a problem), `down` (should run but do
   ]}
   ```
   `POST /services/{name}/{start|stop|restart}` stays limited to `llama`, `kiwix`, `whisper` (agent.md). `piper` and `maps` have no process to control.
-- `GET /api/v1/status` → `services` summary (`name`, `state`).
+- `GET /api/v1/status` → `services` summary (`name`, `state`, with the unit fields of every row; `unit` is `null` for piper and maps).
 - `/events` → `service.state` on every state change, payload `{"name","unit","from","to","active","sub","healthy","code?"}` (the same union is in [agent.md](agent.md) §3.10; `from`/`to` are the state values above, `active`/`sub` the systemd states, `healthy` = `to == "ok"`; `unit` is `null` for piper and maps).
 - `GET /api/v1/doctor` → the problems above with fixes.
 - `/portal/status` → reduced form (`capabilities.library|talk|maps|photo`) ([survival-portal.md](survival-portal.md) §3.5).
@@ -533,7 +540,7 @@ Logs (slog, `component` ∈ `kiwix`, `whisper`, `piper`, `maps`, `health`). Keys
 {"level":"INFO","msg":"stt done","component":"whisper","audio_s":3.2,"language":"en","elapsed_ms":1840,"model":"whisper-small"}
 {"level":"WARN","msg":"service restarted","component":"health","service":"kiwix","code":"LAI-SVC-050","failures":3}
 ```
-Events: `service.state`. Metrics (in `/api/v1/status` → `services.metrics`): `localai_stt_requests_total{result}`, `localai_stt_seconds` (histogram buckets 1, 2, 5, 10, 30, 60), `localai_tts_requests_total{voice,result}`, `localai_tts_seconds`, `localai_maps_tile_bytes_total`, `localai_service_restarts_total{service}`.
+Events: `service.state`. Metrics (in `GET /api/v1/status?counters=1` → `node.counters`, where agent.md §7 puts every counter; `/status` `services` is an array, so it has no `metrics` key): `localai_stt_requests_total{result}`, `localai_stt_seconds` (histogram buckets 1, 2, 5, 10, 30, 60), `localai_tts_requests_total{voice,result}`, `localai_tts_seconds` (buckets 0.5, 1, 2, 5, 10, 30), `localai_maps_tile_bytes_total`, `localai_service_restarts_total{service}`. They live in `health.Metrics`; its `Counters()` is the map a `CounterView` merges into `node.counters`: a counter is a number under its name with the labels in braces, a histogram is `{count, sum, buckets}` with cumulative buckets and `+Inf`.
 
 ## 8. Doctor codes
 
