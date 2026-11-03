@@ -5,7 +5,6 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -160,15 +159,22 @@ func TestSIGKILLResume(t *testing.T) {
 			return true
 		})
 		job := FileJob{Root: root, Item: testItem, Version: testVer, Name: testName}
-		cmd := exec.Command(self, "-test.run=^TestHelperDownloadProcess$")
-		cmd.Env = append(os.Environ(), envHelper+"=1", envURL+"="+srv.URL+"/f", envRoot+"="+root, envJDir+"="+jdir,
-			envSeed+"=31", envSize+"="+strconv.Itoa(size))
-		if err := cmd.Start(); err != nil {
+		// os.StartProcess, not os/exec: only internal/execx may import os/exec (agent.md section 3.2).
+		null, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+		if err != nil {
 			t.Fatal(err)
 		}
+		env := append(os.Environ(), envHelper+"=1", envURL+"="+srv.URL+"/f", envRoot+"="+root, envJDir+"="+jdir,
+			envSeed+"=31", envSize+"="+strconv.Itoa(size))
+		proc, err := os.StartProcess(self, []string{self, "-test.run=^TestHelperDownloadProcess$"},
+			&os.ProcAttr{Env: env, Files: []*os.File{null, null, null}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = null.Close()
 		threshold := int64(1 + rnd.IntN(size-1))
-		exited := make(chan error, 1)
-		go func() { exited <- cmd.Wait() }()
+		exited := make(chan struct{})
+		go func() { _, _ = proc.Wait(); close(exited) }()
 		deadline := time.After(30 * time.Second)
 	wait:
 		for {
@@ -176,12 +182,12 @@ func TestSIGKILLResume(t *testing.T) {
 			case <-exited: // finished before the kill: still a valid scenario
 				break wait
 			case <-deadline:
-				_ = cmd.Process.Kill()
+				_ = proc.Kill()
 				t.Fatal("the helper did not reach the kill point")
 			default:
 			}
 			if st, err := os.Stat(job.PartPath()); err == nil && st.Size() >= threshold {
-				_ = cmd.Process.Signal(syscall.SIGKILL)
+				_ = proc.Signal(syscall.SIGKILL)
 				<-exited
 				killedMidway++
 				break wait
