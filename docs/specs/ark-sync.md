@@ -59,7 +59,7 @@ Non-goals:
 | `<root>/.staging/<item-id>/<version>/<file>` | downloader | Fully downloaded, verified, waiting for swap |
 | `<root>/.staging/quarantine/<item-id>/<UTC-timestamp>/` | verifier | Files that failed verification, plus `reason.json` |
 | `<root>/.trash/<item-id>/<version>/` | swapper | The previous version, kept until retention allows deletion (§4.10) |
-| `/var/lib/localai/sync/items.json` | journal | Current state of every (root, item) pair. Atomic write (tmp + `fsync` + rename) |
+| `/var/lib/localai/sync/items.json` | journal | Current state of every (root, item) pair. Atomic write (tmp + `fsync` + rename + `fsync` of the directory); the previous good file is kept as `items.json.bak` (§4.5.2) |
 | `/var/lib/localai/sync/runs/<run-id>.jsonl` | journal | Append-only event log of one run. Last 60 runs kept |
 | `/var/lib/localai/sync/apt/<codename>-<arch>/` | `apt_closure` resolver | Private apt state (lists, cache config). Never `/var/lib/apt` |
 | `/var/lib/localai/sync/lock` | agent | `flock` guard so that two agent processes can't sync at once |
@@ -383,6 +383,14 @@ Other components never walk directories. They call `ark.BestCopy(itemID) (Copy, 
 
 `BestCopy` is cheap (in-memory index rebuilt after each item swap, mount or unmount) and safe for concurrent use.
 
+How it is built (`agent/internal/ark/bestcopy.go`, `itemdir.go`):
+- `ark.ItemDir` is the one function that maps an item to its directory (§3.1 table); the index scans only those directories (`docs`, `maps/*`, `models/*`, `speech/whisper/*`, `speech/piper/*`, `kiwix/*`, and the directories of `kit/` down to three levels), so `kit/config/`, `kit/MANIFEST.json` (the kit's own index), `.staging` and `.trash` are never items (R9). A manifest that sits in a directory `ItemDir` would not choose for its item is misplaced and counts as missing.
+- A copy exists only if its MANIFEST is valid and every listed file is there with the recorded size (a directory item needs its `SHA256SUMS`). Nothing is hashed. Otherwise the item is left out of the index with `LAI-SYN-052`; a directory without a manifest is just not present (a half-swapped directory looks like this on purpose, §4.5.1).
+- The index is an immutable snapshot swapped atomically. `BestCopy` reads memory only, so it never waits for a slow or unplugged drive. `Rebuild(roots)` (start, mount, unmount) reads the roots concurrently and is bounded by its context; `Refresh(root, dir)` re-reads one item directory after a swap; `SetRootState` excludes an `ejecting` root at once without reading it.
+- Ties: the same sort key with different versions goes to the greater version string, so the order is total. "Drives in mount order" is the mountinfo mount id (`Root.MountID`), then the root id.
+- Rule 4: `MarkServeVerified(root, item, version)` is the flag the verification layer sets once a copy on an `unclean` root has passed its serve-time check. It belongs to that exact version, survives rebuilds of the same copy, and is dropped when the root is unmounted or the version changes. An unverified copy on an unclean root is invisible, including as "the internal root's version" for rule 2. Hashing is not done here (§4.13).
+- `Copies(item)` returns every servable copy, best first, for callers that need to see all of them (retention counting other verified copies, `local_copy` sourcing). A directory item's `Copy.Files` is empty; its content is the tree under `Copy.Dir`.
+
 ### 4.3 Run lifecycle
 
 ```
@@ -568,6 +576,15 @@ For an item with target dir `D` and staging dir `S`:
 8. Journal `{"ev":"swap_done"}`.
 
 Crash recovery for `swapping`: replay the planned renames, skipping any whose source no longer exists and whose destination exists with the expected size; then do steps 7–8. If a destination is missing and its source is missing too, the item goes to `failed` (`LAI-SYN-026`), and the previous version is restored from `.trash` (§4.10 rule R4).
+
+#### 4.5.2 Journal files (`agent/internal/sync/journal`)
+- **`items.json`**: `{"schema_version": 1, "updated_at": "…", "items": {"<root_id>/<item_id>": {…}}}`, keys sorted. A record has `state`, `version` (the target), `attempts`, `last_error` and `code` (a doctor code), `partial_bytes`, `checkpoints` (per file: `offset`, `sha_state`, `etag`, `last_modified`, `url`; headers are never stored), `consecutive_failed_runs`, `updated_at` and the open bag `extras` (`extras.inventory` for SYNC-14). Unknown keys are kept on rewrite. Every change is written through at once: the previous good file is copied to `items.json.bak` (best effort, and a damaged file never replaces a good backup), then the new content replaces `items.json` atomically.
+- **Open** (agent start): leftover temp files are swept; a damaged or foreign-schema `items.json` is renamed to `items.json.damaged-<UTC time>` (never deleted); then `items.json.bak` is tried, and when that is unusable too the records are rebuilt from the MANIFESTs of the mounted roots. A restored or rebuilt state is reconciled with the manifests, written out, and reported as `LAI-SYN-050`. A node with no file, no backup and no manifest is simply new and raises nothing. A read error (as opposed to damage) fails the open without touching the file. The backup is one write behind by design, so reconcile makes the manifests win: the manifest is the commit point of a swap.
+- **Reconcile** (also callable by the engine): a manifest with no record gets a `verified` one; a record for the manifest's version that is not yet `verified` becomes `verified` (the journal was a step behind a swap that committed); a `verified` record whose version differs takes the manifest's; a `verified` record on a scanned root that has no manifest any more is dropped. Records in other states, and records of roots that were not scanned (an unplugged drive), are left alone.
+- **Run logs** `runs/<run-id>.jsonl`, run id `run-YYYYMMDDTHHMMSSZ-<4 hex>`: one compact JSON line per event, `O_APPEND`, `fsync` before `Append` returns, the newest 60 files kept (the only deletion the journal does, and only of its own logs). Every event has `ev` and `at`; `state`, `ckpt`, `swap_plan` and `swap_done` also carry `root`, `item` and `version` so that a replay knows whose they are. `ckpt` events are written every 64 MiB.
+- **Write-ahead**: `Append` returns nil only after the line is on disk, and the caller performs the side effect after that, never before. If `Append` fails the caller must not perform the side effect; the line may still be on disk (written, fsync failed), which replay tolerates. A failed append never swallows the next one: the next line starts on a fresh line, and a torn line is skipped on read.
+- **Replay**: on start, after `items.json` is open and before the new run starts, the newest run log is replayed (`Replay`): per item, the last `state` event's `to` is where the item was going, the last `ckpt` per file is the resume point, and a `swap_plan` without a later `swap_done` is a swap to finish (§4.5.1). The intents are written into `items.json` (`ApplyIntents`; a record that is `verified` for its version is left alone, since `verified` is terminal and the manifest decided it). The engine resumes each non-terminal intent after checking the disk, because an intended state may be one whose side effect never happened. Replaying twice is harmless.
+- **Unknown staging**: `.staging/<item-id>/<version>` with no record for that item at that version in a state other than `verified` (and not `.staging/quarantine`) is junk that was never verified. The journal lists such paths (`UnknownStaging`); deleting them is retention's job (§4.10).
 
 ### 4.6 Download and resume
 
@@ -819,6 +836,10 @@ Field rules:
 - `trust` ∈ `pinned` (catalog sha matched source) · `sidecar` (kiwix sidecar) · `signed_index` (apt) · `computed` (pmtiles/git/docs) · `tofu` (§4.9.5).
 - `history` keeps the last 10 versions (metadata only).
 - Unknown fields are preserved on rewrite (forward compatibility for a node running an older agent on a newer drive).
+- The code (`agent/internal/sync/manifest`) reads strictly and writes deterministically. Invalid, all `LAI-SYN-052`: not JSON or a wrong type; `schema_version` missing or not `1` (a newer file is never rewritten; the schema is checked before the other fields); `state` other than `verified`; an `item_id` or `version` that is not one plain path element; an empty `item_kind`, `sort_key` or `source.type`; a model without `engine`; an unknown `trust`; a missing `downloaded_at`, `verified_at` or `last_reverified_at`; a file with an empty kind, an unsafe or duplicate `path` (absolute, `..`, `MANIFEST.json`, `SHA256SUMS`), a negative size or a `sha256` that is not 64 lowercase hex digits; both a file list and a `tree_sha256`, or neither; a directory item without `file_count`.
+- Write order is the spec order (`schema_version`, `item_id`, `item_kind`, `engine` when set, `catalog_version`, `version`, `sort_key`, `state`, `source`, `files` or `tree_sha256` and `file_count`, `total_bytes`, the three timestamps, `trust`, `synced_by`, `history`), then unknown keys sorted by name; timestamps are RFC 3339 UTC to the second; the file is indented by two spaces. `source` is `type` first, then its other keys sorted. `history` is newest first and is cut to 10 when written (a longer one written by another agent is still read).
+- `tree_sha256` is the sha256 of the lines `"<sha256>  <relpath>\n"` of every file sorted bytewise as whole lines (so by hash first); the order of the files does not matter. `SHA256SUMS` is written sorted by path, in the format of `sha256sum` (`sha256sum`'s binary marker is read too), and before the manifest, so the commit point finds it.
+- On load the manifest is cheap-checked, never hashed: every listed file must exist as a regular file with the recorded size (a directory item needs `SHA256SUMS`), else the item is missing (`LAI-SYN-052`).
 
 ### 4.12 Readiness report
 
@@ -1027,7 +1048,7 @@ Don't use exFAT, NTFS or FAT32: they can't store Unix permissions, so the rebuil
 | Node switched to offline mode during a run | run cancelled gracefully (modes.md §2.1 step 3); `.part` kept | `LAI-SYN-002` |
 | Agent killed or power lost mid-download | on restart, `items.json` says `downloading`; resume from the last checkpoint (truncate `.part` to checkpoint; if shorter, restart file) | — |
 | Power lost mid-swap | replay the swap plan (§4.5.1); no MANIFEST means not present until replay finishes | `LAI-SYN-026` if unrecoverable |
-| `items.json` corrupt or missing | rebuild it from MANIFESTs on all roots; `.staging` content without journal entries is treated as unknown and deleted (it was never verified) | `LAI-SYN-050` |
+| `items.json` corrupt or missing | restore it from `items.json.bak`, else rebuild it from MANIFESTs on all roots, and reconcile with them (§4.5.2); `.staging` content without journal entries is treated as unknown and deleted (it was never verified) | `LAI-SYN-050` |
 | MANIFEST present but a file is missing or a size differs | item treated as missing; re-download; R4 restore if trash has a copy | `LAI-SYN-052` |
 | Streaming sha256 mismatch | quarantine; next run starts fresh; twice in a row → version blocked | `LAI-SYN-020` |
 | HF LFS oid ≠ catalog sha256 | item not downloaded; red | `LAI-SYN-021` |
@@ -1172,6 +1193,7 @@ User-visible fixes are shown in the desktop and, for `LAI-ARK` codes, in the Por
 | ENOSPC | fake filesystem returns ENOSPC at byte N → checkpoint at last good offset, item skipped, `.part` kept |
 | resolvers | HF headers (match, oid mismatch, size mismatch, commit mismatch, missing headers → tree API); kiwix listing parse (multiple dates, torrents ignored, none); sidecar malformed; sidecar redirect refused; pmtiles newest-date probe; GitHub digest mismatch; apt `--print-uris` parsing (MD5-only line rejected); Packages stanza rewrite |
 | swap | per-file renames; directory RENAME_EXCHANGE; crash between each rename → replay; MANIFEST is the last write |
+| manifest and journal | round trip with unknown keys; history cap; every invalid manifest (§4.11); a fault at each step of the atomic writes (open, write, chmod, fsync, close, rename, directory sync, killed process, disk full, read-only); damaged, missing and foreign-schema `items.json`; restore from `.bak`; rebuild from manifests; reconcile; crash between journal append and side effect; torn run-log line; BestCopy preference matrix and unclean gating; concurrent rebuild under `-race` |
 | retention | `CanDelete` matrix: last copy, copy on unmounted drive, copy not re-verified in 24 h, trash with unverified replacement, orphan only copy, quarantine |
 | READY colours | every row of §4.12.2; clock-wrong suppression; survival_capable |
 | inventory copy | equal; drive missing; one side changed; both changed → conflict |
