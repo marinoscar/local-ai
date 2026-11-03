@@ -527,16 +527,25 @@ func (c *Client) Props(ctx context.Context, id string) (Props, error) {
 }
 
 // ChatSmoke implements Router: one user message, max_tokens 8, no streaming, no autoload query.
-func (c *Client) ChatSmoke(ctx context.Context, model string) error {
+func (c *Client) ChatSmoke(ctx context.Context, model string) error { return c.Chat(ctx, model, 8) }
+
+// Chat is ChatSmoke with the size of the completion chosen by the caller: one user message, at most
+// maxTokens tokens, no streaming, no autoload query. It is not part of Router: `aictl rebuild-llama`
+// asks for 16 tokens in the post-switch check of a new build (llama-router.md section 4.10.3). The
+// call is bounded by ctx and by Options.ChatTimeout.
+func (c *Client) Chat(ctx context.Context, model string, maxTokens int) error {
 	if !validID(model) {
 		return ErrBadModelID
+	}
+	if maxTokens < 1 {
+		maxTokens = 1
 	}
 	rep, err := c.do(ctx, call{
 		method: http.MethodPost, path: "/v1/chat/completions", timeout: c.chatTimeout,
 		body: map[string]any{
 			"model":       model,
 			"messages":    []map[string]string{{"role": "user", "content": "Reply with the word OK."}},
-			"max_tokens":  8,
+			"max_tokens":  maxTokens,
 			"temperature": 0,
 			"stream":      false,
 		},
