@@ -455,6 +455,16 @@ Nothing was changed (dry run).
 			t.Errorf("body %s", b)
 		}
 	})
+	t.Run("a local build is not from the internet", func(t *testing.T) {
+		r := newMgRig(t, fake.Options{})
+		r.agent().Respond(http.MethodPost, "/ark/sync", 200, `{"root":"internal","profile":"small-8gb","catalog_version":"2026.11.02-1","offline":true,"items":[`+
+			`{"pos":1,"id":"docs-bundle","kind":"docs","tier":"k","action":"download","to_version":"catalog-2026.11.02-1","final_bytes":1000000,"need_bytes":1000000,"source":"local_build"},`+
+			`{"pos":2,"id":"kit-llama-cpp","kind":"kit","tier":"k","action":"skip","reason":"unresolved"}]}`)
+		got := r.run(mgArgs("ark", "sync", "--dry-run"))
+		if got.code != 0 || !strings.Contains(got.out, "built from local files") || !strings.Contains(got.out, "Downloads: 1 items, 0 B from the internet, 1.0 MB local copy.") {
+			t.Fatalf("%+v", got)
+		}
+	})
 	t.Run("several plans", func(t *testing.T) {
 		r := newMgRig(t, fake.Options{})
 		r.agent().Respond(http.MethodPost, "/ark/sync", 200, `{"plans":[`+planBody+`,`+strings.Replace(planBody, `"root":"internal"`, `"root":"ark-3f9c0a12"`, 1)+`]}`)
