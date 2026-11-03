@@ -190,13 +190,18 @@ func (d *Daemon) build(ctx context.Context) error {
 	}
 
 	// The llama router: client, watcher, the one shared lock, generators, orchestrator, reconciler.
-	c.Router, err = router.NewClient(router.Options{Port: cfg.Get().Ports.Llama, Keys: router.NewFileKey(fs, c.Paths.APIKey()), Logger: log})
+	c.Router, err = router.NewClient(router.Options{Port: cfg.Get().Ports.Llama, Keys: router.NewFileKey(fs, c.Paths.APIKey()), Logger: log,
+		// In single mode a one-model llama-server has no router status: the client reads /v1/models.
+		Mode: func() string { return cfg.Get().Llama.Mode }})
 	if err != nil {
 		return fmt.Errorf("router client: %w", err)
 	}
 	c.RouterWatcher = router.NewWatcher(router.WatcherOptions{
 		Client: c.Router, Publisher: c.Bus, Alerts: alerts, Clock: clock, Logger: log,
 		ModelsMax: func() int {
+			if cfg.Get().Llama.Mode == router.LlamaModeSingle {
+				return 1 // a one-model server (llama-router.md section 4.8)
+			}
 			if p := d.profile(); p != nil {
 				return p.Router.ModelsMax
 			}
@@ -226,7 +231,10 @@ func (d *Daemon) build(ctx context.Context) error {
 		Router: c.Router, State: c.State, Inputs: d.routerInputs, Presence: router.ManifestPresence{FS: fs},
 		Lock: c.OpLock, Generator: c.Generator, Publisher: c.Bus, Audit: d.audit, Alerts: alerts,
 		Suppress: c.RouterWatcher.Suppress, Progress: c.RouterWatcher, Restarter: llamaUnit{c.Systemd},
-		Builds: router.FileBuild{FS: fs, Path: c.Paths.BuildJSON()}, Timing: env.RouterTiming, Clock: clock, Logger: log,
+		// Single mode (llama-router.md section 4.8): the unit is rewritten per model, a forced unload stops it.
+		Units: c.UnitGenerator, Stopper: llamaUnit{c.Systemd},
+		UnitBase: func() router.UnitInputs { return router.UnitInputs{Port: cfg.Get().Ports.Llama} },
+		Builds:   router.FileBuild{FS: fs, Path: c.Paths.BuildJSON()}, Timing: env.RouterTiming, Clock: clock, Logger: log,
 	})
 	if err != nil {
 		return fmt.Errorf("orchestrator: %w", err)
@@ -482,7 +490,7 @@ func (d *Daemon) buildServer() error {
 		{"model operations", func() error {
 			cfg := c.Config.Get()
 			max := 1
-			if p := d.profile(); p != nil {
+			if p := d.profile(); p != nil && cfg.Llama.Mode != router.LlamaModeSingle {
 				max = p.Router.ModelsMax
 			}
 			return api.RegisterModelOps(reg, api.ModelOpsDeps{
@@ -694,6 +702,9 @@ func (d *Daemon) routerInputs() router.Inputs {
 	var rcfg catalog.Router
 	if prof != nil {
 		rcfg = prof.Router
+	}
+	if cfg.Llama.Mode == router.LlamaModeSingle {
+		rcfg.ModelsMax = 1 // models_max is effectively 1 in single mode (llama-router.md section 4.8)
 	}
 	st := d.c.State.Snapshot()
 	def := ""

@@ -127,6 +127,10 @@ type Options struct {
 	Transport http.RoundTripper
 	// Logger receives the key-rotation notice (the fingerprint, never the key). Default slog.Default().
 	Logger *slog.Logger
+	// Mode returns node.yaml llama.mode ("router" or "single"). In single mode Models reads
+	// GET /v1/models, because a one-model llama-server has no router status (llama-router.md
+	// section 4.8). nil means router mode.
+	Mode func() string
 }
 
 // Client is the real Router. It is safe for concurrent use.
@@ -137,6 +141,7 @@ type Client struct {
 	chatTimeout time.Duration
 	hc          *http.Client
 	log         *slog.Logger
+	mode        func() string
 }
 
 var _ Router = (*Client)(nil)
@@ -155,7 +160,7 @@ func NewClient(opts Options) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Client{base: u, keys: opts.Keys, timeout: opts.Timeout, chatTimeout: opts.ChatTimeout, log: opts.Logger}
+	c := &Client{base: u, keys: opts.Keys, timeout: opts.Timeout, chatTimeout: opts.ChatTimeout, log: opts.Logger, mode: opts.Mode}
 	if c.timeout <= 0 {
 		c.timeout = DefaultTimeout
 	}
@@ -473,6 +478,9 @@ func (c *Client) Health(ctx context.Context) error {
 
 // Models implements Router.
 func (c *Client) Models(ctx context.Context) ([]ModelStatus, error) {
+	if c.mode != nil && c.mode() == LlamaModeSingle {
+		return c.V1Models(ctx)
+	}
 	rep, err := c.do(ctx, call{method: http.MethodGet, path: "/models", maxBody: maxModelsBody})
 	if err != nil {
 		return nil, err

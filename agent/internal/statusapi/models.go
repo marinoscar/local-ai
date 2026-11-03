@@ -65,6 +65,9 @@ func (m *ModelMerger) Models(lang string) ModelsView {
 	if prof != nil {
 		routerCfg = prof.Router
 	}
+	if cfg.Llama.Mode == router.LlamaModeSingle {
+		routerCfg.ModelsMax = 1 // a one-model server (llama-router.md section 4.8)
+	}
 	var w int64
 	if m.WhisperReserveMiB != nil {
 		w = m.WhisperReserveMiB()

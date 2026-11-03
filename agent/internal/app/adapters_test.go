@@ -68,6 +68,14 @@ func TestLlamaUnitAdapter(t *testing.T) {
 	if !reflect.DeepEqual(verbs, []string{"start", "restart"}) {
 		t.Errorf("verbs = %v", verbs)
 	}
+	// StopLlama (a forced unload in single mode) stops the llama unit and nothing else.
+	m2 := svcfake.New()
+	if err := (llamaUnit{m2}).StopLlama(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if calls := m2.Calls(); len(calls) != 1 || calls[0].Verb != services.VerbStop || calls[0].Unit != services.UnitLlama {
+		t.Errorf("StopLlama calls = %+v", calls)
+	}
 	// A failing manager's error comes back.
 	m.Fail(services.VerbState, services.UnitLlama, errors.New("bus down"))
 	if _, err := u.State(context.Background()); err == nil {
@@ -377,4 +385,19 @@ func (r *recordingRegen) Regenerate(context.Context) (statusapi.RegenResult, err
 	r.n++
 	r.mu.Unlock()
 	return statusapi.RegenResult{}, nil
+}
+
+// A llama.mode change on disk asks the orchestrator to apply it; a llama that already runs in the
+// configured mode (the rig's fake router is a router, node.yaml says router) is left alone.
+func TestConfigChangeLlamaModeLeavesARunningModeAlone(t *testing.T) {
+	r := newRig(t)
+	r.start()
+	r.waitStarted()
+	d := r.d
+	<-d.applyLlamaMode(context.Background())
+	for _, c := range r.sysd.Calls() {
+		if c.Unit == services.UnitLlama && c.Verb == services.VerbRestart {
+			t.Errorf("llama was restarted although it already runs in the configured mode")
+		}
+	}
 }

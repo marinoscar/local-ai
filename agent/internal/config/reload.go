@@ -13,8 +13,9 @@ import (
 //   - restart the agent (CodeRestartNeeded, target "agent"): node.id, ports.*, cloud.url. The effective
 //     config keeps the running value until the agent restarts;
 //   - restart llama (CodeRestartNeeded, target "llama", never automatic): llama.extra_env (the
-//     drop-in is regenerated, but env only reaches a new process) and llama.mode, build, commit,
-//     backend and cuda_arch (they change the unit or the binary).
+//     drop-in is regenerated, but env only reaches a new process) and llama.build, commit, backend
+//     and cuda_arch (they change the unit or the binary). llama.mode is reported the same way but
+//     the orchestrator applies it itself (router.Orchestrator.ApplyMode, llama-router.md 4.8.1).
 
 const (
 	targetAgent = "agent"
