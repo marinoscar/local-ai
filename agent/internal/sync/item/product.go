@@ -370,6 +370,12 @@ func (r *runner) finishKeep() Result {
 		return r.res
 	}
 	r.res.State, r.res.Code, r.res.Reason, r.res.Err, r.res.Retryable, r.res.Bytes = journal.StateVerified, "", "", nil, false, cur.TotalBytes
+	// A kept item still carries its notices (an apt kit built from unverified repositories stays yellow).
+	if r.produced != nil {
+		for _, n := range r.produced.Notices {
+			r.res.Notices = appendNotice(r.res.Notices, n)
+		}
+	}
 	return r.res
 }
 

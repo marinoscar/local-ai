@@ -566,6 +566,43 @@ func TestSourceProducersAreWiredToTheNode(t *testing.T) {
 	}
 }
 
+// sync.apt_unverified_repos is wired to the apt producer: allow by default (the owner's decision for
+// now, issue #274), and a change of node.yaml applies to the next closure without a restart.
+func TestAptUnverifiedReposSettingIsWiredAndReloads(t *testing.T) {
+	sr := newSrcRig(t, "online", true)
+	d := sr.start()
+	sr.waitStarted()
+	apt := d.ark.sources.apt
+	if apt.AllowUnverifiedRepos == nil || !apt.AllowUnverifiedRepos() {
+		t.Fatal("the default of sync.apt_unverified_repos must be allow")
+	}
+	for _, tc := range []struct {
+		name, block string
+		want        bool
+	}{
+		{"refuse", "sync:\n  apt_unverified_repos: refuse\n", false},
+		{"allow written out", "sync:\n  apt_unverified_repos: allow\n", true},
+		{"another sync key leaves the default", "sync:\n  concurrency: 3\n", true},
+		{"refuse again", "sync:\n  apt_unverified_repos: refuse\n", false},
+		{"the key removed", "", true},
+	} {
+		sr.writeNodeYAMLText(sr.nodeYAML() + tc.block)
+		d.Components().Config.ReloadNow()
+		if got := apt.AllowUnverifiedRepos(); got != tc.want {
+			t.Errorf("%s: allow = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	// A value the validator refuses never reaches the producer: the config store keeps the last valid
+	// file, so the setting stays what it was.
+	sr.writeNodeYAMLText(sr.nodeYAML() + "sync:\n  apt_unverified_repos: refuse\n")
+	d.Components().Config.ReloadNow()
+	sr.writeNodeYAMLText(sr.nodeYAML() + "sync:\n  apt_unverified_repos: maybe\n")
+	d.Components().Config.ReloadNow()
+	if apt.AllowUnverifiedRepos() {
+		t.Error("an invalid value replaced the last valid refuse")
+	}
+}
+
 // An online node plans the three source types to the right items and a run of them goes through the
 // engine end to end: the llama.cpp mirror with its tarball, the docs and the kit catalog as two items
 // of the one repo_docs source, and (planned only) the apt closure. This is `aictl ark sync --item

@@ -63,9 +63,12 @@ func (s *arkStack) registerSources(dl *download.Downloader) error {
 	// no Credential and runs apt as the agent's own user (a root agent without the service user is
 	// refused by the producer itself, LAI-SYN-060). The keyrings of the extra repositories are not
 	// embedded in the agent yet (rebuild-kit.md section 3.4), so only the Ubuntu archive keyring is
-	// read, from the build machine's /usr/share/keyrings.
+	// read, from the build machine's /usr/share/keyrings. What happens to an extra repository without
+	// a keyring is node.yaml sync.apt_unverified_repos (allow by default, issue #274), read at the
+	// start of every closure so a change of node.yaml applies to the next run.
 	src.apt = &resolve.AptClosure{
 		Env: env, SystemKeyringDir: d.c.Paths.Join("/usr/share/keyrings"), Euid: d.env.Geteuid, User: aptSandboxUser,
+		AllowUnverifiedRepos: func() bool { return d.syncSettings().AllowUnverifiedAptRepos() },
 	}
 	if d.haveLocalAI && !d.env.Unprivileged {
 		src.apt.Credential = &execx.Credential{UID: uint32(d.localaiUID), GID: uint32(d.localaiGID)}

@@ -109,6 +109,19 @@ func (s Source) String(key string) string {
 	return ""
 }
 
+// SourceUnverifiedRepos is the source field of an apt_closure item that names the extra repositories
+// taken without checking the vendor signature (sync.apt_unverified_repos: allow, LAI-SYN-063).
+const SourceUnverifiedRepos = "unverified_repos"
+
+// StringList returns a field that is a JSON array of strings, or nil when it is absent or not one.
+func (s Source) StringList(key string) []string {
+	var v []string
+	if raw, ok := s.Fields[key]; ok && json.Unmarshal(raw, &v) == nil {
+		return v
+	}
+	return nil
+}
+
 // With returns a copy of s with the field set to the JSON encoding of v.
 func (s Source) With(key string, v any) (Source, error) {
 	raw, err := jsonord.Marshal(v)

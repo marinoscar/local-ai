@@ -243,6 +243,7 @@ const (
 	SYN060 = "LAI-SYN-060"
 	SYN061 = "LAI-SYN-061"
 	SYN062 = "LAI-SYN-062"
+	SYN063 = "LAI-SYN-063"
 	SYN070 = "LAI-SYN-070"
 
 	// LAI-ARK
@@ -1673,6 +1674,12 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "Manuals were made without the real lab values", ES: "Los manuales se generaron sin los valores reales del laboratorio"},
 		Fix:      Msg{EN: "Copy `inventory.local.yaml` to `/etc/localai/` or plug in the ark drive, then sync.", ES: "Copie `inventory.local.yaml` a `/etc/localai/` o conecte la unidad del arca, y luego sincronice."},
+	},
+	{
+		ID:       SYN063,
+		Severity: Warning,
+		Title:    Msg{EN: "The rebuild kit has packages from vendor repositories whose signature was not checked", ES: "El kit de reconstrucción tiene paquetes de repositorios de proveedores cuya firma no se comprobó"},
+		Fix:      Msg{EN: "Pin the repository's key and set sync.apt_unverified_repos to refuse.", ES: "Fije la clave del repositorio y ponga sync.apt_unverified_repos en refuse."},
 	},
 	{
 		ID:       SYN070,

@@ -61,6 +61,13 @@ type AptClosure struct {
 	User string
 	// Euid reports the effective uid of the agent; default os.Geteuid. A seam for tests.
 	Euid func() int
+	// AllowUnverifiedRepos is node.yaml sync.apt_unverified_repos, read at the start of every closure
+	// so a change takes effect on the next run: true (allow) takes an extra repository whose keyring is
+	// not available without checking the vendor signature, over https only, records it in the manifest
+	// (source.unverified_repos) and raises LAI-SYN-063; false (refuse, and the default of a nil
+	// function: the zero value fails closed) fails with LAI-SYN-060. The Ubuntu archive is verified
+	// either way.
+	AllowUnverifiedRepos func() bool
 
 	mu    sync.Mutex
 	cache map[string]*Closure
@@ -77,6 +84,8 @@ type Closure struct {
 	Pkgs    []Pkg
 	// At is when it was computed.
 	At time.Time
+	// Unverified names (sorted) the extra repositories taken without a verified keyring.
+	Unverified []string
 
 	key    string
 	src    aptSource
@@ -184,7 +193,8 @@ func (a *AptClosure) closure(ctx context.Context, it plan.CatalogItem) (*Closure
 	if err := a.Env.requireOnline(); err != nil {
 		return nil, err
 	}
-	key := it.ID + "|" + src.Codename + "|" + src.Arch + "|" + a.Mirror + "|" + strings.Join(wanted, ",") + "|" + extraKey(src)
+	allow := a.AllowUnverifiedRepos != nil && a.AllowUnverifiedRepos()
+	key := it.ID + "|" + src.Codename + "|" + src.Arch + "|" + a.Mirror + "|" + strings.Join(wanted, ",") + "|" + extraKey(src) + "|" + fmt.Sprint(allow)
 	a.mu.Lock()
 	if c, ok := a.cache[key]; ok && a.Env.now().Sub(c.At) < closureTTL {
 		a.mu.Unlock()
@@ -206,6 +216,11 @@ func (a *AptClosure) closure(ctx context.Context, it plan.CatalogItem) (*Closure
 	l := a.treeLock(tree)
 	l.Lock()
 	defer l.Unlock()
+
+	unverified, err := a.unverifiedRepos(&src, allow)
+	if err != nil {
+		return nil, err
+	}
 
 	proxy, stop, perr := a.Env.startProxy(ctx, src.proxyHosts())
 	if perr != nil {
@@ -231,7 +246,7 @@ func (a *AptClosure) closure(ctx context.Context, it plan.CatalogItem) (*Closure
 	if err != nil {
 		return nil, err
 	}
-	c := &Closure{Version: closureVersion(pkgs), Pkgs: pkgs, At: a.Env.now(), key: key, src: src, tree: tree, wanted: wanted}
+	c := &Closure{Version: closureVersion(pkgs), Pkgs: pkgs, At: a.Env.now(), Unverified: unverified, key: key, src: src, tree: tree, wanted: wanted}
 	a.mu.Lock()
 	if a.cache == nil {
 		a.cache = map[string]*Closure{}
@@ -239,6 +254,38 @@ func (a *AptClosure) closure(ctx context.Context, it plan.CatalogItem) (*Closure
 	a.cache[key] = c
 	a.mu.Unlock()
 	return c, nil
+}
+
+// unverifiedRepos decides, for every extra repository, whether its keyring is available (then it is
+// verified with Signed-By, as before) or not. Without a keyring the item fails with LAI-SYN-060 unless
+// sync.apt_unverified_repos is allow, in which case the repository is taken without checking the
+// vendor signature, but only if its address is https (nothing authenticates a plain http one). The
+// names are recorded in src.Unverified, which prepareTree writes as `Trusted: yes` for those sources
+// alone, and returned sorted. No network is touched. The Ubuntu archive keyring is not looked at here:
+// prepareTree requires it.
+func (a *AptClosure) unverifiedRepos(src *aptSource, allow bool) ([]string, error) {
+	var names []string
+	for _, r := range src.Extra {
+		if _, err := a.keyring(r.Key); err == nil {
+			continue
+		} else if !allow {
+			return nil, fail(CodeApt, err, "the keyring %s is not available (set sync.apt_unverified_repos to allow to take the repository %s without it)", r.Key, r.Name)
+		}
+		if u, err := cleanURI(r.URI); err != nil || u.Scheme != "https" {
+			return nil, fail(CodeApt, nil, "the repository %s has no keyring and its address is not https, so it is refused", r.Name)
+		}
+		if src.Unverified == nil {
+			src.Unverified = map[string]bool{}
+		}
+		src.Unverified[r.Name] = true
+		names = append(names, r.Name)
+	}
+	sort.Strings(names)
+	if len(names) > 0 {
+		a.Env.log().Warn("extra apt repositories are taken without checking the vendor signature", "component", "sync",
+			"code", CodeUnverifiedRepos, "repositories", strings.Join(names, ","))
+	}
+	return names, nil
 }
 
 func extraKey(s aptSource) string {
@@ -319,7 +366,9 @@ func (a *AptClosure) prepareTree(tree string, src aptSource) error {
 	keyDir := filepath.Join(tree, "etc", "apt", "trusted.gpg.d")
 	names := []string{ubuntuKeyring}
 	for _, r := range src.Extra {
-		names = append(names, r.Key)
+		if !src.Unverified[r.Name] { // taken without a keyring: nothing to write
+			names = append(names, r.Key)
+		}
 	}
 	done := map[string]bool{}
 	for _, n := range names {
@@ -425,6 +474,12 @@ func (a *AptClosure) Produce(ctx context.Context, req Request) (Product, error) 
 	defer a.forget(c)
 	prod := Product{Version: c.Version, SortKey: c.At.UTC().Format(time.RFC3339), Trust: manifest.TrustSignedIndex,
 		Source: map[string]any{"codename": c.src.Codename, "arch": c.src.Arch, "packages": c.wanted}}
+	if len(c.Unverified) > 0 {
+		// The kit must not look fully verified: the repositories are named in the manifest and the item
+		// carries the yellow notice LAI-SYN-063 (ark-sync.md section 4.9.7).
+		prod.Source[manifest.SourceUnverifiedRepos] = c.Unverified
+		prod.Notices = []Notice{{Code: CodeUnverifiedRepos, Message: "packages from " + strings.Join(c.Unverified, ", ") + " were taken without checking the vendor signature"}}
+	}
 	if req.PresentDir != "" && req.PresentVersion == c.Version {
 		prod.Keep = true
 		return prod, nil

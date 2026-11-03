@@ -91,7 +91,14 @@ const (
 	CodeNoRoot       = doctor.ARK001
 	CodeReadOnly     = doctor.ARK003
 	CodeCatalogBad   = doctor.CAT002
+	// CodeUnverifiedRepos: an item of the run took apt repositories without checking the vendor
+	// signature (a notice of the item; the run carries WarnUnverifiedRepos).
+	CodeUnverifiedRepos = doctor.SYN063
 )
+
+// WarnUnverifiedRepos is the one-sentence warning a run carries (RunStatus.Warnings) when an apt item
+// was built from vendor repositories whose signature was not checked (sync.apt_unverified_repos: allow).
+const WarnUnverifiedRepos = "Some rebuild-kit packages come from vendor repositories whose signature was not checked (" + doctor.SYN063 + ")."
 
 // RepeatFailureRuns is how many runs in a row an item may fail before LAI-SYN-035.
 const RepeatFailureRuns = 3

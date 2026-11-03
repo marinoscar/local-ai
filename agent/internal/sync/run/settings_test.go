@@ -62,3 +62,47 @@ ark_drive:
 		})
 	}
 }
+
+// TestAptUnverifiedReposSetting: sync.apt_unverified_repos defaults to allow (the owner's decision for
+// now, issue #274), takes allow and refuse, and refuses anything else with a plain error.
+func TestAptUnverifiedReposSetting(t *testing.T) {
+	for name, tc := range map[string]struct {
+		yaml    string
+		want    string
+		allow   bool
+		wantErr string
+	}{
+		"an absent block defaults to allow": {"", AptReposAllow, true, ""},
+		"a block without the key":           {"concurrency: 3", AptReposAllow, true, ""},
+		"allow":                             {"apt_unverified_repos: allow", AptReposAllow, true, ""},
+		"refuse":                            {"apt_unverified_repos: refuse", AptReposRefuse, false, ""},
+		"an unknown value":                  {"apt_unverified_repos: maybe", "", false, `sync.apt_unverified_repos must be "allow" or "refuse", got "maybe"`},
+		"a boolean is not a value":          {"apt_unverified_repos: true", "", false, "apt_unverified_repos"},
+		"an empty value":                    {`apt_unverified_repos: ""`, "", false, "apt_unverified_repos"},
+		"upper case is not accepted":        {"apt_unverified_repos: Allow", "", false, "apt_unverified_repos"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, err := ParseSettings(config.RawBlock(tc.yaml))
+			probs := (SettingsValidator{}).ValidateBlock(config.RawBlock(tc.yaml))
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want one mentioning %q", err, tc.wantErr)
+				}
+				// The config store's validator reports the same problem as a blocking one.
+				if len(probs) != 1 || probs[0].Severity != config.SeverityError {
+					t.Fatalf("validator problems = %+v", probs)
+				}
+				return
+			}
+			if err != nil || s.AptUnverifiedRepos != tc.want || s.AllowUnverifiedAptRepos() != tc.allow {
+				t.Fatalf("%+v, %v", s, err)
+			}
+			if len(probs) != 0 {
+				t.Fatalf("validator problems = %+v", probs)
+			}
+		})
+	}
+	if d := DefaultSettings(); d.AptUnverifiedRepos != AptReposAllow || !d.AllowUnverifiedAptRepos() {
+		t.Fatalf("the default is %q, want allow", d.AptUnverifiedRepos)
+	}
+}

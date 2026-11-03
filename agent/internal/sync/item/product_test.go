@@ -842,6 +842,24 @@ func TestKeepVerifiesThePresentVersionWithoutASwap(t *testing.T) {
 	}
 }
 
+// A kept item (the apt closure did not change) still reports its notices, so a kit built from
+// unverified apt repositories (LAI-SYN-063) keeps raising its warning on every run.
+func TestKeepCarriesTheNoticesOfTheProducer(t *testing.T) {
+	e := newEnv(t)
+	e.install(e.mirrorJob("rev1", mirrorV1(), nil))
+	job := e.mirrorJob("rev1", mirrorV1(), nil)
+	job.Resolution.Produce = func(context.Context, ProduceEnv) (Produced, error) {
+		return Produced{Keep: true, Notices: []string{doctor.SYN063}}, nil
+	}
+	if _, err := e.jr.Items.Update(e.root.ID, mirrorItem, func(i *journal.Item) { i.State = journal.StateFailed }); err != nil {
+		t.Fatal(err)
+	}
+	res := e.m.Run(bg, e.startRun(), job)
+	if res.State != journal.StateVerified || len(res.Notices) != 1 || res.Notices[0] != doctor.SYN063 {
+		t.Fatalf("res = %+v", res)
+	}
+}
+
 func TestNoticesAreRecordedInTheManifestAndTheResult(t *testing.T) {
 	e := newEnv(t)
 	docs, _ := e.docsProductJobs("rev1", docs1(), catalog1(), nil)

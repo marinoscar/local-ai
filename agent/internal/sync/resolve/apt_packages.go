@@ -28,6 +28,7 @@ var (
 	codenameRe    = regexp.MustCompile(`^[a-z][a-z0-9]*$`)
 	repoNameRe    = regexp.MustCompile(`^[a-z0-9][a-z0-9._\-]*$`)
 	suiteTokenRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+\-]*(/[A-Za-z0-9._+\-]+)*$`)
+	flatSuiteRe   = regexp.MustCompile(`^([A-Za-z0-9._+\-]+(/[A-Za-z0-9._+\-]+)*)?/$`)
 	poolNameRe    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+~\-]*\.deb$`)
 	sha256HexRe   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	maxClosurePkg = 20000
@@ -67,7 +68,14 @@ type aptSource struct {
 	// HTTPS rewrites every http URI to https (set when the throttling proxy is in use: it tunnels
 	// CONNECT only, which carries https and not plain http).
 	HTTPS bool
+	// Unverified names the extra repositories that have no keyring and are taken without checking the
+	// vendor signature (sync.apt_unverified_repos: allow). They are written with `Trusted: yes` and no
+	// Signed-By; every other repository, and always the Ubuntu archive, is verified with its keyring.
+	Unverified map[string]bool
 }
+
+// isFlatSuite reports whether a suite names a flat repository (it ends with a slash).
+func isFlatSuite(suite string) bool { return strings.HasSuffix(suite, "/") }
 
 // validate checks every value that is about to be written into a deb822 file or an argv.
 func (s aptSource) validate() error {
@@ -86,6 +94,15 @@ func (s aptSource) validate() error {
 			return fail(CodeApt, nil, "extra repository %q is listed twice", r.Name)
 		case !contains(catalog.EmbeddedKeyrings, r.Key):
 			return fail(CodeApt, nil, "extra repository %q uses a key that is not embedded in the agent", r.Name)
+		case isFlatSuite(r.Suite):
+			// A flat repository (the NVIDIA CUDA one: suite "/") has no components; deb822 requires
+			// the Components field to be left out for it.
+			if !flatSuiteRe.MatchString(r.Suite) || strings.Contains(r.Suite, "..") {
+				return fail(CodeApt, nil, "extra repository %q has a bad suite", r.Name)
+			}
+			if len(r.Components) != 0 {
+				return fail(CodeApt, nil, "extra repository %q is a flat repository (its suite ends with /) and must have no components", r.Name)
+			}
 		case !suiteTokenRe.MatchString(r.Suite):
 			return fail(CodeApt, nil, "extra repository %q has a bad suite", r.Name)
 		case len(r.Components) == 0:
@@ -203,8 +220,17 @@ func (s aptSource) renderExtraSources(keyringDir string) string {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		fmt.Fprintf(&b, "Types: deb\nURIs: %s\nSuites: %s\nComponents: %s\n", s.fix(r.URI), r.Suite, strings.Join(r.Components, " "))
-		fmt.Fprintf(&b, "Architectures: %s\nSigned-By: %s\n", s.Arch, path.Join(keyringDir, r.Key))
+		fmt.Fprintf(&b, "Types: deb\nURIs: %s\nSuites: %s\n", s.fix(r.URI), r.Suite)
+		if len(r.Components) > 0 { // a flat repository has none
+			fmt.Fprintf(&b, "Components: %s\n", strings.Join(r.Components, " "))
+		}
+		fmt.Fprintf(&b, "Architectures: %s\n", s.Arch)
+		if s.Unverified[r.Name] {
+			// The narrowest trust apt has: this one source, no key. Never written for the Ubuntu archive.
+			b.WriteString("Trusted: yes\n")
+		} else {
+			fmt.Fprintf(&b, "Signed-By: %s\n", path.Join(keyringDir, r.Key))
+		}
 	}
 	return b.String()
 }

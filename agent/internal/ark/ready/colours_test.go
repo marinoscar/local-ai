@@ -8,6 +8,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/ark/ready"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
+	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 )
 
 // TestStatusColour is every row of the status table of ark-sync.md section 4.12.2, in every column.
@@ -376,6 +377,53 @@ func TestKitAgeAndClosure(t *testing.T) {
 	}
 	if r.Overall != ready.Yellow {
 		t.Errorf("overall = %s", r.Overall)
+	}
+}
+
+// TestUnverifiedAptRepositoriesAreYellow: a kit closure whose manifest names repositories taken without
+// a checked vendor signature (source.unverified_repos) is never green, with LAI-SYN-063, and it stays
+// "verified" (survival capability and status are untouched); one without the field is green.
+func TestUnverifiedAptRepositoriesAreYellow(t *testing.T) {
+	const id = "kit-debs-resolute-amd64"
+	tests := []struct {
+		name  string
+		repos any
+		want  ready.Colour
+		codes []string
+	}{
+		{"no field", nil, ready.Green, nil},
+		{"an empty list", []string{}, ready.Green, nil},
+		{"one repository", []string{"nvidia-cuda"}, ready.Yellow, []string{doctor.SYN063}},
+		{"two repositories", []string{"nvidia-cuda", "tailscale"}, ready.Yellow, []string{doctor.SYN063}},
+		{"a field of the wrong shape is ignored", "nvidia-cuda", ready.Green, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := newWorld().withContent(closure("resolute", "amd64", 40)).synced(day)
+			w.have(id, "v1", day)
+			if tt.repos != nil {
+				m := w.present[id]
+				var err error
+				if m.Source, err = m.Source.With(manifest.SourceUnverifiedRepos, tt.repos); err != nil {
+					t.Fatal(err)
+				}
+				w.present[id] = m
+			}
+			r := w.build()
+			it := item(t, r, id)
+			if it.Status != ready.StatusVerified {
+				t.Errorf("status = %s: an unverified repository must not unverify the copy", it.Status)
+			}
+			if r.Overall != tt.want {
+				t.Errorf("overall = %s, want %s", r.Overall, tt.want)
+			}
+			if got := problemCodes(r); !reflect.DeepEqual(got, tt.codes) && !(len(got) == 0 && len(tt.codes) == 0) {
+				t.Errorf("problems = %v, want %v", got, tt.codes)
+			}
+			if len(tt.codes) == 1 && (r.Problems[0].Item != id || it.Code != doctor.SYN063) {
+				t.Errorf("problem = %+v, item code %q", r.Problems[0], it.Code)
+			}
+		})
 	}
 }
 

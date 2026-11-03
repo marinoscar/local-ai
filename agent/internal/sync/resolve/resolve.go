@@ -58,6 +58,9 @@ const (
 	CodeTool = doctor.SYN061
 	// CodeNoInventory: manuals were made without the real lab values (LAI-SYN-062, yellow, not a failure).
 	CodeNoInventory = doctor.SYN062
+	// CodeUnverifiedRepos: an apt closure took extra repositories without checking the vendor signature
+	// (LAI-SYN-063, yellow, not a failure; sync.apt_unverified_repos is allow).
+	CodeUnverifiedRepos = doctor.SYN063
 	// CodeNoPDF: the survival card PDF could not be made (LAI-CLI-014, yellow, not a failure).
 	CodeNoPDF = doctor.CLI014
 	// CodeCatalogLint: the catalog of the tarball failed lint, the old kit/catalog is kept (LAI-CAT-002).
