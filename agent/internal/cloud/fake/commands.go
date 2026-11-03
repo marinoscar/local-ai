@@ -167,6 +167,26 @@ func (s *Server) WaitHeld(ctx context.Context, n int) error {
 	}
 }
 
+// WaitHeldAtMost blocks until at most n claims are held open (a cancelled long poll has been noticed by
+// the server), or ctx ends.
+func (s *Server) WaitHeldAtMost(ctx context.Context, n int) error {
+	for {
+		s.mu.Lock()
+		s.cmds.init()
+		ok := s.cmds.held <= n
+		ch := s.cmds.wake
+		s.mu.Unlock()
+		if ok {
+			return nil
+		}
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for at most %d held claims: %w", n, ctx.Err())
+		}
+	}
+}
+
 // WaitJob blocks until a job has the status, or ctx ends.
 func (s *Server) WaitJob(ctx context.Context, id, status string) error {
 	for {

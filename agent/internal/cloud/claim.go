@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -284,7 +285,12 @@ func (c *Claimer) unsettled() []*jobRun {
 			out = append(out, j)
 		}
 	}
-	slices.SortFunc(out, func(a, b *jobRun) int { return a.started.Compare(b.started) })
+	slices.SortFunc(out, func(a, b *jobRun) int {
+		if d := a.started.Compare(b.started); d != 0 {
+			return d
+		}
+		return strings.Compare(a.id, b.id)
+	})
 	return out
 }
 
@@ -321,7 +327,7 @@ func (c *Claimer) Inflight() (int, map[string]any) {
 	}
 	var oldest *jobRun
 	for _, j := range c.jobs {
-		if oldest == nil || j.started.Before(oldest.started) {
+		if oldest == nil || j.started.Before(oldest.started) || (j.started.Equal(oldest.started) && j.id < oldest.id) {
 			oldest = j
 		}
 	}

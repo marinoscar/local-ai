@@ -412,6 +412,10 @@ func TestStopCancelsTheLongPollAndTheLoopRestarts(t *testing.T) {
 	if n := cr.link.Counters().ClaimFailures.Load(); n != 0 {
 		t.Errorf("a cancelled long poll counted as a failure: %d", n)
 	}
+	// The fake has noticed that the cancelled request is gone, or it could still answer it with the job.
+	if err := cr.srv.WaitHeldAtMost(cr.ctx, 0); err != nil {
+		t.Fatal(err)
+	}
 	cr.srv.HoldClaims(false)
 	cr.srv.QueueJob(fake.Job{ID: "job-r", Type: "localai.status.refresh", Params: map[string]any{}, Token: "tok-r"})
 	cr.claimer.Start(cr.ctx)
