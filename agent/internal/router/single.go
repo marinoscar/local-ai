@@ -297,6 +297,7 @@ func (op *loadOp) succeedSingle(ctx context.Context, loadMS int64, stopped []str
 	o.countLoad(id, true, loadMS)
 	o.clear(CodeNothingLoaded, "")
 	o.clear(CodeDefaultNotStarted, "")
+	o.unitApplied()
 	for _, p := range stopped {
 		o.publish(events.TypeModelUnloaded, op.opID, events.ModelUnloaded{Model: p, Reason: events.UnloadEvicted})
 	}
@@ -334,6 +335,7 @@ func (o *Orchestrator) singleRollback(ctx context.Context, op *loadOp) rollbackR
 			rb.interrupted = true
 			return rb
 		}
+		o.unitApplied()
 	}
 	v := o.singleView(ctx)
 	rb.loaded = v.ids()
@@ -560,6 +562,7 @@ func (o *Orchestrator) applySingle(ctx context.Context, in Inputs, opID string, 
 	})
 	o.clear(CodeDefaultNotStarted, "")
 	o.clear(CodeNothingLoaded, "")
+	o.unitApplied()
 	o.publish(events.TypeModelLoaded, opID, events.ModelLoaded{Model: id, LoadMS: loadMS})
 	o.log.Info("the AI service runs in single-model mode", "op_id", opID, "model", id, "phase", "mode", "duration_ms", loadMS)
 	return res, nil
@@ -591,6 +594,7 @@ func (o *Orchestrator) applyRouter(ctx context.Context, in Inputs, opID string, 
 			map[string]any{"op_id": opID, "cause": kindRestartFailed}, err)
 	}
 	res.Changed = true
+	o.unitApplied()
 	o.refreshBuild()
 	if !o.waitHealth(ctx, o.opt.Timing.HealthWait) {
 		return res, o.healthFailure(ctx, "mode", opID)
@@ -603,6 +607,10 @@ func (o *Orchestrator) applyRouter(ctx context.Context, in Inputs, opID string, 
 	o.log.Info("the AI service runs in router mode", "op_id", opID, "phase", "mode", "restored", rr.Restored, "skipped", len(rr.Skipped))
 	return res, nil
 }
+
+// unitApplied clears the LAI-AGT-016 the unit generator raised for the changed command line: llama
+// was restarted by the orchestrator itself, so the running service has the unit on disk.
+func (o *Orchestrator) unitApplied() { o.clear(CodeUnitRestart, "llama-unit") }
 
 // routerUnitInputs are the unit inputs of router mode.
 func (o *Orchestrator) routerUnitInputs(in Inputs) UnitInputs {

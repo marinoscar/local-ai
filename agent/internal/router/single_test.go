@@ -76,6 +76,9 @@ func TestSingleLoadSuccess(t *testing.T) {
 	if !r.alerts.has("clear", CodeNothingLoaded, "*") {
 		t.Error("LAI-LLM-012 was not cleared")
 	}
+	if !r.alerts.has("raise", CodeUnitRestart, "llama-unit") || !r.alerts.has("clear", CodeUnitRestart, "llama-unit") {
+		t.Error("LAI-AGT-016 for the rewritten unit was not raised and then cleared by the restart")
+	}
 	a := r.aud.events()
 	if len(a) != 1 || a[0].Action != "model.load" || a[0].Result != "ok" {
 		t.Fatalf("audit = %+v", a)
