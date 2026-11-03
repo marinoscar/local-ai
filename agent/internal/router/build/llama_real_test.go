@@ -13,7 +13,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -295,13 +294,14 @@ func (s *realService) RestartLlama(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, filepath.Join(dir, "bin", "llama-server"), "--version")
-	cmd.Env = append(os.Environ(), "LOCALAI_SERVICE=1")
-	out, err := cmd.CombinedOutput()
+	res, err := execx.Exec{}.Run(ctx, execx.Cmd{
+		Path: filepath.Join(dir, "bin", "llama-server"), Args: []string{"--version"}, Timeout: time.Minute, MaxOut: 1 << 20,
+		Env: append(toolEnv(), "LOCALAI_SERVICE=1"),
+	})
 	id := filepath.Base(dir)
-	if err != nil {
+	if err != nil || res.ExitCode != 0 {
 		s.log = append(s.log, id+":failed")
-		return fmt.Errorf("llama-server did not start: %v: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("llama-server did not start: %v (exit status %d): %s", err, res.ExitCode, strings.TrimSpace(string(res.Stderr)))
 	}
 	s.log = append(s.log, id+":started")
 	return nil
@@ -325,14 +325,17 @@ func (s *realService) Complete(ctx context.Context, _ string, maxTokens int) err
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, GenerateTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, filepath.Join(dir, "bin", "llama-cli"), "-m", s.model, "-n", fmt.Sprint(maxTokens), "-p", "Hello", "--no-warmup")
-	out, err := cmd.Output()
+	res, err := execx.Exec{}.Run(ctx, execx.Cmd{
+		Path: filepath.Join(dir, "bin", "llama-cli"), Timeout: GenerateTimeout, MaxOut: 1 << 20, Env: toolEnv(),
+		Args: []string{"-m", s.model, "-n", fmt.Sprint(maxTokens), "-p", "Hello", "--no-warmup"},
+	})
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(string(out)) == "" {
+	if res.ExitCode != 0 {
+		return fmt.Errorf("llama-cli exited with status %d", res.ExitCode)
+	}
+	if strings.TrimSpace(string(res.Stdout)) == "" {
 		return errors.New("llama-cli wrote nothing")
 	}
 	s.completions++
@@ -367,7 +370,7 @@ int main(int argc, char **argv) {
 // program.
 func compileFailingServer(t *testing.T) []byte {
 	t.Helper()
-	cc, err := exec.LookPath("cc")
+	cc, err := execx.Lookup("cc")
 	if err != nil {
 		t.Fatalf("no C compiler for the injected failure: %v", err)
 	}
@@ -376,8 +379,11 @@ func compileFailingServer(t *testing.T) []byte {
 	if err := os.WriteFile(src, []byte(wrapperSource), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if b, err := exec.Command(cc, "-O1", "-o", out, src).CombinedOutput(); err != nil {
-		t.Fatalf("compiling the wrapper: %v\n%s", err, b)
+	res, err := execx.Exec{}.Run(context.Background(), execx.Cmd{
+		Path: cc, Args: []string{"-O1", "-o", out, src}, Timeout: 2 * time.Minute, MaxOut: 1 << 20, Env: toolEnv(),
+	})
+	if err != nil || res.ExitCode != 0 {
+		t.Fatalf("compiling the wrapper: %v (exit status %d)\n%s%s", err, res.ExitCode, res.Stdout, res.Stderr)
 	}
 	return readBytes(t, out)
 }
