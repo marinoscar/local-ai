@@ -103,6 +103,9 @@ const (
 	CAT003 = "LAI-CAT-003"
 	CAT004 = "LAI-CAT-004"
 	CAT005 = "LAI-CAT-005"
+	CAT006 = "LAI-CAT-006"
+	CAT007 = "LAI-CAT-007"
+	CAT008 = "LAI-CAT-008"
 	CAT010 = "LAI-CAT-010"
 	CAT011 = "LAI-CAT-011"
 	CAT012 = "LAI-CAT-012"
@@ -885,6 +888,24 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "A model doesn't fit this node (VRAM/RAM/backend)", ES: "Un modelo no cabe en este nodo (VRAM/RAM/backend)"},
 		Fix:      Msg{EN: "Choose a smaller model. `aictl models --loadable` lists the ones that fit", ES: "Elija un modelo más pequeño. `aictl models --loadable` lista los que caben"},
+	},
+	{
+		ID:       CAT006,
+		Severity: Warning,
+		Title:    Msg{EN: "Couldn't download the catalog from GitHub", ES: "No se pudo descargar el catálogo desde GitHub"},
+		Fix:      Msg{EN: "The node keeps its current catalog. Check the internet connection, then run `aictl catalog refresh`", ES: "El nodo conserva su catálogo actual. Revise la conexión a internet y ejecute `aictl catalog refresh`"},
+	},
+	{
+		ID:       CAT007,
+		Severity: Warning,
+		Title:    Msg{EN: "The catalog version named in node.yaml does not exist on GitHub", ES: "La versión del catálogo indicada en node.yaml no existe en GitHub"},
+		Fix:      Msg{EN: "Set `catalog.channel` in node.yaml to `stable` or to an existing `catalog-<version>`", ES: "Ponga `catalog.channel` en node.yaml como `stable` o como un `catalog-<versión>` que exista"},
+	},
+	{
+		ID:       CAT008,
+		Severity: Warning,
+		Title:    Msg{EN: "The catalog from GitHub was incomplete or inconsistent, so nothing was installed", ES: "El catálogo de GitHub llegó incompleto o inconsistente, así que no se instaló nada"},
+		Fix:      Msg{EN: "The node keeps its current catalog. Run `aictl catalog refresh` again; if it repeats, report it to the maintainer", ES: "El nodo conserva su catálogo actual. Ejecute `aictl catalog refresh` otra vez; si se repite, avise al mantenedor"},
 	},
 	{
 		ID:       CAT010,

@@ -86,7 +86,9 @@ func TestSessionIsNotAvailableUnlessLinked(t *testing.T) {
 func TestClaimResultFollowsTheStateTable(t *testing.T) {
 	r := newRig(t)
 	r.enroll()
-	r.waitCount(fake.RouteHeartbeat, 1)
+	// The first heartbeat's answer must be applied before the claim fails: an answer applied after the
+	// claim failure is a successful call and returns the link to linked (the test below pins that).
+	r.waitHeartbeatApplied(1)
 	// A claim failure moves linked to backoff; the next success returns to linked.
 	r.link.ClaimResult(errors.New("connection reset"))
 	r.waitState(StateBackoff)
@@ -114,13 +116,35 @@ func TestClaimResultFollowsTheStateTable(t *testing.T) {
 	}
 }
 
+// A heartbeat answer is a successful call, so one applied after a claim failure returns backoff to
+// linked (agent.md section 4.8.1: "next successful call"). The two loops are independent; whichever
+// result is applied last wins. The fake holds the answer so the order is fixed instead of left to the
+// scheduler, which is what made TestClaimResultFollowsTheStateTable flaky.
+func TestHeartbeatAnswerAppliedAfterAClaimFailureReturnsToLinked(t *testing.T) {
+	r := newRig(t)
+	release := r.srv.Hold(fake.RouteHeartbeat)
+	r.enroll()
+	r.waitCount(fake.RouteHeartbeat, 1) // received by the cloud, not yet applied by the client
+	r.link.ClaimResult(errors.New("connection reset"))
+	if got := r.link.State(); got != StateBackoff {
+		t.Fatalf("state %s after a claim failure, want backoff", got)
+	}
+	release()
+	r.waitState(StateLinked)
+	r.waitHeartbeatApplied(1)
+	if got := r.link.State(); got != StateLinked {
+		t.Errorf("state %s once the heartbeat answer was applied, want linked", got)
+	}
+}
+
 func TestClaim401RevokesAndClaim404RegistersAgain(t *testing.T) {
 	r := newRig(t)
 	r.enroll()
-	r.waitCount(fake.RouteHeartbeat, 1)
+	r.waitHeartbeatApplied(1)
 	r.link.ClaimResult(&APIError{Status: 404})
 	r.waitCount(fake.RouteRegister, 2)
 	r.waitState(StateLinked)
+	r.waitHeartbeatApplied(2) // the new link cycle's first heartbeat
 	r.link.ClaimResult(&APIError{Status: 401})
 	r.waitState(StateRevoked)
 }
@@ -128,11 +152,17 @@ func TestClaim401RevokesAndClaim404RegistersAgain(t *testing.T) {
 // A disabled node probes the claim on each heartbeat through the optional Probe method of the claim loop.
 type probeLoop struct {
 	started, stopped int
+	startedCh        chan struct{} // receives one value per Start
 	probed           chan struct{}
 	mu               sync.Mutex
 }
 
-func (p *probeLoop) Start(context.Context) { p.mu.Lock(); p.started++; p.mu.Unlock() }
+func (p *probeLoop) Start(context.Context) {
+	p.mu.Lock()
+	p.started++
+	p.mu.Unlock()
+	p.startedCh <- struct{}{}
+}
 func (p *probeLoop) Stop(context.Context) error {
 	p.mu.Lock()
 	p.stopped++
@@ -142,10 +172,17 @@ func (p *probeLoop) Stop(context.Context) error {
 func (p *probeLoop) Probe(context.Context) { p.probed <- struct{}{} }
 
 func TestClaimLoopIsStartedWhenLinkedAndStoppedOnStop(t *testing.T) {
-	pl := &probeLoop{probed: make(chan struct{}, 8)}
+	pl := &probeLoop{startedCh: make(chan struct{}, 8), probed: make(chan struct{}, 8)}
 	r := newRig(t, withDeps(func(d *Deps) { d.Claim = pl }))
 	r.enroll()
-	r.waitCount(fake.RouteHeartbeat, 1)
+	select {
+	case <-pl.startedCh: // the supervisor starts the claim loop beside the heartbeat loop, in no fixed order
+	case <-r.ctx.Done():
+		t.Fatal("the claim loop was not started")
+	}
+	// The first heartbeat's answer is applied before the claim is disabled; applied afterwards it would
+	// probe the claim, and the wait below could pass on that probe instead of on the 300 s heartbeat.
+	r.waitHeartbeatApplied(1)
 	pl.mu.Lock()
 	started := pl.started
 	pl.mu.Unlock()
