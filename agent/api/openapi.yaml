@@ -1350,7 +1350,7 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "409":
           $ref: "#/components/responses/Conflict"
-          description: "LAI-SYN-005: a sync run is active (wait for it, or cancel it); LAI-ARK-001: no writable root."
+          description: "LAI-SYN-005: a sync run is active (wait for it, or cancel it). LAI-CAT-001: no catalog is loaded, so orphans cannot be told apart (details.reason no_catalog)."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "500": {$ref: "#/components/responses/Internal"}
