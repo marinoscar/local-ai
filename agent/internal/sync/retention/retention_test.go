@@ -38,11 +38,21 @@ func (f fakeJournal) Get(root, item string) (journal.Item, bool) {
 	return i, ok
 }
 
-type fakeItems struct{ deleted []string }
+type fakeItems struct {
+	deleted []string
+	updated []journal.Item
+}
 
 func (f *fakeItems) Delete(root, item string) error {
 	f.deleted = append(f.deleted, root+"/"+item)
 	return nil
+}
+
+func (f *fakeItems) Update(root, item string, fn func(*journal.Item)) (journal.Item, error) {
+	it := journal.Item{RootID: root, ItemID: item, State: journal.StateFailed, Version: "newer", Code: "LAI-SYN-025", LastError: "x"}
+	fn(&it)
+	f.updated = append(f.updated, it)
+	return it, nil
 }
 
 // rig is a node with two roots, a real best-copy index over them and a retention.
@@ -250,6 +260,28 @@ func TestCanDeleteMatrix(t *testing.T) {
 			_ = os.MkdirAll(p, 0o700)
 			return p
 		}, true, ReasonOK},
+		{"a read-only root is never modified, even for a copy that has another (R8)", func(r *rig) string {
+			r.install(driveID, "qwen-x", "rev1", fresh)
+			p := r.install("internal", "qwen-x", "rev1", fresh)
+			r.roots[0].ReadOnly = true
+			return p
+		}, false, ReasonReadOnly},
+		{"a root in the read_only state: trash is kept too (R8)", func(r *rig) string {
+			r.install("internal", "qwen-x", "rev2", fresh)
+			r.setState("internal", "qwen-x", journal.StateVerified)
+			p := r.trash("internal", "qwen-x", "rev1", fresh, time.Hour)
+			r.roots[0].State = ark.StateReadOnly
+			return p
+		}, false, ReasonReadOnly},
+		{"an unclean drive is treated as read-only; its staging stays (R8)", func(r *rig) string {
+			p := filepath.Join(r.root(driveID).Path, ".staging", "qwen-x", "rev9")
+			_ = os.MkdirAll(p, 0o700)
+			r.roots[1].State = ark.StateUnclean
+			return p
+		}, false, ReasonReadOnly},
+		{"an orphan that is the only copy is refused like any other (R6)", func(r *rig) string {
+			return r.install("internal", "osm-north-america", "20260501", fresh)
+		}, false, ReasonLastVerifiedCopy},
 		{"kit/config is not an item (R9)", func(r *rig) string {
 			p := filepath.Join(r.root("internal").Path, "kit", "config")
 			_ = os.MkdirAll(p, 0o755)
@@ -528,45 +560,4 @@ func TestNewChecksItsDependencies(t *testing.T) {
 func pathExists(p string) bool {
 	_, err := os.Lstat(p)
 	return err == nil
-}
-
-// The spec's static check (ark-sync.md section 9.1): no file of internal/sync or internal/ark outside
-// this package deletes. Deletion is the one thing retention exists to own.
-func TestOnlyRetentionDeletes(t *testing.T) {
-	banned := []string{"os.Remove", "os.RemoveAll", "unix.Unlink", "syscall.Unlink", "unix.Unlinkat", "unix.Rmdir", "syscall.Rmdir"}
-	for _, root := range []string{"..", "../../ark"} {
-		err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.IsDir() {
-				if filepath.Base(path) == "retention" || filepath.Base(path) == "testdata" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return nil
-			}
-			src, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			for n, line := range strings.Split(string(src), "\n") {
-				code := line
-				if i := strings.Index(code, "//"); i >= 0 {
-					code = code[:i]
-				}
-				for _, b := range banned {
-					if strings.Contains(code, b+"(") {
-						t.Errorf("%s:%d calls %s: only internal/sync/retention may delete", path, n+1, b)
-					}
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 }

@@ -16,18 +16,22 @@
 //   - R3: a trash entry (a superseded version) may be purged when the item has a verified live copy
 //     and the journal does not say the item is mid-swap (a swapped but not yet verified replacement
 //     does not count);
-//   - R5: staging leftovers and quarantine are not copies and may always go;
+//   - R4: Restore (restore.go) puts a verified older version of .trash back when the live copy rotted;
+//   - R5: staging leftovers and quarantine are not copies and may always go, and go first when space
+//     is needed;
+//   - R6: Prune (prune.go) deletes orphans and trash on request, and the last verified copy never;
+//   - R8: a read-only root is never modified;
 //   - R9: a path that is not inside a verified copy, the trash, the staging or the quarantine is not
 //     an item and is never deleted.
 //
-// What it does not do: prune of orphans (SYNC-08 adds the route on top of CanDelete), the restore of
-// a trash entry (item.Restorer does the reverse swap), or any hashing.
+// Nothing here deletes without asking CanDelete first, and no code outside this package deletes at all.
 package retention
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -39,6 +43,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/config"
+	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/sync/journal"
 	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 )
@@ -63,9 +68,16 @@ const (
 	ReasonReplacementUnverified = "replacement_unverified"
 	// ReasonNotAnItem: the path is not a verified copy, trash, staging or quarantine (R9).
 	ReasonNotAnItem = "not_an_item"
+	// ReasonReadOnly: the root is read-only; nothing on it is ever modified (R8).
+	ReasonReadOnly = "read_only"
+	// ReasonNotPresent: the root holds no copy of the item.
+	ReasonNotPresent = "not_present"
 	// ReasonOK: allowed.
 	ReasonOK = "ok"
 )
+
+// CodePurged is the information code of a deletion made to free room (LAI-SYN-043).
+const CodePurged = doctor.SYN043
 
 // Kind is what a path is, as far as retention is concerned.
 type Kind string
@@ -95,6 +107,10 @@ type FS interface {
 	config.FS
 	// RemoveAll deletes a path and everything below it; a missing path is not an error.
 	RemoveAll(name string) error
+	// MkdirAll creates a directory and its parents (Restore and the quarantine it writes).
+	MkdirAll(path string, perm os.FileMode) error
+	// OpenRead opens a file for a streamed read (Restore hashes what it puts back).
+	OpenRead(name string) (io.ReadCloser, error)
 }
 
 // OSFS is the real filesystem.
@@ -102,6 +118,12 @@ type OSFS struct{ config.OSFS }
 
 // RemoveAll implements FS.
 func (OSFS) RemoveAll(name string) error { return os.RemoveAll(name) }
+
+// MkdirAll implements FS.
+func (OSFS) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
+
+// OpenRead implements FS.
+func (OSFS) OpenRead(name string) (io.ReadCloser, error) { return os.Open(name) }
 
 // CopyLister is the part of *ark.Index retention reads (always the live index).
 type CopyLister interface {
@@ -255,10 +277,34 @@ func (r *Retention) CanDelete(path string) (bool, string) {
 	return r.canDelete(r.Classify(path))
 }
 
-func (r *Retention) canDelete(c Class) (bool, string) {
+func (r *Retention) canDelete(c Class) (bool, string) { return r.canDeleteWithout(c, nil) }
+
+// goneSet is a set of copies a dry run treats as already deleted, so that the second of two copies of
+// one item is judged the way the real run will judge it (the first one is gone by then).
+type goneSet map[string]bool
+
+func goneKey(rootID, dir string) string { return rootID + "|" + filepath.Clean(dir) }
+
+func (g goneSet) add(cp ark.Copy)      { g[goneKey(cp.RootID, cp.Dir)] = true }
+func (g goneSet) has(cp ark.Copy) bool { return g != nil && g[goneKey(cp.RootID, cp.Dir)] }
+
+// rootReadOnly is rule R8's test: the root is read-only (the flag, a read-only mount, or an unclean
+// shutdown that the drive layer treats the same way).
+func rootReadOnly(ro ark.Root) bool {
+	return ro.ReadOnly || ro.State == ark.StateReadOnly || ro.State == ark.StateUnclean
+}
+
+// canDeleteWithout is CanDelete with the copies of gone counted as already deleted.
+func (r *Retention) canDeleteWithout(c Class, gone goneSet) (bool, string) {
 	switch c.Kind {
-	case KindStaging, KindQuarantine:
-		return true, ReasonOK
+	case KindStaging, KindQuarantine, KindTrash, KindCopy:
+	default:
+		return false, ReasonNotAnItem
+	}
+	if rootReadOnly(c.Root) {
+		return false, ReasonReadOnly // R8
+	}
+	switch c.Kind {
 	case KindTrash:
 		if c.Version == "" && c.ItemID == "" {
 			return false, ReasonNotAnItem
@@ -271,23 +317,29 @@ func (r *Retention) canDelete(c Class) (bool, string) {
 				return false, ReasonReplacementUnverified
 			}
 		}
-		if len(r.d.Copies.Copies(c.ItemID)) == 0 {
+		live := 0
+		for _, cp := range r.d.Copies.Copies(c.ItemID) {
+			if !gone.has(cp) {
+				live++
+			}
+		}
+		if live == 0 {
 			return false, ReasonReplacementUnverified
 		}
 		return true, ReasonOK
 	case KindCopy:
-		if r.otherFreshCopy(c) {
+		if r.otherFreshCopy(c, gone) {
 			return true, ReasonOK
 		}
 		return false, ReasonLastVerifiedCopy
 	}
-	return false, ReasonNotAnItem
+	return true, ReasonOK // staging and quarantine: not copies (R5)
 }
 
 // otherFreshCopy: after deleting c's copy, does another verified copy of the item exist that was
 // verified within the freshness window? Other roots count only while they are mounted and not
 // ejecting (the index holds exactly those); an intact verified trash entry counts too.
-func (r *Retention) otherFreshCopy(c Class) bool {
+func (r *Retention) otherFreshCopy(c Class, gone goneSet) bool {
 	now := r.d.Now()
 	fresh := func(m manifest.Manifest) bool {
 		at := m.LastReverifiedAt
@@ -298,6 +350,9 @@ func (r *Retention) otherFreshCopy(c Class) bool {
 	}
 	for _, cp := range r.d.Copies.Copies(c.ItemID) {
 		if cp.RootID == c.Copy.RootID && filepath.Clean(cp.Dir) == filepath.Clean(c.Copy.Dir) {
+			continue
+		}
+		if gone.has(cp) {
 			continue
 		}
 		if fresh(cp.Manifest) {
@@ -321,6 +376,22 @@ func (r *Retention) otherFreshCopy(c Class) bool {
 		}
 	}
 	return false
+}
+
+// CanDeleteItem is CanDelete for the verified copy of an item on one root (rule R7: the model delete
+// route asks it before it deletes, and DeleteCopy asks it again at the moment of the deletion). A root
+// that holds no copy answers ReasonNotPresent.
+func (r *Retention) CanDeleteItem(rootID, itemID string) (bool, string) {
+	root, ok := r.root(rootID)
+	if !ok {
+		return false, ReasonNotPresent
+	}
+	for _, cp := range r.d.Copies.Copies(itemID) {
+		if cp.RootID == rootID {
+			return r.canDelete(Class{Kind: KindCopy, Root: root, ItemID: itemID, Version: cp.Manifest.Version, Copy: cp})
+		}
+	}
+	return false, ReasonNotPresent
 }
 
 // Remove deletes path (a file or a tree) when CanDelete allows it, and returns *RefusedError when
@@ -444,16 +515,99 @@ func (r *Retention) size(dir string, depth int) int64 {
 	return n
 }
 
-// Purge deletes eligible trash of a root, oldest first, until need bytes are freed or nothing
-// eligible is left (R3, "space is needed"). Each entry goes through CanDelete at the moment it is
-// deleted. It returns the bytes freed. It implements download.SpaceMaker, which is how the
-// downloader asks for room, and never touches a .part, a verified copy or quarantine.
+// ListQuarantine returns the quarantine entries of a root (.staging/quarantine/<item>/<stamp>), oldest
+// first. The Version of an entry is its stamp directory name.
+func (r *Retention) ListQuarantine(rootID string) ([]TrashEntry, error) {
+	root, ok := r.root(rootID)
+	if !ok {
+		return nil, fmt.Errorf("retention: %s is not a mounted root", rootID)
+	}
+	base := filepath.Join(root.Path, ".staging", "quarantine")
+	ids, err := r.d.FS.ReadDir(base)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []TrashEntry
+	for _, id := range ids {
+		if !id.IsDir() || !manifest.SafeName(id.Name()) {
+			continue
+		}
+		stamps, err := r.d.FS.ReadDir(filepath.Join(base, id.Name()))
+		if err != nil {
+			continue
+		}
+		for _, st := range stamps {
+			if !st.IsDir() {
+				continue
+			}
+			p := filepath.Join(base, id.Name(), st.Name())
+			e := TrashEntry{RootID: root.ID, ItemID: id.Name(), Version: st.Name(), Path: p, Bytes: r.size(p, 0)}
+			if at, ok := quarantineTime(st.Name()); ok {
+				e.At = at
+			} else if info, err := st.Info(); err == nil {
+				e.At = info.ModTime()
+			}
+			out = append(out, e)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].At.Equal(out[j].At) {
+			return out[i].At.Before(out[j].At)
+		}
+		return out[i].Path < out[j].Path
+	})
+	return out, nil
+}
+
+// quarantineStampLayout is the layout of a quarantine directory name; a second quarantine in the same
+// second carries a "-<n>" suffix (the item machine picks a free name).
+const quarantineStampLayout = "20060102T150405Z"
+
+// quarantineTime reads the time out of a quarantine directory name, with or without its "-<n>" suffix.
+func quarantineTime(name string) (time.Time, bool) {
+	if i := strings.IndexByte(name, '-'); i > 0 {
+		name = name[:i]
+	}
+	at, err := time.Parse(quarantineStampLayout, name)
+	return at, err == nil
+}
+
+// Purge frees room on a root until need bytes are freed or nothing eligible is left ("space is
+// needed", R3 and R5): quarantine first, oldest first (it is not a copy), then eligible trash, oldest
+// first. Each entry goes through CanDelete at the moment it is deleted. It returns the bytes freed. It
+// implements download.SpaceMaker, which is how the downloader asks for room, and never touches a
+// .part or a verified copy.
 func (r *Retention) Purge(ctx context.Context, rootID string, need int64) (int64, error) {
-	entries, err := r.ListTrash(rootID)
+	var freed int64
+	quarantined, err := r.ListQuarantine(rootID)
 	if err != nil {
 		return 0, err
 	}
-	var freed int64
+	for _, e := range quarantined {
+		if freed >= need {
+			return freed, nil
+		}
+		if err := ctx.Err(); err != nil {
+			return freed, err
+		}
+		if err := r.Remove(e.Path); err != nil {
+			var refused *RefusedError
+			if errors.As(err, &refused) {
+				continue
+			}
+			return freed, err
+		}
+		freed += e.Bytes
+		r.d.Logger.Info("retention: quarantine purged", "component", "sync", "code", CodePurged, "root", rootID, "item", e.ItemID, "stamp", e.Version, "bytes", e.Bytes)
+		r.tidyTrashItem(filepath.Dir(e.Path))
+	}
+	entries, err := r.ListTrash(rootID)
+	if err != nil {
+		return freed, err
+	}
 	for _, e := range entries {
 		if freed >= need {
 			break
@@ -470,7 +624,7 @@ func (r *Retention) Purge(ctx context.Context, rootID string, need int64) (int64
 			return freed, err
 		}
 		freed += e.Bytes
-		r.d.Logger.Info("retention: trash purged", "component", "sync", "root", rootID, "item", e.ItemID, "version", e.Version, "bytes", e.Bytes)
+		r.d.Logger.Info("retention: trash purged", "component", "sync", "code", CodePurged, "root", rootID, "item", e.ItemID, "version", e.Version, "bytes", e.Bytes)
 		r.tidyTrashItem(filepath.Dir(e.Path))
 	}
 	return freed, nil
@@ -517,34 +671,26 @@ func (r *Retention) PurgeExpired(ctx context.Context, rootID string, trashDays, 
 		out.Bytes += e.Bytes
 		r.tidyTrashItem(filepath.Dir(e.Path))
 	}
-	root, ok := r.root(rootID)
-	if !ok || quarantineDays <= 0 {
+	if quarantineDays <= 0 {
 		return out, nil
 	}
-	qbase := filepath.Join(root.Path, ".staging", "quarantine")
-	ids, err := r.d.FS.ReadDir(qbase)
+	quarantined, err := r.ListQuarantine(rootID)
 	if err != nil {
 		return out, nil
 	}
-	for _, id := range ids {
-		stamps, err := r.d.FS.ReadDir(filepath.Join(qbase, id.Name()))
-		if err != nil {
+	for _, e := range quarantined {
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
+		if e.At.IsZero() || now.Sub(e.At) < time.Duration(quarantineDays)*24*time.Hour {
 			continue
 		}
-		for _, st := range stamps {
-			at, err := time.Parse("20060102T150405Z", st.Name())
-			if err != nil || now.Sub(at) < time.Duration(quarantineDays)*24*time.Hour {
-				continue
-			}
-			p := filepath.Join(qbase, id.Name(), st.Name())
-			n := r.size(p, 0)
-			if err := r.Remove(p); err != nil {
-				continue
-			}
-			out.Quarantine++
-			out.Bytes += n
+		if err := r.Remove(e.Path); err != nil {
+			continue
 		}
-		r.tidyTrashItem(filepath.Join(qbase, id.Name()))
+		out.Quarantine++
+		out.Bytes += e.Bytes
+		r.tidyTrashItem(filepath.Dir(e.Path))
 	}
 	return out, ctx.Err()
 }
@@ -588,9 +734,6 @@ type DeleteResult struct {
 	Reason string
 }
 
-// ReasonNotPresent: the root holds no copy of the item.
-const ReasonNotPresent = "not_present"
-
 // DeleteCopy removes the verified copy of an item on one root. With KeepLast the copy goes only when
 // CanDelete says another fresh verified copy survives (R1); otherwise it is left and the result says
 // why. The manifest is removed first, so that a crash in the middle leaves "not present", never a
@@ -601,6 +744,9 @@ func (r *Retention) DeleteCopy(ctx context.Context, req DeleteRequest) (DeleteRe
 	root, ok := r.root(req.RootID)
 	if !ok {
 		return DeleteResult{}, fmt.Errorf("retention: %s is not a mounted root", req.RootID)
+	}
+	if rootReadOnly(root) {
+		return DeleteResult{Reason: ReasonReadOnly}, nil // R8, whatever KeepLast says
 	}
 	var cp ark.Copy
 	found := false
