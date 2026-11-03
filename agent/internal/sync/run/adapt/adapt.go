@@ -104,8 +104,8 @@ func (c Controller) Current(context.Context) (any, bool) {
 	if !ok {
 		return nil, false
 	}
-	// The history of items is the report's, not GET's: keep the body the spec describes.
-	st.Items = nil
+	// An ended run carries what became of each item (ark-sync.md section 3.5): that is where a skipped
+	// item's reason and code are read. A running run has none yet.
 	return st, true
 }
 
@@ -288,19 +288,16 @@ type GathererPlanner struct{ G *plan.Gatherer }
 // Roots implements run.Planner.
 func (p GathererPlanner) Roots() []ark.Root { return p.G.Roots() }
 
-// Plan implements run.Planner. req.Offline overrides what the gatherer knows of the network: a run a
-// person allowed in offline mode plans online, a node without connectivity plans from what the catalog
-// pins.
+// Plan implements run.Planner. req.Offline is the run's own verdict on the network (the engine's
+// preflight: connectivity, and the mode with allow_offline_mode), and it overrides what the gatherer
+// would read from the node: a run a person allowed in offline mode is planned online and its resolvers
+// run; a node without connectivity is planned offline, from what the catalog pins and from material
+// already on a root.
 func (p GathererPlanner) Plan(ctx context.Context, req run.PlanRequest) (run.Plans, error) {
-	inputs, err := p.G.GatherAll(ctx, req.RootIDs, plan.GatherOptions{Resolve: !req.Offline})
+	online := !req.Offline
+	inputs, err := p.G.GatherAll(ctx, req.RootIDs, plan.GatherOptions{Resolve: true, Online: &online})
 	if err != nil {
 		return run.Plans{}, err
-	}
-	for i := range inputs {
-		inputs[i].Offline = req.Offline
-		if !req.Offline {
-			inputs[i].Mode = plan.ModeOnline // the planner treats the offline and survival modes as no network
-		}
 	}
 	out := run.Plans{Plans: plan.PlanAll(inputs), MinFree: map[string]int64{}}
 	for _, rp := range out.Plans {

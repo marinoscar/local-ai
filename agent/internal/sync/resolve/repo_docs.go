@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -76,6 +77,8 @@ type RepoDocs struct {
 	allowLocal bool
 }
 
+var _ plan.LocalResolver = (*RepoDocs)(nil)
+
 // SourceType implements NamedResolver.
 func (*RepoDocs) SourceType() string { return "repo_docs" }
 
@@ -126,6 +129,68 @@ func (r *RepoDocs) Resolve(_ context.Context, it plan.CatalogItem) (plan.Resolve
 	// The kit catalog is copied from the tarball as it is: the inventory has no part in it, so it keeps
 	// the plain catalog version and is not made again when the inventory appears.
 	return plan.Resolved{Version: docsVersion(v, r.inventory() != "" && !isCatalogItem(it)), SortKey: v}, nil
+}
+
+// ResolveLocal implements plan.LocalResolver: with no network, the docs and the kit catalog can still
+// be built when a mounted root holds a local-ai.git mirror (kit/git/local-ai.git) that has the tag of
+// the catalog (Produce runs `git archive` from it, whatever the mode). The answer is Resolve's, since
+// Resolve reads nothing from the network either. It reads the mirror's ref files only (the loose tag,
+// or packed-refs): no tool runs and nothing dials, so the planner can call it on a node that is
+// truly offline. A mirror that has the tag but is damaged is found by Produce (LAI-SYN-024).
+func (r *RepoDocs) ResolveLocal(ctx context.Context, it plan.CatalogItem, rootPaths []string) (plan.Resolved, bool) {
+	if r.CatalogVersion == nil {
+		return plan.Resolved{}, false
+	}
+	v := r.CatalogVersion()
+	if !catalogVersionRe.MatchString(v) {
+		return plan.Resolved{}, false
+	}
+	tag := "catalog-" + v
+	found := false
+	for _, root := range rootPaths {
+		if ctx.Err() != nil {
+			return plan.Resolved{}, false
+		}
+		if mirrorHasTag(filepath.Join(root, "kit", "git", repoMirrorName+".git"), tag) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return plan.Resolved{}, false
+	}
+	res, err := r.Resolve(ctx, it)
+	if err != nil {
+		return plan.Resolved{}, false
+	}
+	return res, true
+}
+
+// maxPackedRefs bounds the packed-refs file ResolveLocal reads.
+const maxPackedRefs = 16 << 20
+
+// mirrorHasTag reports whether the bare repository at mirror lists refs/tags/<tag>, as a loose ref or
+// in packed-refs. Files only: nothing runs.
+func mirrorHasTag(mirror, tag string) bool {
+	ref := "refs/tags/" + tag
+	if fi, err := os.Stat(filepath.Join(mirror, filepath.FromSlash(ref))); err == nil && fi.Mode().IsRegular() {
+		return true
+	}
+	f, err := os.Open(filepath.Join(mirror, "packed-refs"))
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, maxPackedRefs))
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if i := strings.IndexByte(line, ' '); i > 0 && line[i+1:] == ref {
+			return true
+		}
+	}
+	return false
 }
 
 // isCatalogItem reports whether the item installs the kit catalog (a kit item) rather than the manuals.
