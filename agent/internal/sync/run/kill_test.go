@@ -34,6 +34,9 @@ const (
 	envURL    = "LAI_RUN_URL"
 	envSeed   = "LAI_RUN_SEED"
 	envSize   = "LAI_RUN_SIZE"
+	// envPark is "<state> <bytes>": the child parks itself (blocks for good) on the first progress report
+	// of that item state with at least that many bytes done, so the parent kills it exactly there.
+	envPark = "LAI_RUN_PARK"
 
 	killSize     = 3<<20 + 4097
 	killBuf      = 64 << 10
@@ -58,16 +61,44 @@ func (c *stepClock) Now() time.Time {
 
 func (c *stepClock) AfterFunc(time.Duration, func()) func() bool { return func() bool { return false } }
 
-// printer is the child's event bus: it prints what the engine published, one line each, to stdout.
-type printer struct{ mu sync.Mutex }
+// printer is the child's event bus: it prints what the engine published, one line each, to stdout. When
+// parkState is set it blocks the publishing goroutine for good right after it printed the first report of
+// that state with at least parkAt bytes done: the engine is stopped at that report, mid item, so the
+// parent's SIGKILL lands at that point and not somewhere later (#276: a kill delivered late found the
+// model already swapped in, and the helper's fake planner planned it again).
+type printer struct {
+	mu        sync.Mutex
+	parkState string
+	parkAt    int64
+	parked    bool
+}
 
 func (p *printer) Publish(typ, _ string, data any) error {
-	if ev, ok := data.(events.SyncProgress); ok {
-		p.mu.Lock()
-		fmt.Printf("P %s %d\n", ev.State, ev.BytesDone)
-		p.mu.Unlock()
+	ev, ok := data.(events.SyncProgress)
+	if !ok {
+		return nil
+	}
+	p.mu.Lock()
+	fmt.Printf("P %s %d\n", ev.State, ev.BytesDone)
+	park := p.parkState != "" && !p.parked && ev.State == p.parkState && ev.BytesDone >= p.parkAt
+	if park {
+		p.parked = true
+	}
+	p.mu.Unlock()
+	if park {
+		select {} // the parent kills the process; nothing after this report happens
 	}
 	return nil
+}
+
+// parkFromEnv reads envPark: "<state> <bytes>", or no parking.
+func parkFromEnv() (state string, at int64) {
+	var st string
+	var n int64
+	if k, _ := fmt.Sscanf(os.Getenv(envPark), "%s %d", &st, &n); k == 2 {
+		return st, n
+	}
+	return "", 0
 }
 
 // TestHelperEngineProcess is not a test: the SIGKILL test re-executes the test binary into it to play
@@ -81,6 +112,7 @@ func TestHelperEngineProcess(t *testing.T) {
 	size, _ := strconv.Atoi(os.Getenv(envSize))
 	body := data(size, seed)
 	base := os.Getenv(envBase)
+	parkState, parkAt := parkFromEnv()
 	root := ark.Root{ID: ark.InternalID, Kind: ark.KindInternal, Path: filepath.Join(base, "srv"), State: ark.StateReady}
 	roots := func() []ark.Root { return []ark.Root{root} }
 	jr, rec, err := journal.Open(context.Background(), journal.Options{Dir: filepath.Join(base, "var"), Logger: quiet,
@@ -105,7 +137,7 @@ func TestHelperEngineProcess(t *testing.T) {
 	eng, err := New(Deps{
 		Journal: jr, Machine: machine, Planner: pl, Copies: idx, FS: config.OSFS{}, JournalDir: filepath.Join(base, "var"),
 		Settings: DefaultSettings, Priority: func(bool) error { return nil }, Lock: FileLock{Path: filepath.Join(base, "lock")}, Retention: ret,
-		Clock: &stepClock{t: epoch}, Events: &printer{},
+		Clock: &stepClock{t: epoch}, Events: &printer{parkState: parkState, parkAt: parkAt},
 		Unknown: func(r ark.Root) ([]string, error) { return jr.Items.UnknownStaging(config.OSFS{}, r) },
 	})
 	if err != nil {
@@ -155,8 +187,9 @@ func TestSIGKILLAtRandomByteOffsetsThenFinish(t *testing.T) {
 	rnd := rand.New(rand.NewPCG(21, 22))
 	resumed, killedVerifying := 0, 0
 	for i := 0; i < trials; i++ {
-		// Where the process dies: once the child has REPORTED (after the bytes reached its .part, not
-		// merely after the server sent them) a state and at least this many bytes.
+		// Where the process dies: at the first report (after the bytes reached its .part, not merely
+		// after the server sent them) of this state with at least this many bytes. The child parks
+		// itself on that report, so the kill is exact, not a race with the rest of the run.
 		state, at := "downloading", int64(1+rnd.IntN(killSize/killBuf-1))*killBuf
 		if i%5 == 4 {
 			state, at = "verifying", int64(1+rnd.IntN(killSize-1))
@@ -171,7 +204,7 @@ func TestSIGKILLAtRandomByteOffsetsThenFinish(t *testing.T) {
 				t.Fatal(err)
 			}
 			// os.StartProcess, not os/exec: only internal/execx may import os/exec (agent.md section 3.2).
-			start := func() (*os.Process, *os.File) {
+			start := func(park string) (*os.Process, *os.File) {
 				r, w, err := os.Pipe()
 				if err != nil {
 					t.Fatal(err)
@@ -180,7 +213,7 @@ func TestSIGKILLAtRandomByteOffsetsThenFinish(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				env := append(os.Environ(), envHelper+"=1", envBase+"="+base, envURL+"="+srv.URL+"/m1.gguf", envSeed+"=99", envSize+"="+strconv.Itoa(killSize))
+				env := append(os.Environ(), envHelper+"=1", envBase+"="+base, envURL+"="+srv.URL+"/m1.gguf", envSeed+"=99", envSize+"="+strconv.Itoa(killSize), envPark+"="+park)
 				proc, err := os.StartProcess(self, []string{self, "-test.run=^TestHelperEngineProcess$"}, &os.ProcAttr{Env: env, Files: []*os.File{null, w, w}})
 				_ = null.Close()
 				_ = w.Close()
@@ -189,7 +222,7 @@ func TestSIGKILLAtRandomByteOffsetsThenFinish(t *testing.T) {
 				}
 				return proc, r
 			}
-			proc1, out1 := start()
+			proc1, out1 := start(state + " " + strconv.FormatInt(at, 10))
 			killed := false
 			sc := bufio.NewScanner(out1)
 			for sc.Scan() {
@@ -212,7 +245,7 @@ func TestSIGKILLAtRandomByteOffsetsThenFinish(t *testing.T) {
 			}
 
 			// Restart: the agent replays its journal, resumes, and finishes the run.
-			proc2, out2 := start()
+			proc2, out2 := start("")
 			text, _ := io.ReadAll(out2)
 			_ = out2.Close()
 			ps, err := proc2.Wait()

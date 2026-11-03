@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -107,6 +108,59 @@ func TestRunsMarkWhatTheyConfirmedCurrent(t *testing.T) {
 	}
 	if _, ok := r.jr.Items.Get("internal", "no-record"); ok {
 		t.Fatal("marking current created a record")
+	}
+}
+
+// TestSyncStateIsIdleOnceTheFinalStateIsPublished pins the window finish leaves open: the final state
+// (done, cancelled, failed) is published while the run still holds the slot, and the report hook runs in
+// that window. status.ark.sync reads SyncState there, and it must say what an idle node says (""), never
+// a final state: SyncState is "running" or "cancelling" or "" (#276).
+func TestSyncStateIsIdleOnceTheFinalStateIsPublished(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(r *rig)
+		cut   func(eng *Engine, r *rig) // makes the run end the way the case wants
+		want  string
+	}{
+		{"done", func(r *rig) {}, func(*Engine, *rig) {}, StateDone},
+		{"cancelled", func(r *rig) {
+			r.mach.beh = func(ctx context.Context, job item.Job) item.Result { <-ctx.Done(); return cancelled(job) }
+		}, func(eng *Engine, r *rig) { recvN(t, r.mach.startedCh, 1); eng.Cancel() }, StateCancelled},
+		{"failed", func(r *rig) { r.plnr.err = errors.New("the plan failed") }, func(*Engine, *rig) {}, StateFailed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRig(t)
+			r.setPlans(map[string][]plan.ItemPlan{"internal": {row("a", 1)}})
+			tc.setup(r)
+			type seen struct {
+				final  string
+				sync   string
+				active bool
+			}
+			got := make(chan seen, 1)
+			var eng *Engine
+			r.deps.Hooks.Report = func(ctx context.Context, rc RunContext, st RunStatus) {
+				got <- seen{final: st.State, sync: eng.SyncState(), active: eng.RunActive()}
+			}
+			eng = r.start()
+			id := r.startRun(StartRequest{Trigger: TriggerManual})
+			tc.cut(eng, r)
+			r.waitEnd(id)
+			s := <-got
+			if s.final != tc.want {
+				t.Fatalf("the report saw state %q, want %q", s.final, tc.want)
+			}
+			if !s.active {
+				t.Fatal("the report hook ran after the run released its slot: the window under test is gone")
+			}
+			if s.sync != "" {
+				t.Fatalf("SyncState after the final state %q was published = %q, want idle", s.final, s.sync)
+			}
+			if eng.SyncState() != "" {
+				t.Fatalf("SyncState after the run = %q", eng.SyncState())
+			}
+		})
 	}
 }
 

@@ -85,7 +85,10 @@ func (e *Engine) RootRun(rootID string) (RootRun, bool) {
 }
 
 // SyncState is the engine's state for status.ark.sync: "running" or "cancelling" while a run is active,
-// "" when idle.
+// "" when idle. It never reports a final state (done, cancelled, failed): finish publishes the final
+// state while the run still holds the slot (the report hook and sync.done run before it is released), and
+// a run that has settled is no longer syncing, so that window reads "" like the idle node it is about to
+// be. The final state is Status's to report.
 func (e *Engine) SyncState() string {
 	e.mu.Lock()
 	rs := e.active
@@ -95,7 +98,14 @@ func (e *Engine) SyncState() string {
 	}
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return rs.state
+	if rs.finishedAt != nil {
+		return ""
+	}
+	if rs.state == StateCancelling {
+		return StateCancelling
+	}
+	// A run whose plan failed (state failed) still runs the end-of-run passes until finish settles it.
+	return StateRunning
 }
 
 // markCurrent stamps the items a run confirmed to be current on a root with the time of the check

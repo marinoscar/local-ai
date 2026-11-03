@@ -428,6 +428,7 @@ func TestSchedulerRespectsConcurrencyAndWritersPerRoot(t *testing.T) {
 		var mu sync.Mutex
 		net, maxNet := 0, 0
 		hold := newHold()
+		holding := make(chan string, 4) // an item says so once it holds a network slot
 		r.mach.beh = func(ctx context.Context, job item.Job) item.Result {
 			release, err := job.Gate.Network(ctx)
 			if err != nil {
@@ -437,6 +438,7 @@ func TestSchedulerRespectsConcurrencyAndWritersPerRoot(t *testing.T) {
 			net++
 			maxNet = max(maxNet, net)
 			mu.Unlock()
+			holding <- job.Ref.ID
 			hold.waitOrCancel(ctx, job.Ref.ID)
 			mu.Lock()
 			net--
@@ -448,13 +450,26 @@ func TestSchedulerRespectsConcurrencyAndWritersPerRoot(t *testing.T) {
 		r.start()
 		id := r.startRun(StartRequest{Trigger: TriggerManual})
 		recvN(t, r.mach.startedCh, 4) // all four are in flight (four writers), only two hold a slot
+		// Started is not holding: an item reports it started before it asks the gate for a slot. Release
+		// nothing until two items hold a slot at the same time, or the first could finish before the
+		// second got its slot and the peak would be 1 under load (#276). The two receives are the
+		// happens-before edge; the gate's cap is what keeps a third item from reporting.
+		held := recvN(t, holding, 2)
+		select {
+		case extra := <-holding:
+			t.Fatalf("%s holds a third network slot while %v hold the two there are", extra, held)
+		default:
+		}
 		hold.release("a")
 		hold.release("b")
 		hold.release("c")
 		hold.release("d")
 		r.waitEnd(id)
-		if maxNet != 2 {
-			t.Fatalf("max network downloads = %d, want 2", maxNet)
+		mu.Lock()
+		peak := maxNet
+		mu.Unlock()
+		if peak != 2 {
+			t.Fatalf("max network downloads = %d, want 2", peak)
 		}
 	})
 	t.Run("an exclusive resource runs one at a time", func(t *testing.T) {
