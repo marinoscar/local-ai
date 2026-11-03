@@ -19,9 +19,11 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
 	"github.com/marinoscar/local-ai/agent/internal/ark"
+	"github.com/marinoscar/local-ai/agent/internal/ark/ready"
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 	"github.com/marinoscar/local-ai/agent/internal/cloud"
 	"github.com/marinoscar/local-ai/agent/internal/cloud/jobs"
@@ -322,4 +324,37 @@ func (p GathererPlanner) Plan(ctx context.Context, req run.PlanRequest) (run.Pla
 		out.Item = func(string) (plan.CatalogItem, bool) { return plan.CatalogItem{}, false }
 	}
 	return out, nil
+}
+
+// Ready is run.ReadyRefresher over the readiness service (SYNC-12): after a swap and at the end of a run
+// the engine asks it to regenerate READY.json of the roots, and reads back each root's overall colour
+// for sync.done.
+type Ready struct{ Service *ready.Service }
+
+// Refresh implements run.ReadyRefresher.
+func (r Ready) Refresh(ctx context.Context, rootIDs []string) (map[string]string, error) {
+	if err := r.Service.RunFinished(ctx, rootIDs...); err != nil {
+		return nil, err
+	}
+	all := r.Service.Colours()
+	out := make(map[string]string, len(rootIDs))
+	for _, id := range rootIDs {
+		if c, ok := all[id]; ok {
+			out[id] = c
+		}
+	}
+	return out, nil
+}
+
+// ReadyRuns is ready.RunSource over the engine: the last run that touched a root, of any trigger and
+// final state, and when the last run that ended done finished.
+type ReadyRuns struct{ Engine *run.Engine }
+
+// LastRuns implements ready.RunSource.
+func (r ReadyRuns) LastRuns(rootID string) (*ready.RunInfo, time.Time) {
+	rr, ok := r.Engine.RootRun(rootID)
+	if !ok {
+		return nil, time.Time{}
+	}
+	return &ready.RunInfo{RunID: rr.RunID, Trigger: rr.Trigger, FinishedAt: rr.FinishedAt, State: rr.State}, rr.LastDone
 }

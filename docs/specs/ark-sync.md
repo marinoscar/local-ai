@@ -63,6 +63,7 @@ Non-goals:
 | `/var/lib/localai/sync/runs/<run-id>.jsonl` | journal | Append-only event log of one run. Last 60 runs kept |
 | `/var/lib/localai/sync/apt/<codename>-<arch>/` | `apt_closure` resolver | Private apt state (lists, cache config). Never `/var/lib/apt` |
 | `/var/lib/localai/sync/lock` | agent | `flock` guard so that two agent processes can't sync at once |
+| `/var/lib/localai/sync/root-runs.json` | agent (end of every run) | Per root: the last run that touched it (any trigger, any final state, a skipped run included) and when the last run that ended `done` finished. It is what the readiness report's `last_sync` and age rules read (`ready.RunSource`), kept across restarts |
 | `/var/lib/localai/sync/last-run.json` | agent (end of every run) | The last finished run as `GET /ark/sync` shows it, so it answers after a restart. A run that was still `running` when the agent died is shown as `failed` |
 | `<mount>/START-HERE.html` | sync (drive roots only) | §4.15 |
 | `<mount>/inventory.local.yaml` | sync (drive roots only, optional) | §4.15 |
@@ -418,6 +419,8 @@ Which triggers are "scheduled": `scheduled` and `mode_online` (the catch-up the 
 
 **Execute** runs the plans of all roots through one scheduler (§4.7). **Reverify slice** spends up to `reverify_budget_minutes` re-hashing the items with the oldest `last_reverified_at` (§4.13). Then READY.json is written for every root that was touched, the drive extras are written (§4.15), and the run is reported (§4.16).
 
+A run also stamps what it confirmed: every item it verified, and every item the plan kept with a resolved version (present and current), gets `extras.checked_current_at` (RFC 3339) in `items.json`, which the readiness report reads as the last time the item was checked current (§4.12). An item the run could not resolve is not stamped.
+
 A **scheduled** run that is still active after `max_run_hours` is cancelled gracefully and ends `done` with the remaining items `skipped: time_limit`. They resume the next night.
 
 ### 4.4 Planner
@@ -703,7 +706,7 @@ The downloader is a library that the engine (SYNC-07) and the resolvers call; it
 
 ### 4.9 Resolvers
 
-Engine contract (`agent/internal/sync/run`). A resolver has two halves: the planner's `plan.Resolver` (version and size, metadata only, registered in `plan.Resolvers`) and the engine's `run.ItemResolver` (`Resolve(ctx, plan.CatalogItem, plan.ItemPlan) (item.Resolution, error)`, registered with `ItemResolvers.Register(sourceType, r)`), which also returns the files with their URLs and checksums, or for a directory item a `Build`. Errors should be `*item.ResolveError{Code, Permanent}` carrying the doctor code. A source type with no registered `ItemResolver` falls back to `run.Pinned`, which resolves what the catalog itself pins (a model's files with `sha256` and size, a `url` item with a pinned `sha256`, a pinned kiwix file) and is otherwise `LAI-SYN-033`. A `local_copy` task is resolved by the engine (`run.LocalCopy`) from the other root's verified manifest, through `download.LocalSource`.
+Engine contract (`agent/internal/sync/run`). A resolver has two halves: the planner's `plan.Resolver` (version and size, metadata only, registered in `plan.Resolvers`) and the engine's `run.ItemResolver` (`Resolve(ctx, plan.CatalogItem, plan.ItemPlan) (item.Resolution, error)`, registered with `ItemResolvers.Register(sourceType, r)`), which also returns the files with their URLs and checksums, or for a directory item a `Build`. Errors should be `*item.ResolveError{Code, Permanent}` carrying the doctor code. A source type with no registered `ItemResolver` falls back to `run.Pinned`, which resolves what the catalog itself pins (a model's files with `sha256` and size, a `url` item with a pinned `sha256`, a pinned kiwix file) and is otherwise `LAI-SYN-033`. Not yet driven by the engine: the `resolve.Producer` products of `git_mirror`, `apt_closure` and `repo_docs` (SYNC-11), which are made of several parts with their own destinations (a tree, a file set, an in-place mirror update). The machine installs one item directory per resolution (`item.Resolution`, a directory item being one tree); a follow-up issue installs multi-part products. A `local_copy` task is resolved by the engine (`run.LocalCopy`) from the other root's verified manifest, through `download.LocalSource`.
 
 A resolver turns a catalog item into a concrete version: `Resolve(ctx, item) (Resolved, error)` where
 ```go

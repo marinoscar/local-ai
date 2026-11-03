@@ -71,10 +71,11 @@ type Deps struct {
 type Engine struct {
 	d Deps
 
-	mu      sync.Mutex
-	active  *runState
-	last    *RunStatus
-	catchup func() bool
+	mu       sync.Mutex
+	active   *runState
+	last     *RunStatus
+	catchup  func() bool
+	rootRuns map[string]RootRun
 }
 
 // Causes of a cancelled context, to tell a cancel, a mode switch and the time limit apart.
@@ -133,6 +134,7 @@ func New(d Deps) (*Engine, error) {
 	}
 	e := &Engine{d: d}
 	e.loadLast()
+	e.loadRootRuns()
 	return e, nil
 }
 
@@ -382,6 +384,11 @@ func (e *Engine) skippedLocked(req StartRequest, v verdict, now time.Time) (Star
 	}
 	e.last = &st
 	e.persist(st)
+	var mounted []string
+	for _, r := range e.d.Planner.Roots() {
+		mounted = append(mounted, r.ID)
+	}
+	e.noteRootRunsLocked(st, mounted)
 	e.d.Logger.Info("sync run skipped", "component", "sync", "run_id", id, "trigger", req.Trigger, "reason", v.Reason, "code", v.Code)
 	e.publish(events.TypeSyncDone, id, events.SyncDone{RunID: id, State: StateSkipped, Totals: st.MarshalTotals(), Ready: map[string]string{}})
 	return Started{RunID: id, State: StateSkipped, Reason: v.Reason, Code: v.Code}, nil
@@ -680,6 +687,13 @@ func (e *Engine) tasks(rs *runState, plans Plans) []*task {
 		mounted[r.ID] = r
 	}
 	var perRoot [][]*task
+	current := map[string][]string{}
+	defer func() {
+		now := e.d.Clock.Now()
+		for rootID, ids := range current {
+			e.markCurrent(rootID, ids, now)
+		}
+	}()
 	for _, rp := range plans.Plans {
 		root, ok := mounted[rp.Root]
 		if !ok {
@@ -710,6 +724,11 @@ func (e *Engine) tasks(rs *runState, plans Plans) []*task {
 				list = append(list, &task{root: root, row: row, cat: cat, ref: ref, rel: rel, minFree: plans.MinFree[rp.Root], catalogVersion: plans.CatalogVersion})
 			case plan.ActionSkip:
 				rs.recordSkip(root, row.ID, row.ToVersion, string(row.Reason), skipCode(row.Reason), true)
+			case plan.ActionKeep:
+				// The plan resolved the version and found it present: the item is as current as this run.
+				if row.ToVersion != "" {
+					current[root.ID] = append(current[root.ID], row.ID)
+				}
 			}
 		}
 		if len(list) > 0 {
@@ -1060,6 +1079,7 @@ func (rs *runState) record(t *task, res item.Result) {
 		rs.totals.Done++
 		rs.totals.BytesDone += t.row.NeedBytes
 		rs.outcome[t.key()] = "verified"
+		defer e.markCurrent(t.root.ID, []string{t.row.ID}, e.d.Clock.Now())
 	case journal.StateSkipped:
 		rs.totals.Skipped++
 		rs.outcome[t.key()] = "skipped"
@@ -1184,6 +1204,7 @@ func (e *Engine) finish(rs *runState) {
 	e.mu.Lock()
 	e.active = nil
 	e.last = &st
+	e.noteRootRunsLocked(st, rs.roots)
 	e.mu.Unlock()
 	if rs.lease != nil {
 		rs.lease.Release()
