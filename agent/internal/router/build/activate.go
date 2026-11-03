@@ -80,8 +80,11 @@ func (m *Manager) completeBuild(ctx context.Context, r *run, info BuildInfo, cur
 // hands the build to the prebuilt exporter. It returns the warnings of what failed.
 func (m *Manager) recordActivated(ctx context.Context, plan Plan) []string {
 	var warns []string
-	if m.opt.NodeConfig != nil && m.opt.Node != nil {
-		cur := strings.ToLower(strings.TrimSpace(m.opt.Node().Commit))
+	if m.opt.NodeConfig != nil {
+		cur := ""
+		if m.opt.Node != nil {
+			cur = strings.ToLower(strings.TrimSpace(m.opt.Node().Commit))
+		}
 		if cur == "" || !strings.HasPrefix(plan.Commit, cur) {
 			if err := m.opt.NodeConfig.RecordLlamaCommit(plan.Commit); err != nil {
 				warns = append(warns, "node.yaml could not be updated with the new llama.commit: "+err.Error())
