@@ -614,6 +614,22 @@ func (e *Engine) Steps(p *Plan) []string {
 	return out
 }
 
+// RollbackSteps describes R1 to R6 for `--rollback --dry-run`.
+func (e *Engine) RollbackSteps(restoreFiles bool) []string {
+	files := "leave the model files where they are (the links keep the old paths valid)"
+	if restoreFiles {
+		files = "move the model files back to their old paths (same filesystem only)"
+	}
+	return []string{
+		fmt.Sprintf("R1   stop and disable %s", NewUnitName),
+		fmt.Sprintf("R2   unmask %s, put its unit file (and drop-ins) back from %s if they are missing, daemon-reload", LegacyUnitName, e.paths.MigDir),
+		fmt.Sprintf("R3   make %s a regular file again, holding the current key", e.paths.LegacyKey),
+		"R4   " + files,
+		fmt.Sprintf("R5   enable and start %s; wait for /health, 200 with the key and 401 without", LegacyUnitName),
+		"R6   record the result; Tailscale Serve is not touched",
+	}
+}
+
 // RenderPlan prints the plan for a person: the steps, the warnings, the flag differences accepted and
 // every problem. It is what --dry-run prints.
 func (e *Engine) RenderPlan(w io.Writer, p *Plan) {

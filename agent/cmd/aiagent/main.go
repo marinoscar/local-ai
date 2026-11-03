@@ -19,7 +19,7 @@ const usage = `usage:
   aiagent serve                      run the daemon
   aiagent ctl [args...]              run the CLI (same as aictl)
   aiagent version [--json]           print the build version
-  aiagent migrate llama-qwen [...]   legacy migration (not implemented yet)
+  aiagent migrate [llama-qwen] [...] legacy migration: replace llama-qwen.service in place (root; --dry-run, --rollback)
   aiagent update-rollback-check      internal: run by the rollback timer (agent.md section 4.10)
 `
 
@@ -65,12 +65,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stderr, usage)
 		return 2
 	case "migrate":
-		if len(args) >= 3 && args[2] == "llama-qwen" {
-			fmt.Fprintln(stderr, "aiagent migrate llama-qwen: not implemented yet (ROUTER-09)")
-			return 1
-		}
-		fmt.Fprint(stderr, usage)
-		return 2
+		return runMigrate(ctx, args[2:], stdout, stderr)
 	case "update-rollback-check":
 		if len(args) != 2 {
 			fmt.Fprint(stderr, usage)
