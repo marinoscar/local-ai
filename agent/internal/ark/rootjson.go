@@ -1,15 +1,14 @@
 package ark
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
-	"sort"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/config"
+	"github.com/marinoscar/local-ai/agent/internal/jsonord"
 )
 
 // RootJSONName is the file name of the root identity file, directly under the root.
@@ -94,14 +93,14 @@ func (r RootJSON) Validate() error {
 
 // MarshalJSON writes the fixed key order (see RootJSON), compact. Encode is the file form.
 func (r RootJSON) MarshalJSON() ([]byte, error) {
-	by, err := marshalOrdered([]kv{
+	by, err := jsonord.Object([]jsonord.KV{
 		{"node_id", r.CreatedBy.NodeID},
 		{"agent_version", r.CreatedBy.AgentVersion},
 	}, r.CreatedBy.Extra)
 	if err != nil {
 		return nil, err
 	}
-	raw, err := marshalOrdered([]kv{
+	raw, err := jsonord.Object([]jsonord.KV{
 		{"schema_version", r.SchemaVersion},
 		{"root_id", r.RootID},
 		{"kind", r.Kind},
@@ -124,12 +123,7 @@ func (r RootJSON) Encode() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out bytes.Buffer
-	if err := json.Indent(&out, raw, "", "  "); err != nil {
-		return nil, err
-	}
-	out.WriteByte('\n')
-	return out.Bytes(), nil
+	return jsonord.Indent(raw)
 }
 
 // UnmarshalJSON reads the known keys and keeps the others in Extra. Missing known keys stay zero;
@@ -188,64 +182,6 @@ func (r *RootJSON) UnmarshalJSON(data []byte) error {
 	}
 	*r = out
 	return nil
-}
-
-type kv struct {
-	key string
-	val any
-}
-
-// marshalOrdered writes an object with the keys of known in order, then extra sorted by name.
-// Strings are not HTML-escaped (a note may contain & or <).
-func marshalOrdered(known []kv, extra map[string]json.RawMessage) ([]byte, error) {
-	var b bytes.Buffer
-	b.WriteByte('{')
-	first := true
-	put := func(key string, val any) error {
-		if !first {
-			b.WriteByte(',')
-		}
-		first = false
-		k, err := marshalNoEscape(key)
-		if err != nil {
-			return err
-		}
-		v, err := marshalNoEscape(val)
-		if err != nil {
-			return err
-		}
-		b.Write(k)
-		b.WriteByte(':')
-		b.Write(v)
-		return nil
-	}
-	for _, e := range known {
-		if err := put(e.key, e.val); err != nil {
-			return nil, err
-		}
-	}
-	names := make([]string, 0, len(extra))
-	for name := range extra {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		if err := put(name, extra[name]); err != nil {
-			return nil, err
-		}
-	}
-	b.WriteByte('}')
-	return b.Bytes(), nil
-}
-
-func marshalNoEscape(v any) ([]byte, error) {
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return nil, err
-	}
-	return bytes.TrimRight(b.Bytes(), "\n"), nil
 }
 
 // ParseRootJSON parses and validates the content of a ROOT.json. Errors satisfy ErrRootJSONCorrupt
