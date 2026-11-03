@@ -253,6 +253,7 @@ sync:                               # owned by ark-sync.md §3.3
   quarantine_days: 7
   max_run_hours: 12             # scheduled run stops gracefully after this
   hf_token_file: /etc/localai/hf-token   # optional; used only for huggingface.co requests
+  apt_unverified_repos: allow   # an apt_closure extra repository with no keyring: allow = take it over https without checking the vendor signature, with a yellow warning (LAI-SYN-063); refuse = fail with LAI-SYN-060 (§4.9.7)
   ark_drive:
     enabled: true               # false = drives are detected and served but never written
     default_profile: ark-drive-full

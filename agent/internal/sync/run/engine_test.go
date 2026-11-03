@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -890,6 +891,35 @@ func TestPlanFailureFailsTheRunWithItsCode(t *testing.T) {
 	st = r.waitEnd(r.startRun(StartRequest{Trigger: TriggerManual}))
 	if st.State != StateFailed || st.Code != doctor.AGT099 {
 		t.Fatalf("status = %+v", st)
+	}
+}
+
+// An item that ended with the LAI-SYN-063 notice (an apt kit built from unverified repositories) puts one
+// plain-language warning on the run result, however many items carry it; a run without it has none.
+func TestUnverifiedAptRepositoriesWarnOncePerRun(t *testing.T) {
+	r := newRig(t)
+	r.setPlans(map[string][]plan.ItemPlan{"internal": {row("m1", 1), row("m2", 1), row("m3", 1)}})
+	r.mach.beh = func(_ context.Context, job item.Job) item.Result {
+		res := verified(job, "v1")
+		if job.Ref.ID != "m3" {
+			res.Notices = []string{doctor.SYN063}
+		}
+		return res
+	}
+	r.start()
+	st := r.waitEnd(r.startRun(StartRequest{Trigger: TriggerManual}))
+	if st.State != StateDone || st.Totals.Done != 3 {
+		t.Fatalf("status = %+v", st)
+	}
+	if !reflect.DeepEqual(st.Warnings, []string{WarnUnverifiedRepos}) || !strings.Contains(st.Warnings[0], doctor.SYN063) {
+		t.Fatalf("warnings = %q, want exactly the LAI-SYN-063 sentence", st.Warnings)
+	}
+
+	r2 := newRig(t)
+	r2.setPlans(map[string][]plan.ItemPlan{"internal": {row("m1", 1)}})
+	r2.start()
+	if st := r2.waitEnd(r2.startRun(StartRequest{Trigger: TriggerManual})); len(st.Warnings) != 0 {
+		t.Fatalf("a run with no notice has warnings: %q", st.Warnings)
 	}
 }
 

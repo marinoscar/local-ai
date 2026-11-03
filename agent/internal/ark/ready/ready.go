@@ -391,6 +391,14 @@ func (b *builder) desired(row plan.ItemPlan) Item {
 		if !b.clockWrong {
 			it.Freshness = fresh
 		}
+		// An apt kit built from repositories whose signature was not checked is never green
+		// (LAI-SYN-063): the manifest names them (source.unverified_repos).
+		if len(pres.Source.StringList(manifest.SourceUnverifiedRepos)) > 0 {
+			colour = Worse(colour, Yellow)
+			if it.Code == "" {
+				it.Code = CodeUnverifiedRepos
+			}
+		}
 	}
 	if colour != Green && it.Code != "" {
 		b.add(it.Code, it.ID, colour)

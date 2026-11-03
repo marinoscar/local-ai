@@ -25,6 +25,9 @@ const (
 	CodeKitDoesNotFit = doctor.SYN042
 	// CodeDocsPlaceholders: the manuals were made without the real lab values.
 	CodeDocsPlaceholders = doctor.SYN062
+	// CodeUnverifiedRepos: an apt kit item was built from vendor repositories whose signature was not
+	// checked (sync.apt_unverified_repos: allow).
+	CodeUnverifiedRepos = doctor.SYN063
 	// CodeDocsNoCardPDF: the manuals were made without the survival-card PDF.
 	CodeDocsNoCardPDF = doctor.CLI014
 	// CodeDocsDamaged: the manuals' pages are missing or damaged.

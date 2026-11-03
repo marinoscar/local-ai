@@ -36,7 +36,18 @@ type Settings struct {
 	HFTokenFile string `yaml:"hf_token_file"`
 	// ArkDrive configures the drive roots.
 	ArkDrive ArkDriveSettings `yaml:"ark_drive"`
+	// AptUnverifiedRepos is what an apt_closure item does with an extra repository (extra_repos) that
+	// has no keyring in the agent: AptReposAllow (the default) takes it over https without checking the
+	// vendor signature and says so everywhere (LAI-SYN-063); AptReposRefuse fails the item with
+	// LAI-SYN-060. The Ubuntu archive is always verified. Read at the start of every closure.
+	AptUnverifiedRepos string `yaml:"apt_unverified_repos"`
 }
+
+// The values of sync.apt_unverified_repos.
+const (
+	AptReposAllow  = "allow"
+	AptReposRefuse = "refuse"
+)
 
 // ArkDriveSettings is sync.ark_drive.
 type ArkDriveSettings struct {
@@ -53,6 +64,8 @@ func DefaultSettings() Settings {
 		ReverifyDays: 30, ReverifyBudgetMinutes: 90, TrashDays: 14, QuarantineDays: 7, MaxRunHours: 12,
 		HFTokenFile: "/etc/localai/hf-token",
 		ArkDrive:    ArkDriveSettings{Enabled: true, DefaultProfile: "ark-drive-full", CopyInventory: true},
+		// allow is the owner's decision for now (issue #274); refuse is the fail-closed setting.
+		AptUnverifiedRepos: AptReposAllow,
 	}
 }
 
@@ -84,11 +97,17 @@ func (s Settings) Validate() error {
 	case s.MaxRunHours < 0:
 		return fmt.Errorf("sync.max_run_hours cannot be negative")
 	}
+	if s.AptUnverifiedRepos != AptReposAllow && s.AptUnverifiedRepos != AptReposRefuse {
+		return fmt.Errorf("sync.apt_unverified_repos must be %q or %q, got %q", AptReposAllow, AptReposRefuse, s.AptUnverifiedRepos)
+	}
 	if _, err := throttle.ParseLimit(s.BandwidthLimit); err != nil {
 		return fmt.Errorf("sync.bandwidth_limit: %w", err)
 	}
 	return nil
 }
+
+// AllowUnverifiedAptRepos reports whether sync.apt_unverified_repos is allow.
+func (s Settings) AllowUnverifiedAptRepos() bool { return s.AptUnverifiedRepos == AptReposAllow }
 
 // MaxRun is max_run_hours as a duration (0: no limit).
 func (s Settings) MaxRun() time.Duration { return time.Duration(s.MaxRunHours) * time.Hour }

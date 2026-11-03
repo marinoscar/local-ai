@@ -320,6 +320,7 @@ The script reads the `codes.go` layout described in its header: a const block (`
 | LAI-SYN-060 | warning | Couldn't compute the package list for the rebuild kit | Report it: a package name in the catalog probably changed. The old package set is kept. |
 | LAI-SYN-061 | error | A tool sync needs is missing (pmtiles, git, apt-get) | Run `sudo install-node.sh --repair`. |
 | LAI-SYN-062 | warning | Manuals were made without the real lab values | Copy `inventory.local.yaml` to `/etc/localai/` or plug in the ark drive, then sync. |
+| LAI-SYN-063 | warning | The rebuild kit has packages from vendor repositories whose signature was not checked | Pin the repository's key and set sync.apt_unverified_repos to refuse. |
 | LAI-SYN-070 | error | A drive copy no longer matches its own checksum | That copy is damaged. Sync the drive on a computer with internet, or use another drive. |
 
 ### `LAI-ARK` — owner: [ark-sync.md](ark-sync.md)

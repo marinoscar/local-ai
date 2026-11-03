@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -1058,6 +1059,13 @@ func (rs *runState) progress(t *task, p item.Progress) {
 	}
 }
 
+// warnOnce adds a plain warning to the run's result unless it is already there. Caller holds rs.mu.
+func (rs *runState) warnOnce(w string) {
+	if !slices.Contains(rs.warnings, w) {
+		rs.warnings = append(rs.warnings, w)
+	}
+}
+
 // record settles a finished task: counters, the event, the journal's failure counter, and the fault of
 // a root.
 func (rs *runState) record(t *task, res item.Result) {
@@ -1098,6 +1106,9 @@ func (rs *runState) record(t *task, res item.Result) {
 	}
 	if res.RootFault != nil {
 		rs.faulted[t.root.ID] = true
+	}
+	if slices.Contains(res.Notices, CodeUnverifiedRepos) {
+		rs.warnOnce(WarnUnverifiedRepos)
 	}
 	rs.results = append(rs.results, ItemResult{Root: t.root.ID, Item: t.row.ID, Result: result, Version: res.Version, Reason: reason, Code: code})
 	rs.mu.Unlock()
