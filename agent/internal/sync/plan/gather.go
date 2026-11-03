@@ -157,6 +157,9 @@ type Deps struct {
 	Network func() Network
 	// Resolvers is the optional registry of resolvers.
 	Resolvers *Resolvers
+	// ResolveTimeout bounds one resolver call when GatherOptions.ResolveTimeout is zero;
+	// DefaultResolveTimeout when this is zero too.
+	ResolveTimeout time.Duration
 	// Now is the clock; time.Now when nil.
 	Now func() time.Time
 	// Logger defaults to slog.Default.
@@ -441,6 +444,9 @@ func (g *Gatherer) resolve(ctx context.Context, in *PlanInput, root ark.Root, op
 		return
 	}
 	timeout := opt.ResolveTimeout
+	if timeout <= 0 {
+		timeout = g.d.ResolveTimeout
+	}
 	if timeout <= 0 {
 		timeout = DefaultResolveTimeout
 	}

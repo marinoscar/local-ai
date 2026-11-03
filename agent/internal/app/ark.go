@@ -95,12 +95,13 @@ type arkStack struct {
 	plans  *plan.Gatherer
 	bucket *throttle.TokenBucket
 
-	// resolvers and itemResolvers are the empty registries of the source resolvers: the planner half
-	// (plan.Resolvers) and the engine half (run.ItemResolvers). They stay empty until the multi-part
-	// products land (#257): an item with no resolver is planned and fetched from what the catalog pins,
-	// which is what every single-tree and file-set item needs.
+	// resolvers and itemResolvers are the registries of the source resolvers: the planner half
+	// (plan.Resolvers) and the engine half (run.ItemResolvers). registerSources fills them with the
+	// git_mirror, apt_closure and repo_docs producers (ark_sources.go); an item of any other source
+	// type is planned and fetched from what the catalog pins.
 	resolvers     *plan.Resolvers
 	itemResolvers *run.ItemResolvers
+	sources       *arkSources
 
 	facts *nodeFacts
 }
@@ -124,6 +125,9 @@ func (d *Daemon) syncSettings() run.Settings {
 
 // netState is the node's mode and whether the internet is reachable (connectivity is not "none").
 func (d *Daemon) netState() run.NetState {
+	if d.env.NetState != nil {
+		return d.env.NetState()
+	}
 	if d.mode == nil {
 		return run.NetState{Mode: string(plan.ModeOffline)}
 	}
@@ -186,6 +190,10 @@ func (d *Daemon) buildArk(ctx context.Context, idx *ark.Index) (*arkStack, error
 		return nil, fmt.Errorf("item machine: %w", err)
 	}
 
+	if err := s.registerSources(dl); err != nil {
+		return nil, fmt.Errorf("source resolvers: %w", err)
+	}
+
 	s.plans, err = plan.NewGatherer(plan.Deps{
 		FS: fsys, Catalog: func() *catalog.Catalog { return c.Catalog.Get().Catalog },
 		Settings: func() plan.NodeSettings {
@@ -194,7 +202,7 @@ func (d *Daemon) buildArk(ctx context.Context, idx *ark.Index) (*arkStack, error
 		},
 		Roots: roots, Copies: idx, Journal: jr.Items, Statfs: plan.OSStatfs,
 		Node: s.nodeInfo, Network: func() plan.Network { n := d.netState(); return plan.Network{Mode: n.Mode, Online: n.Online} },
-		Resolvers: s.resolvers, Now: clock.Now, Logger: lg,
+		Resolvers: s.resolvers, ResolveTimeout: sourceResolveTimeout, Now: clock.Now, Logger: lg,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("planner: %w", err)
