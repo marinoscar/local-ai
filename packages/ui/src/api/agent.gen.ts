@@ -848,8 +848,12 @@ export interface paths {
         put?: never;
         /**
          * Synthesize speech
-         * @description Owned by companion-services.md section 3.4. Produces `audio/wav` by exec'ing piper with a fixed argv.
-         *     agent.md section 3.8.25.
+         * @description Owned by companion-services.md section 3.4. Produces `audio/wav` by exec'ing piper with a fixed argv; the
+         *     text goes to its stdin, never to its argv. The answer is chunked and starts before synthesis ends: the
+         *     44-byte WAV header carries 0xFFFFFFFF as the RIFF and data sizes (length unknown), followed by 16-bit
+         *     mono PCM at the voice's sample rate. A failure before the first audio is an ordinary error response; one
+         *     after it aborts the connection, so the client sees a truncated stream. Voice rules: companion-services.md
+         *     section 4.3.4; the caller sends its language in `X-LocalAI-UI-Language`. agent.md section 3.8.25.
          *
          */
         post: operations["textToSpeech"];
@@ -1971,6 +1975,7 @@ export interface components {
             [key: string]: unknown;
         };
         TtsRequest: {
+            /** @description 1 to 2000 characters after cleanup (Markdown, URLs, code blocks and emoji are removed or replaced); longer is 413 LAI-SVC-024. */
             text: string;
             /** @description A catalog piper model id. */
             voice?: string | null;
@@ -3777,17 +3782,18 @@ export interface operations {
                     "audio/wav": string;
                 };
             };
+            /** @description LAI-AGT-020: malformed body, an unknown voice (details.field voice, details.reason unknown_voice), a language other than auto, en or es, a speed outside 0.7 to 1.5, or no text left after cleanup (details.reason empty_after_cleanup). */
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            /** @description LAI-SVC-024: the text is over 2000 characters after cleanup; LAI-AGT-025 the body is over the limit. */
+            /** @description LAI-SVC-024: the text is over 2000 characters after cleanup (details.chars, details.max), or over 64 KiB before it; LAI-AGT-025 the body is over the limit. */
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
-            /** @description LAI-SVC-015: more than 2 concurrent syntheses and 4 queued. */
+            /** @description LAI-SVC-015: more than 2 concurrent syntheses and 4 queued (Retry-After is set). */
             429: components["responses"]["RateLimited"];
-            /** @description LAI-SVC-023: piper failed; LAI-AGT-099 a bug. */
+            /** @description LAI-SVC-023: piper failed (details.reason is exit_status, timeout, empty_audio, start_failed or bad_voice_config; details.exit_code and details.stderr, the first 4 KiB, when it ran); LAI-AGT-099 a bug. */
             500: components["responses"]["Internal"];
-            /** @description LAI-AGT-024 the agent is starting or stopping; LAI-SVC-022 no voice. */
+            /** @description LAI-AGT-024 the agent is starting or stopping; LAI-SVC-020 the voice program is not installed; LAI-SVC-022 no voice is installed (or piper.enabled is false). */
             503: components["responses"]["Starting"];
         };
     };
