@@ -4,13 +4,16 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/cli/out"
 )
 
 // globalFlagsHelp documents the global flags of aictl.md section 3.1. A test keeps it in step with
-// the flags parseGlobal registers.
+// the flags parseGlobal registers; globalFlagsHelpES (help_es.go) is its Spanish twin.
 const globalFlagsHelp = `Global flags (before the command name):
   --json              Machine output on stdout: one JSON document, no colour, no prompts
   --lang en|es        Language of human output (default: from $LANG, else en)
@@ -28,48 +31,105 @@ const globalFlagsHelp = `Global flags (before the command name):
   -h, --help          Help for the command
 `
 
+// summaryOf is the one-line summary of the command at path in language l: the Spanish table for
+// --lang es, else (and for a command the table does not know) the command's own English text.
+func summaryOf(l Lang, path []string, c *Command) string {
+	if l == LangES {
+		if s, ok := helpES[strings.Join(path, " ")]; ok {
+			return s
+		}
+	}
+	return c.Summary
+}
+
+// timeoutText is a default deadline for the command list: "10 s", "30 min", "1 h 30 min"; "-" for none.
+func timeoutText(d time.Duration) string {
+	switch {
+	case d <= 0:
+		return "-"
+	case d%time.Hour == 0:
+		return fmt.Sprintf("%d h", d/time.Hour)
+	case d%time.Minute == 0 && d < time.Hour:
+		return fmt.Sprintf("%d min", d/time.Minute)
+	case d%time.Second == 0 && d < time.Minute:
+		return fmt.Sprintf("%d s", d/time.Second)
+	}
+	return out.Duration(d)
+}
+
+// sortedSubs returns the subcommands of c by name, so help does not depend on the order in which the
+// files registered them.
+func sortedSubs(c *Command) []*Command {
+	subs := append([]*Command(nil), c.Sub...)
+	sort.SliceStable(subs, func(i, j int) bool { return subs[i].Name < subs[j].Name })
+	return subs
+}
+
+// writeCommandList writes one row per command and per subcommand, by full path, with its marks, its
+// default deadline and its summary: the list `aictl help` prints and the one aictl.md section 4 is
+// checked against (help_test.go).
+func writeCommandList(w io.Writer, reg *Registry, l Lang) {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	var row func(c *Command, path []string)
+	row = func(c *Command, path []string) {
+		deadline := "-"
+		if c.Run != nil {
+			deadline = timeoutText(c.Timeout)
+		}
+		fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", strings.Join(path, " "), c.Marks, deadline, summaryOf(l, path, c))
+		for _, s := range sortedSubs(c) {
+			row(s, append(append([]string(nil), path...), s.Name))
+		}
+	}
+	for _, c := range reg.Commands() {
+		row(c, []string{c.Name})
+	}
+	tw.Flush()
+}
+
 // writeHelp prints the top-level help: usage, the registered commands with their marks, the global
 // flags.
-func writeHelp(w io.Writer, reg *Registry) {
-	fmt.Fprint(w, "aictl: command line for the Local AI node agent.\n\n")
-	fmt.Fprint(w, "Usage:\n  aictl [global flags] <command> [subcommand] [flags] [args]\n  aictl help [command]\n\n")
-	cmds := reg.Commands()
-	if len(cmds) == 0 {
-		fmt.Fprint(w, "No commands are available in this build yet.\n\n")
+func writeHelp(w io.Writer, reg *Registry, l Lang) {
+	hw := helpFor(l)
+	fmt.Fprint(w, hw.intro+"\n\n")
+	fmt.Fprint(w, hw.usage+"\n  aictl [global flags] <command> [subcommand] [flags] [args]\n  aictl help [command]\n\n")
+	if len(reg.Commands()) == 0 {
+		fmt.Fprint(w, pick(l, "No commands are available in this build yet.", "Todavía no hay comandos disponibles en esta compilación.")+"\n\n")
 	} else {
-		fmt.Fprint(w, "Commands:\n")
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		for _, c := range cmds {
-			fmt.Fprintf(tw, "  %s\t%s\t%s\n", c.Name, c.Summary, c.Marks)
-		}
-		tw.Flush()
+		fmt.Fprint(w, hw.commands+"\n")
+		writeCommandList(w, reg, l)
 		fmt.Fprintln(w)
+		fmt.Fprint(w, hw.marksLegend+"\n\n")
 	}
-	fmt.Fprint(w, globalFlagsHelp)
-	fmt.Fprint(w, "\nRun `aictl help <command>` for the details of one command.\n")
+	fmt.Fprint(w, hw.globalFlags)
+	fmt.Fprint(w, "\n"+hw.run+"\n")
 }
 
 // writeCommandHelp prints the help of one command: synopsis, summary, marks, default timeout, its
 // flags and its subcommands.
-func writeCommandHelp(w io.Writer, res resolved) {
+func writeCommandHelp(w io.Writer, res resolved, l Lang) {
+	hw := helpFor(l)
 	cmd := res.cmd
 	path := strings.Join(res.path, " ")
 	usage := "aictl [global flags] " + path
+	if l == LangES {
+		usage = "aictl [opciones globales] " + path
+	}
 	if len(cmd.Sub) > 0 && cmd.Run == nil {
-		usage += " <subcommand>"
+		usage += pick(l, " <subcommand>", " <subcomando>")
 	}
 	if cmd.Usage != "" {
 		usage += " " + cmd.Usage
 	}
-	fmt.Fprintf(w, "Usage:\n  %s\n\n%s\n", usage, cmd.Summary)
+	fmt.Fprintf(w, "%s\n  %s\n\n%s\n", hw.usage, usage, summaryOf(l, res.path, cmd))
 	if cmd.Description != "" {
 		fmt.Fprintf(w, "\n%s\n", strings.TrimSpace(cmd.Description))
 	}
 	if m := cmd.Marks.String(); m != "" {
-		fmt.Fprintf(w, "\nMarks: %s\n", m)
+		fmt.Fprintf(w, "\n%s %s\n", hw.marks, m)
 	}
 	if cmd.Timeout > 0 {
-		fmt.Fprintf(w, "Default timeout: %s (change it with --timeout)\n", cmd.Timeout.Round(time.Second))
+		fmt.Fprintf(w, hw.timeout+"\n", cmd.Timeout.Round(time.Second))
 	}
 	if cmd.Flags != nil {
 		fs := flag.NewFlagSet(path, flag.ContinueOnError)
@@ -77,26 +137,27 @@ func writeCommandHelp(w io.Writer, res resolved) {
 		var n int
 		fs.VisitAll(func(*flag.Flag) { n++ })
 		if n > 0 {
-			fmt.Fprint(w, "\nFlags:\n")
+			fmt.Fprint(w, "\n"+hw.flags+"\n")
 			fs.SetOutput(w)
 			fs.PrintDefaults()
 		}
 	}
 	if len(cmd.Sub) > 0 {
-		fmt.Fprint(w, "\nSubcommands:\n")
+		fmt.Fprint(w, "\n"+hw.subcommands+"\n")
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		for _, s := range cmd.Sub {
-			fmt.Fprintf(tw, "  %s\t%s\t%s\n", s.Name, s.Summary, s.Marks)
+		for _, s := range sortedSubs(cmd) {
+			subPath := append(append([]string(nil), res.path...), s.Name)
+			fmt.Fprintf(tw, "  %s\t%s\t%s\n", s.Name, summaryOf(l, subPath, s), s.Marks)
 		}
 		tw.Flush()
 	}
 }
 
 // shortUsage is the two-line hint printed with a usage error.
-func shortUsage(w io.Writer, path string) {
+func shortUsage(w io.Writer, path string, l Lang) {
 	if path == "" {
-		fmt.Fprint(w, "Usage: aictl [global flags] <command> [args]\n")
+		fmt.Fprint(w, pick(l, "Usage: aictl [global flags] <command> [args]\n", "Uso: aictl [opciones globales] <comando> [argumentos]\n"))
 		return
 	}
-	fmt.Fprintf(w, "Usage: aictl [global flags] %s [flags] [args]\n", path)
+	fmt.Fprintf(w, helpFor(l).usageHint+"\n", path)
 }

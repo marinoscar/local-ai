@@ -279,12 +279,12 @@ func Run(ctx context.Context, env Env, reg *Registry, args []string) int {
 	rep := reporter{p: printer, g: g, env: env}
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			writeHelp(env.Stdout, reg)
+			writeHelp(env.Stdout, reg, g.Lang)
 			return ExitOK
 		}
 		code := rep.fail(NewCLIError(g.Lang, CodeUsage, usageMessage(g.Lang, err)))
 		if !g.JSON {
-			shortUsage(env.Stderr, "")
+			shortUsage(env.Stderr, "", g.Lang)
 		}
 		return code
 	}
@@ -292,7 +292,7 @@ func Run(ctx context.Context, env Env, reg *Registry, args []string) int {
 		if g.JSON {
 			return rep.fail(NewCLIError(g.Lang, CodeUsage, pick(g.Lang, "No command given.", "No se indicó ningún comando.")))
 		}
-		writeHelp(env.Stderr, reg)
+		writeHelp(env.Stderr, reg, g.Lang)
 		return ExitUsage
 	}
 	if rest[0] == "help" {
@@ -306,7 +306,7 @@ func Run(ctx context.Context, env Env, reg *Registry, args []string) int {
 			code := rep.fail(NewCLIError(g.Lang, CodeUsage, pick(g.Lang,
 				fmt.Sprintf("Unknown command %q.", unknown), fmt.Sprintf("Comando desconocido %q.", unknown))))
 			if !g.JSON {
-				shortUsage(env.Stderr, "")
+				shortUsage(env.Stderr, "", g.Lang)
 			}
 			return code
 		case unknown != "":
@@ -314,7 +314,7 @@ func Run(ctx context.Context, env Env, reg *Registry, args []string) int {
 				fmt.Sprintf("Unknown subcommand %q for %s.", unknown, strings.Join(res.path, " ")),
 				fmt.Sprintf("Subcomando desconocido %q para %s.", unknown, strings.Join(res.path, " ")))))
 			if !g.JSON {
-				writeCommandHelp(env.Stderr, res)
+				writeCommandHelp(env.Stderr, res, g.Lang)
 			}
 			return code
 		default: // a group command without a subcommand
@@ -324,10 +324,10 @@ func Run(ctx context.Context, env Env, reg *Registry, args []string) int {
 					fmt.Sprintf("%s necesita un subcomando.", strings.Join(res.path, " ")))))
 			}
 			if hasHelpArg(res.rest) {
-				writeCommandHelp(env.Stdout, res)
+				writeCommandHelp(env.Stdout, res, g.Lang)
 				return ExitOK
 			}
-			writeCommandHelp(env.Stderr, res)
+			writeCommandHelp(env.Stderr, res, g.Lang)
 			return ExitUsage
 		}
 	}
@@ -340,12 +340,12 @@ func Run(ctx context.Context, env Env, reg *Registry, args []string) int {
 	positional, perr := parseInterspersed(fs, res.rest)
 	if perr != nil {
 		if errors.Is(perr, flag.ErrHelp) {
-			writeCommandHelp(env.Stdout, res)
+			writeCommandHelp(env.Stdout, res, g.Lang)
 			return ExitOK
 		}
 		code := rep.fail(NewCLIError(g.Lang, CodeUsage, usageMessage(g.Lang, perr)))
 		if !g.JSON {
-			shortUsage(env.Stderr, strings.Join(res.path, " "))
+			shortUsage(env.Stderr, strings.Join(res.path, " "), g.Lang)
 		}
 		return code
 	}
@@ -398,7 +398,7 @@ func normalize(err error, c *Call) error {
 func runHelp(rep reporter, reg *Registry, topic []string) int {
 	env := rep.env
 	if len(topic) == 0 {
-		writeHelp(env.Stdout, reg)
+		writeHelp(env.Stdout, reg, rep.g.Lang)
 		return ExitOK
 	}
 	res, unknown, err := reg.resolve(topic)
@@ -411,7 +411,7 @@ func runHelp(rep reporter, reg *Registry, topic []string) int {
 			fmt.Sprintf("No help for %q.", word), fmt.Sprintf("No hay ayuda para %q.", word))))
 		return code
 	}
-	writeCommandHelp(env.Stdout, res)
+	writeCommandHelp(env.Stdout, res, rep.g.Lang)
 	return ExitOK
 }
 
