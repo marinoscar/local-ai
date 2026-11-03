@@ -1,0 +1,9 @@
+== stdout ==
+== stderr ==
+… Compilando llama.cpp f3586e66b para cuda (sm 75), 5 trabajos en paralelo (unos
+  20–40 minutos)
+✗ La nueva compilación de llama.cpp no funcionó; se sigue usando la anterior. El
+  registro está en /opt/localai/llama.cpp/builds/f3586e66b-cuda/build.log.
+  [LAI-LLM-019]
+  → Solución: Informe del registro de compilación; no hay nada más que hacer.
+== exit 1 ==

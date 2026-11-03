@@ -1,0 +1,14 @@
+== stdout ==
+✓ Build inputs (commit, backend, CUDA architecture): llama.cpp f3586e66b for
+  cuda (sm 75)
+✓ Source of llama.cpp f3586e66b: kit tarball
+  /srv/localai/kit/src/llama.cpp-x.tar.gz (sha256 matches the kit manifest)
+✗ Build tools (gcc, g++, cmake 3.21 or newer, ninja, pkg-config): not installed:
+  ninja, pkg-config.  [LAI-KIT-010]
+  → Fix: Run `sudo aictl kit install-debs`.
+i To install what is missing from the kit, run:
+  `sudo aictl kit install-debs --packages ninja-build,pkg-config`
+
+i Not ready: fix the checks marked above and run
+  `sudo aictl rebuild-llama --dry-run` again.
+== exit 1 ==

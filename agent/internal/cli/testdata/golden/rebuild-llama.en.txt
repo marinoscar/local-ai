@@ -1,0 +1,9 @@
+== stdout ==
+✓ Build f3586e66b-cuda passed its test (CUDA0: NVIDIA GeForce RTX 2070 with
+  Max-Q Design).
+✓ Switched to the new build. qwen3.5-9b-q4km is loaded again.
+== stderr ==
+… Building llama.cpp f3586e66b for cuda (sm 75), 5 parallel jobs (about 20–40
+  minutes)
+… Compiling (this takes a while)
+== exit 0 ==

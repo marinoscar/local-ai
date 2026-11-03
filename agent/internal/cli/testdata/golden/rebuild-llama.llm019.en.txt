@@ -1,0 +1,9 @@
+== stdout ==
+== stderr ==
+… Building llama.cpp f3586e66b for cuda (sm 75), 5 parallel jobs (about 20–40
+  minutes)
+✗ The new llama.cpp build did not work; the previous build is still in use. The
+  log is in /opt/localai/llama.cpp/builds/f3586e66b-cuda/build.log.
+  [LAI-LLM-019]
+  → Fix: Report the build log; nothing else to do.
+== exit 1 ==

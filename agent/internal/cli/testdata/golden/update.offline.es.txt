@@ -1,0 +1,9 @@
+== stdout ==
+== stderr ==
+✗ Esta acción no está permitida en el modo actual. Actualizar necesita internet
+  y este equipo no tiene salida a GitHub o no está en modo en línea.
+  [LAI-AGT-023]
+  → Solución: Cambie al modo en línea (`aictl mode online`) y ejecútelo otra
+              vez. Sin internet, use `sudo aictl kit install agent` o
+              `sudo aictl rebuild-agent`.
+== exit 6 ==

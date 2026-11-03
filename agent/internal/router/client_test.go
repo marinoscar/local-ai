@@ -301,6 +301,30 @@ func TestLoadAnswerWithoutSuccess(t *testing.T) {
 	}
 }
 
+func TestChatAsksForTheTokensTheCallerChose(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	r.fake.Set("model-a-q4km", fake.Loaded)
+	for _, tc := range []struct{ ask, want int }{{16, 16}, {1, 1}, {0, 1}, {-3, 1}} {
+		if err := r.client.Chat(ctx, "model-a-q4km", tc.ask); err != nil {
+			t.Fatalf("Chat(%d): %v", tc.ask, err)
+		}
+		var chat map[string]any
+		for _, q := range r.fake.Requests() {
+			if q.Path == "/v1/chat/completions" {
+				chat = nil
+				_ = json.Unmarshal([]byte(q.Body), &chat)
+			}
+		}
+		if chat["max_tokens"] != float64(tc.want) || chat["stream"] != false {
+			t.Errorf("Chat(%d) sent %v, want max_tokens %d", tc.ask, chat, tc.want)
+		}
+	}
+	if err := r.client.Chat(ctx, "", 16); !errors.Is(err, ErrBadModelID) {
+		t.Errorf("an empty model id = %v", err)
+	}
+}
+
 func TestReload(t *testing.T) {
 	r := newRig(t)
 	if err := r.client.Reload(context.Background()); err != nil {

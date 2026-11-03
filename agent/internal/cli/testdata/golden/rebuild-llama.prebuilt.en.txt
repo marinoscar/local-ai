@@ -1,0 +1,9 @@
+== stdout ==
+i Restoring the ready-made llama.cpp build f3586e66b for cuda (sm 75) from
+  llama.cpp-f3586e66b-cuda-noble-amd64-sm75.tar.gz
+i Restored from llama.cpp-f3586e66b-cuda-noble-amd64-sm75.tar.gz; nothing was
+  compiled.
+✓ Build f3586e66b-cuda passed its test (CUDA0: NVIDIA GeForce RTX 2070 with
+  Max-Q Design).
+✓ Switched to the new build. qwen3.5-9b-q4km is loaded again.
+== exit 0 ==

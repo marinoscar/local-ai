@@ -1,0 +1,8 @@
+== stdout ==
+i Version 0.2.0 is available (you have 0.1.0).
+✓ Updated to 0.2.0. Everything is running.
+== stderr ==
+Update now? The agent restarts; models keep running. [y/N] … Downloading and checking the signature
+… Installing the new version
+… Restarting the agent and waiting for it
+== exit 0 ==

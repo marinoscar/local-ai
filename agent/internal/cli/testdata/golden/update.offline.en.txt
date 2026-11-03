@@ -1,0 +1,8 @@
+== stdout ==
+== stderr ==
+✗ Updating needs the internet and this node is not online. Switch to online mode
+  first (`aictl mode online`).  [LAI-AGT-023]
+  → Fix: Switch to online mode (`aictl mode online`) and run it again. With no
+         internet, use `sudo aictl kit install agent` or
+         `sudo aictl rebuild-agent` instead.
+== exit 6 ==
