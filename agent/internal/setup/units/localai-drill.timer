@@ -1,0 +1,13 @@
+[Unit]
+Description=Local AI monthly offline drill (timer)
+Documentation=https://github.com/marinoscar/local-ai/blob/main/docs/specs/drill.md
+
+[Timer]
+# First Sunday of each month, 04:30 local time (after the nightly sync window)
+OnCalendar=Sun *-*-01..07 04:30:00
+RandomizedDelaySec=30min
+Persistent=true
+Unit=localai-drill.service
+
+[Install]
+WantedBy=timers.target

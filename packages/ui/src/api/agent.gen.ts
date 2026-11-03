@@ -984,7 +984,8 @@ export interface paths {
         put?: never;
         /**
          * Start a drill
-         * @description `trigger: scheduled` is what `localai-drill.service` sends. Owned by drill.md section 3.1. agent.md
+         * @description `trigger: scheduled` is what `localai-drill.service` sends. A manual run a precondition refuses is
+         *     409; a scheduled one answers 202 with `state: skipped`. Owned by drill.md section 3.1. agent.md
          *     section 3.8.28.
          *
          */
@@ -2052,8 +2053,19 @@ export interface components {
              */
             trigger: "manual" | "scheduled";
         };
+        /** @description The run id. A scheduled run that a precondition held back answers 202 too, with `state: skipped`,
+         *     the doctor code and a plain reason (the document of that run says the same), and `retry_at` when
+         *     the agent will try again (drill.md section 4.1).
+         *      */
         DrillAccepted: {
             run_id: string;
+            /** @enum {string} */
+            state?: "skipped";
+            /** @description LAI-DRL-002, 003, 004 or 005. */
+            code?: string;
+            reason?: string;
+            /** Format: date-time */
+            retry_at?: string;
         };
         /** @description The results document, owned by drill.md section 3.4. */
         DrillResults: {
@@ -2064,12 +2076,22 @@ export interface components {
             started_at: string;
             /** Format: date-time */
             finished_at?: string | null;
+            /**
+             * @description Absent for a run that completed.
+             * @enum {string}
+             */
+            state?: "running" | "skipped" | "aborted";
             /** @enum {string} */
-            overall: "pass" | "warn" | "fail" | "aborted";
+            overall: "pass" | "warn" | "fail" | "aborted" | "skipped" | "running";
             survival_ready?: boolean;
             checks?: {
                 [key: string]: unknown;
             }[];
+            /** @description Why a skipped or aborted run did not complete. */
+            code?: string;
+            reason?: string;
+            /** Format: date-time */
+            retry_at?: string;
         } & {
             [key: string]: unknown;
         };
