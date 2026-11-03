@@ -10,6 +10,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
 	"github.com/marinoscar/local-ai/agent/internal/audit"
+	"github.com/marinoscar/local-ai/agent/internal/cloud/jobs"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/drill"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
@@ -82,6 +83,7 @@ type Daemon struct {
 	syncEngine modelsapi.SyncEngine
 	hooksSync  syncCanceller
 	reporter   *drill.Reporter
+	updater    *jobs.AgentUpdate
 	modelsDeps modelsapi.Deps
 	models     *modelsapi.Service
 	svcDeps    api.ServicesDeps

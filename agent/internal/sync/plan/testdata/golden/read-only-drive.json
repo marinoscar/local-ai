@@ -1,0 +1,125 @@
+[
+  {
+    "root": "ark-3f9c0a12",
+    "path": "/media/operator/AI-ARK/localai",
+    "profile": "ark-drive-full",
+    "catalog_version": "2026.11.02-1",
+    "mode": "online",
+    "read_only": true,
+    "budget_bytes": 95000000000,
+    "planned_bytes": 6000000000,
+    "fs_free_bytes": 60000000000,
+    "min_free_bytes": 5000000000,
+    "peak_bytes": 6000000000,
+    "free_floor_bytes": 60000000000,
+    "items": [
+      {
+        "pos": 1,
+        "id": "kit-llama-cpp",
+        "kind": "kit",
+        "tier": "k",
+        "action": "skip",
+        "to_version": "tag-kit-llama-cpp",
+        "final_bytes": 500000000,
+        "reason": "read_only"
+      },
+      {
+        "pos": 2,
+        "id": "kit-debs-resolute-amd64",
+        "kind": "kit",
+        "tier": "k",
+        "action": "skip",
+        "to_version": "closure-b",
+        "final_bytes": 3100000000,
+        "reason": "read_only",
+        "refresh_days": 30
+      },
+      {
+        "pos": 3,
+        "id": "docs-bundle",
+        "kind": "docs",
+        "tier": "k",
+        "action": "skip",
+        "to_version": "catalog-2026.11.02-1",
+        "final_bytes": 100000000,
+        "reason": "read_only"
+      },
+      {
+        "pos": 4,
+        "id": "model-alpha-9b",
+        "kind": "model",
+        "tier": 1,
+        "action": "keep",
+        "from_version": "rev-alpha-0001",
+        "to_version": "rev-alpha-0001",
+        "final_bytes": 6000000000,
+        "age_days": 10
+      },
+      {
+        "pos": 5,
+        "id": "model-beta-vision",
+        "kind": "model",
+        "tier": 1,
+        "action": "skip",
+        "to_version": "rev-beta-0002",
+        "final_bytes": 5000000000,
+        "reason": "read_only"
+      },
+      {
+        "pos": 6,
+        "id": "wiki-alpha-en",
+        "kind": "kiwix",
+        "tier": 1,
+        "action": "skip",
+        "to_version": "2026-10",
+        "final_bytes": 49000000000,
+        "reason": "read_only",
+        "refresh_days": 90
+      },
+      {
+        "pos": 7,
+        "id": "model-gamma-tiny",
+        "kind": "model",
+        "tier": 2,
+        "action": "skip",
+        "to_version": "rev-gamma-0003",
+        "final_bytes": 1000000000,
+        "reason": "read_only"
+      },
+      {
+        "pos": 8,
+        "id": "stackexchange-alpha",
+        "kind": "kiwix",
+        "tier": 2,
+        "action": "skip",
+        "to_version": "2026-09",
+        "final_bytes": 4000000000,
+        "reason": "read_only",
+        "refresh_days": 30
+      },
+      {
+        "pos": 9,
+        "id": "books-alpha-en",
+        "kind": "kiwix",
+        "tier": 3,
+        "action": "skip",
+        "to_version": "2026-08",
+        "final_bytes": 30000000000,
+        "reason": "read_only",
+        "refresh_days": 180
+      },
+      {
+        "pos": 10,
+        "id": "maps-alpha",
+        "kind": "kiwix",
+        "tier": 3,
+        "action": "skip",
+        "to_version": "20261001",
+        "final_bytes": 12000000000,
+        "reason": "read_only",
+        "refresh_days": 90
+      }
+    ],
+    "findings": []
+  }
+]

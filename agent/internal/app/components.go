@@ -20,6 +20,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 	"github.com/marinoscar/local-ai/agent/internal/svc/kiwix"
+	"github.com/marinoscar/local-ai/agent/internal/update"
 )
 
 // Components are the subsystems the daemon has built. Hooks (hooks.go) receive them, so a slice that
@@ -80,6 +81,9 @@ type Components struct {
 
 	// Cloud is the cloud link; the claim plane and sync engine plug in through the hooks.
 	Cloud *cloud.Link
+
+	// Update is the self-update runner (agent.md section 4.10).
+	Update *update.Runner
 
 	// Drill is the drill framework engine; ArkMonitor checks the internal content root.
 	Drill      *drill.Engine

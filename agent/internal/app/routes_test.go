@@ -8,6 +8,15 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/api"
 )
 
+// notWiredYet lists the implemented operations the daemon does not serve yet, each with the reason. An
+// entry leaves this list in the PR of the item that wires it (with app.RegisterRoutes, or by an edit of
+// build.go); the test fails on an entry that is served after all, so the list only shrinks.
+var notWiredYet = map[string]string{
+	"POST /ark/sync":     "the dry-run planner (SYNC-05) needs the sync engine's roots and run lock; the run engine (SYNC-07) registers it",
+	"POST /speech/tts":   "Piper (SVC-08) registers its routes, its health probe and its voice index with the other companion services",
+	"GET /speech/voices": "Piper (SVC-08), as above",
+}
+
 // The daemon serves exactly the operations openapi.yaml says are implemented (agent.md section 4.14):
 // a route that exists but is not wired here, or that is wired but marked planned, fails this test, so
 // the wiring cannot fall behind the packages. It is the third side of the route bijection, next to the
@@ -34,6 +43,8 @@ func TestDaemonServesEveryImplementedOperation(t *testing.T) {
 		documented[op.Key()] = true
 		_, ok := served[op.Key()]
 		switch {
+		case !op.Planned() && !ok && notWiredYet[op.Key()] != "":
+			// Implemented by its package, wired by the slice's own item through app.RegisterRoutes.
 		case !op.Planned() && !ok:
 			problems = append(problems, op.Key()+" is documented as implemented but the daemon does not serve it")
 		case op.Planned() && ok:
@@ -43,6 +54,9 @@ func TestDaemonServesEveryImplementedOperation(t *testing.T) {
 	for key := range served {
 		if !documented[key] {
 			problems = append(problems, key+" is served but not in openapi.yaml")
+		}
+		if notWiredYet[key] != "" {
+			problems = append(problems, key+" is served: remove it from notWiredYet")
 		}
 	}
 	sort.Strings(problems)

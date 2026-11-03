@@ -1,0 +1,21 @@
+Plan for root "ark-3f9c0a12" (/media/operator/AI-ARK/localai) · profile ark-drive-full · catalog 2026.11.02-1
+Budget 95.0 GB · planned 6.0 GB · free now 60.0 GB · keep free ≥ 5.0 GB
+
+  #  ITEM                         TIER  ACTION    VERSION              SIZE      NOTE
+  1  kit-llama-cpp                k     skip      tag-kit-llama-cpp    0.5 GB    read-only root
+  2  kit-debs-resolute-amd64      k     skip      closure-b            3.1 GB    read-only root
+  3  docs-bundle                  k     skip      catalog-2026.11.02-1 0.1 GB    read-only root
+  4  model-alpha-9b               1     keep      rev-alpha-0001       6.0 GB
+  5  model-beta-vision            1     skip      rev-beta-0002        5.0 GB    read-only root
+  6  wiki-alpha-en                1     skip      2026-10              49.0 GB   read-only root
+  7  model-gamma-tiny             2     skip      rev-gamma-0003       1.0 GB    read-only root
+  8  stackexchange-alpha          2     skip      2026-09              4.0 GB    read-only root
+  9  books-alpha-en               3     skip      2026-08              30.0 GB   read-only root
+ 10  maps-alpha                   3     skip      20261001             12.0 GB   read-only root
+
+Notes:
+  This root is read-only: nothing will be written to it.
+
+Downloads: 0 items, 0.0 GB from the internet, 0.0 GB local copy.
+Peak disk use during sync: 6.0 GB (free will not drop below 60.0 GB).
+Nothing was changed (dry run).

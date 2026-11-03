@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 	"github.com/marinoscar/local-ai/agent/internal/svc/kiwix"
+	"github.com/marinoscar/local-ai/agent/internal/update"
 )
 
 // modeView is the statusapi.ModeView, drill.ModeView and router mode source that exists before the
@@ -479,6 +481,7 @@ func (d *Daemon) buildServer() error {
 // ark.verify wait for the sync engine, agent.update for the self-update (UseAgentUpdate).
 func (d *Daemon) buildClaimPlane(sdeps statusapi.Deps) error {
 	c := d.c
+	d.buildUpdater()
 	if f := d.hooks.claim; f != nil {
 		d.claim.set(f(c))
 		return nil
@@ -486,10 +489,13 @@ func (d *Daemon) buildClaimPlane(sdeps statusapi.Deps) error {
 	jd := jobs.Deps{
 		Router: c.Orchestrator, Models: d.models, Modes: c.Modes, Services: d.svcDeps,
 		Logs: services.NewJournal(d.env.Runner, ""), Catalog: sdeps, Link: c.Cloud, Status: sdeps.Builder(),
-		State: c.State, Hardware: c.Hardware, Clock: d.env.CloudClock,
+		State: c.State, Hardware: c.Hardware, Clock: d.env.CloudClock, AgentUpdate: d.updater,
 	}
 	var recoverFn func(context.Context, cloud.InflightEntry) bool
-	if f := d.hooks.agentUpd; f != nil {
+	if d.updater != nil {
+		recoverFn = d.updater.Recover
+	}
+	if f := d.hooks.agentUpd; f != nil { // a replacement of the self-update (a test double)
 		u := f(c)
 		jd.AgentUpdate, recoverFn = u.Updater, u.Recover
 	}
@@ -505,7 +511,93 @@ func (d *Daemon) buildClaimPlane(sdeps statusapi.Deps) error {
 		return fmt.Errorf("cloud claim loop: %w", err)
 	}
 	claimer.Bind(c.Cloud)
+	if d.updater != nil {
+		d.updater.Bind(claimer) // the settle of an agent.update command after the restart it causes
+	}
 	d.claim.set(ClaimPlane{Loop: claimer, Inflight: claimer.Inflight})
+	return nil
+}
+
+// buildUpdater builds the self-update (agent.md section 4.10): the update.Runner every outside
+// dependency of which is a seam, and the executor of the agent.update job over it. The new process
+// runs its post-update health check at startup step 15 (stepUpdate); the cloud command is settled
+// from there, or by the claim loop's Recover for an entry an earlier process left.
+func (d *Daemon) buildUpdater() {
+	c, env := d.c, d.env
+	cfg := c.Config.Get()
+	src := update.Source{Repo: cfg.Update.Repo, Channel: cfg.Update.Channel}
+	if env.UpdateSource != nil {
+		src = *env.UpdateSource
+	}
+	var uclock update.Clock = updateClock{env.Clock}
+	if env.UpdateClock != nil {
+		uclock = env.UpdateClock
+	}
+	c.Update = &update.Runner{
+		Paths:  update.Paths{UpdateDir: c.Paths.Join(varDir + "/update"), BinDir: c.Paths.Join(optDir + "/bin")},
+		Source: src, Current: env.Version, AllowDowngrade: cfg.Update.AllowDowngrade, Keys: env.UpdateKeys,
+		Exec: env.Runner, Clock: uclock, Mode: d.modeName, Audit: d.audit, Events: c.Bus,
+		State: c.State, Alerts: c.Doctor, Log: d.log, Probe: d.postUpdateProbe,
+	}
+	d.updater = &jobs.AgentUpdate{
+		Runner: c.Update, Inflight: cloud.InflightStore{FS: config.OSFS{}, Path: c.Paths.Inflight()},
+		Clock: uclock, Logger: d.log,
+	}
+}
+
+// updateClock is update.Clock over the daemon's clock: Sleep waits on a ticker of it, so a test with a
+// manual clock decides when the update's waits end.
+type updateClock struct{ c config.Clock }
+
+func (u updateClock) Now() time.Time { return u.c.Now() }
+
+func (u updateClock) Sleep(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	t := u.c.NewTicker(d)
+	defer t.Stop()
+	select {
+	case <-t.C():
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// postUpdateProbe is one pass of the post-update health check of the new process (agent.md section
+// 4.10 step 9): both listeners are up, the state store is writable, /health answers from the process
+// itself, the router answers or at least the llama unit is as it should be, and the cloud registration
+// is ok when the node was linked before. It returns the first problem; the update's Startup repeats it
+// every 2 s for at most 60 s before it rolls back.
+func (d *Daemon) postUpdateProbe(ctx context.Context) error {
+	c := d.c
+	if tcp, sock := c.API.BindErrors(); tcp != nil || sock != nil {
+		return errors.New("a listener is not up")
+	}
+	if !c.State.Writable() {
+		return errors.New("the state store is not writable")
+	}
+	if err := d.healthOverTransport(ctx); err != nil {
+		return fmt.Errorf("/health: %w", err)
+	}
+	// The router answers; failing that, the llama unit is running (it is starting) or it is not meant to
+	// be (disabled): nothing the update could have broken.
+	if err := c.Router.Health(ctx); err != nil {
+		us, uerr := llamaUnit{c.Systemd}.State(ctx)
+		if uerr != nil {
+			return fmt.Errorf("the router does not answer and the llama unit cannot be read: %w", uerr)
+		}
+		if !us.Running && us.Enabled {
+			return errors.New("the router does not answer and the llama unit is not running")
+		}
+	}
+	// A node that was linked before registers again, and must be linked once the registration ran.
+	if _, ok := (cloud.LinkStore{Path: c.Paths.CloudLink(), FS: config.OSFS{}}).Load(); ok && d.mode.online() {
+		if st := c.Cloud.State(); st != cloud.StateLinked {
+			return fmt.Errorf("the cloud link is %s, not linked", st)
+		}
+	}
 	return nil
 }
 

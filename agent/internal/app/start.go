@@ -498,9 +498,18 @@ func (d *Daemon) background() {
 	d.step17()
 }
 
-// stepUpdate is step 15: the registered self-update hooks (#37). With none registered it does nothing.
+// stepUpdate is step 15: the post-update health check (internal/update) and the registered update
+// hooks. With no update in progress and no hook it does nothing.
 func (d *Daemon) stepUpdate(ctx context.Context) error {
 	var errs []error
+	// The post-update health check of the new process, then the settle of the cloud command that
+	// asked for the update. With no update in progress it returns at once.
+	if d.updater != nil && d.hooks.agentUpd == nil {
+		if err := d.updater.PostStart(ctx); err != nil {
+			d.log.Error("the post-update check failed", "error", err.Error())
+			errs = append(errs, fmt.Errorf("agent.update: %w", err))
+		}
+	}
 	for _, h := range d.hooks.update {
 		if err := h.fn(ctx, d.c); err != nil {
 			d.log.Error("an update hook failed", "hook", h.name, "error", err.Error())

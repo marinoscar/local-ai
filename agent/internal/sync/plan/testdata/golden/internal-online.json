@@ -1,0 +1,161 @@
+[
+  {
+    "root": "internal",
+    "path": "/srv/localai",
+    "profile": "small-8gb",
+    "catalog_version": "2026.11.02-1",
+    "mode": "online",
+    "budget_bytes": 80000000000,
+    "planned_bytes": 68700000000,
+    "fs_free_bytes": 290000000000,
+    "min_free_bytes": 25000000000,
+    "peak_bytes": 177900000000,
+    "free_floor_bytes": 229800000000,
+    "trash_bytes": 47000000000,
+    "items": [
+      {
+        "pos": 1,
+        "id": "kit-llama-cpp",
+        "kind": "kit",
+        "tier": "k",
+        "action": "keep",
+        "from_version": "tag-kit-llama-cpp",
+        "to_version": "tag-kit-llama-cpp",
+        "final_bytes": 500000000,
+        "age_days": 40
+      },
+      {
+        "pos": 2,
+        "id": "kit-debs-resolute-amd64",
+        "kind": "kit",
+        "tier": "k",
+        "action": "update",
+        "from_version": "closure-a",
+        "to_version": "closure-b",
+        "final_bytes": 3100000000,
+        "need_bytes": 3100000000,
+        "source": "network",
+        "reason": "refresh_due",
+        "age_days": 31,
+        "refresh_days": 30
+      },
+      {
+        "pos": 3,
+        "id": "docs-bundle",
+        "kind": "docs",
+        "tier": "k",
+        "action": "download",
+        "to_version": "catalog-2026.11.02-1",
+        "final_bytes": 100000000,
+        "need_bytes": 100000000,
+        "source": "network"
+      },
+      {
+        "pos": 4,
+        "id": "model-alpha-9b",
+        "kind": "model",
+        "tier": 1,
+        "action": "keep",
+        "from_version": "rev-alpha-0001",
+        "to_version": "rev-alpha-0001",
+        "final_bytes": 6000000000,
+        "age_days": 40
+      },
+      {
+        "pos": 5,
+        "id": "model-beta-vision",
+        "kind": "model",
+        "tier": 1,
+        "action": "download",
+        "to_version": "rev-beta-0002",
+        "final_bytes": 5000000000,
+        "need_bytes": 3000000000,
+        "source": "network"
+      },
+      {
+        "pos": 6,
+        "id": "wiki-alpha-en",
+        "kind": "kiwix",
+        "tier": 1,
+        "action": "update",
+        "from_version": "2026-07",
+        "to_version": "2026-10",
+        "final_bytes": 49000000000,
+        "need_bytes": 49000000000,
+        "source": "network",
+        "reason": "refresh_due",
+        "age_days": 100,
+        "refresh_days": 90
+      },
+      {
+        "pos": 7,
+        "id": "model-gamma-tiny",
+        "kind": "model",
+        "tier": 2,
+        "action": "download",
+        "to_version": "rev-gamma-0003",
+        "final_bytes": 1000000000,
+        "need_bytes": 1000000000,
+        "source": "local_copy",
+        "from_root": "ark-3f9c0a12"
+      },
+      {
+        "pos": 8,
+        "id": "stackexchange-alpha",
+        "kind": "kiwix",
+        "tier": 2,
+        "action": "download",
+        "to_version": "2026-09",
+        "final_bytes": 4000000000,
+        "need_bytes": 4000000000,
+        "source": "network",
+        "refresh_days": 30
+      },
+      {
+        "pos": 9,
+        "id": "books-alpha-en",
+        "kind": "kiwix",
+        "tier": 3,
+        "action": "skip",
+        "final_bytes": 30000000000,
+        "reason": "unresolved",
+        "refresh_days": 180
+      },
+      {
+        "pos": 10,
+        "id": "maps-alpha",
+        "kind": "kiwix",
+        "tier": 3,
+        "action": "skip",
+        "to_version": "20261001",
+        "final_bytes": 12000000000,
+        "reason": "budget",
+        "refresh_days": 90
+      },
+      {
+        "id": "osm-north-america",
+        "kind": "maps",
+        "action": "orphan",
+        "from_version": "20260501",
+        "final_bytes": 11200000000
+      }
+    ],
+    "findings": [
+      {
+        "code": "LAI-SYN-041",
+        "severity": "warning",
+        "items": [
+          "maps-alpha"
+        ]
+      },
+      {
+        "code": "LAI-SYN-051",
+        "severity": "info",
+        "items": [
+          "osm-north-america"
+        ],
+        "bytes": 11200000000
+      }
+    ]
+  }
+]

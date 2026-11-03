@@ -18,6 +18,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/router"
 	"github.com/marinoscar/local-ai/agent/internal/services"
 	"github.com/marinoscar/local-ai/agent/internal/state"
+	"github.com/marinoscar/local-ai/agent/internal/update"
 )
 
 // Env is everything outside the process that the daemon touches, as seams. The zero value is the
@@ -89,6 +90,13 @@ type Env struct {
 	// LookupLocalAI resolves the localai user and group (default os/user). ok false means the user
 	// does not exist (a development machine): files then keep the agent's own owner.
 	LookupLocalAI func() (uid, gid int, ok bool)
+	// UpdateSource replaces the GitHub release client of the self-update (a test points it at the fake
+	// GitHub of internal/update/updatetest); nil builds it from node.yaml update{}. UpdateKeys are the
+	// trusted minisign keys; nil means the embedded ones.
+	UpdateSource *update.Source
+	UpdateKeys   []update.PublicKey
+	// UpdateClock drives the waits of the self-update (default: Clock).
+	UpdateClock update.Clock
 	// RouterTiming shortens the orchestrator's waits (tests).
 	RouterTiming router.Timing
 	// ModeOptions tunes the mode engine (tests: a fake clock, step timeouts).
