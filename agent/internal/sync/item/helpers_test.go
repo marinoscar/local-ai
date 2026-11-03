@@ -65,6 +65,10 @@ var errCrash = errors.New("test: the process was killed here")
 type crashFS struct {
 	base  OSFS
 	strip string
+	// journalDir is the journal's directory: its internals are not numbered (the journal has its own
+	// fault tests); only the visible commit of an items.json update (the rename) and the append of a
+	// run-log line (the write) are steps, so a kill lands between a journal event and its side effect.
+	journalDir string
 
 	mu         sync.Mutex
 	n          int
@@ -77,7 +81,25 @@ type crashFS struct {
 
 func newCrashFS(strip string) *crashFS { return &crashFS{strip: strip} }
 
-func (c *crashFS) rel(p string) string { return strings.TrimPrefix(p, c.strip) }
+func (c *crashFS) rel(p string) string {
+	if c.journalDir != "" && (p == c.journalDir || strings.HasPrefix(p, c.journalDir+"/")) {
+		return p // kept whole: tick recognises the journal by its directory
+	}
+	return strings.TrimPrefix(p, c.strip)
+}
+
+// arm makes the process die at the k-th numbered step from now.
+func (c *crashFS) arm(k int, after bool) {
+	c.mu.Lock()
+	c.limit, c.after = c.n+k, after
+	c.mu.Unlock()
+}
+
+func (c *crashFS) isDead() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.dead
+}
 
 func (c *crashFS) alive() error {
 	c.mu.Lock()
@@ -95,6 +117,14 @@ func (c *crashFS) tick(desc string) error {
 	defer c.mu.Unlock()
 	if c.dead {
 		return errCrash
+	}
+	if c.journalDir != "" && strings.Contains(desc, c.journalDir) {
+		// a journal internal: counted only when it is the commit of items.json or a run-log append
+		isCommit := strings.HasPrefix(desc, "rename ") && strings.Contains(desc, "-> "+c.journalDir+"/items.json") && !strings.Contains(desc, ".bak")
+		isAppend := strings.HasPrefix(desc, "write ") && strings.Contains(desc, c.journalDir+"/runs/")
+		if !isCommit && !isAppend {
+			return nil
+		}
 	}
 	c.n++
 	c.ops = append(c.ops, desc)
@@ -418,14 +448,69 @@ var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
 // newEnv builds a node in a fresh temp dir.
 func newEnv(t testing.TB) *env {
 	t.Helper()
-	base := t.TempDir()
-	e := &env{t: t, base: base, reread: true, clk: newClock(), vals: NewValidators()}
-	e.root = ark.Root{ID: ark.InternalID, Kind: ark.KindInternal, Path: filepath.Join(base, "srv"), Profile: "profile", State: ark.StateReady}
-	e.jdir = filepath.Join(base, "var")
+	e := bareEnv(t, t.TempDir())
 	if err := os.MkdirAll(e.root.Path, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	e.open(newCrashFS(base), nil)
+	e.open(newCrashFS(e.base), nil)
+	return e
+}
+
+var (
+	baselineMu   sync.Mutex
+	baselineDirs []string
+)
+
+// baselineEnv is a node whose directory outlives the test that made it: scenarios build it once and
+// clone it for every trial. TestMain removes the directories.
+func baselineEnv(t testing.TB) *env {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "item-baseline-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	baselineMu.Lock()
+	baselineDirs = append(baselineDirs, dir)
+	baselineMu.Unlock()
+	e := bareEnv(t, dir)
+	if err := os.MkdirAll(e.root.Path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e.open(newCrashFS(e.base), nil)
+	return e
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	for _, d := range baselineDirs {
+		_ = os.RemoveAll(d)
+	}
+	os.Exit(code)
+}
+
+// bareEnv is an env over base that has not been opened yet.
+func bareEnv(t testing.TB, base string) *env {
+	e := &env{t: t, base: base, reread: true, clk: newClock(), vals: NewValidators()}
+	e.root = ark.Root{ID: ark.InternalID, Kind: ark.KindInternal, Path: filepath.Join(base, "srv"), Profile: "profile", State: ark.StateReady}
+	e.jdir = filepath.Join(base, "var")
+	return e
+}
+
+// cloneEnv is a copy of a quiet node: the disk of src (a root and a journal) in a new temp dir, opened
+// on a counting filesystem. It makes the many trials of the kill test cheap (no install each time).
+func cloneEnv(t testing.TB, src *env) *env {
+	t.Helper()
+	dst := t.TempDir()
+	if err := os.CopyFS(dst, os.DirFS(src.base)); err != nil {
+		t.Fatal(err)
+	}
+	e := bareEnv(t, dst)
+	e.fetch = newFetcher(map[string][]byte{})
+	for k, v := range src.fetch.data {
+		e.fetch.data[k] = v
+	}
+	e.clk = &clock{t: src.clk.t}
+	e.open(newCrashFS(e.base), e.fetch)
 	return e
 }
 
@@ -433,6 +518,7 @@ func newEnv(t testing.TB) *env {
 func (e *env) open(fsys *crashFS, fetch *fakeFetcher) {
 	e.t.Helper()
 	e.fsys = fsys
+	fsys.journalDir = e.jdir
 	if fetch == nil {
 		fetch = newFetcher(map[string][]byte{})
 		if e.fetch != nil {
