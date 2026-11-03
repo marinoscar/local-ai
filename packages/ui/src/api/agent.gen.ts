@@ -1142,7 +1142,10 @@ export interface components {
         /** @description One companion service. `name` and `unit` are always present (`unit` is null for piper and maps). The agent
          *     fields (`active`, `sub`, `since`, `restarts`, `healthy`, `enabled`, `last_exit`) are in agent.md section 3.8.4
          *     and 3.8.22; the supervisor fields (`state`, `last_check`, `detail`, `books`, `model`, `device`, `voices`,
-         *     `maps`, `problems`) are owned by companion-services.md section 4.6, hence the open object.
+         *     `maps`, `problems`) are owned by companion-services.md section 4.6, hence the open object. A service
+         *     without a unit (piper, maps) has no `active`, `sub`, `restarts` or `enabled`. `state` is the health state
+         *     of companion-services.md section 4.6; `problems` is worst first, with LAI-SVC-051 first when the restart
+         *     budget is spent.
          *      */
         Service: {
             name: string;
@@ -1166,16 +1169,23 @@ export interface components {
             /** Format: date-time */
             last_check?: string;
             detail?: string;
-            books?: {
+            books?: ({
+                content_id: string;
+                name: string;
+                root: string;
+            } & {
                 [key: string]: unknown;
-            }[];
+            })[];
             model?: string;
             device?: string;
             voices?: string[];
             maps?: string[];
-            problems?: {
+            problems?: ({
+                code: string;
+                severity: components["schemas"]["Severity"];
+            } & {
                 [key: string]: unknown;
-            }[];
+            })[];
         } & {
             [key: string]: unknown;
         };
