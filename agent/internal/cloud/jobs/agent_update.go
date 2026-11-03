@@ -76,6 +76,7 @@ type AgentUpdate struct {
 	mu       sync.Mutex
 	settler  UpdateSettler
 	settling map[string]bool
+	wg       sync.WaitGroup
 }
 
 var _ AgentUpdater = (*AgentUpdate)(nil)
@@ -179,8 +180,16 @@ func (a *AgentUpdate) track(ctx context.Context, e cloud.InflightEntry) {
 	}
 	a.settling[e.JobID] = true
 	a.mu.Unlock()
-	go a.settle(context.WithoutCancel(ctx), e)
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		a.settle(context.WithoutCancel(ctx), e)
+	}()
 }
+
+// Wait blocks until every settle in progress has ended (tests, and a graceful shutdown that wants to see the
+// command settled). A settle waiting for the link ends when the lease is long over or the clock's Sleep fails.
+func (a *AgentUpdate) Wait() { a.wg.Wait() }
 
 // verdict is how an update command ends: a result or a failure.
 type verdict struct {
