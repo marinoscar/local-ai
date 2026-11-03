@@ -173,7 +173,7 @@ func kiwixCatalog(base, policy string) plan.CatalogItem {
 	return contentItem("library", "kiwix", src)
 }
 
-func itemErr(t *testing.T, err error) *item.ResolveError {
+func asResolveErr(t *testing.T, err error) *item.ResolveError {
 	t.Helper()
 	var re *item.ResolveError
 	if !errors.As(err, &re) {
@@ -256,7 +256,7 @@ func TestKiwixSidecarFailuresAreLAISYN022(t *testing.T) {
 			f := newFakeKiwix(t)
 			f.sidecarBody = func() (int, string) { return tc.body(f) }
 			_, err := f.kiwix().ResolveItem(context.Background(), kiwixCatalog(f.base(), "latest"), plan.ItemPlan{})
-			re := itemErr(t, err)
+			re := asResolveErr(t, err)
 			if re.Code != doctor.SYN022 || re.Permanent {
 				t.Fatalf("code %s permanent=%v (%v), want a retryable LAI-SYN-022", re.Code, re.Permanent, err)
 			}
@@ -280,7 +280,7 @@ func TestKiwixSidecarRedirectIsRefusedEvenToAValidBody(t *testing.T) {
 	f := newFakeKiwix(t)
 	f.sidecarRedirect = true
 	_, err := f.kiwix().ResolveItem(context.Background(), kiwixCatalog(f.base(), "latest"), plan.ItemPlan{})
-	if re := itemErr(t, err); re.Code != doctor.SYN022 {
+	if re := asResolveErr(t, err); re.Code != doctor.SYN022 {
 		t.Fatalf("code %s, want LAI-SYN-022", re.Code)
 	}
 	if n := f.count("mirror", ".sha256"); n != 0 {
@@ -293,7 +293,7 @@ func TestKiwixListingWithoutADatedFileIsLAISYN033(t *testing.T) {
 	it := kiwixCatalog(f.base(), "latest")
 	it.Content.Source.Book = "no_such_book"
 	_, err := f.kiwix().ResolveItem(context.Background(), it, plan.ItemPlan{})
-	if re := itemErr(t, err); re.Code != doctor.SYN033 || re.Permanent {
+	if re := asResolveErr(t, err); re.Code != doctor.SYN033 || re.Permanent {
 		t.Fatalf("code %s permanent=%v, want a retryable LAI-SYN-033", re.Code, re.Permanent)
 	}
 	if _, err := f.kiwix().Resolve(context.Background(), it); CodeOf(err) != doctor.SYN033 {
@@ -380,7 +380,7 @@ func TestKiwixRefusesToTouchTheNetworkWhenOffline(t *testing.T) {
 		k := f.kiwix()
 		k.Env.Online = online
 		_, err := k.ResolveItem(context.Background(), kiwixCatalog(f.base(), "latest"), plan.ItemPlan{})
-		if re := itemErr(t, err); re.Code != doctor.SYN002 || !re.Permanent {
+		if re := asResolveErr(t, err); re.Code != doctor.SYN002 || !re.Permanent {
 			t.Fatalf("%+v", re)
 		}
 		if _, err := k.Resolve(context.Background(), kiwixCatalog(f.base(), "latest")); CodeOf(err) != doctor.SYN002 {
@@ -426,7 +426,7 @@ func TestKiwixRefusesAnUnusableCatalogEntry(t *testing.T) {
 	}
 	for name, it := range cases {
 		_, err := f.kiwix().ResolveItem(context.Background(), it, plan.ItemPlan{})
-		if re := itemErr(t, err); re.Code != doctor.SYN030 || !re.Permanent {
+		if re := asResolveErr(t, err); re.Code != doctor.SYN030 || !re.Permanent {
 			t.Errorf("%s: %+v", name, re)
 		}
 		if _, err := f.kiwix().Resolve(context.Background(), it); CodeOf(err) != doctor.SYN030 {
@@ -459,7 +459,7 @@ func (f *fakeKiwix) source(t *testing.T) *kiwixDownload {
 	return res.Files[0].Source.(*kiwixDownload)
 }
 
-func readAll(t *testing.T, body io.ReadCloser) []byte {
+func readBody(t *testing.T, body io.ReadCloser) []byte {
 	t.Helper()
 	if body == nil {
 		t.Fatal("no body")
@@ -479,14 +479,14 @@ func TestKiwixSourceFollowsTheMirrorAndResumes(t *testing.T) {
 	if err != nil || resp.Status != 200 || resp.Size != int64(len(f.zim)) {
 		t.Fatalf("%+v %v", resp, err)
 	}
-	if string(readAll(t, body)) != string(f.zim) || f.count("mirror GET") != 1 {
+	if string(readBody(t, body)) != string(f.zim) || f.count("mirror GET") != 1 {
 		t.Fatalf("not served by the mirror: %v", f.requests())
 	}
 	body, resp, err = src.Open(context.Background(), 100, resp.ETag)
 	if err != nil || resp.Status != 206 || resp.Offset != 100 || resp.Size != int64(len(f.zim)) {
 		t.Fatalf("resume: %+v %v", resp, err)
 	}
-	if string(readAll(t, body)) != string(f.zim[100:]) {
+	if string(readBody(t, body)) != string(f.zim[100:]) {
 		t.Fatal("the resumed bytes are wrong")
 	}
 	if src.direct {
@@ -508,7 +508,7 @@ func TestKiwixSourceGoesDirectAfterTwoMirrorAnswersThatIgnoreRange(t *testing.T)
 	if err != nil || resp.Status != 200 {
 		t.Fatalf("first: %+v %v", resp, err)
 	}
-	_ = readAll(t, body)
+	_ = readBody(t, body)
 	if src.direct {
 		t.Fatal("one strike must not switch yet")
 	}
@@ -517,7 +517,7 @@ func TestKiwixSourceGoesDirectAfterTwoMirrorAnswersThatIgnoreRange(t *testing.T)
 	if err != nil || resp.Status != 206 || resp.Offset != 100 {
 		t.Fatalf("second: %+v %v", resp, err)
 	}
-	if string(readAll(t, body)) != string(f.zim[100:]) {
+	if string(readBody(t, body)) != string(f.zim[100:]) {
 		t.Fatal("the direct bytes are wrong")
 	}
 	if !src.direct || f.count("origin GET", kxFile, "accept=application/octet-stream", "range=bytes=100-") != 1 {
@@ -529,7 +529,7 @@ func TestKiwixSourceGoesDirectAfterTwoMirrorAnswersThatIgnoreRange(t *testing.T)
 	if err != nil || resp.Status != 200 {
 		t.Fatalf("third: %+v %v", resp, err)
 	}
-	_ = readAll(t, body)
+	_ = readBody(t, body)
 	if f.count("mirror GET") != mirrorBefore {
 		t.Fatalf("the mirror was used again: %v", f.requests())
 	}
@@ -543,7 +543,7 @@ func TestKiwixSourceGoesDirectAtOnceWhenTheMirrorHasAnotherSize(t *testing.T) {
 	if err != nil || resp.Status != 200 || resp.Size != int64(len(f.zim)) {
 		t.Fatalf("%+v %v", resp, err)
 	}
-	if string(readAll(t, body)) != string(f.zim) || !src.direct || f.count("origin GET", "accept=application/octet-stream") != 1 {
+	if string(readBody(t, body)) != string(f.zim) || !src.direct || f.count("origin GET", "accept=application/octet-stream") != 1 {
 		t.Fatalf("not direct: %v", f.requests())
 	}
 }
