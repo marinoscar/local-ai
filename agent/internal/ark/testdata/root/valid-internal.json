@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "root_id": "internal",
+  "kind": "internal",
+  "profile": "small-8gb",
+  "created_at": "2026-10-30T09:00:00Z",
+  "created_by": {
+    "node_id": "ai-n1",
+    "agent_version": "0.4.0"
+  },
+  "label": "",
+  "notes": "A note with <angle> & ampersand."
+}
