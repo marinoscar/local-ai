@@ -73,9 +73,12 @@ type Event struct {
 	LastModified string
 	URL          string
 
-	// Renames and Trash are [source, destination] pairs of absolute paths.
-	Renames [][2]string
-	Trash   [][2]string
+	// Renames, Trash and Exchange are [source, destination] pairs of absolute paths. Trash is the
+	// old version moving out (done first), Exchange the directory swaps (renameat2 RENAME_EXCHANGE,
+	// done second), Renames the new version moving in, the manifest last.
+	Renames  [][2]string
+	Trash    [][2]string
+	Exchange [][2]string
 }
 
 // MarshalJSON implements json.Marshaler: compact, fixed key order, no HTML escaping.
@@ -105,6 +108,9 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	if e.Ev == EvSwapPlan || e.Trash != nil {
 		kv = append(kv, jsonord.KV{Key: "trash", Val: nonNil(e.Trash)})
 	}
+	if e.Exchange != nil {
+		kv = append(kv, jsonord.KV{Key: "exchange", Val: e.Exchange})
+	}
 	return jsonord.Object(kv, nil)
 }
 
@@ -121,6 +127,7 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		"ev": &e.Ev, "at": (*jsonord.Stamp)(&e.At), "root": &e.Root, "item": &e.Item, "version": &e.Version,
 		"from": &e.From, "to": &e.To, "file": &e.File, "offset": &e.Offset, "sha_state": &e.ShaState,
 		"etag": &e.ETag, "last_modified": &e.LastModified, "url": &e.URL, "renames": &e.Renames, "trash": &e.Trash,
+		"exchange": &e.Exchange,
 	})
 	return err
 }
@@ -396,8 +403,9 @@ func (r *Run) Close() error {
 
 // SwapPlan is the planned rename list of a swap (ark-sync.md section 4.5.1).
 type SwapPlan struct {
-	Renames [][2]string
-	Trash   [][2]string
+	Renames  [][2]string
+	Trash    [][2]string
+	Exchange [][2]string
 }
 
 // Intent is what a run log says one item was about to be, reconstructed by Replay.
@@ -453,7 +461,7 @@ func Replay(events []Event) map[string]Intent {
 			cp[ev.File] = Checkpoint{Offset: ev.Offset, ShaState: ev.ShaState, ETag: ev.ETag, LastModified: ev.LastModified, URL: ev.URL}
 			in.Checkpoints = cp
 		case EvSwapPlan:
-			in.Swap = &SwapPlan{Renames: ev.Renames, Trash: ev.Trash}
+			in.Swap = &SwapPlan{Renames: ev.Renames, Trash: ev.Trash, Exchange: ev.Exchange}
 		case EvSwapDone:
 			in.Swap = nil
 		}
