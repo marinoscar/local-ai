@@ -18,6 +18,9 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
 )
 
+// osFS is the real filesystem of the manifest helpers.
+var osFS config.FS = config.OSFS{}
+
 // Producer is the fetch half of a resolver: it materialises one catalog item into the staging
 // directory of its root. The sync engine calls it while the item is "downloading" and swaps what it
 // returns. Produce is safe to call again after a crash: it overwrites its own leftovers in staging.
@@ -42,6 +45,9 @@ type Request struct {
 	// ("" when there is none) and PresentVersion its version. apt_closure hard-links unchanged debs
 	// from it and keeps the item when the version is unchanged.
 	PresentDir, PresentVersion string
+	// ItemDir is where the item lives below the root (ark.ItemDir, slash separated), for the kinds
+	// whose directory depends on the catalog id (kit-debs and kit-nvidia). "" derives it from the id.
+	ItemDir string
 	// OtherRoots are the absolute paths of the other mounted content roots, where repo_docs looks for
 	// a local-ai.git mirror to build the docs from offline.
 	OtherRoots []string
@@ -182,7 +188,7 @@ func sealTree(name, dir, from, to string) (Part, error) {
 	if len(sums) == 0 {
 		return Part{}, fmt.Errorf("%s is empty", name)
 	}
-	if err := manifest.WriteSums(config.OSFS{}, dir, sums); err != nil {
+	if err := manifest.WriteSums(osFS, dir, sums); err != nil {
 		return Part{}, err
 	}
 	tree, err := manifest.TreeSHA256(sums)
@@ -222,4 +228,10 @@ func writeFileAtomic(p string, data []byte) error {
 // inside reports whether the slash path p stays inside its base (no "..", not absolute).
 func inside(p string) bool {
 	return p != "" && fs.ValidPath(p) && path.Clean(p) == p && p != "."
+}
+
+// sha256Hex is the lower-case hex sha256 of b.
+func sha256Hex(b []byte) string {
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
 }

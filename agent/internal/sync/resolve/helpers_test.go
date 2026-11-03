@@ -3,7 +3,6 @@ package resolve
 import (
 	"context"
 	"crypto/sha1" //nolint:gosec // a git object id, not a security hash
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"os"
@@ -123,11 +122,6 @@ func testEnv(t *testing.T) *Env {
 // contentItem builds a catalog item around a source.
 func contentItem(id, kind string, src catalog.ContentSource) plan.CatalogItem {
 	return plan.ContentItem(&catalog.ContentItem{ID: id, Kind: kind, Source: src})
-}
-
-func sha256Hex(b []byte) string {
-	h := sha256.Sum256(b)
-	return hex.EncodeToString(h[:])
 }
 
 // errCode returns the doctor code of an error, failing the test when it has none.
