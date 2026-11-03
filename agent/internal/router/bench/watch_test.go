@@ -11,7 +11,7 @@ import (
 // "already stopped" at once. stream runs while the goroutine is held (it plays the stream).
 func lateWatch(ch chan events.Event, stream func()) *watch {
 	release := make(chan struct{})
-	w := startWatchGated(ch, func() { <-release })
+	w := startWatchGated(ch, nil, func() { <-release })
 	stream()
 	stopped := make(chan struct{})
 	go func() { w.stop(); close(stopped) }()
@@ -60,14 +60,25 @@ func TestWatchDecidesBeforeTheStop(t *testing.T) {
 	}
 }
 
-// A close that follows the engine's own stop (its cancel of the events context) is not a loss.
+// The close that the engine's own cancel causes is not a loss, with the goroutine held back or not.
 func TestWatchOwnCancelIsNotALoss(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		ch := make(chan events.Event, 8)
-		w := startWatch(ch)
+		cancelled := false
+		cancel := func() { cancelled = true; close(ch) } // what cancelling the events context does
+		var w *watch
+		if i%2 == 0 {
+			release := make(chan struct{})
+			w = startWatchGated(ch, cancel, func() { <-release })
+			close(release)
+		} else {
+			w = startWatch(ch, cancel)
+		}
 		ch <- events.Event{Type: events.TypeModelLoaded, OpID: "op_own"}
 		w.stop()
-		close(ch) // what the cancel does to the stream, after the watch has ended
+		if !cancelled {
+			t.Fatal("stop did not cancel the stream")
+		}
 		if w.disturbed(map[string]bool{"op_own": true}) {
 			t.Fatalf("round %d: our own cancel was counted as a loss", i)
 		}
