@@ -21,6 +21,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/cli/out"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
+	"github.com/marinoscar/local-ai/agent/internal/kit"
 	"github.com/marinoscar/local-ai/agent/internal/router/build"
 	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 	"gopkg.in/yaml.v3"
@@ -31,7 +32,8 @@ import (
 // the pinned whisper.cpp commit into /opt/localai/whisper.cpp/builds/<commit9>-<backend>, tests it,
 // switches `current` and restarts the speech service through the agent (or systemctl when the agent
 // is down). This file is the flags, the node.yaml and kit wiring, the messages and the exit codes;
-// the work is the engine's. `--prebuilt` and the export of a whisper build are KIT-05.
+// the work is the engine's. `--prebuilt` (restore of a build exported by `aictl kit export-build`, with
+// the offer of a matching one) and the export after a switch are KIT-05 (cmd_rebuild_prebuilt.go).
 
 const (
 	// rebuildWhisperTimeout is the default deadline: a CPU build takes minutes, a CUDA build on a
@@ -49,7 +51,7 @@ func init() {
 	Register(&Command{
 		Name:    "rebuild-whisper",
 		Summary: "Rebuild the speech-to-text program (whisper.cpp) from the pinned source.",
-		Usage:   "[--commit <sha>] [--backend auto|cuda|vulkan|cpu] [--source <dir> | --from-kit] [--activate | --no-activate] [--dry-run] [--yes]",
+		Usage:   "[--commit <sha>] [--backend auto|cuda|vulkan|cpu] [--source <dir> | --from-kit | --prebuilt <file>] [--activate | --no-activate] [--dry-run] [--yes]",
 		Description: `Builds whisper.cpp from the commit pinned in node.yaml (whisper.commit), tests the new build (it
 must be self-contained, answer --help and, when a speech model is installed, transcribe a short
 recording), and only then switches /opt/localai/whisper.cpp/current to it and restarts the speech
@@ -59,13 +61,18 @@ service. If the test or the restart fails, the previous build stays in use. The 
                      (llama.backend). --backend cpu keeps all the graphics memory for the AI.
   --source <dir>     Build from this folder instead of the kit.
   --from-kit         Use only the rebuild kit as the source: no internet is used.
+  --prebuilt <file>  Restore a ready-made build from kit/prebuilt/ (made by "aictl kit export-build"
+                     on this computer) instead of compiling: it takes seconds. It is refused unless
+                     it was made for this Ubuntu version, processor, backend and graphics chip.
   --activate         Switch to the new build when it passes its test (the default).
   --no-activate      Build and test it, but do not switch to it.
   --dry-run          Only check that everything needed is there; change nothing. Exit 0 only if every
                      check passes.
   --yes              Do not ask for confirmation.
 Without --source the source is the kit's tarball of the commit, so a build with and without internet
-is the same. Run it with sudo.
+is the same. When the kit holds a ready-made build that fits this computer exactly, you are asked
+whether to use it instead of compiling. The new build is exported to the kit when it is switched on.
+Run it with sudo.
 Specification: docs/specs/aictl.md section 4.23a, docs/specs/companion-services.md section 4.2.1`,
 		Marks:   MarkLocal | MarkRoot,
 		Timeout: rebuildWhisperTimeout,
@@ -74,6 +81,7 @@ Specification: docs/specs/aictl.md section 4.23a, docs/specs/companion-services.
 			fs.String("backend", "auto", "auto, cuda, vulkan or cpu")
 			fs.String("source", "", "build from this folder")
 			fs.Bool("from-kit", false, "use only the rebuild kit as the source")
+			fs.String("prebuilt", "", "restore this ready-made build from the kit instead of compiling")
 			fs.Bool("activate", false, "switch to the new build when it passes its test (the default)")
 			fs.Bool("no-activate", false, "build and test it without switching to it")
 			fs.Bool("dry-run", false, "check what is needed and change nothing")
@@ -324,12 +332,23 @@ func rebuildWhisper(c *Call) error {
 		SmokeModel:   func() (string, bool) { return whisperSmokeModel(env) },
 		RecordCommit: func(commit string) error { return recordWhisperCommit(env, commit) },
 	}
+	// After a switch the build is exported to the kit (rebuild-kit.md section 4.2); a computer whose
+	// Ubuntu release is unknown cannot name the file, and then nothing is exported.
+	host := kitHostFn()
+	if !req.DryRun {
+		if ex, err := newPrebuiltExporter(c, env, host, kit.ProgramWhisper); err == nil {
+			opt.Exporter = ex
+		}
+	}
 	eng := whisperNewEngine(opt)
 
 	req.Progress = func(p build.Progress) {
 		if !c.Global.JSON {
 			c.Out.Progress(p.Message)
 		}
+	}
+	if req.Prebuilt != "" {
+		return whisperRestore(c, eng, host, req)
 	}
 	if req.DryRun {
 		return whisperDryRun(c, eng, req)
@@ -341,6 +360,13 @@ func rebuildWhisper(c *Call) error {
 	}
 	if !c.Global.JSON {
 		c.Out.Info(whisperPlanLine(c.Lang, in, req))
+	}
+	// A ready-made build that fits this computer is offered before anything is compiled.
+	if req.SourceDir == "" {
+		if file, ok := offerPrebuilt(c, host, contentRootPaths(c.Ctx, env), kit.ProgramWhisper, "rebuild-whisper", in); ok {
+			req.Prebuilt = file
+			return whisperRestore(c, eng, host, req)
+		}
 	}
 	ok, cerr := c.Confirm(whisperConfirmPrompt(c.Lang, in, req))
 	if cerr != nil {
@@ -377,6 +403,19 @@ func whisperRequest(c *Call) (build.Request, error) {
 	}
 	req.SourceDir = c.String("source")
 	req.FromKit = c.Bool("from-kit")
+	if p := c.String("prebuilt"); p != "" {
+		if req.SourceDir != "" || req.FromKit {
+			return req, c.usageErr(
+				pick(c.Lang, "--prebuilt cannot be used with --source or --from-kit.", "--prebuilt no se puede usar con --source ni con --from-kit."),
+				pick(c.Lang, "Restore a ready-made build (--prebuilt) or compile from a source (--source, --from-kit), not both.",
+					"Restaure una compilación lista (--prebuilt) o compile desde una fuente (--source, --from-kit), no ambas cosas."))
+		}
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			abs = p
+		}
+		req.Prebuilt = abs
+	}
 	if req.SourceDir != "" && req.FromKit {
 		return req, c.usageErr(
 			pick(c.Lang, "--source and --from-kit cannot be used together.", "--source y --from-kit no se pueden usar juntos."),
@@ -456,6 +495,38 @@ func whisperDryRun(c *Call, eng whisperEngine, req build.Request) error {
 	}
 	c.Out.OK(pick(c.Lang, "Everything needed to rebuild whisper.cpp is in place.", "Todo lo necesario para recompilar whisper.cpp está listo."))
 	return nil
+}
+
+// ---- --prebuilt ---------------------------------------------------------------------------------
+
+// whisperRestore restores a ready-made build (--prebuilt, or the one the operator accepted when it was
+// offered): the file's record must fit this computer (LAI-KIT-048 otherwise), and then the engine
+// verifies BUILD.json and every program, smoke tests the build, switches to it and rolls back when the
+// speech service does not answer. With --dry-run it only verifies.
+func whisperRestore(c *Call, eng whisperEngine, host kitHost, req build.Request) error {
+	roots := contentRootPaths(c.Ctx, localEnv())
+	plan, err := prepareRestore(c, whisperPrebuiltCmd, eng, host, roots, req, whisperErr)
+	if err != nil {
+		return err
+	}
+	res, err := eng.Build(c.Ctx, plan.Req)
+	if err != nil {
+		return whisperErr(c, err)
+	}
+	if c.Global.JSON {
+		return c.Out.JSON().Document(res)
+	}
+	for _, w := range res.Warnings {
+		c.Out.Warn(w)
+	}
+	if res.DryRun {
+		c.Out.OK(fmt.Sprintf(pick(c.Lang,
+			"The ready-made build %s is intact and fits this computer. Nothing was changed.",
+			"La compilación lista %s está intacta y corresponde a este equipo. No se cambió nada."), filepath.Base(req.Prebuilt)))
+		return nil
+	}
+	c.Out.Info(fmt.Sprintf(pick(c.Lang, "Restored from %s; nothing was compiled.", "Restaurada desde %s; no se compiló nada."), filepath.Base(req.Prebuilt)))
+	return whisperDone(c, res, plan.Req)
 }
 
 // ---- the result ---------------------------------------------------------------------------------

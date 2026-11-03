@@ -1,0 +1,10 @@
+== stdout ==
+✓ The agent source in the kit: local-ai-node-v0.4.0-src.tar.gz (21 MB)
+✓ The Go toolchain in the kit: go1.24.7.linux-amd64.tar.gz (75 MB)
+✓ The source is complete and vendored: agent/go.mod, cmd/aiagent and 41 vendored
+  packages
+✓ The Go toolchain is new enough: Go 1.24.7
+✓ The compile can run as an unprivileged user: as localai
+✓ Free disk space for the build: 12.0 GB free in /var/lib/localai/build
+✓ Everything needed to rebuild the agent 0.4.0 from the kit is in place.
+== exit 0 ==

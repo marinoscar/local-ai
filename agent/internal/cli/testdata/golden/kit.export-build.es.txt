@@ -1,0 +1,9 @@
+== stdout ==
+✓ Se exportó la compilación llama.cpp de f3586e66b-cuda como llama.cpp-f3586e66b-cuda-resolute-amd64-sm75.tar.gz (<size>).
+i Ya estaba en <root>/kit/prebuilt, sin cambios.
+✓ Se exportó la compilación whisper.cpp de 1a2b3c4d5-cuda como whisper.cpp-1a2b3c4d5-cuda-resolute-amd64-sm75.tar.gz (<size>).
+i Ya estaba en <root>/kit/prebuilt, sin cambios.
+== stderr ==
+… Exportando la compilación llama.cpp de f3586e66b-cuda
+… Exportando la compilación whisper.cpp de 1a2b3c4d5-cuda
+== exit 0 ==

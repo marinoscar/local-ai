@@ -1,0 +1,8 @@
+== stdout ==
+i Rebuilding the agent 0.4.0 from the kit with Go 1.24.7 (no internet is used)
+✓ Built aiagent v0.4.0 from the ark kit (no internet used). The agent restarted
+  and is healthy.
+i The previous agent 0.3.0 is kept as /opt/localai/bin/aiagent.prev.
+== stderr ==
+… Compiling the agent (no internet is used)
+== exit 0 ==

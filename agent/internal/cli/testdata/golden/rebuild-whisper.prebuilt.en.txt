@@ -1,0 +1,8 @@
+== stdout ==
+i Restoring the ready-made whisper.cpp build 1a2b3c4d5 for cuda (sm 75) from
+  whisper.cpp-1a2b3c4d5-cuda-noble-amd64-sm75.tar.gz
+i Restored from whisper.cpp-1a2b3c4d5-cuda-noble-amd64-sm75.tar.gz; nothing was
+  compiled.
+✓ Build 1a2b3c4d5-cuda of whisper.cpp passed its test. Speech-to-text is running
+  again.
+== exit 0 ==

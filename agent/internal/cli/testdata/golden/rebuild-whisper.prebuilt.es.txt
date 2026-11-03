@@ -1,0 +1,8 @@
+== stdout ==
+i Restaurando la compilación lista whisper.cpp de 1a2b3c4d5 para cuda (sm 75)
+  desde whisper.cpp-1a2b3c4d5-cuda-noble-amd64-sm75.tar.gz
+i Restaurada desde whisper.cpp-1a2b3c4d5-cuda-noble-amd64-sm75.tar.gz; no se
+  compiló nada.
+✓ La versión 1a2b3c4d5-cuda de whisper.cpp superó su prueba. El reconocimiento
+  de voz está en marcha otra vez.
+== exit 0 ==

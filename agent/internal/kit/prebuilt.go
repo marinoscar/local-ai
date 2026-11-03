@@ -433,12 +433,10 @@ func LoadPrebuilt(fsys FS, file string) (rec PrebuiltRecord, recorded bool, err 
 // what differs and, from roots, the builds of the program the kit has (so the operator is told what
 // would match, never left with "wrong build").
 func CheckPrebuilt(fsys FS, roots []string, rec PrebuiltRecord, want PrebuiltWant) error {
+	var diffs []PrebuiltDiff
 	if rec.Program != want.Program {
-		return &PrebuiltMismatchError{File: rec.File, Want: want,
-			Diffs: []PrebuiltDiff{{Field: "program", Has: rec.Program, Wants: want.Program}}}
-	}
-	diffs := DiffPrebuilt(rec, want)
-	if diffs == nil {
+		diffs = []PrebuiltDiff{{Field: "program", Has: rec.Program, Wants: want.Program}}
+	} else if diffs = DiffPrebuilt(rec, want); diffs == nil {
 		return nil
 	}
 	all := ListPrebuilt(fsys, roots, want.Program)

@@ -1,0 +1,9 @@
+== stdout ==
+✓ Exported the llama.cpp build f3586e66b-cuda as llama.cpp-f3586e66b-cuda-resolute-amd64-sm75.tar.gz (<size>).
+i Written to <root>/kit/prebuilt.
+✓ Exported the whisper.cpp build 1a2b3c4d5-cuda as whisper.cpp-1a2b3c4d5-cuda-resolute-amd64-sm75.tar.gz (<size>).
+i Written to <root>/kit/prebuilt.
+== stderr ==
+… Exporting the llama.cpp build f3586e66b-cuda
+… Exporting the whisper.cpp build 1a2b3c4d5-cuda
+== exit 0 ==
