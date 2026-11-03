@@ -1,0 +1,42 @@
+== stdout ==
+
+Rebuild kit on this computer's disk: red
+  Everything was read again from the disk: 24 files, 2.3 kB.
+PART        STATE    CODE
+catalog     ok
+installers  ok
+bin         ok
+src         ok
+git         ok
+toolchains  damaged  LAI-KIT-001
+tools       damaged  LAI-KIT-001
+debs        ok
+nvidia      ok
+cuda        ok
+prebuilt    ok
+✗ These files of the rebuild kit are damaged or do not match their record:
+  toolchains/go1.24.0.linux-amd64.tar.gz (changed).  [LAI-KIT-001]
+  → Fix: Run `aictl kit verify --full`; sync the drive on a computer with
+         internet.
+✗ These files of the rebuild kit are damaged or do not match their record:
+  tools/piper/piper_linux_x86_64.tar.gz (truncated).  [LAI-KIT-001]
+  → Fix: Run `aictl kit verify --full`; sync the drive on a computer with
+         internet.
+== stderr ==
+… Reading the records of the kit
+… Reading bin again from the disk
+… Reading catalog again from the disk
+… Reading cuda/12.4-amd64 again from the disk
+… Reading debs/resolute-amd64 again from the disk
+… Reading git/llama.cpp.git again from the disk
+… Reading git/whisper.cpp.git again from the disk
+… Reading nvidia/resolute-amd64-595-open again from the disk
+… Reading prebuilt again from the disk
+… Reading src again from the disk
+… Reading toolchains again from the disk
+… Reading tools/kiwix-tools again from the disk
+… Reading tools/pmtiles again from the disk
+… Checking the signature of the agent files
+… Checking what this computer needs
+… Checking that llama.cpp could be rebuilt from the kit
+== exit 1 ==

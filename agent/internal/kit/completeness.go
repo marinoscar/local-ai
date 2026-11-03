@@ -247,6 +247,14 @@ func activePins(p Pins, now time.Time) (Pins, []string) {
 	return out, gone
 }
 
+// nodeIDs is the node list of a finding: nothing when the computer's id is not known.
+func nodeIDs(id string) []string {
+	if id == "" {
+		return nil
+	}
+	return []string{id}
+}
+
 func shortCommit(c string) string {
 	if len(c) > 9 {
 		return c[:9]
@@ -357,7 +365,7 @@ func (r *run) evalNode(n nodeNeeds) ([]Need, []Finding) {
 			nd.Status = StatusOK
 		case "missing":
 			nd.Status, nd.Code = StatusMissing, missingCode
-			findings = append(findings, Finding{Code: missingCode, Kind: KindMissing, Part: nd.Part, Item: nd.Item, Need: nd.Need, Arg: nd.Arg, Nodes: []string{n.id}})
+			findings = append(findings, Finding{Code: missingCode, Kind: KindMissing, Part: nd.Part, Item: nd.Item, Need: nd.Need, Arg: nd.Arg, Nodes: nodeIDs(n.id)})
 		case "bad":
 			nd.Status, nd.Code = StatusDamaged, CodeKitDamagedFile
 			if r.signatureFailed() && nd.Need == NeedAgentBinary {
@@ -429,7 +437,7 @@ func (r *run) evalNode(n nodeNeeds) ([]Need, []Finding) {
 				nd.Status, nd.Code = StatusInconsistent, CodeKitCudaTooNew
 				needs = append(needs, nd)
 				findings = append(findings, Finding{Code: CodeKitCudaTooNew, Kind: KindCudaTooNew, Part: nd.Part, Item: nd.Item,
-					Need: NeedCuda, Arg: tk.version, Have: []string{tk.version}, Want: n.driverCUDA, Nodes: []string{n.id}})
+					Need: NeedCuda, Arg: tk.version, Have: []string{tk.version}, Want: n.driverCUDA, Nodes: nodeIDs(n.id)})
 			}
 		default:
 			emit(nd, tk.state)
@@ -464,7 +472,7 @@ func (r *run) evalNode(n nodeNeeds) ([]Need, []Finding) {
 			default:
 				nd.Status, nd.Code = StatusWarning, CodeKitMissingNode
 				findings = append(findings, Finding{Code: CodeKitMissingNode, Kind: KindPrebuiltMissing, Part: PartPrebuilt, Item: nd.Item,
-					Need: NeedPrebuilt, Arg: nd.Arg, Colour: Yellow, Optional: true, Nodes: []string{n.id}})
+					Need: NeedPrebuilt, Arg: nd.Arg, Colour: Yellow, Optional: true, Nodes: nodeIDs(n.id)})
 			}
 			needs = append(needs, nd)
 		}
