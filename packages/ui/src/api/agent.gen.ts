@@ -543,7 +543,14 @@ export interface paths {
         put?: never;
         /**
          * Re-verify content (bit rot)
-         * @description Runs as a run of trigger `verify`, sharing the run slot with sync. ark-sync.md section 3.5. agent.md section 3.8.19.
+         * @description Starts a run of trigger `verify` that re-hashes what is stored, oldest `last_reverified_at` first, and
+         *     shares the run slot with sync (`409 LAI-SYN-005`). It reads local disks only, so it is allowed in every
+         *     mode. Without `full` and `items` it checks the copies not checked in `sync.reverify_days`, within
+         *     `sync.reverify_budget_minutes`; `full: true` checks everything with no budget; a named item is checked
+         *     whatever its age. A copy that no longer matches its MANIFEST is `LAI-SYN-025`: on a writable root it is
+         *     moved to quarantine (an older version in `.trash` is put back first), on a read-only root it is excluded
+         *     in memory and nothing is written. ark-sync.md sections 3.5 and 4.13. agent.md section 3.8.19.
+         *
          */
         post: operations["verifyArk"];
         delete?: never;
@@ -563,9 +570,15 @@ export interface paths {
         put?: never;
         /**
          * Import content from another root
-         * @description Works in every mode (no network). With `dry_run: true` the answer is `200` with the plan. `from_root`
-         *     absent and several drives mounted is `409 LAI-ARK-015` with `details.roots`. ark-sync.md section 3.5
-         *     and 4.14. agent.md section 3.8.20.
+         * @description Copies verified items from an AI-ARK drive to the internal root. Works in every mode (no network is
+         *     used, and the downloader of an import refuses every dial). With `dry_run: true` the answer is `200`
+         *     with the plan (a list with the plan of the internal root; nothing is written) and no run slot is
+         *     taken. `from_root` absent and several drives mounted is `409 LAI-ARK-015` with `details.roots`.
+         *     `catalog: true` installs the drive's catalog first when it is newer and valid (an invalid one is
+         *     `LAI-CAT-002` in the run's `warnings` and the import goes on). An item the profile does not list is
+         *     refused (`not_in_profile`) unless `add_to_profile` is set, which needs `items` and admin* (`403`
+         *     with `details.pin_required` for an operator without the PIN; not needed for a dry run). The run has
+         *     trigger `import`. ark-sync.md sections 3.5 and 4.14. agent.md section 3.8.20.
          *
          */
         post: operations["importArk"];
@@ -1985,9 +1998,6 @@ export interface components {
              */
             state: "cancelling" | "idle";
         };
-        RunAccepted: {
-            run_id: string;
-        };
         VerifyRequest: {
             roots?: string[];
             items?: string[];
@@ -1995,10 +2005,14 @@ export interface components {
             full: boolean;
         };
         ImportRequest: {
-            /** @description A root id. Absent with several drives mounted is 409 LAI-ARK-015. */
+            /** @description A root id. Absent means the only mounted drive; with several mounted it is 409 LAI-ARK-015 (details.roots). */
             from_root?: string;
+            /** @description Catalog ids; empty means everything the profile wants that the drive holds. */
             items?: string[];
-            /** @default false */
+            /**
+             * @description Append the named items the profile does not list to node.yaml profile_overrides. Needs items and admin* (not for a dry run).
+             * @default false
+             */
             add_to_profile: boolean;
             /** @default false */
             catalog: boolean;
@@ -3432,13 +3446,13 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunAccepted"];
+                    "application/json": components["schemas"]["SyncAccepted"];
                 };
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            /** @description LAI-SYN-005: a run is already active. */
+            /** @description LAI-SYN-005: a run is already active (details.run_id). LAI-ARK-001: no root can be read. */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
@@ -3467,7 +3481,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SyncPlan"];
+                    "application/json": components["schemas"]["SyncPlan"][];
                 };
             };
             /** @description The run started. */
@@ -3478,17 +3492,18 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunAccepted"];
+                    "application/json": components["schemas"]["SyncAccepted"];
                 };
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            /** @description LAI-SYN-005 a run is already active; LAI-ARK-015 several drives are mounted and from_root is absent (details.roots). */
+            /** @description LAI-SYN-005 a run is already active (details.run_id); LAI-ARK-015 several drives are mounted and from_root is absent (details.roots); LAI-ARK-004 the drive is unclean; LAI-ARK-001 the internal root cannot be written. */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            /** @description LAI-CAT-003: the profile of the internal root is not in the catalog. */
+            422: components["responses"]["Unprocessable"];
             500: components["responses"]["Internal"];
             503: components["responses"]["Starting"];
         };
