@@ -80,7 +80,7 @@ Inside `serve` the daemon is one process with these long-lived goroutines ("work
 | Tailscale reconciler | `internal/modes` (`tailscale.go`) | on mode entry, then every 5 min in online mode |
 | Cloud link (heartbeat, claim, state push) | `internal/cloud` | 15 s / 3 s / 60 s (§4.8) |
 | Sync engine | `internal/sync` | on request or timer ([ark-sync.md](ark-sync.md)) |
-| Drive watcher | `internal/sync` | `/proc/self/mountinfo` poll every 5 s ([ark-sync.md](ark-sync.md) §4.1.2) |
+| Drive watcher | `internal/ark` | `/proc/self/mountinfo` with `poll(2)`, plus a 30 s fallback re-read and scan ([ark-sync.md](ark-sync.md) §4.1.2) |
 | Alert manager + periodic checks | `internal/doctor` | fast checks every 60 s |
 | Watchdog pinger | `internal/app` | `WATCHDOG=1` every 20 s if the main loop is healthy |
 
