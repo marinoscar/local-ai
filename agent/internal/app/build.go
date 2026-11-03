@@ -443,9 +443,6 @@ func (d *Daemon) buildServer() error {
 		{"drill", func() error {
 			return api.RegisterDrill(reg, api.DrillDeps{Service: drill.NewService(c.Drill), Audit: d.audit, Logger: d.log})
 		}},
-		{"docs", func() error {
-			return reg.Add(api.DocsRoutes(api.DocsOptions{Roots: func() []string { return d.roots().Ordered() }, Logger: d.log})...)
-		}},
 	}
 	for _, r := range regs {
 		if err := r.add(); err != nil {

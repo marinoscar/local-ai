@@ -1138,7 +1138,7 @@ Steps 12–16 run concurrently after step 11, except that 14 waits for 12, and 1
 | `app.RegisterUpdateHook(name, fn)` | step 15, 60 s budget | the post-update health check (AGENT-19) |
 | `app.RegisterPostStart(name, fn)` | step 16, after the workers | the sync timer, anything started once |
 | `app.RegisterWorker(name, build)` | built and started at step 16, stopped in reverse order at shutdown step 2 | the drive watcher, the sync engine's worker |
-| `app.RegisterRoutes(name, add)` | while the route registry is built, before step 10 | the `/chat/`, `/maps/` and SPA routes |
+| `app.RegisterRoutes(name, add)` | while the route registry is built, before step 10 | the `/docs/` routes (`api.DocsRoutes`, planned in openapi.yaml until that item lands), the `/chat/`, `/maps/` and SPA routes |
 | `app.UseAgentUpdate(build)` | once, when the claim plane is built | the self-update behind the `agent.update` job and the takeover of its `inflight.json` entry (AGENT-19); without it the job is refused with `LAI-AGT-023` |
 | `app.UseClaimPlane(build)` | once, when the claim plane is built | a replacement for the daemon's own claim loop (a test double); the daemon already runs `cloud.Claimer` over `cloud/jobs` |
 | `app.UseSyncEngine(build)` | once, at build | the engine behind `GET`/`POST`/`DELETE /models` (replaces the stub) |

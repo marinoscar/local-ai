@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
+	"github.com/marinoscar/local-ai/agent/internal/auth"
+	authfake "github.com/marinoscar/local-ai/agent/internal/auth/fake"
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
 	hwfake "github.com/marinoscar/local-ai/agent/internal/hardware/fake"
@@ -207,8 +209,11 @@ func newRig(t *testing.T, opts ...rigOption) *rig {
 		Runner: r.ts, Lookup: r.ts.Lookup, Systemd: r.sysd, Hardware: r.hw,
 		CloudHTTP: offline{}, ModesHTTP: offline{}, CatalogGitHub: failingGitHub{},
 		LookupLocalAI: func() (int, int, bool) { return 0, 0, false },
-		RouterTiming:  router.Timing{LoadPoll: time.Millisecond, EvictPoll: time.Millisecond, ProgressEvery: time.Millisecond, HealthWait: 5 * time.Second},
-		Getenv:        func(string) string { return "" },
+		// The test process is an operator of the socket whoever runs it (CI runs as an ordinary user):
+		// the daemon itself is root in production, which always is.
+		Groups:       authfake.NewGroups().Add(auth.OperatorsGroup, os.Getgid(), os.Getuid()),
+		RouterTiming: router.Timing{LoadPoll: time.Millisecond, EvictPoll: time.Millisecond, ProgressEvery: time.Millisecond, HealthWait: 5 * time.Second},
+		Getenv:       func(string) string { return "" },
 	}
 	r.ts.Installed, r.ts.DaemonUp, r.ts.Backend = true, true, "Running"
 	for _, o := range opts {
