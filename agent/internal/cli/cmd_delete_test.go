@@ -12,8 +12,8 @@ import (
 )
 
 // Tests of `aictl delete` (AICTL-05, aictl.md section 4.7): the size-aware question, the typed second
-// confirmation of --allow-last-copy, the admin PIN, the refusals and the --json rules. DELETE
-// /models/{id} lands with AGENT-15; these tests run against the documented contract.
+// confirmation of --allow-last-copy, the admin PIN, the refusals and the --json rules, against the
+// contract of DELETE /models/{id} (agent.md section 3.8.12, AGENT-15).
 
 const (
 	delPath = "/models/" + bigID
@@ -142,6 +142,23 @@ func TestDelete(t *testing.T) {
 		got := r.run(mgArgs("delete", bigID, "--yes"))
 		checkRun(t, got, 0, "i Qwen 3.6 35B was not stored there. Nothing was deleted.\n", "")
 	})
+	t.Run("a copy kept as the last verified one is said, with the way to delete it", func(t *testing.T) {
+		r := newDeleteRig(t)
+		r.agent().Respond(http.MethodDelete, delPath, 200, `{"id":"`+bigID+`","deleted":[{"root":"/srv/localai","bytes":19000000000}],`+
+			`"kept":[{"root":"/media/user/AI-ARK/localai","reason":"last_verified_copy"},{"root":"ark-0123abcd","reason":"not_present"}],"op_id":"op_del1"}`)
+		got := r.run(mgArgs("delete", bigID, "--yes"))
+		want := done + "i Kept the copy in /media/user/AI-ARK/localai: it is the last verified copy. Add\n  --allow-last-copy to delete it too.\n"
+		checkRun(t, got, 0, want, "")
+	})
+	t.Run("the router reload had a problem: a warning, the files are gone, exit 0", func(t *testing.T) {
+		r := newDeleteRig(t)
+		r.agent().Respond(http.MethodDelete, delPath, 200, `{"id":"`+bigID+`","deleted":[{"root":"/srv/localai","bytes":19000000000}],`+
+			`"warnings":[{"code":"LAI-LLM-007","message":"The model list could not be applied."}],"op_id":"op_del1"}`)
+		got := r.run(mgArgs("delete", bigID, "--yes"))
+		if got.code != 0 || got.out != done || !strings.Contains(got.errOut, "[LAI-LLM-007]") {
+			t.Fatalf("%+v", got)
+		}
+	})
 	t.Run("two content folders: one line each", func(t *testing.T) {
 		r := newDeleteRig(t)
 		r.agent().Respond(http.MethodDelete, delPath, 200, `{"id":"`+bigID+`","deleted":[{"root":"/srv/localai","bytes":19000000000},{"root":"/media/user/AI-ARK/localai","bytes":19000000000}],"op_id":"op_del1"}`)
@@ -158,7 +175,7 @@ func TestDelete(t *testing.T) {
 		exit   int
 	}{
 		{"a loaded model", 409, "LAI-AGT-022", ExitRefused},
-		{"the last verified copy", 409, "LAI-SYN-025", ExitRefused},
+		{"the last verified copy", 409, "LAI-SYN-044", ExitRefused},
 		{"a model that is not there", 404, "LAI-AGT-021", ExitNotFound},
 		{"survival mode", 409, "LAI-AGT-023", ExitRefused},
 		{"not allowed", 403, "LAI-SEC-002", ExitDenied},

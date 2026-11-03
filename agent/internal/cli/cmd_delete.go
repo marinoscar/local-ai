@@ -29,7 +29,15 @@ type modelDeleted struct {
 		Root  string `json:"root"`
 		Bytes int64  `json:"bytes"`
 	} `json:"deleted"`
+	// Kept lists the roots whose copy was left in place: the last verified copy under keep_last, or
+	// no copy on that root (reason last_verified_copy or not_present).
+	Kept []struct {
+		Root   string `json:"root"`
+		Reason string `json:"reason"`
+	} `json:"kept"`
 	OpID string `json:"op_id"`
+	// Warnings are problems of the router reload that follows a delete; the files are already gone.
+	Warnings []wireNotice `json:"warnings"`
 }
 
 func init() {
@@ -156,12 +164,23 @@ func (c *Call) deleteDeclined(err error) error {
 func (c *Call) deleteDone(name string, res modelDeleted) {
 	if len(res.Deleted) == 0 {
 		c.Out.Info(pick(c.Lang, name+" was not stored there. Nothing was deleted.", name+" no estaba guardado allí. No se borró nada."))
-		return
 	}
 	for _, d := range res.Deleted {
 		c.Out.OK(pick(c.Lang,
 			"Deleted "+name+" from "+d.Root+" ("+out.Size(d.Bytes)+" freed).",
 			"Se borró "+name+" de "+d.Root+" ("+out.Size(d.Bytes)+" liberados)."))
+	}
+	// A copy that was left in place because it is the last verified one is worth a line: the person
+	// asked for it to go. ("not_present" is just a root that had nothing to delete.)
+	for _, k := range res.Kept {
+		if k.Reason == "last_verified_copy" {
+			c.Out.Info(pick(c.Lang,
+				"Kept the copy in "+k.Root+": it is the last verified copy. Add --allow-last-copy to delete it too.",
+				"Se conservó la copia de "+k.Root+": es la última copia verificada. Agregue --allow-last-copy para borrarla también."))
+		}
+	}
+	for _, w := range res.Warnings {
+		c.Out.Problem(c.codeProblem(w.Code, w.Message))
 	}
 }
 

@@ -8,8 +8,7 @@ import (
 )
 
 // The bodies the model and service tests answer with are valid answers of the agent's OpenAPI document
-// (agent/api/openapi.yaml), including the two routes that are still planned (download and delete, which
-// land with AGENT-15): the commands are built against the documented contract, not against shapes
+// (agent/api/openapi.yaml): the commands are built against the documented contract, not against shapes
 // this package invented.
 
 func responseSchema(t *testing.T, doc map[string]any, path, method, status string) any {
@@ -41,6 +40,9 @@ func TestModelBodiesMatchTheOpenAPIDocument(t *testing.T) {
 		{"default 200", "/models/default", "put", "200", `{"default":"` + qwenID + `","previous":"` + smallID + `","ini_regenerated":true}`},
 		{"download 202", "/models/{id}/download", "post", "202", `{"id":"` + smallID + `","sync_run_id":"` + arkRunID + `","queued":true}`},
 		{"delete 200", "/models/{id}", "delete", "200", delBody},
+		{"delete 200 with kept and warnings", "/models/{id}", "delete", "200",
+			`{"id":"` + bigID + `","deleted":[{"root":"/srv/localai","bytes":19000000000}],"kept":[{"root":"ark-0123abcd","reason":"last_verified_copy"}],` +
+				`"warnings":[{"code":"LAI-LLM-007","message":"The model list could not be applied."}],"op_id":"op_del1"}`},
 		{"restart 200", "/services/{name}/{action}", "post", "200", llamaRestarted},
 	}
 	for _, tc := range cases {
