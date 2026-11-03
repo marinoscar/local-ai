@@ -1,0 +1,104 @@
+{
+  "root": "internal",
+  "profile": "small-8gb",
+  "budget_bytes": 220000000000,
+  "planned_bytes": 71876839052,
+  "kit": [
+    {
+      "pos": 2,
+      "id": "kit-catalog",
+      "dir": "kit/catalog",
+      "action": "download",
+      "to_version": "catalog-2026.11.02-1",
+      "final_bytes": 1000000
+    },
+    {
+      "pos": 3,
+      "id": "kit-llama-cpp",
+      "dir": "kit/git/llama.cpp.git",
+      "action": "download",
+      "to_version": "head-0001",
+      "final_bytes": 1100000000
+    },
+    {
+      "pos": 4,
+      "id": "kit-whisper-cpp",
+      "dir": "kit/git/whisper.cpp.git",
+      "action": "download",
+      "to_version": "head-0001",
+      "final_bytes": 400000000
+    },
+    {
+      "pos": 5,
+      "id": "kit-agent-binaries",
+      "dir": "kit/bin",
+      "action": "download",
+      "to_version": "111111111111",
+      "final_bytes": 60000000
+    },
+    {
+      "pos": 6,
+      "id": "kit-agent-source",
+      "dir": "kit/src",
+      "action": "download",
+      "to_version": "node-v0.4.0",
+      "final_bytes": 40000000
+    },
+    {
+      "pos": 7,
+      "id": "kit-go-toolchain",
+      "dir": "kit/toolchains",
+      "action": "download",
+      "to_version": "777777777777",
+      "final_bytes": 153665522
+    },
+    {
+      "pos": 8,
+      "id": "kit-kiwix-tools",
+      "dir": "kit/tools/kiwix-tools",
+      "action": "download",
+      "to_version": "999999999999",
+      "final_bytes": 42168530
+    },
+    {
+      "pos": 9,
+      "id": "kit-pmtiles",
+      "dir": "kit/tools/pmtiles",
+      "action": "download",
+      "to_version": "bbbbbbbbbbbb",
+      "final_bytes": 20000000
+    },
+    {
+      "pos": 10,
+      "id": "kit-piper",
+      "dir": "kit/tools/piper",
+      "action": "download",
+      "to_version": "dddddddddddd",
+      "final_bytes": 50000000
+    },
+    {
+      "pos": 11,
+      "id": "kit-debs-resolute-amd64",
+      "dir": "kit/debs/resolute-amd64",
+      "action": "download",
+      "to_version": "head-0001",
+      "final_bytes": 5000000000
+    },
+    {
+      "pos": 12,
+      "id": "kit-nvidia-resolute-amd64-595-open",
+      "dir": "kit/nvidia/resolute-amd64-595-open",
+      "action": "download",
+      "to_version": "head-0001",
+      "final_bytes": 500000000
+    },
+    {
+      "pos": 13,
+      "id": "kit-desktop",
+      "dir": "kit/desktop",
+      "action": "download",
+      "to_version": "ffffffffffff",
+      "final_bytes": 150000000
+    }
+  ]
+}

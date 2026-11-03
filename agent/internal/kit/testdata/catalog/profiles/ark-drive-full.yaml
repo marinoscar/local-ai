@@ -1,0 +1,19 @@
+schema_version: 1
+id: ark-drive-full
+display_name: "Portable ark drive (everything)"
+router:
+  models_max: 1
+  memory_margin_mib: 512
+  autoload: false
+storage:
+  target: ark_drive
+  budget_bytes: 2000000000000
+  min_free_bytes: 50000000000
+include:
+  models: [model-alpha-9b-q4, model-beta-27b-q4, model-gamma-vl-q4, model-delta-embed, whisper-small, piper-en-medium]
+  content: [wiki-alpha-en, map-region-alpha, kit-catalog, kit-llama-cpp, kit-whisper-cpp, kit-agent-binaries, kit-agent-source, kit-go-toolchain, kit-kiwix-tools, kit-pmtiles, kit-piper, kit-local-ai-repo, kit-debs-resolute-amd64, kit-debs-resolute-arm64, kit-nvidia-resolute-amd64-595-open, kit-desktop, kit-ubuntu-iso-26.04, docs-bundle]
+default_model: model-alpha-9b-q4
+survival:
+  models: [model-alpha-9b-q4]
+  default_model: model-alpha-9b-q4
+  portal_language: auto

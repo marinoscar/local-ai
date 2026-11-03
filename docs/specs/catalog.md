@@ -243,7 +243,7 @@ content:
 
 **Rules:** `id` follows the same format as models. A `kiwix` item with `version_policy: latest` must have `refresh_days ≥ 30`. A `pmtiles_extract` item must have a bbox with min < max. A `kit` or `docs` item is always survival tier 1.
 
-**More rules enforced by lint** (all `LAI-CAT-015` unless noted). `kind` and `source.type` agree: `kiwix` uses `kiwix`; `maps` uses `pmtiles_extract`, `url` or `github_release`; `kit` uses `git_mirror`, `apt_closure`, `url` or `github_release`; `docs` uses `repo_docs`. A `kiwix` item with `version_policy: pinned` or `checksum: pinned` needs the `pinned` block. A `bbox` has four numbers inside longitude -180..180 and latitude -90..90. A key that the source type does not use is a schema problem (`LAI-CAT-010`), except the optional fields `extract`, `extra_repos`, `checksum`, `trust`, `sidecar_url`, `url` and `files`, whose misuse is `LAI-CAT-016`. `survival_tier` may be left out: `Tier()` then returns 1 for `kit` and `docs` items and 3 for the rest (the first to be dropped by the budget planner). A `kit` or `docs` item that declares a tier must declare 1.
+**More rules enforced by lint** (all `LAI-CAT-015` unless noted). `kind` and `source.type` agree: `kiwix` uses `kiwix`; `maps` uses `pmtiles_extract`, `url` or `github_release`; `kit` uses `git_mirror`, `apt_closure`, `url`, `github_release` or `repo_docs` (the last only for `kit-catalog`, the kit copy of the catalog, [rebuild-kit.md](rebuild-kit.md) §3.2); `docs` uses `repo_docs`. A `kiwix` item with `version_policy: pinned` or `checksum: pinned` needs the `pinned` block. A `bbox` has four numbers inside longitude -180..180 and latitude -90..90. A key that the source type does not use is a schema problem (`LAI-CAT-010`), except the optional fields `extract`, `extra_repos`, `checksum`, `trust`, `sidecar_url`, `url` and `files`, whose misuse is `LAI-CAT-016`. `survival_tier` may be left out: `Tier()` then returns 1 for `kit` and `docs` items and 3 for the rest (the first to be dropped by the budget planner). A `kit` or `docs` item that declares a tier must declare 1.
 
 **Source types** (each has exactly one resolver in [ark-sync.md](ark-sync.md) §4.9; adding a type means adding a resolver there):
 | `source.type` | File | Resolver |
@@ -255,7 +255,7 @@ content:
 | `github_release` | ark.yaml | ark-sync.md §4.9.4 |
 | `git_mirror` | ark.yaml | ark-sync.md §4.9.6 |
 | `apt_closure` | ark.yaml | ark-sync.md §4.9.7 |
-| `repo_docs` | ark.yaml | ark-sync.md §4.9.8 (also writes `kit/catalog/`: catalog files, `CATALOG_VERSION`, `pins.json`, from the same tag tarball in the same item install; rebuild-kit.md §3.2) |
+| `repo_docs` | ark.yaml | ark-sync.md §4.9.8 (`docs-bundle` renders `docs/`; the kit item `kit-catalog` writes `kit/catalog/`: catalog files and `CATALOG_VERSION`, from the same tag tarball; rebuild-kit.md §3.2.1) |
 
 **Optional fields** (lint-enforced):
 - `extract: true` (`github_release` and `url` only): the verified archive (`.tar.gz`, `.tar.xz` or `.zip`) is unpacked and stored as a directory item. `map-assets` uses it.

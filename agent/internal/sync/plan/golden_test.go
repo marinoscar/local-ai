@@ -206,6 +206,40 @@ func TestTierJSON(t *testing.T) {
 	}
 }
 
+// TestItemDir: every row of a plan carries the directory its MANIFEST lives in, from the one table
+// of ark.ItemDir (and kit.LayoutOf for the subdir of a kit item).
+func TestItemDir(t *testing.T) {
+	llama, whisper, piper := model("m-llama", 1, 1), model("m-whisper", 1, 1), model("m-piper", 1, 1)
+	whisper.Engine, piper.Engine = "whisper", "piper"
+	mirror := kit("kit-llama-cpp", 1, source(catalog.ContentSource{Type: "git_mirror", URL: "https://src.example.test/org-alpha/llama.cpp.git"}))
+	mapAssets := catalog.ContentItem{ID: "map-assets", Kind: "maps", Source: catalog.ContentSource{Type: "github_release"}}
+	region := catalog.ContentItem{ID: "map-region-alpha", Kind: "maps", Source: catalog.ContentSource{Type: "pmtiles_extract"}}
+	unknownKit := kit("kit-fork-only-item", 1)
+	wiki, doc, apt := zim("wiki-alpha-en", 1), docs(1), debs("resolute", "amd64", 1)
+	cases := []struct {
+		name string
+		item plan.CatalogItem
+		want string
+	}{
+		{"llama model", plan.ModelItem(&llama), "models/m-llama"},
+		{"whisper model", plan.ModelItem(&whisper), "speech/whisper/m-whisper"},
+		{"piper model", plan.ModelItem(&piper), "speech/piper/m-piper"},
+		{"kiwix", plan.ContentItem(&wiki), "kiwix/wiki-alpha-en"},
+		{"maps", plan.ContentItem(&region), "maps/map-region-alpha"},
+		{"map-assets is the fixed directory", plan.ContentItem(&mapAssets), "maps/assets"},
+		{"docs", plan.ContentItem(&doc), "docs"},
+		{"kit mirror", plan.ContentItem(&mirror), "kit/git/llama.cpp.git"},
+		{"kit apt closure", plan.ContentItem(&apt), "kit/debs/resolute-amd64"},
+		{"a kit id the layout does not know has no directory", plan.ContentItem(&unknownKit), ""},
+		{"an unknown kind has no directory", plan.CatalogItem{ID: "thing-x", Kind: "other"}, ""},
+	}
+	for _, tc := range cases {
+		if got := tc.item.ItemDir(); got != tc.want {
+			t.Errorf("%s: ItemDir = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestFormatGB(t *testing.T) {
 	for _, tc := range []struct {
 		in   int64

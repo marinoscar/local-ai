@@ -1,0 +1,254 @@
+# Fixture catalog for the kit package: every rebuild-kit item of rebuild-kit.md section 3.2 in the shape
+# the real catalog/ark.yaml uses, next to placeholder content, models and profiles. It is test data:
+#   - a sha256 is written @sha:<hex digit>@ and the tests expand it to 64 characters (the repository's
+#     redaction check rejects a real 64-hex string outside its own fixtures, see KIT-01 notes);
+#   - the versions of the agent, the desktop app, pmtiles and the CUDA redistributables are made up;
+#   - the Go and kiwix-tools file names and sizes are the real upstream ones, their digests are not.
+# The real values land in catalog/ark.yaml with the catalog (CAT-03).
+schema_version: 1
+content:
+  - id: wiki-alpha-en
+    kind: kiwix
+    display_name: "Encyclopedia Alpha (English, text only)"
+    summary: "A whole encyclopedia without pictures."
+    survival_tier: 1
+    languages: [en]
+    license: "CC BY-SA 4.0"
+    source:
+      type: kiwix
+      book: wiki_alpha_en_nopic
+      base_url: https://mirror.example.test/zim/alpha/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 50000000000
+    refresh_days: 90
+
+  - id: map-region-alpha
+    kind: maps
+    display_name: "Offline map: Region Alpha"
+    summary: "Streets, towns, rivers and roads. Works without internet."
+    survival_tier: 1
+    source:
+      type: pmtiles_extract
+      planet_url_pattern: "https://tiles.example.test/{date}.pmtiles"
+      bbox: [-92.5, 7.0, -77.0, 18.6]
+      maxzoom: 15
+      checksum: computed
+    expected_size_bytes: 2500000000
+    refresh_days: 180
+
+  # ---- rebuild kit (KIT-01) -------------------------------------------------------------------
+
+  - id: kit-catalog
+    kind: kit
+    display_name: "Catalog copy (rebuild kit)"
+    summary: "The catalog the kit was planned with, so a drive describes itself."
+    source:
+      type: repo_docs
+    expected_size_bytes: 1000000
+
+  - id: kit-agent-binaries
+    kind: kit
+    display_name: "Agent programs and installer (rebuild kit)"
+    summary: "aiagent for both CPU types with its signed checksums, and install-node.sh."
+    source:
+      type: url
+      version_policy: pinned
+      checksum: pinned
+      files:
+        - {url: "https://downloads.example.test/local-ai/node-v0.4.0/aiagent-linux-amd64", sha256: "@sha:1@"}
+        - {url: "https://downloads.example.test/local-ai/node-v0.4.0/aiagent-linux-arm64", sha256: "@sha:2@"}
+        - {url: "https://downloads.example.test/local-ai/node-v0.4.0/SHA256SUMS", sha256: "@sha:3@"}
+        - {url: "https://downloads.example.test/local-ai/node-v0.4.0/SHA256SUMS.minisig", sha256: "@sha:4@"}
+        - {url: "https://downloads.example.test/local-ai/node-v0.4.0/install-node.sh", sha256: "@sha:5@"}
+    expected_size_bytes: 60000000
+
+  - id: kit-agent-source
+    kind: kit
+    display_name: "Agent source with vendored modules (rebuild kit)"
+    summary: "Everything needed to rebuild the agent with only the Go compiler."
+    source:
+      type: github_release
+      repo: org-alpha/local-ai
+      tag: node-v0.4.0
+      asset: local-ai-node-v0.4.0-src.tar.gz
+      sha256: "@sha:6@"
+    expected_size_bytes: 40000000
+
+  - id: kit-llama-cpp
+    kind: kit
+    display_name: "llama.cpp source (rebuild kit)"
+    summary: "A full copy of the repository and a tarball of every pinned commit."
+    source:
+      type: git_mirror
+      url: https://git.example.test/org-alpha/llama.cpp.git
+      also_tarball_of: pinned
+    expected_size_bytes: 1100000000
+
+  - id: kit-whisper-cpp
+    kind: kit
+    display_name: "whisper.cpp source (rebuild kit)"
+    source:
+      type: git_mirror
+      url: https://git.example.test/org-alpha/whisper.cpp.git
+      also_tarball_of: pinned
+    expected_size_bytes: 400000000
+
+  - id: kit-local-ai-repo
+    kind: kit
+    display_name: "Lab repository mirror (rebuild kit, drive only)"
+    source:
+      type: git_mirror
+      url: https://git.example.test/org-alpha/local-ai.git
+    expected_size_bytes: 100000000
+
+  - id: kit-go-toolchain
+    kind: kit
+    display_name: "Go compiler (rebuild kit)"
+    summary: "The Go version the agent builds with, for both CPU types."
+    source:
+      type: url
+      version_policy: pinned
+      checksum: pinned
+      files:
+        - {url: "https://go.dev/dl/go1.24.13.linux-amd64.tar.gz", sha256: "@sha:7@"}
+        - {url: "https://go.dev/dl/go1.24.13.linux-arm64.tar.gz", sha256: "@sha:8@"}
+    expected_size_bytes: 153665522
+
+  - id: kit-kiwix-tools
+    kind: kit
+    display_name: "kiwix-tools (rebuild kit)"
+    source:
+      type: url
+      version_policy: pinned
+      checksum: pinned
+      files:
+        - {url: "https://download.kiwix.org/release/kiwix-tools/kiwix-tools_linux-x86_64-3.8.2.tar.gz", sha256: "@sha:9@"}
+        - {url: "https://download.kiwix.org/release/kiwix-tools/kiwix-tools_linux-aarch64-3.8.2.tar.gz", sha256: "@sha:a@"}
+    expected_size_bytes: 42168530
+
+  - id: kit-pmtiles
+    kind: kit
+    display_name: "pmtiles (rebuild kit)"
+    source:
+      type: url
+      version_policy: pinned
+      checksum: pinned
+      files:
+        - {url: "https://downloads.example.test/pmtiles/go-pmtiles_1.0.0_Linux_x86_64.tar.gz", sha256: "@sha:b@"}
+        - {url: "https://downloads.example.test/pmtiles/go-pmtiles_1.0.0_Linux_arm64.tar.gz", sha256: "@sha:c@"}
+    expected_size_bytes: 20000000
+
+  - id: kit-piper
+    kind: kit
+    display_name: "piper (rebuild kit)"
+    source:
+      type: url
+      version_policy: pinned
+      checksum: pinned
+      files:
+        - {url: "https://downloads.example.test/piper/2023.11.14-2/piper_linux_x86_64.tar.gz", sha256: "@sha:d@"}
+        - {url: "https://downloads.example.test/piper/2023.11.14-2/piper_linux_aarch64.tar.gz", sha256: "@sha:e@"}
+    expected_size_bytes: 50000000
+
+  - id: kit-desktop
+    kind: kit
+    display_name: "ai-desktop installers (rebuild kit)"
+    source:
+      type: url
+      version_policy: pinned
+      checksum: pinned
+      files:
+        - {url: "https://downloads.example.test/local-ai/desktop-v0.1.0/ai-desktop_0.1.0_amd64.deb", sha256: "@sha:f@"}
+        - {url: "https://downloads.example.test/local-ai/desktop-v0.1.0/ai-desktop-0.1.0-x86_64.AppImage", sha256: "@sha:1@"}
+        - {url: "https://downloads.example.test/local-ai/desktop-v0.1.0/SHA256SUMS", sha256: "@sha:2@"}
+    expected_size_bytes: 150000000
+
+  - id: kit-debs-resolute-amd64
+    kind: kit
+    display_name: "Ubuntu packages, resolute amd64 (rebuild kit)"
+    source:
+      type: apt_closure
+      codename: resolute
+      arch: amd64
+      packages: [build-essential, cmake, ninja-build, pkg-config, ccache, git,
+                 libvulkan-dev, glslc, spirv-headers, vulkan-tools, mesa-vulkan-drivers,
+                 curl, jq, ca-certificates, iw, network-manager, pciutils, usbutils, minisign, zstd, udisks2,
+                 openssh-server, python3, tailscale, nvidia-cuda-toolkit]
+      extra_repos:
+        - name: tailscale
+          uri: https://pkgs.example.test/stable/ubuntu
+          suite: resolute
+          components: [main]
+          key: tailscale-archive-keyring.gpg
+        - name: nvidia-cuda
+          uri: https://developer.example.test/compute/cuda/repos/ubuntu2604/x86_64/
+          suite: /
+          components: []
+          key: nvidia-cuda-archive-keyring.gpg
+    expected_size_bytes: 5000000000
+    refresh_days: 30
+
+  - id: kit-debs-resolute-arm64
+    kind: kit
+    display_name: "Ubuntu packages, resolute arm64 (rebuild kit)"
+    source:
+      type: apt_closure
+      codename: resolute
+      arch: arm64
+      packages: [build-essential, cmake, ninja-build, pkg-config, ccache, git,
+                 libvulkan-dev, glslc, spirv-headers, vulkan-tools, mesa-vulkan-drivers,
+                 curl, jq, ca-certificates, iw, network-manager, pciutils, usbutils, minisign, zstd, udisks2,
+                 openssh-server, python3, tailscale, nvidia-cuda-toolkit]
+      extra_repos:
+        - name: tailscale
+          uri: https://pkgs.example.test/stable/ubuntu
+          suite: resolute
+          components: [main]
+          key: tailscale-archive-keyring.gpg
+    expected_size_bytes: 5000000000
+    refresh_days: 30
+
+  - id: kit-nvidia-resolute-amd64-595-open
+    kind: kit
+    display_name: "NVIDIA driver 595 packages, resolute amd64 (rebuild kit)"
+    source:
+      type: apt_closure
+      codename: resolute
+      arch: amd64
+      packages: [nvidia-driver-595-open, nvidia-utils-595, libnvidia-compute-595, nvidia-dkms-595-open,
+                 dkms, linux-headers-generic, linux-modules-nvidia-595-open-generic]
+      extra_repos: []
+    expected_size_bytes: 500000000
+    refresh_days: 30
+
+  - id: kit-cuda-redist-12.4.1-amd64
+    kind: kit
+    display_name: "CUDA redistributables 12.4.1 amd64 (rebuild kit, optional)"
+    source:
+      type: url
+      version_policy: pinned
+      checksum: pinned
+      files:
+        - {url: "https://redist.example.test/cuda/cuda_nvcc-linux-x86_64-12.4.1-archive.tar.xz", sha256: "@sha:3@"}
+        - {url: "https://redist.example.test/cuda/cuda_cudart-linux-x86_64-12.4.1-archive.tar.xz", sha256: "@sha:4@"}
+        - {url: "https://redist.example.test/cuda/libcublas-linux-x86_64-12.4.1-archive.tar.xz", sha256: "@sha:5@"}
+    expected_size_bytes: 1500000000
+
+  - id: kit-ubuntu-iso-26.04
+    kind: kit
+    display_name: "Ubuntu 26.04 install image (rebuild kit, drive only)"
+    source:
+      type: url
+      url: "https://releases.ubuntu.com/26.04/ubuntu-26.04-desktop-amd64.iso"
+      checksum: sidecar
+      sidecar_url: "https://releases.ubuntu.com/26.04/SHA256SUMS"
+    expected_size_bytes: 6000000000
+
+  - id: docs-bundle
+    kind: docs
+    survival_tier: 1
+    source:
+      type: repo_docs
+    expected_size_bytes: 200000000

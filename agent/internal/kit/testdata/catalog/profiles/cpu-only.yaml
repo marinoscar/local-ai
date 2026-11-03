@@ -1,0 +1,22 @@
+schema_version: 1
+id: cpu-only
+display_name: "Any machine without a usable GPU"
+match:
+  backends: [cpu]
+router:
+  models_max: 1
+  memory_margin_mib: 512
+  autoload: false
+storage:
+  target: internal
+  budget_bytes: 120000000000
+  min_free_bytes: 15000000000
+include:
+  models: [model-alpha-9b-q4, whisper-small, piper-en-medium]
+  content: [wiki-alpha-en, kit-catalog, kit-llama-cpp, kit-whisper-cpp, kit-agent-binaries, kit-agent-source, kit-go-toolchain, kit-kiwix-tools, kit-pmtiles, kit-piper, kit-debs-resolute-amd64, kit-desktop, docs-bundle]
+default_model: model-alpha-9b-q4
+survival:
+  models: [model-alpha-9b-q4]
+  default_model: model-alpha-9b-q4
+  require_services: [kiwix]
+  portal_language: auto

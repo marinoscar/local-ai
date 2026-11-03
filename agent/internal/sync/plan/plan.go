@@ -22,6 +22,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
+	"github.com/marinoscar/local-ai/agent/internal/kit"
 	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 )
 
@@ -70,6 +71,32 @@ func ModelItem(m *catalog.Model) CatalogItem {
 // ContentItem wraps a catalog content entry.
 func ContentItem(c *catalog.ContentItem) CatalogItem {
 	return CatalogItem{ID: c.ID, Kind: c.Kind, Content: c}
+}
+
+// ItemDir is the item directory of the item relative to the content root, slash separated
+// (ark-sync.md section 3.1: models/<id>, kiwix/<id>, maps/<id>, docs, kit/<subdir>), the one place the
+// answer comes from (ark.ItemDir; kit.LayoutOf for the subdir of a kit item). It is empty when the
+// layout has no place for the item (a kit id that rebuild-kit.md section 3.1 does not know): the plan
+// still lists the item, and the downloader refuses to write it.
+func (c CatalogItem) ItemDir() string { return itemDir(c) }
+
+func itemDir(c CatalogItem) string {
+	ref := ark.ItemRef{Kind: c.Kind, ID: c.ID}
+	switch {
+	case c.Model != nil:
+		ref.Kind, ref.Engine = manifest.KindModel, c.Model.Engine
+	case c.Content != nil && c.Kind == manifest.KindKit:
+		r, err := kit.ItemRef(*c.Content)
+		if err != nil {
+			return ""
+		}
+		ref = r
+	}
+	dir, err := ark.ItemDir(ref)
+	if err != nil {
+		return ""
+	}
+	return dir
 }
 
 // IsPinnedClass reports whether the item is of the pinned class: kit and docs, always planned first
@@ -508,7 +535,7 @@ func (r *run) decide(c cand) ItemPlan {
 	if c.pinned {
 		tier = Tier{Pinned: true}
 	}
-	ip := ItemPlan{ID: it.ID, Kind: it.Kind, Tier: &tier, RefreshDays: it.RefreshDays()}
+	ip := ItemPlan{ID: it.ID, Kind: it.Kind, Dir: itemDir(it), Tier: &tier, RefreshDays: it.RefreshDays()}
 
 	pres, hasPres := in.Present[it.ID]
 	var presBytes int64
