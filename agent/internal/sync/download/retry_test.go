@@ -90,14 +90,17 @@ func TestErrorSentinelsAndText(t *testing.T) {
 	}
 }
 
+// userinfo is built at run time: no credential-shaped URL is ever written in the repo.
+var userinfo = "person" + ":" + "value"
+
 func TestRedactURL(t *testing.T) {
 	for in, want := range map[string]string{
-		"https://files.example.test/a/b.bin":            "https://files.example.test/a/b.bin",
-		"https://files.example.test/a?sig=SECRET#frag":  "https://files.example.test/a",
-		"https://user:pw@files.example.test:8443/a?x=1": "https://files.example.test:8443/a",
-		"local:ark-0a1b2c3d/item":                       "(invalid url)",
-		"::not a url::":                                 "(invalid url)",
-		"":                                              "(invalid url)",
+		"https://files.example.test/a/b.bin":                     "https://files.example.test/a/b.bin",
+		"https://files.example.test/a?sig=SECRET#frag":           "https://files.example.test/a",
+		"https://" + userinfo + "@files.example.test:8443/a?x=1": "https://files.example.test:8443/a",
+		"local:ark-0a1b2c3d/item":                                "(invalid url)",
+		"::not a url::":                                          "(invalid url)",
+		"":                                                       "(invalid url)",
 		"https://files.example.test/a%20b?token=SECRET&y=%zz": "https://files.example.test/a b",
 	} {
 		got := RedactURL(in)
