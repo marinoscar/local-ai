@@ -679,14 +679,17 @@ func cudaVersionOf(debVersion string) string {
 
 // prebuiltState: a prebuilt of the current llama build is in kit/prebuilt: "ok", "bad" (one is there
 // and fails its check) or "missing". The name is
-// llama.cpp-<commit9>-<backend>-<codename>-<arch>[-sm<cc>].tar.gz (rebuild-kit.md section 3.1); for CUDA,
-// when the compute capabilities are known, the -sm suffix must be one of them.
+// llama.cpp-<commit9>-<backend>-<codename>-<arch>[-sm<cc>].tar.gz (rebuild-kit.md section 3.1 and 4.2);
+// <cc> is the compute capability of a CUDA build and a build for several GPUs lists them joined with
+// "_" (-sm75_86, PrebuiltName). For CUDA, when this computer's capabilities are known, the listed ones
+// must be exactly those, as the restore requires (PrebuiltWant.Check): a build for sm75 does not run on
+// an sm86 GPU.
 func (r *run) prebuiltState(c9, backend string, rl release, cudaArch string) string {
 	prefix := "llama.cpp-" + c9 + "-" + backend + "-" + rl.dir()
-	caps := map[string]bool{}
+	var want []string
 	for _, c := range strings.Split(cudaArch, ";") {
 		if c != "" {
-			caps[c] = true
+			want = append(want, c)
 		}
 	}
 	state := "missing"
@@ -707,7 +710,11 @@ func (r *run) prebuiltState(c9, backend string, rl release, cudaArch string) str
 		switch {
 		case rest == "":
 		case strings.HasPrefix(rest, "-sm"):
-			if backend == "cuda" && len(caps) > 0 && !caps[strings.TrimPrefix(rest, "-sm")] {
+			rec, ok := ParsePrebuiltName(name)
+			if !ok {
+				continue
+			}
+			if backend == "cuda" && len(want) > 0 && !sameSet(strings.Split(rec.CudaArch, ";"), want) {
 				continue
 			}
 		default:

@@ -126,6 +126,7 @@ func newPlan(rec Recipe, root, scratch string, in Inputs, sha string) Plan {
 	}
 	p.BuildDir = filepath.Join(p.OutDir, "build")
 
+	in.Commit = sha // the flags see the full sha, whatever the caller was given
 	p.CMakeFlags = rec.Flags(in)
 	p.ConfigureArgs = append([]string{"-S", p.SourceDir, "-B", p.BuildDir, "-G", "Ninja"}, p.CMakeFlags...)
 	p.BuildArgs = append(append([]string{"--build", p.BuildDir, "--config", "Release", "--target"}, rec.Targets...),

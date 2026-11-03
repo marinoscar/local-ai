@@ -1,2 +1,2 @@
-[timeout 30m0s] cmake -S <ROOT>/src/<SHA> -B <ROOT>/builds/f3586e66b-cuda.tmp/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DGGML_NATIVE=ON -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=75
+[timeout 30m0s] cmake -S <ROOT>/src/<SHA> -B <ROOT>/builds/f3586e66b-cuda.tmp/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DGGML_NATIVE=ON -DLLAMA_BUILD_COMMIT=<SHA> -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=75
 [timeout 3h0m0s] cmake --build <ROOT>/builds/f3586e66b-cuda.tmp/build --config Release --target llama-server llama-cli llama-bench -j 5
