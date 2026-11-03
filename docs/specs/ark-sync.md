@@ -53,7 +53,7 @@ Non-goals:
 | Path | Written by | Purpose |
 |---|---|---|
 | `<root>/ROOT.json` | sync (on root init) | Root identity (§3.2) |
-| `<root>/READY.json` | sync (end of every run, and on every verify/import) | Readiness report (§4.12) |
+| `<root>/READY.json` | the readiness service (at mount, at the end of every run, on every verify/import, and every 6 h; never on a read-only root) | Readiness report (§4.12) |
 | `<root>/<item-dir>/MANIFEST.json` | sync (the commit point of a swap) | Per-item manifest (§4.11) |
 | `<root>/.staging/<item-id>/<version>/<file>.part` | downloader | Partial download, same filesystem as the target |
 | `<root>/.staging/<item-id>/<version>/<file>` | downloader | Fully downloaded, verified, waiting for swap |
@@ -180,7 +180,7 @@ Validation errors in this block are `LAI-AGT` config errors (agent.md). Unknown 
 
 **`DELETE /api/v1/ark/sync`** → `202 {"run_id": "...", "state": "cancelling"}`. Every active transfer stops at the next 1 MiB boundary, checkpoints and exits. Idempotent.
 
-**`GET /api/v1/ark`** → `{"roots": [<READY.json of each mounted root>]}` (§4.12).
+**`GET /api/v1/ark`** → `{"roots": [<READY.json of each mounted root>]}` (§4.12), internal root first, then drives in mount order; `{"roots": []}` when none is mounted. The titles of `problems[]` are in the language of the request (`Accept-Language`, else `ui.language`); the file on the root and the document the cloud receives are English. A read-only root is served from memory (§4.12.3).
 
 **`GET /api/v1/ark/drives`**:
 ```json
@@ -894,7 +894,7 @@ Field rules:
 
 ### 4.12 Readiness report
 
-`<root>/READY.json`, regenerated at the end of every run that touches the root, after verify and import, at mount, and at least every 6 h by the agent (ages change even when nothing else does).
+`<root>/READY.json`, regenerated at the end of every run that touches the root, after verify and import, at mount, and at least every 6 h by the agent (ages change even when nothing else does). How the code computes, stores and serves it: §4.12.3.
 
 #### 4.12.1 Schema and example
 ```json
@@ -917,6 +917,7 @@ Field rules:
   },
   "overall": "yellow",
   "survival_capable": true,
+  "clock_wrong": false,
   "last_sync": {"run_id": "run-20261102T031500Z-a1f3", "trigger": "scheduled", "finished_at": "2026-11-02T04:02:09Z", "state": "done", "age_days": 0},
   "last_full_reverify_at": "2026-10-20T04:10:00Z",
   "counts": {"verified": 24, "stale": 1, "missing": 0, "skipped": 3, "failed": 0, "quarantined": 0, "orphan": 1},
@@ -926,7 +927,7 @@ Field rules:
      "checked_current_at": "2026-11-02T03:20:00Z", "age_days": 0, "freshness": "green", "bytes": 5870000000, "trust": "pinned"},
     {"id": "wikipedia-en-nopic", "kind": "kiwix", "tier": 1, "status": "stale", "version": "2026-07",
      "reason": "update failed: retries exhausted", "code": "LAI-SYN-031", "age_days": 124, "freshness": "green", "bytes": 47800000000},
-    {"id": "stackexchange-electronics", "kind": "kiwix", "tier": 2, "status": "skipped", "reason": "budget", "freshness": "yellow"}
+    {"id": "stackexchange-electronics", "kind": "kiwix", "tier": 2, "status": "skipped", "reason": "budget", "code": "LAI-SYN-041"}
   ],
   "problems": [
     {"code": "LAI-SYN-031", "severity": "warning", "item": "wikipedia-en-nopic", "title": "An update couldn't be downloaded. The older copy is still here and works."}
@@ -941,9 +942,17 @@ Item `status` ∈ `verified | stale | missing | skipped | failed | quarantined |
 - `failed` / `quarantined`: no verified copy; the last attempt failed.
 - `orphan`: present but not in the profile.
 
-**Clock wrong.** When the agent's clock check fails (`now` is earlier than the newest `verified_at` on any root, `LAI-AGT-012`), every item's `freshness` is **omitted**, root-level age rules are not applied, and the report carries `"clock_wrong": true` at the top level (it is `false` or absent otherwise; cloud `ReadyReportV1` has the same optional field). UIs show the age columns grey with "clock wrong". `overall` is then computed from status and non-age rules only.
+**Clock wrong.** When the agent's clock check fails (`now` is earlier than the newest `verified_at` on any root, `LAI-AGT-012`), every item's `freshness` is **omitted**, root-level age rules are not applied, and the report carries `"clock_wrong": true` at the top level (the agent writes `false` otherwise; a reader treats absent as `false`; cloud `ReadyReportV1` has the same optional field). UIs show the age columns grey with "clock wrong". `overall` is then computed from status and non-age rules only.
 
-`checked_current_at` is the last time a run resolved the item and confirmed the present version is the one wanted. `age_days` is days since `checked_current_at` (or since `verified_at` if never checked).
+`checked_current_at` is the last time a run resolved the item and confirmed the present version is the one wanted (the engine records it in the item's `items.json` extras, key `checked_current_at`, as an RFC 3339 string). `age_days` is days since `checked_current_at` (or since `verified_at` if never checked).
+
+Field rules of the agent's writer (`agent/internal/ark/ready`):
+- `freshness` is the colour of the age column alone, not of the status: a stale tier-1 item 124 days old shows `green` and is yellow through its status. It is omitted for an item with no copy, for an orphan and, when the clock is wrong, for every item. For the docs item it is the verdict of the docs row (§4.12.2).
+- `tier` is always 1 to 3: the declared tier, else 1 for kit and docs, else 2 (the planner's default, §4.4.2). `survival: true` appears only on a model of `profile.survival.models`.
+- `bytes` is the size of the copy on the root; an item that is wanted and has no copy (`missing`, `failed`, `quarantined`) shows the size it should have when the plan knows it. `version` is the version that is present.
+- `reason` is one of a short English vocabulary (`budget`, `disk`, `read_only`, `update failed`, `update pending`, `download failed`, `checksum mismatch`, `not downloaded yet`), never a path, a URL or an error text, because the file goes to the cloud. `code` is the doctor code that explains the status or a yellow or red verdict of the item.
+- `problems[]` holds, worst first and in discovery order inside a colour, one entry per item whose colour is yellow or red and that has a code, then the root rules that fired. `severity` is the code's own, except `LAI-ARK-008` after 90 days, which is `error`. `title` is the English title of the code; the fix is in the code table in both languages and UIs look it up by code. At most 100 entries.
+- `root.used_bytes` is the size of the verified copies on the root (orphans included); `root.trash_bytes` is everything in `.trash/`; `root.budget_bytes` is the planner's budget (§4.4.3); `last_full_reverify_at` is the oldest `last_reverified_at` of any copy on the root, `null` for an empty root.
 
 #### 4.12.2 Colour rules
 
@@ -982,6 +991,31 @@ Root-level rules (in addition):
 `overall` = red if any item or root rule is red, else yellow if any is yellow, else green.
 
 `survival_capable` = true iff, on this root **or across all mounted roots for the node-level view**, every model in `profile.survival.models` that is loadable on this node has a verified copy, at least one whisper model and one piper voice per Portal UI language (`en` and `es`, the languages of [survival-portal.md](survival-portal.md) §4.9) are verified, at least one tier-1 kiwix item is verified, and the tier-1 map plus `map-assets` are verified. The node-level value is reported by `GET /api/v1/status` and `/portal/status`.
+
+#### 4.12.3 How the report is computed, stored and served
+
+`agent/internal/ark/ready` splits the work. `Build(Input) Report` is a pure function (no clock, filesystem, network or catalog lookup that is not in the value), so every colour row is a table test and the JSON is a golden test (`testdata/golden/*.json`, English and Spanish). The `Service` around it gathers the input, writes the file and serves it.
+
+**Input.** The planner's input for the root (`plan.Gatherer.Gather`, made without resolvers) run through `plan.Plan` supplies the desired set, what the planner would do with each item, the budget and `min_free_bytes`; the best-copy index supplies the verified copies and their manifests (trust, `verified_at`, `last_reverified_at`, the catalog version they were made with); the journal supplies failures and `checked_current_at`; statfs supplies the free space. The report is judged **as if online** and from what the catalog pins: whether a pinned newer version is installed does not depend on the cable, so the same disks always give the same report. An item that follows "latest" with no resolver answer is judged by its present copy.
+
+**Item status.** A copy is present and is the one wanted (the planner keeps it: same version, nothing newer known, or `refresh_days` not due) is `verified`. A copy is present and a newer one is planned but not installed (pending, left out for budget or disk, a read-only root, or a failure of the newer version in the journal) is `stale`, with its reason and code (`LAI-SYN-041`, or `LAI-SYN-042` for kit and docs, for budget; `LAI-SYN-040`, or `LAI-SYN-042` for kit and docs, for disk; the journal's code for a failure). No copy: `quarantined` or `failed` when the journal says so; `skipped` when the planner left it out for budget or disk; otherwise `missing` (a read-only root with no copy is `missing`, reason `read_only`). A copy of an id the profile does not list is an `orphan`.
+
+**Judgement calls.**
+- A `stale` copy does not count for `survival_capable`, and neither does anything but status `verified`.
+- The root's age rules (`LAI-ARK-008`, `LAI-SYN-004`) count from the last run that ended `done` (`last_sync` itself shows the last run of any state): a run skipped for lack of internet did not bring the root up to date. With no run record, the newest `verified_at` or `checked_current_at` on the root stands in; an empty root has no age and only the status rules speak.
+- "Mostly online" for `LAI-SYN-004` is online mode for more than half of the time since that run, from the mode history; with no history the node counts as online.
+- `LAI-SYN-025` is one problem naming the most overdue copy (ties by id), judged on every copy on the root.
+- "The tier-1 map" is a tier-1 `maps` item whose source is `pmtiles_extract`; the fixed id `map-assets` is the map styles. A piper voice matches a Portal language by its `languages` entry, ignoring case and a region suffix (`es_MX` is `es`); `multi` names no voice. Whisper is any `engine: whisper` model. A survival model that is not loadable on this node is left out of the requirement only when the caller says so (the router's static fit); with no answer every survival model is required.
+- The docs row (§4.12.2): "older catalog" compares the catalog version of the docs manifest with the catalog in use; the presence of the pages and the card's PDF are read from the docs index (`docs/index.json`); whether the manuals were rendered with the real lab values is known only to the render (SYNC-11 supplies it through the `DocsProbe`), so until then placeholders raise nothing.
+- The kit rows use the kit verify report through the `KitSource` interface (KIT-03). `LAI-KIT-040` and `LAI-KIT-042` are red on the internal root and yellow on a drive; `LAI-KIT-041` and `043` are yellow. Without a source the kit rows use age alone.
+- A root whose profile is not in the catalog is red with `LAI-CAT-003` and lists no item; a mounted root that cannot be assessed at all keeps its previous report, or gets a red one with `LAI-ARK-014` (drive) or `LAI-AGT-099` (internal root).
+- Free space is not an age rule and applies even when the clock is wrong, like `LAI-ARK-004`.
+
+**Storage and serving.** The report is encoded once (two-space indent, trailing newline) and written with `config.WriteFileAtomicFS` to `<root>/READY.json`; those exact bytes are what the cloud link sends (after it strips `root.path` and `generated_by.node_id`). A read-only root (a read-only mount, an unclean drive, a network filesystem) is never written: its report is computed and kept in memory, and `GET /ark` and the cloud snapshot serve it from there. A root that is not mounted (pulled, ejecting, not mounted, unusable, not set up) has no report. A damaged `READY.json` is never an input; the next regeneration replaces it.
+
+**Triggers.** `Service.Mounted(root)` at `drive.mounted`, `Service.RunFinished(roots...)` at the end of every sync, verify and import run, `Service.Unmounted(root)` at `drive.unmounted`, and `Service.Start` for a first report at startup and then one every 6 h. The wiring (AGENT-20) calls them; the `Regenerated` hook tells it when a snapshot should be pushed.
+
+**Node level.** `ready.NodeSurvivalCapable(needs, reports)` is the survival check over the union of the verified items of every mounted root, and `Service.NodeSurvivalCapable()` is what `/status` and `/portal/status` show.
 
 ### 4.13 Re-verification (bit rot)
 
@@ -1173,6 +1207,8 @@ Hashes are logged as `first4…last2`. URLs are logged without query strings.
 | `localai_ark_root_free_bytes` | gauge | `root` |
 | `localai_ark_reverify_age_days_max` | gauge | `root` |
 
+The three `localai_ark_*` gauges are computed from the reports (`ready.MetricsOf`) and appear in `GET /api/v1/status` as `ark.metrics`, a list of `{"name", "labels": {"root": "<id>"}, "value"}`, one of each per mounted root; the key is absent while nothing supplies them. The age is whole days since the oldest `last_reverified_at` of any item of the root, 0 for an empty root.
+
 ## 8. Doctor codes
 
 User-visible fixes are shown in the desktop and, for `LAI-ARK` codes, in the Portal status strip, so both languages are given.
@@ -1246,7 +1282,7 @@ User-visible fixes are shown in the desktop and, for `LAI-ARK` codes, in the Por
 | swap | per-file renames; directory RENAME_EXCHANGE; crash between each rename → replay; MANIFEST is the last write |
 | manifest and journal | round trip with unknown keys; history cap; every invalid manifest (§4.11); a fault at each step of the atomic writes (open, write, chmod, fsync, close, rename, directory sync, killed process, disk full, read-only); damaged, missing and foreign-schema `items.json`; restore from `.bak`; rebuild from manifests; reconcile; crash between journal append and side effect; torn run-log line; BestCopy preference matrix and unclean gating; concurrent rebuild under `-race` |
 | retention | `CanDelete` matrix: last copy, copy on unmounted drive, copy not re-verified in 24 h, trash with unverified replacement, orphan only copy, quarantine |
-| READY colours | every row of §4.12.2; clock-wrong suppression; survival_capable |
+| READY colours | every row of §4.12.2 in every column; both sides of every freshness boundary; drive age 30/31/90/91 d; internal 14/15 d online and mostly offline; a skipped run does not reset the age; re-verify overdue at 60/61 d; free space below, at and above the minimum; unclean; every kit finding on both root kinds; every docs row; `overall` aggregation and problem order; clock-wrong suppression (every freshness omitted, no age rule, status-only overall, negative age clamps to 0); `survival_capable` for each requirement, stale and failed copies, loadable and not, languages, root and node level across two roots; unknown profile; golden READY.json (fresh internal root, stale drive, unclean drive) in en and es, checked against the OpenAPI `ReadyReport` and the cloud `ReadyReportV1`; atomic write with a fault at every step; read-only roots never written; a damaged file replaced; regeneration at mount, after a run and every 6 h on a manual clock |
 | inventory copy | equal; drive missing; one side changed; both changed → conflict |
 | START-HERE | template renders with no `http` URLs except `127.0.0.1` text; relative links |
 

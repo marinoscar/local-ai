@@ -156,6 +156,15 @@ type ArkBlock struct {
 	Roots []ArkRootRow `json:"roots"`
 	Drive ArkDriveRow  `json:"drive"`
 	Sync  ArkSyncRow   `json:"sync"`
+	// Metrics are the readiness gauges of ark-sync.md section 7; absent while no view supplies them.
+	Metrics []ArkMetricRow `json:"metrics,omitempty"`
+}
+
+// ArkMetricRow is one entry of status.ark.metrics.
+type ArkMetricRow struct {
+	Name   string            `json:"name"`
+	Labels map[string]string `json:"labels,omitempty"`
+	Value  float64           `json:"value"`
 }
 
 // ArkRootRow is one content root of status.ark.
