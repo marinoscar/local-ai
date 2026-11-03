@@ -1,0 +1,264 @@
+{
+  "$comment": "LocalaiStateSnapshotV1 as JSON Schema, written out from the Zod schema of cloud-app.md section 3.6 (apps/cloud/apps/api/src/localai/contracts/state.schema.ts). Every object is strict (additionalProperties false). The Go mirror is internal/cloud/snapshot_types.go; TestSnapshotMatchesSchema validates a full snapshot against this file with the schema validator of internal/api/schema. Change it only together with the cloud's Zod schema.",
+  "$defs": {
+    "Iso": {"type": "string", "format": "date-time"},
+    "IsoN": {"type": ["string", "null"], "format": "date-time"},
+    "Code": {"type": "string", "pattern": "^LAI-[A-Z]{2,3}-[0-9]{3}$"},
+    "CodeN": {"type": ["string", "null"], "pattern": "^LAI-[A-Z]{2,3}-[0-9]{3}$"},
+    "Mib": {"type": "integer", "minimum": 0, "maximum": 16777216},
+    "Bytes": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+    "ModelId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,63}$"},
+    "ContentId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,63}$"},
+    "NodeId": {"type": "string", "pattern": "^ai-n[1-9][0-9]{0,3}$"},
+    "RootId": {"type": "string", "pattern": "^(internal|ark-[0-9a-f]{8})$"},
+    "Mode": {"type": "string", "enum": ["online", "offline", "survival"]},
+    "Traffic": {"type": "string", "enum": ["green", "yellow", "red"]},
+    "ItemStatus": {"type": "string", "enum": ["verified", "stale", "missing", "skipped", "failed", "quarantined", "orphan"]},
+    "Tier": {"type": "string", "enum": ["ok", "partial", "missing"]},
+    "Tier3": {"type": "string", "enum": ["ok", "partial", "missing", "not_planned"]},
+    "Severity": {"type": "string", "enum": ["info", "warning", "critical"]},
+    "TempN": {"type": ["number", "null"], "minimum": -50, "maximum": 150},
+    "Transition": {
+      "type": "object", "additionalProperties": false, "required": ["target", "step", "started_at"],
+      "properties": {"target": {"$ref": "#/$defs/Mode"}, "step": {"type": "string", "maxLength": 64}, "started_at": {"$ref": "#/$defs/Iso"}}
+    },
+    "Llama": {
+      "type": "object", "additionalProperties": false, "required": ["build", "backend", "router", "models_max"],
+      "properties": {
+        "build": {"type": "string", "maxLength": 80},
+        "backend": {"type": "string", "enum": ["cuda", "vulkan", "cpu"]},
+        "router": {"type": "string", "enum": ["up", "down", "starting", "single_mode"]},
+        "models_max": {"type": "integer", "minimum": 1, "maximum": 16}
+      }
+    },
+    "Gpu": {
+      "type": "object", "additionalProperties": false, "required": ["name", "vram_total_mib", "vram_used_mib", "temp_c"],
+      "properties": {"name": {"type": "string", "maxLength": 128}, "vram_total_mib": {"$ref": "#/$defs/Mib"}, "vram_used_mib": {"$ref": "#/$defs/Mib"}, "temp_c": {"$ref": "#/$defs/TempN"}}
+    },
+    "Hardware": {
+      "type": "object", "additionalProperties": false, "required": ["gpus", "ram_total_mib", "ram_used_mib", "cpu_temp_c", "power"],
+      "properties": {
+        "gpus": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/Gpu"}},
+        "ram_total_mib": {"$ref": "#/$defs/Mib"},
+        "ram_used_mib": {"$ref": "#/$defs/Mib"},
+        "cpu_temp_c": {"$ref": "#/$defs/TempN"},
+        "power": {
+          "type": "object", "additionalProperties": false, "required": ["source", "battery_percent"],
+          "properties": {"source": {"type": "string", "enum": ["ac", "battery", "unknown"]}, "battery_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}}
+        }
+      }
+    },
+    "Model": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "present", "verified", "loadable", "loadable_reason", "status", "default", "slots", "ctx", "roles", "input_modalities", "roots"],
+      "properties": {
+        "id": {"$ref": "#/$defs/ModelId"},
+        "present": {"type": "boolean"}, "verified": {"type": "boolean"}, "loadable": {"type": "boolean"},
+        "loadable_reason": {"type": ["string", "null"], "maxLength": 200},
+        "status": {"type": "string", "enum": ["loaded", "loading", "unloaded", "failed"]},
+        "default": {"type": "boolean"},
+        "slots": {"type": "integer", "minimum": 1, "maximum": 64},
+        "ctx": {"type": ["integer", "null"], "minimum": 0, "maximum": 4194304},
+        "roles": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 32}},
+        "input_modalities": {"type": "array", "maxItems": 4, "items": {"type": "string", "enum": ["text", "image", "audio", "video"]}},
+        "roots": {"type": "array", "maxItems": 9, "items": {"$ref": "#/$defs/RootId"}}
+      }
+    },
+    "Service": {
+      "type": "object", "additionalProperties": false, "required": ["name", "active_state", "since"],
+      "properties": {
+        "name": {"type": "string", "enum": ["llama", "kiwix", "whisper", "sync", "drill"]},
+        "active_state": {"type": "string", "enum": ["active", "inactive", "failed", "activating", "deactivating", "not_installed"]},
+        "since": {"$ref": "#/$defs/IsoN"}
+      }
+    },
+    "ReadyItem": {
+      "type": "object", "additionalProperties": false, "required": ["id", "kind", "tier", "status"],
+      "properties": {
+        "id": {"$ref": "#/$defs/ContentId"}, "kind": {"type": "string", "maxLength": 32},
+        "tier": {"type": "integer", "minimum": 1, "maximum": 3}, "survival": {"type": "boolean"},
+        "status": {"$ref": "#/$defs/ItemStatus"},
+        "version": {"type": "string", "maxLength": 80},
+        "verified_at": {"$ref": "#/$defs/Iso"}, "last_reverified_at": {"$ref": "#/$defs/Iso"}, "checked_current_at": {"$ref": "#/$defs/Iso"},
+        "age_days": {"type": "integer", "minimum": 0},
+        "freshness": {"$ref": "#/$defs/Traffic"},
+        "bytes": {"$ref": "#/$defs/Bytes"},
+        "trust": {"type": "string", "enum": ["pinned", "sidecar", "signed_index", "computed", "tofu"]},
+        "reason": {"type": "string", "maxLength": 200},
+        "code": {"$ref": "#/$defs/Code"}
+      }
+    },
+    "ReadyReport": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "generated_at", "generated_by", "root", "overall", "survival_capable", "last_sync", "last_full_reverify_at", "counts", "items", "problems"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "generated_at": {"$ref": "#/$defs/Iso"},
+        "generated_by": {"type": "object", "additionalProperties": false, "required": ["agent_version"], "properties": {"agent_version": {"type": "string", "maxLength": 64}}},
+        "root": {
+          "type": "object", "additionalProperties": false,
+          "required": ["id", "kind", "profile", "catalog_version", "fs_total_bytes", "fs_free_bytes", "budget_bytes", "used_bytes", "trash_bytes", "read_only"],
+          "properties": {
+            "id": {"$ref": "#/$defs/RootId"}, "kind": {"type": "string", "enum": ["internal", "ark_drive"]},
+            "profile": {"type": "string", "maxLength": 64}, "catalog_version": {"type": ["string", "null"], "maxLength": 32},
+            "fs_total_bytes": {"$ref": "#/$defs/Bytes"}, "fs_free_bytes": {"$ref": "#/$defs/Bytes"}, "budget_bytes": {"$ref": "#/$defs/Bytes"},
+            "used_bytes": {"$ref": "#/$defs/Bytes"}, "trash_bytes": {"$ref": "#/$defs/Bytes"}, "read_only": {"type": "boolean"}
+          }
+        },
+        "overall": {"$ref": "#/$defs/Traffic"},
+        "survival_capable": {"type": "boolean"},
+        "last_sync": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object", "additionalProperties": false, "required": ["run_id", "trigger", "finished_at", "state", "age_days"],
+              "properties": {
+                "run_id": {"type": "string", "maxLength": 64}, "trigger": {"type": "string", "maxLength": 32}, "finished_at": {"$ref": "#/$defs/Iso"},
+                "state": {"type": "string", "maxLength": 32}, "age_days": {"type": "integer", "minimum": 0}
+              }
+            }
+          ]
+        },
+        "last_full_reverify_at": {"$ref": "#/$defs/IsoN"},
+        "counts": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "verified": {"type": "integer", "minimum": 0}, "stale": {"type": "integer", "minimum": 0}, "missing": {"type": "integer", "minimum": 0},
+            "skipped": {"type": "integer", "minimum": 0}, "failed": {"type": "integer", "minimum": 0}, "quarantined": {"type": "integer", "minimum": 0},
+            "orphan": {"type": "integer", "minimum": 0}
+          }
+        },
+        "items": {"type": "array", "maxItems": 600, "items": {"$ref": "#/$defs/ReadyItem"}},
+        "problems": {
+          "type": "array", "maxItems": 100,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["code", "severity", "title"],
+            "properties": {"code": {"$ref": "#/$defs/Code"}, "severity": {"$ref": "#/$defs/Severity"}, "item": {"$ref": "#/$defs/ContentId"}, "title": {"type": "string", "maxLength": 200}}
+          }
+        },
+        "clock_wrong": {"type": "boolean"}
+      }
+    },
+    "ArkRoot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "present", "ready_generated_at", "tiers", "items_missing", "items_failed", "items_skipped_budget", "bytes_used", "bytes_free", "last_sync_at", "last_verify_at", "overall", "survival_capable", "ready"],
+      "properties": {
+        "id": {"$ref": "#/$defs/RootId"}, "present": {"type": "boolean"},
+        "ready_generated_at": {"$ref": "#/$defs/IsoN"},
+        "tiers": {"type": "object", "additionalProperties": false, "required": ["t1", "t2", "t3"], "properties": {"t1": {"$ref": "#/$defs/Tier"}, "t2": {"$ref": "#/$defs/Tier"}, "t3": {"$ref": "#/$defs/Tier3"}}},
+        "items_missing": {"type": "integer", "minimum": 0}, "items_failed": {"type": "integer", "minimum": 0}, "items_skipped_budget": {"type": "integer", "minimum": 0},
+        "bytes_used": {"$ref": "#/$defs/Bytes"}, "bytes_free": {"$ref": "#/$defs/Bytes"},
+        "last_sync_at": {"$ref": "#/$defs/IsoN"}, "last_verify_at": {"$ref": "#/$defs/IsoN"},
+        "overall": {"$ref": "#/$defs/Traffic"}, "survival_capable": {"type": "boolean"},
+        "ready": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/ReadyReport"}]}
+      }
+    },
+    "Sync": {
+      "type": "object", "additionalProperties": false, "required": ["running", "run_id", "progress_pct", "last_run"],
+      "properties": {
+        "running": {"type": "boolean"}, "run_id": {"type": ["string", "null"], "maxLength": 64},
+        "progress_pct": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "last_run": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object", "additionalProperties": false, "required": ["id", "finished_at", "result", "skip_reason", "error_code"],
+              "properties": {
+                "id": {"type": "string", "maxLength": 64}, "finished_at": {"$ref": "#/$defs/Iso"},
+                "result": {"type": "string", "enum": ["ok", "partial", "failed", "skipped"]},
+                "skip_reason": {"type": ["string", "null"], "maxLength": 64}, "error_code": {"$ref": "#/$defs/CodeN"}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "DrillResults": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "run_id", "trigger", "agent_version", "catalog_version", "mode", "quick", "started_at", "finished_at", "overall", "survival_ready", "counts", "checks", "restored", "network_fence"],
+      "properties": {
+        "schema_version": {"const": 1}, "run_id": {"type": "string", "maxLength": 64}, "trigger": {"type": "string", "maxLength": 32},
+        "agent_version": {"type": "string", "maxLength": 64}, "catalog_version": {"type": ["string", "null"], "maxLength": 32},
+        "mode": {"$ref": "#/$defs/Mode"}, "quick": {"type": "boolean"},
+        "started_at": {"$ref": "#/$defs/Iso"}, "finished_at": {"$ref": "#/$defs/Iso"},
+        "overall": {"type": "string", "enum": ["pass", "warn", "fail"]}, "survival_ready": {"type": "boolean"},
+        "counts": {
+          "type": "object", "additionalProperties": false, "required": ["pass", "warn", "fail", "skip"],
+          "properties": {"pass": {"type": "integer", "minimum": 0}, "warn": {"type": "integer", "minimum": 0}, "fail": {"type": "integer", "minimum": 0}, "skip": {"type": "integer", "minimum": 0}}
+        },
+        "checks": {
+          "type": "array", "maxItems": 100,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["id", "area", "result", "ms"],
+            "properties": {
+              "id": {"type": "string", "maxLength": 96}, "area": {"type": "string", "maxLength": 32},
+              "result": {"type": "string", "enum": ["pass", "warn", "fail", "skip"]}, "code": {"$ref": "#/$defs/Code"},
+              "ms": {"type": "integer", "minimum": 0},
+              "details": {"type": "object", "additionalProperties": {"oneOf": [{"type": "string", "maxLength": 500}, {"type": "number"}, {"type": "boolean"}, {"type": "null"}]}}
+            }
+          }
+        },
+        "restored": {
+          "type": "object", "additionalProperties": false, "required": ["loaded_models", "default_model", "ok"],
+          "properties": {"loaded_models": {"type": "array", "maxItems": 16, "items": {"$ref": "#/$defs/ModelId"}}, "default_model": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/ModelId"}]}, "ok": {"type": "boolean"}}
+        },
+        "network_fence": {
+          "type": "object", "additionalProperties": false, "required": ["enabled", "blocked_dials"],
+          "properties": {"enabled": {"type": "boolean"}, "blocked_dials": {"type": "integer", "minimum": 0}}
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "node_id", "boot_id", "seq", "reported_at", "agent_version", "mode", "mode_transition", "connectivity", "profile", "catalog_version", "llama", "hardware", "models", "services", "ark", "sync", "drill", "tailscale", "alerts"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "node_id": {"$ref": "#/$defs/NodeId"},
+    "boot_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "seq": {"type": "integer", "minimum": 0},
+    "reported_at": {"$ref": "#/$defs/Iso"},
+    "agent_version": {"type": "string", "maxLength": 64},
+    "mode": {"$ref": "#/$defs/Mode"},
+    "mode_transition": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/Transition"}]},
+    "connectivity": {"type": "string", "enum": ["full", "internet", "tailnet", "none", "not_checked"]},
+    "profile": {"type": "string", "maxLength": 64},
+    "catalog_version": {"type": ["string", "null"], "pattern": "^[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}-[0-9]+$"},
+    "llama": {"$ref": "#/$defs/Llama"},
+    "hardware": {"$ref": "#/$defs/Hardware"},
+    "models": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/Model"}},
+    "services": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/Service"}},
+    "ark": {
+      "type": "object", "additionalProperties": false, "required": ["roots", "drive_last_synced_at"],
+      "properties": {"roots": {"type": "array", "maxItems": 9, "items": {"$ref": "#/$defs/ArkRoot"}}, "drive_last_synced_at": {"$ref": "#/$defs/IsoN"}}
+    },
+    "sync": {"$ref": "#/$defs/Sync"},
+    "drill": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["run_id", "last_run_at", "result", "survival_ready", "failed_checks", "failed_check_ids", "results"],
+          "properties": {
+            "run_id": {"type": "string", "maxLength": 64}, "last_run_at": {"$ref": "#/$defs/Iso"},
+            "result": {"type": "string", "enum": ["pass", "warn", "fail"]}, "survival_ready": {"type": "boolean"},
+            "failed_checks": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/Code"}},
+            "failed_check_ids": {"type": "array", "maxItems": 50, "items": {"type": "string", "maxLength": 96}},
+            "results": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/DrillResults"}]}
+          }
+        }
+      ]
+    },
+    "tailscale": {
+      "type": "object", "additionalProperties": false, "required": ["serve_pattern", "serve_active", "backend_state"],
+      "properties": {"serve_pattern": {"type": "string", "enum": ["A", "B", "none"]}, "serve_active": {"type": "boolean"}, "backend_state": {"type": ["string", "null"], "maxLength": 32}}
+    },
+    "alerts": {
+      "type": "array", "maxItems": 50,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["code", "severity", "title"],
+        "properties": {"code": {"$ref": "#/$defs/Code"}, "severity": {"$ref": "#/$defs/Severity"}, "title": {"type": "string", "maxLength": 200}}
+      }
+    }
+  }
+}
