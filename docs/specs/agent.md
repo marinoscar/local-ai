@@ -813,7 +813,7 @@ SSE, §3.10.
 #### 3.8.25 Speech
 Owned by [companion-services.md](companion-services.md) §3.4 (request/response schemas, limits, errors); the agent only routes them.
 - `POST /speech/stt`: multipart audio (field and format rules in companion-services.md), proxied to whisper-server on `127.0.0.1:<ports.whisper>` (`POST /inference`). → `200 {"text": "¿Cómo purifico agua?", "language": "es", …}`.
-- `POST /speech/tts`: `{"text", "voice"?, "language"?, "speed"?}` → `200 audio/wav` produced by exec'ing piper (fixed argv). Concurrency and queue limits → `429 LAI-SVC-015`.
+- `POST /speech/tts`: `{"text", "voice"?, "language"?, "speed"?}` → `200 audio/wav` produced by exec'ing piper (fixed argv). Concurrency and queue limits → `429 LAI-SVC-015` with `Retry-After`; an unknown voice or language, or an empty text → `400 LAI-AGT-020`. Served by `piper.Register` (`internal/svc/piper`).
 - `GET /speech/voices` (an expansion of the brief's table, requested by companion-services.md §11) → `{"voices": [{"id", "language", "display_name", "default"}]}`.
 Auth: `op` or `portal`.
 
