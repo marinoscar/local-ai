@@ -2287,7 +2287,10 @@ components:
         One companion service. `name` and `unit` are always present (`unit` is null for piper and maps). The agent
         fields (`active`, `sub`, `since`, `restarts`, `healthy`, `enabled`, `last_exit`) are in agent.md section 3.8.4
         and 3.8.22; the supervisor fields (`state`, `last_check`, `detail`, `books`, `model`, `device`, `voices`,
-        `maps`, `problems`) are owned by companion-services.md section 4.6, hence the open object.
+        `maps`, `problems`) are owned by companion-services.md section 4.6, hence the open object. A service
+        without a unit (piper, maps) has no `active`, `sub`, `restarts` or `enabled`. `state` is the health state
+        of companion-services.md section 4.6; `problems` is worst first, with LAI-SVC-051 first when the restart
+        budget is spent.
       type: object
       required: [name, unit]
       additionalProperties: true
@@ -2309,12 +2312,29 @@ components:
         state: {type: string, enum: [ok, degraded, down, missing_content, disabled, starting]}
         last_check: {type: string, format: date-time}
         detail: {type: string}
-        books: {type: array, items: {type: object, additionalProperties: true}}
+        books:
+          type: array
+          items:
+            type: object
+            required: [content_id, name, root]
+            additionalProperties: true
+            properties:
+              content_id: {type: string}
+              name: {type: string}
+              root: {type: string}
         model: {type: string}
         device: {type: string}
         voices: {type: array, items: {type: string}}
         maps: {type: array, items: {type: string}}
-        problems: {type: array, items: {type: object, additionalProperties: true}}
+        problems:
+          type: array
+          items:
+            type: object
+            required: [code, severity]
+            additionalProperties: true
+            properties:
+              code: {type: string, pattern: "^LAI-[A-Z]+-[0-9]{3}$"}
+              severity: {$ref: "#/components/schemas/Severity"}
 
     ServiceList:
       type: object

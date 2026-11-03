@@ -91,6 +91,10 @@ type WatcherOptions struct {
 	// Clock defaults to the wall clock.
 	Clock  config.Clock
 	Logger *slog.Logger
+	// Only limits the watcher to the services with these short names (llama, kiwix, whisper); empty
+	// means all three. The daemon wiring sets it to ["llama"] when svc/health.Supervisor owns kiwix
+	// and whisper, so that exactly one component publishes service.state for a service.
+	Only []string
 	// UnhealthyAfter, StartingGrace and Tick override the defaults (tests).
 	UnhealthyAfter time.Duration
 	StartingGrace  time.Duration
@@ -135,7 +139,8 @@ type Watcher struct {
 	wg     sync.WaitGroup
 }
 
-// NewWatcher returns a Watcher for the controlled services (llama, kiwix, whisper).
+// NewWatcher returns a Watcher for the controlled services (llama, kiwix, whisper), or for the ones
+// WatcherOptions.Only names.
 func NewWatcher(opt WatcherOptions) *Watcher {
 	if opt.UnhealthyAfter <= 0 {
 		opt.UnhealthyAfter = DefaultUnhealthyAfter
@@ -160,6 +165,9 @@ func NewWatcher(opt WatcherOptions) *Watcher {
 		probes[p.Service] = p
 	}
 	for _, s := range Controlled {
+		if len(opt.Only) > 0 && !contains(opt.Only, s.Name) {
+			continue
+		}
 		e := &entry{svc: s, probe: probes[s.Name]}
 		w.byUnit[s.Unit] = e
 		w.ordered = append(w.ordered, e)
