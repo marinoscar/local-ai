@@ -541,6 +541,18 @@ func (d *Daemon) buildServer() error {
 			}
 			return api.RegisterArkPrune(reg, api.ArkPruneDeps{Pruner: adapt.Pruner{Engine: d.ark.engine, Retention: d.ark.ret}, Audit: d.audit, Logger: d.log})
 		}},
+		{"ark verify", func() error {
+			if d.ark == nil { // the stack did not come up: the route answers 503
+				return api.RegisterArkVerify(reg, api.ArkVerifyDeps{Starter: arkUnavailable{}})
+			}
+			return api.RegisterArkVerify(reg, api.ArkVerifyDeps{Starter: adapt.VerifyStarter{Engine: d.ark.engine}})
+		}},
+		{"ark import", func() error {
+			if d.ark == nil {
+				return api.RegisterArkImport(reg, api.ArkImportDeps{Importer: arkUnavailable{}, Audit: d.audit, Logger: d.log})
+			}
+			return api.RegisterArkImport(reg, api.ArkImportDeps{Importer: adapt.Importer{Engine: d.ark.engine, Planner: d.ark.importer}, Audit: d.audit, Logger: d.log})
+		}},
 		{"speech", func() error { return reg.Add(d.piper.Routes()...) }},
 	}
 	for _, r := range regs {
@@ -589,7 +601,7 @@ func (d *Daemon) buildClaimPlane(sdeps statusapi.Deps) error {
 		State: c.State, Hardware: c.Hardware, Clock: d.env.CloudClock, AgentUpdate: d.updater,
 	}
 	if d.ark != nil {
-		jd.Ark = arkJobs{adapt.Jobs{Engine: d.ark.engine}}
+		jd.Ark = d.ark.jobsArk()
 	}
 	var recoverFn func(context.Context, cloud.InflightEntry) bool
 	if d.updater != nil {

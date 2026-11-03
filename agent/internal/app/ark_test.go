@@ -208,6 +208,11 @@ func (r *recReady) Unmounted(id string) { r.unmounted = append(r.unmounted, id) 
 
 type recIndex struct{ calls [][]string }
 
+// recServe is the serve-time verifier of the drive events: it is told which roots left.
+type recServe struct{ unmounted []string }
+
+func (r *recServe) Unmounted(id string) { r.unmounted = append(r.unmounted, id) }
+
 func (x *recIndex) Rebuild(_ context.Context, roots []ark.Root) ([]ark.Problem, error) {
 	var ids []string
 	for _, r := range roots {
@@ -221,11 +226,12 @@ func (x *recIndex) Rebuild(_ context.Context, roots []ark.Root) ([]ark.Problem, 
 // without it, and the readiness service forgets the report; a mount rebuilds the index first and then
 // asks for the report; an event of another type does nothing.
 func TestDriveEventsHandler(t *testing.T) {
-	gone, rdy, idx := &recGoner{ret: true}, &recReady{}, &recIndex{}
+	gone, rdy, idx, serve := &recGoner{ret: true}, &recReady{}, &recIndex{}, &recServe{}
 	var seen []string
 	h := driveEvents{
 		engine: gone, ready: rdy, index: idx, roots: func() []ark.Root { return []ark.Root{{ID: ark.InternalID}} },
 		log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		serve:   serve,
 		observe: func(typ, id string) { seen = append(seen, typ+" "+id) },
 	}
 	h.handle(context.Background(), events.TypeDriveUnmounted, "ark-aaaa0001")
@@ -239,6 +245,9 @@ func TestDriveEventsHandler(t *testing.T) {
 	}
 	if len(idx.calls) != 2 {
 		t.Errorf("the index was rebuilt %d times, want once per drive event", len(idx.calls))
+	}
+	if len(serve.unmounted) != 1 || serve.unmounted[0] != "ark-aaaa0001" {
+		t.Errorf("the serve-time verifier was told %v, want the root that left", serve.unmounted)
 	}
 	if len(seen) != 2 {
 		t.Errorf("observed %v, want the two drive events only", seen)

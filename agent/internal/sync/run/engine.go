@@ -59,6 +59,14 @@ type Deps struct {
 	Ready     ReadyRefresher
 	Hooks     Hooks
 	RootFault RootFaultFunc
+	// ImportMachine is the item machine of import runs (trigger import). The wiring builds it over a
+	// downloader whose HTTP client refuses every dial (importer.RefuseDial), so an import cannot use the
+	// network whatever a bug does; nil means Machine.
+	ImportMachine ItemMachine
+	// SourceFault is told when an import found the copy on its source drive damaged (the drive copy no
+	// longer matches its own MANIFEST, LAI-SYN-070): the wiring excludes that copy from the best-copy
+	// index in memory (ark-sync.md section 4.14).
+	SourceFault func(rootID, itemID, version string)
 
 	// Lock is the cross-process run slot; nil means the in-memory guard only.
 	Lock Locker
@@ -191,6 +199,9 @@ type runState struct {
 	settings  Settings
 	opID      string
 	items     map[string]bool
+	// full and imp are the verify run's full flag and the import run's spec.
+	full bool
+	imp  *ImportSpec
 
 	ctx    context.Context
 	cancel context.CancelCauseFunc
@@ -316,6 +327,9 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (Started, error) {
 	if !validTrigger(req.Trigger) {
 		return Started{}, fmt.Errorf("run: %q is not a trigger", req.Trigger)
 	}
+	if req.Trigger == TriggerImport && req.Import == nil {
+		return Started{}, errors.New("run: an import needs its source drive")
+	}
 	if err := ctx.Err(); err != nil {
 		return Started{}, err
 	}
@@ -368,6 +382,12 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (Started, error) {
 	}
 	for _, id := range req.Items {
 		rs.items[id] = true
+	}
+	rs.full = req.Full
+	if req.Trigger == TriggerImport {
+		spec := *req.Import
+		spec.Items = append([]string(nil), req.Items...)
+		rs.imp = &spec
 	}
 	e.active = rs
 	go e.execute(rs, v.Offline)
@@ -649,6 +669,10 @@ func (e *Engine) execute(rs *runState, offline bool) {
 	}()
 	ctx := rs.ctx
 
+	if rs.trigger == TriggerVerify {
+		e.executeVerify(rs)
+		return
+	}
 	if !offline && e.d.Catalog != nil && usesNetwork(rs.trigger) {
 		if err := e.d.Catalog.Refresh(ctx); err != nil && ctx.Err() == nil {
 			// Not fatal: the run goes on with the catalog it has (ark-sync.md section 4.3).
@@ -662,7 +686,14 @@ func (e *Engine) execute(rs *runState, offline bool) {
 		return
 	}
 
-	plans, err := e.d.Planner.Plan(ctx, PlanRequest{RootIDs: rs.roots, Offline: offline})
+	plans, err := e.d.Planner.Plan(ctx, PlanRequest{RootIDs: rs.roots, Offline: offline, Import: rs.imp})
+	if err == nil && len(plans.Warnings) > 0 {
+		rs.mu.Lock()
+		for _, w := range plans.Warnings {
+			rs.warnOnce(w)
+		}
+		rs.mu.Unlock()
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return
@@ -693,6 +724,9 @@ func (e *Engine) tasks(rs *runState, plans Plans) []*task {
 	var perRoot [][]*task
 	current := map[string][]string{}
 	defer func() {
+		if rs.trigger == TriggerImport {
+			return // an import compared nothing with the network, so it confirms nothing is current
+		}
 		now := e.d.Clock.Now()
 		for rootID, ids := range current {
 			e.markCurrent(rootID, ids, now)
@@ -976,7 +1010,7 @@ func (e *Engine) runTask(rs *runState, t *task, g *gate) item.Result {
 	job := item.Job{
 		Root: t.root, Ref: t.ref, RelDir: t.rel, CatalogVersion: t.catalogVersion, MinFree: t.minFree, Gate: g,
 		Progress: func(p item.Progress) { rs.progress(t, p) },
-		Resolve:  func(ctx context.Context) (item.Resolution, error) { return e.resolve(ctx, t) },
+		Resolve:  func(ctx context.Context) (item.Resolution, error) { return e.resolveTask(rs, ctx, t) },
 	}
 	if cur, ok := e.d.Journal.Items.Get(t.root.ID, t.row.ID); ok && cur.State == journal.StateSwapping {
 		job.Swap = e.swapPlanOf(t.root.ID, t.row.ID, cur.Version)
@@ -984,7 +1018,11 @@ func (e *Engine) runTask(rs *runState, t *task, g *gate) item.Result {
 	rs.mu.Lock()
 	ctx := rs.rootCtx[t.root.ID]
 	rs.mu.Unlock()
-	return e.d.Machine.Run(ctx, rs.run, job)
+	machine := e.d.Machine
+	if rs.trigger == TriggerImport && e.d.ImportMachine != nil {
+		machine = e.d.ImportMachine
+	}
+	return machine.Run(ctx, rs.run, job)
 }
 
 // swapPlanOf finds the plan of the swap of version an earlier run left unfinished, in the newest run log
@@ -1096,7 +1134,9 @@ func (rs *runState) record(t *task, res item.Result) {
 		rs.totals.Done++
 		rs.totals.BytesDone += t.row.NeedBytes
 		rs.outcome[t.key()] = "verified"
-		defer e.markCurrent(t.root.ID, []string{t.row.ID}, e.d.Clock.Now())
+		if rs.trigger != TriggerImport {
+			defer e.markCurrent(t.root.ID, []string{t.row.ID}, e.d.Clock.Now())
+		}
 	case journal.StateSkipped:
 		rs.totals.Skipped++
 		rs.outcome[t.key()] = "skipped"
@@ -1124,6 +1164,11 @@ func (rs *runState) record(t *task, res item.Result) {
 	}
 	if res.RootFault != nil && e.d.RootFault != nil {
 		e.safe("root_fault", func() { e.d.RootFault(t.root.ID, res.RootFault) })
+	}
+	if rs.trigger == TriggerImport && res.Code == doctor.SYN070 && t.row.FromRoot != "" && e.d.SourceFault != nil {
+		// The drive's copy no longer matches its own MANIFEST: it is not offered again while the drive
+		// stays mounted, and nothing is written to the drive.
+		e.safe("source_fault", func() { e.d.SourceFault(t.row.FromRoot, t.row.ID, t.row.ToVersion) })
 	}
 	e.d.Logger.Info("item done", "component", "sync", "run_id", rs.id, "root", t.root.ID, "item", t.row.ID, "version", res.Version, "result", result, "code", code, "reason", reason)
 	e.publish(events.TypeSyncItemDone, rs.id, events.SyncItemDone{RunID: rs.id, Root: t.root.ID, Item: t.row.ID, Result: result, Version: res.Version, Reason: reason, Code: code})
@@ -1153,7 +1198,7 @@ func (e *Engine) finish(rs *runState) {
 		}
 	}
 	rs.mu.Unlock()
-	rc := RunContext{RunID: rs.id, Trigger: rs.trigger, Roots: rs.roots, Run: rs.run}
+	rc := e.runContext(rs)
 
 	// Retention: expired trash and quarantine, and staging nothing explains (R3, R5, section 4.5.2).
 	if e.d.Retention != nil && usesNetwork(rs.trigger) {

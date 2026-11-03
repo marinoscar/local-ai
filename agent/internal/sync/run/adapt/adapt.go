@@ -31,6 +31,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/drill"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/modes"
+	"github.com/marinoscar/local-ai/agent/internal/sync/importer"
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
 	"github.com/marinoscar/local-ai/agent/internal/sync/retention"
 	"github.com/marinoscar/local-ai/agent/internal/sync/run"
@@ -283,7 +284,11 @@ func skipReason(st run.RunStatus) string {
 // GathererPlanner is run.Planner over the planner's Gatherer: it gathers the requested roots together,
 // plans them with plan.PlanAll (a download two roots share is sequenced, the second a local copy), and
 // hands the engine the plans with the catalog they were made from.
-type GathererPlanner struct{ G *plan.Gatherer }
+type GathererPlanner struct {
+	G *plan.Gatherer
+	// Importer plans the runs of trigger import (PlanRequest.Import); without it such a request fails.
+	Importer *importer.Planner
+}
 
 // Roots implements run.Planner.
 func (p GathererPlanner) Roots() []ark.Root { return p.G.Roots() }
@@ -294,6 +299,9 @@ func (p GathererPlanner) Roots() []ark.Root { return p.G.Roots() }
 // run; a node without connectivity is planned offline, from what the catalog pins and from material
 // already on a root.
 func (p GathererPlanner) Plan(ctx context.Context, req run.PlanRequest) (run.Plans, error) {
+	if req.Import != nil {
+		return p.planImport(ctx, req.Import)
+	}
 	online := !req.Offline
 	inputs, err := p.G.GatherAll(ctx, req.RootIDs, plan.GatherOptions{Resolve: true, Online: &online})
 	if err != nil {
@@ -321,6 +329,23 @@ func (p GathererPlanner) Plan(ctx context.Context, req run.PlanRequest) (run.Pla
 		out.Item = func(string) (plan.CatalogItem, bool) { return plan.CatalogItem{}, false }
 	}
 	return out, nil
+}
+
+// planImport is the plan of an import run: the internal root planned from the drive's MANIFESTs with the
+// network off (internal/sync/importer). The catalog on the drive and node.yaml are changed here, inside
+// the run, once it holds the slot.
+func (p GathererPlanner) planImport(ctx context.Context, spec *run.ImportSpec) (run.Plans, error) {
+	if p.Importer == nil {
+		return run.Plans{}, errors.New("adapt: no importer is wired")
+	}
+	res, err := p.Importer.Plan(ctx, importer.Request{From: spec.From, Items: spec.Items, AddToProfile: spec.AddToProfile, Catalog: spec.Catalog})
+	if err != nil {
+		return run.Plans{}, err
+	}
+	return run.Plans{
+		Plans: []plan.RootPlan{res.Plan}, Item: res.Lookup, CatalogVersion: res.Plan.CatalogVersion,
+		MinFree: map[string]int64{res.Plan.Root: res.Plan.MinFreeBytes}, Warnings: res.Warnings,
+	}, nil
 }
 
 // Ready is run.ReadyRefresher over the readiness service (SYNC-12): after a swap and at the end of a run

@@ -96,7 +96,17 @@ func preflight(req StartRequest, s Settings, net NetState, onBattery bool, mount
 		v.Offline = true
 	}
 
-	roots, err := selectRoots(req.Roots, s, mounted)
+	var roots []string
+	var err error
+	switch req.Trigger {
+	case TriggerVerify:
+		roots, err = selectVerifyRoots(req.Roots, mounted)
+	case TriggerImport:
+		// An import writes the internal root and nothing else.
+		roots, err = selectRoots([]string{ark.InternalID}, s, mounted)
+	default:
+		roots, err = selectRoots(req.Roots, s, mounted)
+	}
 	if err != nil {
 		return verdict{Err: err}
 	}
@@ -120,6 +130,49 @@ func writable(r ark.Root, s Settings) bool {
 		return false
 	}
 	return true
+}
+
+// readable says whether a verify run may read a root: mounted and in a state the content can be read
+// from. A read-only drive and an unclean one are checked too (they are the ones most worth checking);
+// nothing is written to them.
+func readable(r ark.Root) bool {
+	return r.Path != "" && (r.State == "" || r.State == ark.StateReady || r.State == ark.StateReadOnly || r.State == ark.StateUnclean)
+}
+
+// selectVerifyRoots returns the ids of the roots a verify run reads: every readable mounted root when
+// none is named, else the named ones (ids, root paths or mount points) that are readable. A name that
+// is no mounted root is an *UnknownRootError; a named root that is mounted but cannot be read (it is
+// being ejected) is left out.
+func selectVerifyRoots(names []string, mounted []ark.Root) ([]string, error) {
+	var out []string
+	if len(names) == 0 {
+		for _, r := range mounted {
+			if readable(r) {
+				out = append(out, r.ID)
+			}
+		}
+		return out, nil
+	}
+	seen := map[string]bool{}
+	for _, name := range names {
+		var found *ark.Root
+		for i := range mounted {
+			r := &mounted[i]
+			if r.ID == name || (r.Path != "" && filepath.Clean(r.Path) == filepath.Clean(name)) || (r.Mount != "" && filepath.Clean(r.Mount) == filepath.Clean(name)) {
+				found = r
+				break
+			}
+		}
+		if found == nil {
+			return nil, &UnknownRootError{Root: name}
+		}
+		if seen[found.ID] || !readable(*found) {
+			continue
+		}
+		seen[found.ID] = true
+		out = append(out, found.ID)
+	}
+	return out, nil
 }
 
 // selectRoots returns the ids of the roots a run works on: every writable mounted root when none is

@@ -28,7 +28,7 @@ type words struct {
 	readOnly, keepRefresh, keepNoInterval, keepUnresolved         string
 	keepUnresolvedOffline, keepBudget, refreshDue, catalogPin     string
 	was, oldKept, fromLocal, localWaits, frees, budgetNote        string
-	localBuild                                                    string
+	localBuild, notInProfile                                      string
 	diskNote, unresolved, unresolvedOffline, readOnlyNote, orphan string
 	itemOne, itemMany, andMore, sevInfo, sevWarning, sevError     string
 	actions                                                       map[Action]string
@@ -50,7 +50,7 @@ var en = words{
 	keepBudget: "update skipped: budget",
 	refreshDue: "refresh due (%d d)", catalogPin: "catalog pin changed", was: "was %s", oldKept: "old copy kept in .trash",
 	fromLocal: "from %s (local copy)", localWaits: "from %s (local copy, after it finishes)",
-	localBuild: "built here from local files (no network)",
+	localBuild: "built here from local files (no network)", notInProfile: "not in this computer's profile; add --add-to-profile",
 	frees:      "frees %s of old versions in .trash",
 	budgetNote: "budget", diskNote: "not enough free disk space", unresolved: "unresolved", unresolvedOffline: "unresolved (offline)",
 	readOnlyNote: "read-only root", orphan: "not in profile; run `aictl ark prune --orphans`",
@@ -75,7 +75,7 @@ var es = words{
 	keepBudget: "actualización omitida: presupuesto",
 	refreshDue: "toca actualizar (%d d)", catalogPin: "cambió la versión fijada en el catálogo", was: "era %s", oldKept: "la copia anterior queda en .trash",
 	fromLocal: "desde %s (copia local)", localWaits: "desde %s (copia local, cuando termine)",
-	localBuild: "se construye aquí con archivos locales (sin red)",
+	localBuild: "se construye aquí con archivos locales (sin red)", notInProfile: "no está en el perfil de este equipo; use --add-to-profile",
 	frees:      "libera %s de versiones antiguas en .trash",
 	budgetNote: "presupuesto", diskNote: "no hay espacio libre suficiente en el disco", unresolved: "sin resolver", unresolvedOffline: "sin resolver (sin conexión)",
 	readOnlyNote: "raíz de solo lectura", orphan: "no está en el perfil; ejecute `aictl ark prune --orphans`",
@@ -294,6 +294,8 @@ func note(p RootPlan, it ItemPlan, w words) string {
 			}
 		case ReasonReadOnly:
 			parts = append(parts, w.readOnlyNote)
+		case ReasonNotInProfile:
+			parts = append(parts, w.notInProfile)
 		default:
 			parts = append(parts, string(it.Reason))
 		}

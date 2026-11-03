@@ -190,6 +190,11 @@ func arkImport(c *Call) error {
 	if err != nil {
 		return err
 	}
+	if c.Bool("add-to-profile") && len(items) == 0 {
+		// "Add everything on the drive to the profile" is never what a person means: they name what they want.
+		return c.usageErr(pick(c.Lang, "--add-to-profile needs at least one --item.", "--add-to-profile necesita al menos un --item."),
+			pick(c.Lang, "Name what to add, for example `aictl ark import --item whisper-small --add-to-profile`.", "Indique qué añadir, por ejemplo `aictl ark import --item whisper-small --add-to-profile`."))
+	}
 	from := c.String("from")
 	if from != "" {
 		if err := c.checkRoot("--from", from, false); err != nil {
