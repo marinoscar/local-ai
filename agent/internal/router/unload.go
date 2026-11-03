@@ -59,8 +59,11 @@ func (o *Orchestrator) UnloadWith(ctx context.Context, req UnloadRequest) (Unloa
 		o.auditWrite(ctx, audit.ActionModelUnload, req.Actor, req.ID, "", err)
 		return UnloadResult{}, err
 	}
-	if err := o.opt.Router.Health(ctx); err != nil {
-		return fail(errRouter(err))
+	// In single mode "not answering" is read under the lock, with the rest of the status.
+	if in.Llama.Mode != LlamaModeSingle {
+		if err := o.opt.Router.Health(ctx); err != nil {
+			return fail(errRouter(err))
+		}
 	}
 	hold, err := o.lock.AcquireWait(ctx, HolderUnload, req.LockWait)
 	if err != nil {
@@ -95,6 +98,9 @@ func (o *Orchestrator) UnloadWith(ctx context.Context, req UnloadRequest) (Unloa
 func (o *Orchestrator) runUnload(ctx context.Context, in Inputs, req UnloadRequest, opID string, inCatalog bool) (UnloadResult, error) {
 	id := req.ID
 	res := UnloadResult{ID: id, OpID: opID, Restored: []string{}}
+	if in.Llama.Mode == LlamaModeSingle {
+		return o.runSingleUnload(ctx, req, opID, inCatalog, res)
+	}
 	statuses, err := o.opt.Router.Models(ctx)
 	if err != nil {
 		return res, errRouter(err)

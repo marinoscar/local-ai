@@ -89,6 +89,10 @@ type ModelLoading struct {
 	Unloading []string `json:"unloading"`
 	OpID      string   `json:"op_id"`
 	Progress  *float64 `json:"progress,omitempty"`
+	// Restart is true when the load is a restart of the AI service (single-model mode,
+	// llama-router.md section 4.8): the model in use stops at once and inference is down until the
+	// new one is ready, so the downtime equals the load time. Absent in router mode.
+	Restart bool `json:"restart,omitempty"`
 }
 
 // ModelLoaded is the data of model.loaded.
