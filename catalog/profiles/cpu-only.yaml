@@ -1,0 +1,43 @@
+schema_version: 1
+id: cpu-only
+display_name: "Any machine without a usable GPU"
+match:
+  backends: [cpu]
+router:
+  models_max: 1
+  memory_margin_mib: 512
+  autoload: false
+storage:
+  target: internal
+  budget_bytes: 120000000000
+  min_free_bytes: 15000000000
+include:
+  models: [qwen3.5-9b-q4km, whisper-small, piper-en-medium, piper-es-medium]
+  content:
+    # tier 1
+    - docs-bundle
+    - wikimed-en
+    - survival-first-aid
+    - survival-water
+    - survival-food
+    - survival-post-disaster
+    - ifixit-en
+    - osm-central-america
+    - places-central-america
+    - wikipedia-en-nopic
+    - wikipedia-es-nopic
+    # tier 2
+    - wikimed-es
+    - stackexchange-diy
+    - stackexchange-cooking
+    - stackexchange-gardening
+    - stackexchange-outdoors
+    - stackexchange-ham
+    - wikivoyage-en
+    - wikivoyage-es
+default_model: qwen3.5-9b-q4km
+survival:
+  models: [qwen3.5-9b-q4km]
+  default_model: qwen3.5-9b-q4km
+  require_services: [kiwix]
+  portal_language: auto

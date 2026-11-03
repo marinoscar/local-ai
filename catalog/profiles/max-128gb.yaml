@@ -1,0 +1,66 @@
+schema_version: 1
+id: max-128gb
+display_name: "Large unified-memory node (128 GB)"
+match:
+  backends: [vulkan]
+  vram_mib: {min: 65536}
+  ram_mib: {min: 65536}
+router:
+  models_max: 3
+  memory_margin_mib: 1024
+  autoload: false
+storage:
+  target: internal
+  budget_bytes: 900000000000
+  min_free_bytes: 100000000000
+include:
+  models: [qwen3.6-35b-a3b-q4km, qwen3-coder-next-q4km, qwen3.8-27b-q4km, whisper-large-v3-turbo, piper-en-medium, piper-es-medium]
+  content:
+    # tier 1
+    - docs-bundle
+    - wikimed-en
+    - survival-first-aid
+    - survival-water
+    - survival-food
+    - survival-post-disaster
+    - ifixit-en
+    - osm-central-america
+    - places-central-america
+    - wikipedia-es-nopic
+    - wikipedia-en-maxi
+    # tier 2
+    - wikimed-es
+    - mdwiki-en
+    - stackexchange-diy
+    - stackexchange-electronics
+    - stackexchange-cooking
+    - stackexchange-gardening
+    - stackexchange-outdoors
+    - stackexchange-ham
+    - wikibooks-en
+    - wikivoyage-en
+    - wikivoyage-es
+    - stackexchange-superuser
+    - stackexchange-askubuntu
+    - stackexchange-unix
+    - gutenberg-en-technology
+    - gutenberg-en-agriculture
+    - gutenberg-en-medicine
+    - libretexts-en-medicine
+    - libretexts-en-engineering
+    - libretexts-en-biology
+    - libretexts-en-chemistry
+    - energypedia-en
+    # tier 3
+    - wiktionary-en
+    - wiktionary-es
+    - ted-natural-disaster
+    - ted-water
+    - ted-medicine
+    - gutenberg-es-all
+default_model: qwen3.6-35b-a3b-q4km
+survival:
+  models: [qwen3.6-35b-a3b-q4km]
+  default_model: qwen3.6-35b-a3b-q4km
+  require_services: [kiwix, whisper]
+  portal_language: auto

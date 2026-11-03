@@ -1,0 +1,67 @@
+schema_version: 1
+id: ark-drive-full
+display_name: "Portable ark drive (everything)"
+router:
+  models_max: 1
+  memory_margin_mib: 512
+  autoload: false
+storage:
+  target: ark_drive
+  budget_bytes: 2000000000000
+  min_free_bytes: 50000000000
+include:
+  models: [qwen3.5-9b-q4km, qwen3.6-35b-a3b-q4km, qwen3-coder-next-q4km, qwen3.8-27b-q4km, whisper-small, whisper-medium, whisper-large-v3-turbo, piper-en-medium, piper-es-medium]
+  content:
+    # tier 1
+    - docs-bundle
+    - wikimed-en
+    - survival-first-aid
+    - survival-water
+    - survival-food
+    - survival-post-disaster
+    - ifixit-en
+    - osm-central-america
+    - places-central-america
+    - wikipedia-en-nopic
+    - wikipedia-es-nopic
+    - wikipedia-en-maxi
+    # tier 2
+    - wikimed-es
+    - mdwiki-en
+    - stackexchange-diy
+    - stackexchange-electronics
+    - stackexchange-cooking
+    - stackexchange-gardening
+    - stackexchange-outdoors
+    - stackexchange-ham
+    - wikibooks-en
+    - wikivoyage-en
+    - wikivoyage-es
+    - stackexchange-superuser
+    - stackexchange-askubuntu
+    - stackexchange-unix
+    - gutenberg-en-technology
+    - gutenberg-en-agriculture
+    - gutenberg-en-medicine
+    - libretexts-en-medicine
+    - libretexts-en-engineering
+    - libretexts-en-biology
+    - libretexts-en-chemistry
+    - energypedia-en
+    - khanacademy-en
+    - khanacademy-es
+    # tier 3
+    - wiktionary-en
+    - wiktionary-es
+    - ted-natural-disaster
+    - ted-water
+    - ted-medicine
+    - gutenberg-es-all
+    - stackexchange-stackoverflow
+    - survivor-library
+    - osm-north-america
+default_model: qwen3.5-9b-q4km
+survival:
+  models: [qwen3.5-9b-q4km]
+  default_model: qwen3.5-9b-q4km
+  portal_language: auto
