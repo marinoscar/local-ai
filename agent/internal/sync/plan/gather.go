@@ -98,8 +98,8 @@ func (f ResolverFunc) Resolve(ctx context.Context, it CatalogItem) (Resolved, er
 	return f(ctx, it)
 }
 
-// Resolvers is the registry of resolvers by catalog source type ("huggingface", "kiwix", ...). It is
-// empty until the resolver issues register theirs; an item with no resolver is planned from what the
+// Resolvers is the registry of resolvers by catalog source type ("git_mirror", "apt_closure",
+// "repo_docs"; the agent's wiring registers those). An item with no resolver is planned from what the
 // catalog pins, and an item the catalog cannot pin is unresolved. Safe for concurrent use.
 type Resolvers struct {
 	mu sync.RWMutex
