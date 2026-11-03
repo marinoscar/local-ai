@@ -163,34 +163,6 @@ When the timer's drill is skipped (one of the reasons above), it prints `i Drill
 
 ## Part 6. The quarterly "pull the plug" drill
 
-Every 3 months, by someone who is **not** the person who set up the node if possible. It tests what software can't: really no network, really on battery, a real restart. **About 45 minutes.** Take this page and a pen. Source: [drill.md §4.6](../specs/drill.md#46-manual-quarterly-pull-the-plug-drill).
+Every 3 months, by someone who is **not** the person who set up the node if possible. It tests what software can't: really no network, really on battery, a real restart. **About 45 minutes.** The 17 steps, each with what you should see and what to do if it doesn't work, are in **[01 Survival mode, Appendix, Part B](01-survival-mode.md#appendix-monthly-and-quarterly-checks)** (English and Spanish, printable with the Survival guide, and also in the manuals on the drive). They live there so the page that is printed next to the computer is the only copy. Source: [drill.md §4.6](../specs/drill.md#46-manual-quarterly-pull-the-plug-drill).
 
-Node: ________  Date: ________  Done by: ________ (this header is only to keep track while you work; the result is saved on the computer in step 17)
-
-1. [ ] Write down the time. Run `aictl drill` and check it passes (`aictl drill show`).
-2. [ ] **Unplug the network cable and turn Wi-Fi off** (top-right menu → Wi-Fi → Off). On the MSI (ai-n2), check it doesn't boot into Windows by itself.
-3. [ ] **Unplug the charger** (laptops). Battery: ______ %
-4. [ ] **Restart the computer.** Log in. You should see: the Local AI app opens by itself, or you can open it from the dock.
-5. [ ] Press **Survival mode** in the app. You should see: the Portal fills the screen within 2 minutes; the status line says "Ready" or lists problems with codes.
-6. [ ] **Chat:** press **1**, ask "How do I treat a minor burn?". An answer in under 30 seconds.
-7. [ ] **Photo:** press **2**, take a photo of any object (or choose one from the Pictures folder), ask "What is this?". A sensible description (switching brain is OK).
-8. [ ] **Talk:** press **3**, ask a question aloud in Spanish, then in English. A spoken answer in the same language.
-9. [ ] **Library:** press **4**, search "water purification", open a result. Then **F** → *Severe bleeding*: the article opens.
-10. [ ] **Maps:** press **5**, search for your town, press **Nearest: hospital**.
-11. [ ] **Manuals:** press **6**, open "Survival mode"; print the Survival card, or check the printed one is current.
-12. [ ] **Status:** press **7**. Battery ______ %, time left ______. Compare with step 3 and write the measured hours in the battery table of [01 Part 4](01-survival-mode.md).
-13. [ ] **Ark drive:** plug in the AI-ARK drive. Status shows "Ark drive connected". Open `START-HERE.html` on the drive from the **Files** app; it opens with no internet.
-14. [ ] **Without the app:** close the app, open a browser at `http://127.0.0.1:7070/portal`. It works the same.
-15. [ ] **Rebuild check** (optional, 30 minutes, admin): `sudo aictl rebuild-llama --from-kit --no-activate`. It must finish without internet. (`--from-kit` takes the source from the kit; `--no-activate` builds and tests without replacing the running build.)
-16. [ ] Plug the charger and the network back in. Leave survival mode in the dashboard (needs the PIN), or `aictl mode online`. Check the mode shows **online** and the cloud shows the node again within a minute.
-17. [ ] **Record the result on the computer** (needs `sudo` or the admin PIN):
-
-    ```
-    sudo aictl drill record-manual --result pass --notes "battery 3.5 h, all buttons ok"
-    ```
-
-    Use `--result fail` if any step failed, and put the step numbers and codes in `--notes`.
-    - **What you should see:** a `✓` line. `aictl drill show` now lists this manual drill.
-    - **If it doesn't work:** `LAI-CLI-008`: run it in a terminal (it must ask for the PIN), or with `sudo`. If the computer can't be used at all, write the result in the paper log at the end of [01](01-survival-mode.md) (Part 10) and record it here later.
-
-Anything that failed: write down the code shown and follow its fix, or [07-troubleshooting.md](07-troubleshooting.md).
+In short: run `aictl drill` and check it passes, unplug the network and the charger, restart, press **Survival mode**, test keys **1** to **7**, plug in the AI-ARK drive, reconnect, leave Survival mode, and record the result with `sudo aictl drill record-manual --result pass|fail --notes "…"`. The cloud shows the result on the node card.

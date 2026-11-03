@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "item_id": "wiki-example",
+  "item_kind": "kiwix",
+  "catalog_version": "2026.11.02-1",
+  "version": "2026-10",
+  "sort_key": "2026-10",
+  "state": "verified",
+  "source": {
+    "type": "kiwix",
+    "base_url": "https://example.test/zim/wikipedia/",
+    "book": "wikipedia_en_example",
+    "version_policy": "latest"
+  },
+  "files": [
+    {
+      "kind": "zim",
+      "path": "wikipedia_en_example_2026-10.zim",
+      "size_bytes": 48712345678,
+      "sha256": "{{sha:zim}}",
+      "sha256_source": "kiwix_sidecar",
+      "zim_md5_ok": true
+    }
+  ],
+  "total_bytes": 48712345678,
+  "downloaded_at": "2026-11-01T01:00:00Z",
+  "verified_at": "2026-11-01T02:00:00Z",
+  "last_reverified_at": "2026-11-01T02:00:00Z",
+  "trust": "sidecar",
+  "synced_by": {
+    "node_id": "node-a",
+    "agent_version": "0.4.0",
+    "run_id": "run-20261101T005900Z-0001"
+  },
+  "history": []
+}

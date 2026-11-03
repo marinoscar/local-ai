@@ -1942,12 +1942,11 @@ paths:
       operationId: recordManualDrill
       summary: Record the quarterly pull-the-plug drill
       description: |
-        Stores a results document with `trigger: manual_plug` and no `checks`. Audit `drill.record_manual`.
-        Owned by drill.md sections 4.6 and 11. agent.md section 3.8.28.
+        Stores a results document with `trigger: manual_plug` and no `checks` in the drill directory; it
+        never moves `latest.json`. The run id is `drl-<at>-<4 hex>-manual`. `at` defaults to now. Audit
+        `drill.record_manual`. Owned by drill.md sections 4.6 and 11. agent.md section 3.8.28.
       x-localai-auth: admin
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: DRILL-06
       requestBody:
         required: true
         content:
@@ -1965,10 +1964,14 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/DrillAccepted"}
               examples:
-                run: {value: {run_id: "drl-20261102T150000Z-manual"}}
-        "400": {$ref: "#/components/responses/InvalidRequest"}
+                run: {value: {run_id: "drl-20261102T150000Z-ab12-manual"}}
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+          description: "LAI-AGT-020: `result` is not pass or fail, `notes` is over 2000 characters or has control characters, `at` is not RFC 3339, is in the future or is older than a year."
         "401": {$ref: "#/components/responses/Unauthenticated"}
-        "403": {$ref: "#/components/responses/Forbidden"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: "LAI-SEC-002: an operator without the PIN grant."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "500": {$ref: "#/components/responses/Internal"}
@@ -3457,7 +3460,7 @@ components:
       properties:
         schema_version: {type: integer}
         run_id: {type: string, pattern: "^drl-"}
-        trigger: {type: string}
+        trigger: {type: string, enum: [scheduled, manual, cloud, manual_plug]}
         started_at: {type: string, format: date-time}
         finished_at: {type: [string, "null"], format: date-time}
         state: {type: string, enum: [running, skipped, aborted], description: "Absent for a run that completed."}
@@ -3467,6 +3470,7 @@ components:
         code: {type: string, description: "Why a skipped or aborted run did not complete."}
         reason: {type: string}
         retry_at: {type: string, format: date-time}
+        notes: {type: string, description: "A manual_plug entry only: the text the person recorded. It stays on the node."}
 
     DrillManualRequest:
       type: object

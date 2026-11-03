@@ -25,6 +25,7 @@ type svcRig struct {
 	llama  *fakeLlama
 	mode   string
 	status *staticStatus
+	deps   ServicesDeps
 	h      http.Handler
 }
 
@@ -93,6 +94,7 @@ func newSvcRig(t *testing.T, opts ...func(*ServicesDeps)) *svcRig {
 	for _, o := range opts {
 		o(&deps)
 	}
+	r.deps = deps
 	reg := NewRegistry()
 	if err := RegisterServices(reg, deps); err != nil {
 		t.Fatal(err)

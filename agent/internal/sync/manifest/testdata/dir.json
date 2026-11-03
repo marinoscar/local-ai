@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "item_id": "docs-example",
+  "item_kind": "docs",
+  "catalog_version": "2026.11.02-1",
+  "version": "v1.2.3",
+  "sort_key": "2026-11-02T04:00:00Z",
+  "state": "verified",
+  "source": {
+    "type": "repo_docs",
+    "ref": "v1.2.3",
+    "repo": "org-alpha/docs-example"
+  },
+  "tree_sha256": "{{sha:tree}}",
+  "file_count": 42,
+  "total_bytes": 123456,
+  "downloaded_at": "2026-11-02T03:59:00Z",
+  "verified_at": "2026-11-02T04:00:00Z",
+  "last_reverified_at": "2026-11-02T04:00:00Z",
+  "trust": "computed",
+  "synced_by": {
+    "node_id": "node-a",
+    "agent_version": "0.4.0",
+    "run_id": "run-20261102T035800Z-0002"
+  },
+  "history": []
+}

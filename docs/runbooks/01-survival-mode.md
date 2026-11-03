@@ -131,7 +131,7 @@ When there is no charger, the battery is your fuel. The AI uses a lot of power *
 27. **Ask short questions.** Ask one clear question at a time. Read the library (button 4) instead of asking the AI when you can: reading uses almost no power.
 28. **Close the lid only if it is plugged in.** Closing the lid does not turn it off, so it keeps using battery.
 
-**Expected battery time.** Measure it once for this computer (during the quarterly drill, runbook 08) and write it here in pen:
+**Expected battery time.** Measure it once for this computer (during the quarterly check, [Appendix, Part B](#appendix-monthly-and-quarterly-checks), step B12) and write it here in pen:
 
 | What is running | Screen | Hours |
 |---|---|---|
@@ -256,7 +256,7 @@ The drive holds everything. Pick the first option that fits:
 45. **A computer with Windows or macOS:** they can't read the drive by themselves (it is formatted for Linux). If you have the Ubuntu USB stick, start that computer from it and choose **Try Ubuntu**, then do step 44.
 46. **To make a new AI computer from scratch, with no internet:** follow runbook 06 (Rebuild a node offline). It's also on the drive: `localai/docs/runbooks/06-rebuild-a-node-offline.html`.
 
-**Every 3 months:** test all of this for real with the "pull the plug" checklist in runbook 08. The result is stored on the computer with `sudo aictl drill record-manual`; use the paper log below only when that is not possible.
+**Every 3 months:** test all of this for real with the "pull the plug" checklist in the [Appendix, Part B](#appendix-monthly-and-quarterly-checks) at the end of this page. The result is stored on the computer with `sudo aictl drill record-manual`; use the paper log below only when that is not possible.
 
 ---
 
@@ -270,6 +270,130 @@ Normally every drill and problem is recorded on the computer itself (`aictl dril
 | | | | | | |
 | | | | | | |
 | | | | | | |
+
+---
+
+## Appendix. Monthly and quarterly checks
+
+An emergency computer that was never tested is a guess. Two checks keep this one honest: a **monthly check** that the computer runs by itself, and a **quarterly "pull the plug" check** that you do by hand, because software cannot really unplug a computer.
+
+> 🛠 Verify when implemented (Epic E9 drills, `aictl drill`). Follow it once on a real node and fix anything that differs.
+
+### Part A. Every month: the automatic check (nothing to do, but read the result)
+
+A1. **Let it run.** On the first Sunday of every month, around 4:30 in the morning, the computer tests itself: each brain answers, the library searches, speech works both ways, maps draw, the manuals and the rebuild kit are there. It does **not** disconnect anything and does **not** change the mode. It does not run while the computer is in Survival mode or on battery below 50 %. If a sync is running, or the AI is busy answering you, it waits and tries again later.
+   - **What you should see:** a notification, "Monthly check finished: everything works offline." Or, if it found something, "Monthly check found problems. Open Status."
+   - **If it doesn't work:** no notification for more than a month: go to step A4.
+
+A2. **Read the last result** (any time, nothing is changed). Press **Ctrl + Alt + T** and type:
+
+   ```
+   aictl drill show
+   ```
+
+   - **What you should see:** the date and result of the last check, and one line for each problem with its code (`LAI-DRL-…`) and a fix line.
+   - **If it doesn't work:** "no drill has run yet": run one now with step A3. A code like `LAI-AGT-…` or `LAI-CLI-…` with a fix line: do what it says, see [Troubleshooting, step zero](07-troubleshooting.md).
+
+A3. **Run it now, and fix what it finds.** Takes up to about 30 minutes; the computer stays usable. Type:
+
+   ```
+   aictl drill
+   ```
+
+   Do what each fix line says, then run `aictl drill` again. While the last check had problems, Status (button 7) shows `LAI-DRL-001` ("The last drill found problems"); it goes away by itself after the next check that passes.
+   - **What you should see:** one line per test and a last line such as `✓ Drill passed`.
+   - **If it doesn't work:** `LAI-DRL-002` (a sync is running), `LAI-DRL-003` (the computer is in Survival mode), `LAI-DRL-004` (the AI is in use) or `LAI-DRL-005` (battery below 50 %): it refused to start. Wait, finish what you were doing, or plug in the charger, then try again. More: [runbook 08, Part 5](08-scheduled-sync.md).
+
+A4. **No check for 45 days.** Status shows `LAI-DRL-006` ("No drill in 45 days"). Run `aictl drill` (step A3), then check that the monthly timer is on:
+
+   ```
+   systemctl list-timers 'localai-drill.timer'
+   ```
+
+   - **What you should see:** one line with the time of the next check.
+   - **If it doesn't work:** no line: turn it on with `sudo systemctl enable --now localai-drill.timer`. Still nothing: runbook [07 Troubleshooting](07-troubleshooting.md), index by code.
+
+### Part B. Every 3 months: the "pull the plug" check (17 steps, about 45 minutes)
+
+Do it every 3 months, by someone who is **not** the person who set up the computer, if possible. It tests what software cannot: really no network, really on battery, a real restart. Take this page and a pen.
+
+Computer: __________  Date: __________  Done by: __________
+
+B1. **Write down the time.** Run `aictl drill` first and check that it passes (`aictl drill show`).
+   - **What you should see:** `✓ Drill passed`, or "passed with warnings".
+   - **If it doesn't work:** fix what it lists before going on (step A3 above, [07 Troubleshooting](07-troubleshooting.md)). A check that refused to start (`LAI-DRL-002` to `LAI-DRL-005`): see step A3.
+
+B2. **Unplug the network cable and turn Wi-Fi off:** top-right menu, Wi-Fi, Off. On the MSI laptop, also check that it does not start Windows by itself.
+   - **What you should see:** the Wi-Fi icon is gone or says off; no network name is shown.
+   - **If it doesn't work:** can't find the Wi-Fi switch: open **Settings**, then **Wi-Fi**, and switch it off there. If the computer still shows a network, unplug the router. See [07 Troubleshooting](07-troubleshooting.md).
+
+B3. **Unplug the charger** (laptops). Battery: ______ %
+   - **What you should see:** the battery icon shows it is discharging.
+   - **If it doesn't work:** the icon still says charging: pull the plug from the laptop itself, not from the wall.
+
+B4. **Restart the computer.** Log in.
+   - **What you should see:** the Local AI app opens by itself, or you can open it from the dock.
+   - **If it doesn't work:** [Part 1](#part-1-turn-it-on-and-log-in) and [Part 2](#part-2-start-survival-mode), steps 4 to 7.
+
+B5. **Press Survival mode** in the app.
+   - **What you should see:** the Portal fills the screen within 2 minutes. The top line says **Ready**, or lists problems with codes.
+   - **If it doesn't work:** [Part 2](#part-2-start-survival-mode), step 6 (the browser way), then [Part 8](#part-8-when-something-fails).
+
+B6. **Chat:** press **1** and ask "How do I treat a minor burn?".
+   - **What you should see:** an answer in under 30 seconds.
+   - **If it doesn't work:** `LAI-SVC-102` or `LAI-SVC-106`: [Part 8](#part-8-when-something-fails), step 40. See [07, Chat says error](07-troubleshooting.md).
+
+B7. **Photo:** press **2**, take a photo of any object (or choose one from the Pictures folder) and ask "What is this?".
+   - **What you should see:** a sensible description. The computer may switch brain by itself; that is fine.
+   - **If it doesn't work:** press **8** and choose the brain marked **Sees photos**. See [07, Talk or photo doesn't work](07-troubleshooting.md).
+
+B8. **Talk:** press **3**, ask a question aloud in Spanish, then in English.
+   - **What you should see:** a spoken answer in the same language each time.
+   - **If it doesn't work:** `LAI-SVC-010`, `LAI-SVC-011` or `LAI-SVC-103`: [Part 8](#part-8-when-something-fails), step 40.
+
+B9. **Library:** press **4** and search "water purification". Open a result. Then press **F** and choose *Severe bleeding*.
+   - **What you should see:** the article opens each time.
+   - **If it doesn't work:** `LAI-SVC-001` or `LAI-SVC-002`: [Part 8](#part-8-when-something-fails), step 40.
+
+B10. **Maps:** press **5**, search for your town, press **Nearest: hospital**.
+   - **What you should see:** a map with streets and names, and the nearest hospital marked.
+   - **If it doesn't work:** `LAI-SVC-030`: plug in the AI-ARK drive. See [07, Maps don't work](07-troubleshooting.md).
+
+B11. **Manuals:** press **6** and open "Survival mode". Print the Survival card, or check that the printed one is current (it names this computer and matches what button 6 shows today).
+   - **What you should see:** the manual opens; the card prints on one page.
+   - **If it doesn't work:** no printer: check the printed card instead. A card that is out of date: print a new one and throw the old one away.
+
+B12. **Status:** press **7**. Battery: ______ %, time left: ______. Compare with step B3, and write the measured hours in the battery table of [Part 4](#part-4-saving-battery).
+   - **What you should see:** a battery level lower than at step B3 and a time left that makes sense.
+   - **If it doesn't work:** no battery reading: this computer may have no battery. See [07, Battery](07-troubleshooting.md).
+
+B13. **Ark drive:** plug in the AI-ARK drive.
+   - **What you should see:** Status shows "Ark drive connected". Open **START-HERE.html** on the drive from the **Files** app: it opens in the browser with no internet.
+   - **If it doesn't work:** `LAI-ARK-005`: open the drive in the **Files** app. See [Part 6](#part-6-the-ai-ark-drive-plug-in-eject-keep-safe) and [07, The ark drive is not found](07-troubleshooting.md).
+
+B14. **Without the app:** close the app, open a browser and go to `http://127.0.0.1:7070/portal`.
+   - **What you should see:** the Portal, working the same.
+   - **If it doesn't work:** `aictl mode survival` in a terminal ([Part 2](#part-2-start-survival-mode), step 7).
+
+B15. **Rebuild check (optional, about 30 minutes, needs the admin):** type `sudo aictl rebuild-llama --from-kit --no-activate`. The kit supplies the source and `--no-activate` builds and tests without replacing the running program.
+   - **What you should see:** it finishes with a `✓` line, with no internet.
+   - **If it doesn't work:** `LAI-DRL-071` or the code shown: [runbook 06](06-rebuild-a-node-offline.md).
+
+B16. **Plug the charger and the network back in.** Leave Survival mode: **Online** in the dashboard (needs the PIN), or `aictl mode online` ([Part 7](#part-7-leaving-survival-mode-when-the-emergency-is-over)).
+   - **What you should see:** the mode shows **online**, and the cloud shows this computer again within a minute.
+   - **If it doesn't work:** [Part 7](#part-7-leaving-survival-mode-when-the-emergency-is-over). See [07, Cloud shows node offline](07-troubleshooting.md).
+
+B17. **Record the result on the computer** (needs `sudo` or the admin PIN). Do not write passwords or the PIN in the notes (2000 characters at most).
+
+   ```
+   sudo aictl drill record-manual --result pass --notes "battery 3.5 h, all buttons ok"
+   ```
+
+   Use `--result fail` if any step failed, and put the step numbers and the codes in `--notes`.
+   - **What you should see:** a `✓` line, and `aictl drill show` now lists this manual check.
+   - **If it doesn't work:** `LAI-CLI-008`: run it in a terminal (it asks for the PIN) or with `sudo`. If the computer can't be used at all, write the result in the paper log ([Part 10](#part-10-paper-log-only-when-the-computer-cant-be-used)) and record it here later.
+
+Anything that failed: write down the code shown and follow its fix line, or look it up in [07 Troubleshooting](07-troubleshooting.md).
 
 <div style="page-break-after: always"></div>
 
@@ -406,7 +530,7 @@ Sin cargador, la batería es su combustible. La IA gasta mucha energía **mientr
 27. **Haga preguntas cortas.** Una pregunta clara a la vez. Cuando pueda, lea la biblioteca (botón 4) en vez de preguntarle a la IA: leer casi no gasta energía.
 28. **Cierre la tapa solo si está conectada al cargador.** Cerrar la tapa no la apaga, así que sigue gastando batería.
 
-**Tiempo de batería esperado.** Mídalo una vez para esta computadora (durante el simulacro trimestral, manual 08) y escríbalo aquí con bolígrafo:
+**Tiempo de batería esperado.** Mídalo una vez para esta computadora (durante la revisión trimestral, [Apéndice, Parte B](#apéndice-revisiones-mensuales-y-trimestrales), paso B12) y escríbalo aquí con bolígrafo:
 
 | Qué está funcionando | Pantalla | Horas |
 |---|---|---|
@@ -531,7 +655,7 @@ El disco tiene todo. Elija la primera opción que le sirva:
 45. **Una computadora con Windows o macOS:** no pueden leer el disco por sí solas (está formateado para Linux). Si tiene la memoria USB de Ubuntu, inicie esa computadora desde ella, elija **Probar Ubuntu** y haga el paso 44.
 46. **Para hacer una computadora de IA nueva desde cero, sin internet:** siga el manual 06 (Rebuild a node offline, reconstruir sin internet). También está en el disco: `localai/docs/runbooks/06-rebuild-a-node-offline.html`.
 
-**Cada 3 meses:** pruebe todo esto de verdad con la lista "desconectar todo" del manual 08. El resultado se guarda en la computadora con `sudo aictl drill record-manual`; use el registro en papel de abajo solo cuando eso no sea posible.
+**Cada 3 meses:** pruebe todo esto de verdad con la lista "desconectar todo" del [Apéndice, Parte B](#apéndice-revisiones-mensuales-y-trimestrales) al final de esta página. El resultado se guarda en la computadora con `sudo aictl drill record-manual`; use el registro en papel de abajo solo cuando eso no sea posible.
 
 ---
 
@@ -545,3 +669,127 @@ Normalmente cada simulacro y cada problema queda registrado en la propia computa
 | | | | | | |
 | | | | | | |
 | | | | | | |
+
+---
+
+## Apéndice. Revisiones mensuales y trimestrales
+
+Una computadora de emergencia que nunca se probó es una apuesta. Dos revisiones la mantienen honesta: una **revisión mensual** que la computadora hace sola, y una **revisión trimestral "desconectar todo"** que usted hace a mano, porque ningún programa puede desconectar de verdad una computadora.
+
+> 🛠 Verificar cuando esté implementado (Épica E9 simulacros, `aictl drill`). Sígalo una vez en una computadora real y corrija lo que sea distinto.
+
+### Parte A. Cada mes: la revisión automática (no hay que hacer nada, pero lea el resultado)
+
+A1. **Déjela correr.** El primer domingo de cada mes, hacia las 4:30 de la mañana, la computadora se prueba sola: cada cerebro responde, la biblioteca busca, la voz funciona en los dos sentidos, los mapas se dibujan, los manuales y el kit de reconstrucción están. **No** desconecta nada y **no** cambia el modo. No corre mientras la computadora está en modo supervivencia o con la batería por debajo del 50 %. Si hay una sincronización en curso, o la IA está ocupada respondiendo, espera y lo intenta más tarde.
+   - **Lo que debería ver:** una notificación, "Revisión mensual terminada: todo funciona sin internet." O, si encontró algo, "La revisión mensual encontró problemas. Abra Estado."
+   - **Si no funciona:** ninguna notificación en más de un mes: vaya al paso A4.
+
+A2. **Lea el último resultado** (cuando quiera, no cambia nada). Presione **Ctrl + Alt + T** y escriba:
+
+   ```
+   aictl drill show
+   ```
+
+   - **Lo que debería ver:** la fecha y el resultado de la última revisión, y una línea por cada problema con su código (`LAI-DRL-…`) y una línea de solución.
+   - **Si no funciona:** "ningún simulacro se ha ejecutado": haga uno ahora con el paso A3. Un código como `LAI-AGT-…` o `LAI-CLI-…` con una línea de solución: haga lo que dice, vea el [paso cero de Resolución de problemas](07-troubleshooting.md).
+
+A3. **Ejecútela ahora y corrija lo que encuentre.** Tarda hasta unos 30 minutos; la computadora sigue siendo utilizable. Escriba:
+
+   ```
+   aictl drill
+   ```
+
+   Haga lo que diga cada línea de solución y vuelva a ejecutar `aictl drill`. Mientras la última revisión tenga problemas, Estado (botón 7) muestra `LAI-DRL-001` ("El último simulacro encontró problemas"); desaparece sola después de la siguiente revisión que pase.
+   - **Lo que debería ver:** una línea por prueba y una última línea como `✓ Drill passed`.
+   - **Si no funciona:** `LAI-DRL-002` (hay una sincronización en curso), `LAI-DRL-003` (la computadora está en modo supervivencia), `LAI-DRL-004` (la IA está en uso) o `LAI-DRL-005` (batería por debajo del 50 %): no quiso empezar. Espere, termine lo que hacía o conecte el cargador, y vuelva a intentarlo. Más: [manual 08, Parte 5](08-scheduled-sync.md).
+
+A4. **Ninguna revisión en 45 días.** Estado muestra `LAI-DRL-006` ("Ningún simulacro en 45 días"). Ejecute `aictl drill` (paso A3) y compruebe que el temporizador mensual esté activo:
+
+   ```
+   systemctl list-timers 'localai-drill.timer'
+   ```
+
+   - **Lo que debería ver:** una línea con la hora de la próxima revisión.
+   - **Si no funciona:** ninguna línea: actívelo con `sudo systemctl enable --now localai-drill.timer`. Sigue sin aparecer: manual [07 Resolución de problemas](07-troubleshooting.md), índice por código.
+
+### Parte B. Cada 3 meses: la revisión "desconectar todo" (17 pasos, unos 45 minutos)
+
+Hágala cada 3 meses, si es posible por alguien que **no** sea quien instaló la computadora. Prueba lo que un programa no puede: de verdad sin red, de verdad con batería, un reinicio de verdad. Lleve esta página y un bolígrafo.
+
+Computadora: __________  Fecha: __________  Hecha por: __________
+
+B1. **Anote la hora.** Primero ejecute `aictl drill` y compruebe que pasa (`aictl drill show`).
+   - **Lo que debería ver:** `✓ Drill passed`, o "passed with warnings".
+   - **Si no funciona:** corrija lo que liste antes de seguir (paso A3 de arriba, [07 Resolución de problemas](07-troubleshooting.md)). Una revisión que no quiso empezar (`LAI-DRL-002` a `LAI-DRL-005`): vea el paso A3.
+
+B2. **Desconecte el cable de red y apague el Wi-Fi:** menú de arriba a la derecha, Wi-Fi, Apagar. En la laptop MSI, compruebe también que no inicie Windows por sí sola.
+   - **Lo que debería ver:** el icono de Wi-Fi desaparece o dice apagado; no se muestra ningún nombre de red.
+   - **Si no funciona:** no encuentra el interruptor de Wi-Fi: abra **Configuración**, luego **Wi-Fi**, y apáguelo ahí. Si la computadora aún muestra una red, desconecte el router. Vea [07 Resolución de problemas](07-troubleshooting.md).
+
+B3. **Desconecte el cargador** (laptops). Batería: ______ %
+   - **Lo que debería ver:** el icono de batería indica que se está descargando.
+   - **Si no funciona:** el icono sigue diciendo que carga: saque el enchufe de la propia laptop, no de la pared.
+
+B4. **Reinicie la computadora.** Inicie sesión.
+   - **Lo que debería ver:** la aplicación Local AI se abre sola, o puede abrirla desde el dock.
+   - **Si no funciona:** [Parte 1](#parte-1-encenderla-e-iniciar-sesión) y [Parte 2](#parte-2-iniciar-el-modo-supervivencia), pasos 4 a 7.
+
+B5. **Presione Modo supervivencia** en la aplicación.
+   - **Lo que debería ver:** el Portal llena la pantalla en menos de 2 minutos. La línea de arriba dice **Listo**, o enumera problemas con códigos.
+   - **Si no funciona:** [Parte 2](#parte-2-iniciar-el-modo-supervivencia), paso 6 (por el navegador), y luego [Parte 8](#parte-8-cuando-algo-falla).
+
+B6. **Conversar:** presione **1** y pregunte "¿Cómo trato una quemadura leve?".
+   - **Lo que debería ver:** una respuesta en menos de 30 segundos.
+   - **Si no funciona:** `LAI-SVC-102` o `LAI-SVC-106`: [Parte 8](#parte-8-cuando-algo-falla), paso 40. Vea [07, Chat says error](07-troubleshooting.md).
+
+B7. **Foto:** presione **2**, tome una foto de cualquier objeto (o elija una de la carpeta Imágenes) y pregunte "¿Qué es esto?".
+   - **Lo que debería ver:** una descripción razonable. La computadora puede cambiar de cerebro sola; está bien.
+   - **Si no funciona:** presione **8** y elija el cerebro marcado **Ve fotos**. Vea [07, Talk or photo doesn't work](07-troubleshooting.md).
+
+B8. **Hablar:** presione **3**, haga una pregunta en voz alta en español y luego en inglés.
+   - **Lo que debería ver:** una respuesta hablada en el mismo idioma cada vez.
+   - **Si no funciona:** `LAI-SVC-010`, `LAI-SVC-011` o `LAI-SVC-103`: [Parte 8](#parte-8-cuando-algo-falla), paso 40.
+
+B9. **Biblioteca:** presione **4** y busque "water purification". Abra un resultado. Luego presione **F** y elija *Sangrado grave*.
+   - **Lo que debería ver:** el artículo se abre cada vez.
+   - **Si no funciona:** `LAI-SVC-001` o `LAI-SVC-002`: [Parte 8](#parte-8-cuando-algo-falla), paso 40.
+
+B10. **Mapas:** presione **5**, busque su pueblo y presione **Lo más cercano: hospital**.
+   - **Lo que debería ver:** un mapa con calles y nombres, y el hospital más cercano marcado.
+   - **Si no funciona:** `LAI-SVC-030`: conecte el disco AI-ARK. Vea [07, Maps don't work](07-troubleshooting.md).
+
+B11. **Manuales:** presione **6** y abra "Modo supervivencia". Imprima la tarjeta de supervivencia, o compruebe que la impresa esté al día (nombra esta computadora y coincide con lo que muestra hoy el botón 6).
+   - **Lo que debería ver:** el manual se abre; la tarjeta se imprime en una página.
+   - **Si no funciona:** sin impresora: revise la tarjeta impresa. Una tarjeta desactualizada: imprima una nueva y tire la vieja.
+
+B12. **Estado:** presione **7**. Batería: ______ %, tiempo restante: ______. Compare con el paso B3 y anote las horas medidas en la tabla de batería de la [Parte 4](#parte-4-ahorrar-batería).
+   - **Lo que debería ver:** un nivel de batería más bajo que en el paso B3 y un tiempo restante razonable.
+   - **Si no funciona:** sin lectura de batería: puede que esta computadora no tenga batería. Vea [07, Battery](07-troubleshooting.md).
+
+B13. **Disco del arca:** conecte el disco AI-ARK.
+   - **Lo que debería ver:** Estado muestra "Disco del arca conectado". Abra **START-HERE.html** del disco desde la aplicación **Archivos**: se abre en el navegador sin internet.
+   - **Si no funciona:** `LAI-ARK-005`: abra el disco en la aplicación **Archivos**. Vea la [Parte 6](#parte-6-el-disco-ai-ark-conectar-expulsar-cuidar) y [07, The ark drive is not found](07-troubleshooting.md).
+
+B14. **Sin la aplicación:** cierre la aplicación, abra un navegador y vaya a `http://127.0.0.1:7070/portal`.
+   - **Lo que debería ver:** el Portal, funcionando igual.
+   - **Si no funciona:** `aictl mode survival` en una terminal ([Parte 2](#parte-2-iniciar-el-modo-supervivencia), paso 7).
+
+B15. **Prueba de reconstrucción (opcional, unos 30 minutos, requiere al administrador):** escriba `sudo aictl rebuild-llama --from-kit --no-activate`. El kit aporta el código fuente y `--no-activate` compila y prueba sin reemplazar el programa en uso.
+   - **Lo que debería ver:** termina con una línea `✓`, sin internet.
+   - **Si no funciona:** `LAI-DRL-071` o el código que aparezca: [manual 06](06-rebuild-a-node-offline.md).
+
+B16. **Conecte otra vez el cargador y la red.** Salga del modo supervivencia: **En línea** en el panel (pide el PIN), o `aictl mode online` ([Parte 7](#parte-7-salir-del-modo-supervivencia-cuando-pase-la-emergencia)).
+   - **Lo que debería ver:** el modo muestra **online**, y la nube muestra de nuevo esta computadora en un minuto.
+   - **Si no funciona:** [Parte 7](#parte-7-salir-del-modo-supervivencia-cuando-pase-la-emergencia). Vea [07, Cloud shows node offline](07-troubleshooting.md).
+
+B17. **Registre el resultado en la computadora** (requiere `sudo` o el PIN de administrador). No escriba contraseñas ni el PIN en las notas (2000 caracteres como máximo).
+
+   ```
+   sudo aictl drill record-manual --result pass --notes "battery 3.5 h, all buttons ok"
+   ```
+
+   Use `--result fail` si algún paso falló, y ponga los números de paso y los códigos en `--notes`.
+   - **Lo que debería ver:** una línea `✓`, y `aictl drill show` ahora muestra esta revisión manual.
+   - **Si no funciona:** `LAI-CLI-008`: ejecútelo en una terminal (pide el PIN) o con `sudo`. Si la computadora no se puede usar en absoluto, escriba el resultado en el registro en papel ([Parte 10](#parte-10-registro-en-papel-solo-cuando-la-computadora-no-se-puede-usar)) y regístrelo aquí después.
+
+Lo que haya fallado: anote el código que apareció y siga su línea de solución, o búsquelo en [07 Resolución de problemas](07-troubleshooting.md).

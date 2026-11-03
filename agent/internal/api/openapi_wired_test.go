@@ -77,7 +77,8 @@ func implementedRoutes(t *testing.T) []api.Route {
 	// GET /models, GET and DELETE /models/{id}, POST /models/{id}/download, GET /key and POST
 	// /key/rotate (AGENT-15); the handlers are not called, so the dependencies stay empty.
 	routes = append(routes, modelsapi.Routes(modelsapi.Deps{})...)
-	// POST, GET and DELETE /drill (DRILL-01); the handlers are not called, so the service stays nil.
+	// POST, GET and DELETE /drill (DRILL-01) and POST /drill/manual (DRILL-06); the handlers are not
+	// called, so the service stays nil.
 	routes = append(routes, api.DrillRoutes(api.DrillDeps{})...)
 	return routes
 }
@@ -118,7 +119,7 @@ func TestPlannedOperations(t *testing.T) {
 		issue, _ := op.Raw["x-localai-issue"].(string)
 		byIssue[issue] = append(byIssue[issue], op.Key())
 	}
-	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs", "GET /doctor", "GET /mode", "POST /mode", "POST /mode/survival", "GET /status", "GET /portal/status", "GET /profile", "PUT /profile", "GET /catalog", "POST /catalog/refresh", "POST /models/{id}/load", "POST /models/{id}/unload", "PUT /models/default", "GET /models", "GET /models/{id}", "DELETE /models/{id}", "POST /models/{id}/download", "GET /key", "POST /key/rotate", "GET /cloud", "DELETE /cloud", "POST /cloud/enroll", "POST /cloud/resend-key", "POST /drill", "GET /drill", "DELETE /drill"} {
+	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs", "GET /doctor", "GET /mode", "POST /mode", "POST /mode/survival", "GET /status", "GET /portal/status", "GET /profile", "PUT /profile", "GET /catalog", "POST /catalog/refresh", "POST /models/{id}/load", "POST /models/{id}/unload", "PUT /models/default", "GET /models", "GET /models/{id}", "DELETE /models/{id}", "POST /models/{id}/download", "GET /key", "POST /key/rotate", "GET /cloud", "DELETE /cloud", "POST /cloud/enroll", "POST /cloud/resend-key", "POST /drill", "GET /drill", "DELETE /drill", "POST /drill/manual"} {
 		if !implementedKeys[key] {
 			t.Errorf("%s must be implemented", key)
 		}

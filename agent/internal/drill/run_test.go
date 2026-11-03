@@ -169,7 +169,7 @@ func TestLifecycleEventsStateAndMetrics(t *testing.T) {
 	if got := evs[2].Data.(events.DrillCheckDone); got != (events.DrillCheckDone{RunID: res.RunID, ID: "drl.b", Result: "warn", Code: doctor.DRL031}) {
 		t.Errorf("second drill.check_done = %+v", got)
 	}
-	if got := evs[3].Data.(events.DrillDone); got != (events.DrillDone{RunID: res.RunID, Overall: "warn", SurvivalReady: false}) {
+	if got := evs[3].Data.(events.DrillDone); got != (events.DrillDone{RunID: res.RunID, Overall: "warn", SurvivalReady: false, Trigger: "manual"}) {
 		t.Errorf("drill.done = %+v", got)
 	}
 
@@ -476,7 +476,7 @@ func TestAbortRestoresAndMarksTheRunAborted(t *testing.T) {
 	}
 	evs := r.pub.events()
 	last := evs[len(evs)-1]
-	if last.Typ != events.TypeDrillDone || last.Data.(events.DrillDone) != (events.DrillDone{RunID: res.RunID, Overall: "aborted"}) {
+	if last.Typ != events.TypeDrillDone || last.Data.(events.DrillDone) != (events.DrillDone{RunID: res.RunID, Overall: "aborted", Trigger: "manual"}) {
 		t.Fatalf("last event = %+v", last)
 	}
 	for _, e := range evs {
@@ -496,6 +496,8 @@ func TestAbortErrors(t *testing.T) {
 	}
 	g := newGate()
 	r.add(g.check("drl.hang", 1))
+	// The restore on the way out waits for the test, so the run is still active at the second Abort.
+	r.rest.hold = make(chan struct{})
 	res, _ := r.eng.Start(context.Background(), StartRequest{})
 	<-g.started
 	if _, err := r.eng.Abort("drl-20200101T000000Z-aaaa"); !errors.Is(err, ErrNoRun) {
@@ -507,6 +509,7 @@ func TestAbortErrors(t *testing.T) {
 	if id, err := r.eng.Abort(""); err != nil || id != res.RunID {
 		t.Fatalf("a second Abort is idempotent: %q, %v", id, err)
 	}
+	close(r.rest.hold)
 	r.wait()
 	if _, err := r.eng.Abort(""); !errors.Is(err, ErrNoRun) {
 		t.Fatalf("Abort after the end = %v, want ErrNoRun", err)

@@ -101,6 +101,9 @@ type Deps struct {
 	Restorer Restorer
 	// Metrics receives the gauges; nil drops them.
 	Metrics Metrics
+	// Observer is told of every document the engine saves, the reporter's feed (report.go); nil
+	// drops them.
+	Observer Observer
 
 	// NodeID, AgentVersion and CatalogVersion fill the document header.
 	NodeID         string
@@ -320,29 +323,35 @@ func (e *Engine) release(ar *activeRun) {
 // the run in flight, when the caller has one). It draws random suffixes and, if the generator keeps
 // colliding, walks the 65536 suffixes of that second in order.
 func (e *Engine) newRunID(now time.Time, avoid string) string {
+	return e.newIDWith(now, avoid, "")
+}
+
+// newIDWith is newRunID for an id that ends in suffix ("-manual" for a manual_plug entry): the id it
+// returns is free with the suffix on.
+func (e *Engine) newIDWith(now time.Time, avoid, suffix string) string {
 	rd := e.d.Rand
 	if rd == nil {
 		rd = rand.Reader
 	}
 	stamp := "drl-" + now.Format("20060102T150405Z") + "-"
-	free := func(id string) bool { return id != avoid && !e.d.Results.Has(id) }
+	free := func(id string) bool { return id != avoid && !e.d.Results.Has(id+suffix) }
 	var b [2]byte
 	for i := 0; i < 16; i++ {
 		if _, err := io.ReadFull(rd, b[:]); err != nil {
 			b = [2]byte{byte(now.Nanosecond()), byte(now.Nanosecond() >> 8)}
 		}
 		if id := stamp + hex.EncodeToString(b[:]); free(id) {
-			return id
+			return id + suffix
 		}
 	}
 	start := int(b[0])<<8 | int(b[1])
 	for i := 1; i < 1<<16; i++ {
 		n := (start + i) & 0xffff
 		if id := fmt.Sprintf("%s%04x", stamp, n); free(id) {
-			return id
+			return id + suffix
 		}
 	}
-	return stamp + hex.EncodeToString(b[:])
+	return stamp + hex.EncodeToString(b[:]) + suffix
 }
 
 // Running reports the run in flight, so the sync engine can refuse to start while a drill is active.

@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/state"
 )
@@ -33,9 +34,10 @@ const (
 	tmpInfix      = ".tmp-"
 )
 
-// runIDPattern is a run id: drl-YYYYMMDDTHHMMSSZ-<4hex>, or ...-manual for a manual_plug entry
-// (DRILL-06). It is checked before an id becomes a file name, so a request can never name a path.
-var runIDPattern = regexp.MustCompile(`^drl-[0-9]{8}T[0-9]{6}Z-([0-9a-f]{4}|manual)$`)
+// runIDPattern is a run id: drl-YYYYMMDDTHHMMSSZ-<4hex>, or drl-YYYYMMDDTHHMMSSZ-<4hex>-manual for a
+// manual_plug entry (DRILL-06; the bare ...-manual form is accepted too). It is checked before an id
+// becomes a file name, so a request can never name a path.
+var runIDPattern = regexp.MustCompile(`^drl-[0-9]{8}T[0-9]{6}Z-([0-9a-f]{4}(-manual)?|manual)$`)
 
 // ValidRunID reports whether id has the shape of a run id.
 func ValidRunID(id string) bool { return runIDPattern.MatchString(id) }
@@ -282,6 +284,47 @@ func (s *Results) Latest() ([]byte, error) {
 		return s.fs.ReadFile(s.path(runs[i].id))
 	}
 	return nil, ErrNotFound
+}
+
+// All returns every kept document, newest first by the time the run finished (then by run id), for
+// the reporter's startup, whatever their state. A document that cannot be read or decoded is left
+// out (the retention and Latest treat such a file the same way). A missing directory is no
+// documents.
+func (s *Results) All() ([]*Document, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	runs, err := s.list()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Document, 0, len(runs))
+	for _, r := range runs {
+		data, err := s.fs.ReadFile(s.path(r.id))
+		if err != nil {
+			continue
+		}
+		var doc Document
+		if json.Unmarshal(data, &doc) != nil || doc.RunID != r.id {
+			continue
+		}
+		out = append(out, &doc)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := finishedOf(out[i]), finishedOf(out[j])
+		if !a.Equal(b) {
+			return a.After(b)
+		}
+		return out[i].RunID > out[j].RunID
+	})
+	return out, nil
+}
+
+// finishedOf is the time a document's run finished, its start for one that has no finish time.
+func finishedOf(d *Document) time.Time {
+	if d.FinishedAt != nil {
+		return *d.FinishedAt
+	}
+	return d.StartedAt
 }
 
 // run is a kept document, as the retention sees it.

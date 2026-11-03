@@ -239,11 +239,23 @@ type DrillCheckDone struct {
 	Code   string `json:"code,omitempty"`
 }
 
-// DrillDone is the data of drill.done.
+// DrillDone is the data of drill.done. Trigger is the trigger of the run (absent for a run that
+// recovery closed). Notice is the desktop notification text of a finished scheduled run in both
+// languages (drill.md section 4.5) and is absent for every other run, so a listener that shows a
+// notification only when it is present never shows one for a manual run or an aborted one.
 type DrillDone struct {
-	RunID         string `json:"run_id"`
-	Overall       string `json:"overall"`
-	SurvivalReady bool   `json:"survival_ready"`
+	RunID         string       `json:"run_id"`
+	Overall       string       `json:"overall"`
+	SurvivalReady bool         `json:"survival_ready"`
+	Trigger       string       `json:"trigger,omitempty"`
+	Notice        *DrillNotice `json:"notice,omitempty"`
+}
+
+// DrillNotice is the text of the notification the desktop shows after a scheduled drill, in English
+// and Spanish. The desktop picks the one of its own language.
+type DrillNotice struct {
+	EN string `json:"en"`
+	ES string `json:"es"`
 }
 
 // ResyncData is the data of resync. Reason is ResyncGap or ResyncRestart.

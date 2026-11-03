@@ -93,14 +93,6 @@ type Handshake struct {
 	ServerTime func() time.Time
 }
 
-// Job is a queued command for the claim routes.
-type Job struct {
-	ID     string
-	Type   string
-	Params any
-	Token  string
-}
-
 // Server is the fake cloud: a TLS test server (use Client() as the http client of the code under test).
 type Server struct {
 	*httptest.Server
@@ -139,9 +131,11 @@ type Server struct {
 	states   []json.RawMessage
 	keys     map[string]string // node id -> key
 	keyCount int
-	jobs     []Job
-	holds    map[string]chan struct{} // route -> gate the next answer waits on
-	done     chan struct{}            // closed when the test ends, so a held answer never outlives it
+	cmds     commandState
+	// holdClaims makes a claim without a job wait (a long poll); see HoldClaims.
+	holdClaims bool
+	holds      map[string]chan struct{} // route -> gate the next answer waits on
+	done       chan struct{}            // closed when the test ends, so a held answer never outlives it
 }
 
 // Bundle is a catalog the fake serves.
@@ -194,10 +188,7 @@ func New(t testing.TB) *Server {
 	mux.HandleFunc("POST /api/nodes/{id}/localai/state", s.route(RouteState, s.state))
 	mux.HandleFunc("POST /api/nodes/{id}/localai/key", s.route(RouteKey, s.key))
 	mux.HandleFunc("GET /api/nodes/{id}/localai/catalog", s.route(RouteCatalog, s.catalog))
-	mux.HandleFunc("POST /api/nodes/{id}/localai/commands/claim", s.route(RouteClaim, s.claim))
-	mux.HandleFunc("POST /api/nodes/{id}/localai/commands/{cmd}/renew", s.route(RouteRenew, s.settle("renew")))
-	mux.HandleFunc("POST /api/nodes/{id}/localai/commands/{cmd}/result", s.route(RouteResult, s.settle("result")))
-	mux.HandleFunc("POST /api/nodes/{id}/localai/commands/{cmd}/failure", s.route(RouteFailure, s.settle("failure")))
+	s.cmdRoutes(mux)
 	s.Server = httptest.NewTLSServer(mux)
 	t.Cleanup(s.Server.Close)
 	t.Cleanup(func() { close(s.done) }) // runs before Server.Close, which waits for held answers
@@ -357,13 +348,6 @@ func (s *Server) StoredKey(nodeID string) (string, int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.keys[nodeID], s.keyCount
-}
-
-// QueueJob adds a command for the claim route.
-func (s *Server) QueueJob(j Job) {
-	s.mu.Lock()
-	s.jobs = append(s.jobs, j)
-	s.mu.Unlock()
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -654,40 +638,4 @@ func (s *Server) catalog(w http.ResponseWriter, r *http.Request, _ []byte) (int,
 	}
 	w.Header().Set("ETag", `"`+sha+`"`)
 	return 200, envelope(map[string]any{"version": b.Version, "bundleSha256": sha, "approvedAt": b.ApprovedAt, "files": files})
-}
-
-func (s *Server) claim(_ http.ResponseWriter, r *http.Request, _ []byte) (int, any) {
-	if _, ok := s.node(r); !ok {
-		return 404, errNoNode
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.Disabled {
-		return 403, map[string]any{"error": map[string]any{"message": "Forbidden", "details": map[string]any{"reason": "node_disabled"}}}
-	}
-	jobs := []any{}
-	if len(s.jobs) > 0 {
-		j := s.jobs[0]
-		s.jobs = s.jobs[1:]
-		jobs = append(jobs, map[string]any{
-			"job":    map[string]any{"id": j.ID, "type": j.Type, "attempts": 1},
-			"params": j.Params, "claimToken": j.Token, "renewIntervalMs": 20000, "traceparent": nil,
-		})
-	}
-	return 200, envelope(map[string]any{"jobs": jobs})
-}
-
-func (s *Server) settle(kind string) handler {
-	return func(_ http.ResponseWriter, r *http.Request, _ []byte) (int, any) {
-		if _, ok := s.node(r); !ok {
-			return 404, errNoNode
-		}
-		switch kind {
-		case "renew":
-			return 200, envelope(map[string]any{"leaseExpiresAt": s.Now().Add(time.Minute).UTC().Format(time.RFC3339)})
-		case "result":
-			return 200, envelope(map[string]any{"status": "succeeded"})
-		}
-		return 200, envelope(map[string]any{"status": "failed"})
-	}
 }

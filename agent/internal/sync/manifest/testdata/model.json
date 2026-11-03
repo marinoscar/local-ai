@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "item_id": "model-example",
+  "item_kind": "model",
+  "engine": "llama",
+  "catalog_version": "2026.11.02-1",
+  "version": "0123456789ab",
+  "sort_key": "2026-11-02T03:41:10Z",
+  "state": "verified",
+  "source": {
+    "type": "huggingface",
+    "repo": "org-alpha/Model-X-GGUF",
+    "revision": "{{sha:revision}}"
+  },
+  "files": [
+    {
+      "kind": "weights",
+      "path": "Model-X-Q4.gguf",
+      "size_bytes": 5870000000,
+      "sha256": "{{sha:weights}}",
+      "sha256_source": "catalog+hf_lfs",
+      "url": "https://example.test/org-alpha/Model-X-GGUF/resolve/main/Model-X-Q4.gguf?a=1&b=2"
+    }
+  ],
+  "total_bytes": 5870000000,
+  "downloaded_at": "2026-11-02T03:39:55Z",
+  "verified_at": "2026-11-02T03:41:10Z",
+  "last_reverified_at": "2026-11-02T03:41:10Z",
+  "trust": "pinned",
+  "synced_by": {
+    "node_id": "node-a",
+    "agent_version": "0.4.0",
+    "run_id": "run-20261102T031500Z-a1f3"
+  },
+  "history": [
+    {
+      "version": "fedcba987654",
+      "verified_at": "2026-08-01T03:20:00Z",
+      "superseded_at": "2026-11-02T03:41:10Z"
+    }
+  ]
+}
