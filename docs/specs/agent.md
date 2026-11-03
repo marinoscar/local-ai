@@ -1143,7 +1143,7 @@ Steps 12–16 run concurrently after step 11, except that 14 waits for 12, and 1
 | `adapt.CloudSync` | the cloud snapshot's sync source (a registered `UseSnapshotSources` replaces what it supplies) |
 | the engine | `modes.Deps.Sync` (`CancelGraceful`, `ScheduleCatchup`), `drill.Deps.Ark` (`RunActive`), shutdown step 5 |
 | `run.SettingsValidator`, `piper.BlockValidator` | `config.Hooks.Blocks["sync"]` and `["piper"]` |
-| `kit.Refresher` | before every READY refresh of a root that has a `kit/` folder (the engine has no per-item hook), so `kit/MANIFEST.json` and `kit/README.txt` describe the disk |
+| `kit.Refresher`, `kit.UpdatePins` | before every READY refresh of a root that has a `kit/` folder (the engine has no per-item hook): the index (`kit/MANIFEST.json`, `kit/README.txt`) is regenerated to describe the disk, and this node merges its own entries into `kit/catalog/pins.json` when the root has `kit/catalog` (commits from the `BUILD.json` of the builds in use, because `node.yaml` keeps only 9 characters and a pin needs 40) |
 | `piper.Service` | `POST /speech/tts`, `GET /speech/voices` and the piper health spec of the supervisor |
 | `whisper.DoctorCheck` | the doctor registry, next to the kiwix check (`LAI-SVC-012` when whisper is enabled and not built for the configured backend) |
 

@@ -401,6 +401,73 @@ func TestKitIndexIsRegeneratedBeforeReady(t *testing.T) {
 	}
 }
 
+// This node adds itself to kit/catalog/pins.json of a root it synced (rebuild-kit.md section 3.3): the
+// commits come from the BUILD.json of the builds in use (node.yaml keeps 9 characters, a pin needs 40),
+// the codename and architecture from os-release; a root with no kit/catalog is left alone and a damaged
+// file is never rewritten.
+func TestNodeAddsItselfToThePinsOfARoot(t *testing.T) {
+	llamaSHA := strings.Repeat("ab", 20) // built at run time: no 40-hex literal in the source
+	r := newRig(t, func(r *rig) {
+		r.write("etc/os-release", "VERSION_CODENAME=resolute\n", 0o644)
+		r.write("opt/localai/llama.cpp/current/BUILD.json", `{"commit":"`+llamaSHA+`","backend":"cpu"}`, 0o644)
+		r.write("opt/localai/whisper.cpp/current/BUILD.json", `{"commit":"short"}`, 0o644) // not a pin: left out
+	})
+	d := r.start()
+	r.waitStarted()
+	own, ok := d.ark.facts.nodePins()
+	if !ok {
+		t.Fatal("no pins to report")
+	}
+	if got := own.LlamaCommits(rigNode); len(got) != 1 || got[0] != llamaSHA {
+		t.Errorf("llama commits = %v, want the one of BUILD.json", got)
+	}
+	if got := own.WhisperCommits(rigNode); len(got) != 0 {
+		t.Errorf("whisper commits = %v, a short commit is not a pin", got)
+	}
+	if got := own.AgentTags(rigNode); len(got) != 1 || got[0] != "node-v0.1.0-test" {
+		t.Errorf("agent tags = %v", got)
+	}
+	if len(own.Codenames) != 1 || own.Codenames[0].Codename != "resolute" {
+		t.Errorf("codenames = %+v", own.Codenames)
+	}
+
+	base := t.TempDir()
+	mk := func(name string, catalogDir bool) ark.Root {
+		dir := filepath.Join(base, name, "kit")
+		if catalogDir {
+			dir = filepath.Join(dir, "catalog")
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return ark.Root{ID: name, Kind: ark.KindArkDrive, Path: filepath.Join(base, name), State: ark.StateReady}
+	}
+	withCatalog, without, damaged := mk("a", true), mk("b", false), mk("c", true)
+	badFile := filepath.Join(damaged.Path, "kit", "catalog", "pins.json")
+	if err := os.WriteFile(badFile, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	k := kitRefreshing{
+		inner: &recRefresher{}, roots: func() []ark.Root { return []ark.Root{withCatalog, without, damaged} },
+		log:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		refresher: kit.Refresher{FS: config.OSFS{}, Now: func() time.Time { return t0 }},
+		pins:      func() (kit.Pins, bool) { return own, true },
+	}
+	if _, err := k.Refresh(context.Background(), []string{"a", "b", "c"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := kit.ReadPins(config.OSFS{}, filepath.Join(withCatalog.Path, "kit", "catalog", "pins.json"))
+	if err != nil || len(got.LlamaCommits(rigNode)) != 1 {
+		t.Errorf("pins of the root with kit/catalog = %+v, %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(without.Path, "kit", "catalog")); err == nil {
+		t.Error("kit/catalog was created on a root that had none")
+	}
+	if b, _ := os.ReadFile(badFile); string(b) != "{not json" {
+		t.Errorf("a damaged pins.json was rewritten: %q", b)
+	}
+}
+
 // The facts the kit completeness rules read come from node.yaml, os-release and the architecture, the
 // same as `aictl kit status` reads (kitReadFacts in internal/cli).
 func TestKitNodeFacts(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -33,6 +34,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
+	"github.com/marinoscar/local-ai/agent/internal/svc/whisper"
 	"github.com/marinoscar/local-ai/agent/internal/sync/download"
 	"github.com/marinoscar/local-ai/agent/internal/sync/item"
 	"github.com/marinoscar/local-ai/agent/internal/sync/journal"
@@ -378,7 +380,7 @@ func (s syncClock) AfterFunc(d time.Duration, f func()) func() bool {
 // left alone.
 func (s *arkStack) readyRefresher() run.ReadyRefresher {
 	return kitRefreshing{
-		inner: adapt.Ready{Service: s.ready}, roots: s.roots.List, log: s.d.log.With("component", "sync"),
+		inner: adapt.Ready{Service: s.ready}, roots: s.roots.List, log: s.d.log.With("component", "sync"), pins: s.facts.nodePins,
 		refresher: kit.Refresher{
 			FS: config.OSFS{}, Now: s.d.env.Clock.Now,
 			Expected:       s.expectedKit,
@@ -405,8 +407,10 @@ func (s *arkStack) expectedKit(root ark.Root) []catalog.ContentItem {
 type kitRefreshing struct {
 	inner     run.ReadyRefresher
 	refresher kit.Refresher
-	roots     func() []ark.Root
-	log       *slog.Logger
+	// pins returns this node's own pin entries; nil, or ok false, reports nothing.
+	pins  func() (kit.Pins, bool)
+	roots func() []ark.Root
+	log   *slog.Logger
 }
 
 // Refresh implements run.ReadyRefresher.
@@ -425,8 +429,34 @@ func (k kitRefreshing) Refresh(ctx context.Context, rootIDs []string) (map[strin
 		if err := k.refresher.Refresh(ctx, r); err != nil {
 			k.log.Warn("the kit index could not be regenerated", "root", r.ID, "code", doctor.KIT046, "error", err.Error())
 		}
+		k.reportPins(r)
 	}
 	return k.inner.Refresh(ctx, rootIDs)
+}
+
+// reportPins adds this node's entries to kit/catalog/pins.json of a root it synced (rebuild-kit.md
+// section 3.3: unenrolled, each node merges itself into the pins of the roots it syncs, so a drive keeps
+// the sources for every node of the lab). Only a root that already has kit/catalog is touched (the
+// kit-catalog item put it there); a damaged or newer file is left exactly as it is (LAI-KIT-045).
+func (k kitRefreshing) reportPins(r ark.Root) {
+	if k.pins == nil {
+		return
+	}
+	dir := filepath.Join(r.Path, kit.DirName, kit.PartCatalog)
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		return
+	}
+	own, ok := k.pins()
+	if !ok {
+		return
+	}
+	now := time.Now()
+	if k.refresher.Now != nil {
+		now = k.refresher.Now()
+	}
+	if _, err := kit.UpdatePins(k.refresher.FS, filepath.Join(dir, kit.PinsFileName), own, now); err != nil {
+		k.log.Warn("this node could not be added to the kit pins", "root", r.ID, "code", kit.CodePinsDamaged, "damaged", kit.IsPinsDamaged(err), "error", err.Error())
+	}
 }
 
 // arkUnavailable stands in for the planner and the readiness view of a daemon whose sync stack could
@@ -542,6 +572,52 @@ func (f *nodeFacts) driver(backend string) (cuda, branch string) {
 	f.driverCUDA, f.driverBranch, f.driverAt, f.driverBackend = cuda, branch, now, backend
 	f.mu.Unlock()
 	return cuda, branch
+}
+
+var (
+	fullCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	agentTagOK = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+([-+.][0-9A-Za-z.-]+)?$`)
+)
+
+// buildCommit is the full commit a build was made from: the "commit" of its BUILD.json (node.yaml keeps
+// only the first 9 characters, and a pin needs all 40). "" when there is no build or it is unreadable.
+func buildCommit(path string) string {
+	raw, err := config.OSFS{}.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var b struct {
+		Commit string `json:"commit"`
+	}
+	if json.Unmarshal(raw, &b) != nil || !fullCommit.MatchString(b.Commit) {
+		return ""
+	}
+	return b.Commit
+}
+
+// nodePins is what this node reports into kit/catalog/pins.json (kit.Report): its llama.cpp and
+// whisper.cpp commits (from the BUILD.json of the build in use), the agent tag, the Ubuntu codename and
+// architecture, and on a CUDA node the driver branch. A fact that is unknown or not in the form a pin
+// takes is left out. ok is false when nothing is known.
+func (f *nodeFacts) nodePins() (kit.Pins, bool) {
+	facts := f.kitNode()
+	if facts == nil || facts.NodeID == "" {
+		return kit.Pins{}, false
+	}
+	p := kit.NodePins{
+		NodeID: facts.NodeID, Codename: facts.Codename, Arch: facts.Arch, NvidiaBranch: facts.NvidiaBranch,
+		LlamaCommit:   buildCommit(f.d.c.Paths.BuildJSON()),
+		WhisperCommit: buildCommit(f.d.c.Paths.Join(whisper.Root + "/current/BUILD.json")),
+	}
+	if agentTagOK.MatchString(facts.AgentVersion) {
+		p.AgentTag = "node-v" + facts.AgentVersion
+	}
+	pins, err := kit.Report(p, f.d.env.Clock.Now())
+	if err != nil {
+		f.d.log.Warn("this node's kit pins are not valid and are not reported", "code", kit.CodePinsDamaged, "error", err.Error())
+		return kit.Pins{}, false
+	}
+	return pins, true
 }
 
 // readDriver asks nvidia-smi for the CUDA version the driver supports (the "CUDA Version: X.Y" of its
