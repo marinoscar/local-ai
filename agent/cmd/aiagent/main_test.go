@@ -24,6 +24,12 @@ func runCmd(t *testing.T, ctx context.Context, args ...string) (int, string, str
 	old := serve
 	serve = func(context.Context, io.Writer) int { return 0 }
 	t.Cleanup(func() { serve = old })
+	// Nor does any test touch the machine through the migration: without root, as in CI.
+	oldM := newMigrator
+	newMigrator = func(context.Context, migrateFlags, io.Writer) (migrator, func(), error) {
+		return nil, nil, &migrateError{code: "LAI-CLI-006", msg: "aiagent migrate must be run as root", exit: 1}
+	}
+	t.Cleanup(func() { newMigrator = oldM })
 	var out, errb bytes.Buffer
 	code := run(ctx, args, &out, &errb)
 	return code, out.String(), errb.String()
@@ -52,8 +58,9 @@ func TestDispatch(t *testing.T) {
 		{"aiagent serve runs the daemon", []string{"aiagent", "serve"}, 0, "", ""},
 		{"aiagent version", []string{"aiagent", "version"}, 0, "aiagent ", ""},
 		{"release file name is the agent, not the cli", []string{"./aiagent-linux-amd64", "version"}, 0, "aiagent ", ""},
-		{"migrate llama-qwen is a stub", []string{"aiagent", "migrate", "llama-qwen", "--dry-run"}, 1, "", "not implemented"},
-		{"migrate without target", []string{"aiagent", "migrate"}, 2, "", "usage:"},
+		{"migrate llama-qwen needs root", []string{"aiagent", "migrate", "llama-qwen", "--dry-run"}, 1, "", "LAI-CLI-006"},
+		{"migrate without target runs the pending ones (needs root)", []string{"aiagent", "migrate"}, 1, "", "LAI-CLI-006"},
+		{"migrate with an unknown option", []string{"aiagent", "migrate", "llama-qwen", "--bogus"}, 2, "", "usage:"},
 		{"update-rollback-check takes no argument", []string{"aiagent", "update-rollback-check", "now"}, 2, "", "usage:"},
 		{"no argument prints usage", []string{"aiagent"}, 2, "", "usage:"},
 		{"unknown subcommand prints usage", []string{"aiagent", "bogus"}, 2, "", "usage:"},
