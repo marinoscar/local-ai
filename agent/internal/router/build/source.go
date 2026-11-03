@@ -5,6 +5,8 @@ import (
 	"bufio"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/execx"
+	"github.com/marinoscar/local-ai/agent/internal/kit"
 )
 
 // DefaultCloneURL is the upstream repository of the online source.
@@ -25,6 +28,27 @@ const DefaultCloneURL = "https://github.com/ggml-org/llama.cpp.git"
 // next source of the chain is tried. Any other error means the source has the commit but could not
 // deliver it, which stops the chain from ending in LAI-KIT-002.
 var ErrNotAvailable = errors.New("build: the source does not have this commit")
+
+// ErrSourceDamaged is what a Source returns (wrapped is fine) when it has the commit but the copy
+// cannot be trusted: a kit tarball whose sha256 differs from the one the kit recorded. The chain goes
+// on (rebuild-kit.md section 6: the mirror is used when it has the commit); when nothing else
+// delivers the commit the build ends with LAI-KIT-001.
+var ErrSourceDamaged = kit.ErrSourceDamaged
+
+// MissingToolError is what a Source returns when a program it needs is not installed; the preflight
+// turns it into the missing tool and its apt package.
+type MissingToolError struct {
+	Tool, Package string
+	Err           error
+}
+
+// Error implements error.
+func (e *MissingToolError) Error() string {
+	return e.Tool + " is needed for this source: " + e.Err.Error()
+}
+
+// Unwrap lets errors.Is reach the cause.
+func (e *MissingToolError) Unwrap() error { return e.Err }
 
 // SourceEnv is what a Source may use: the same seams as the Manager.
 type SourceEnv struct {
@@ -50,6 +74,22 @@ type Source interface {
 	Fetch(ctx context.Context, env SourceEnv, ref, dest string) (sha string, err error)
 }
 
+// SourceProbe is what a SourceChecker found.
+type SourceProbe struct {
+	// Detail says in one line what was found ("kit tarball <path>, sha256 verified").
+	Detail string
+	// NeedsGit is true when delivering the commit runs git.
+	NeedsGit bool
+}
+
+// SourceChecker is the optional half of a Source that the preflight (`--dry-run`) uses: it says
+// whether the source can deliver ref, without extracting anything and without the network. It
+// returns ErrNotAvailable for a source that does not have the commit and an error wrapping
+// ErrSourceDamaged for one whose copy fails its checksum. A source without it is assumed to work.
+type SourceChecker interface {
+	Check(ctx context.Context, env SourceEnv, ref string) (SourceProbe, error)
+}
+
 // DefaultSources is the chain a Manager uses when Options.Sources is nil: the online clone, which a
 // Request.Offline skips. The already-extracted tree is always checked first, by the Manager.
 func DefaultSources() []Source { return []Source{GitCloneSource{}} }
@@ -62,7 +102,7 @@ func gitEnv() []string {
 func (e SourceEnv) git(ctx context.Context, timeout time.Duration, args ...string) (execx.Result, error) {
 	gitPath, err := e.Lookup("git")
 	if err != nil {
-		return execx.Result{}, fmt.Errorf("git is needed for this source: %w", err)
+		return execx.Result{}, &MissingToolError{Tool: "git", Package: "git", Err: err}
 	}
 	return e.Exec.Run(ctx, execx.Cmd{Path: gitPath, Args: args, Timeout: timeout, MaxOut: 1 << 20, Env: gitEnv()})
 }
@@ -170,6 +210,22 @@ func (s GitArchiveSource) Fetch(ctx context.Context, env SourceEnv, ref, dest st
 	return sha, nil
 }
 
+// Check implements SourceChecker with `git cat-file -e <ref>^{commit}` (rebuild-kit.md section
+// 4.3.1): the mirror is there and has the commit.
+func (s GitArchiveSource) Check(ctx context.Context, env SourceEnv, ref string) (SourceProbe, error) {
+	if fi, err := env.FS.Stat(s.Repo); err != nil || !fi.IsDir() {
+		return SourceProbe{}, fmt.Errorf("%w: %s is not a directory", ErrNotAvailable, s.Repo)
+	}
+	res, err := env.git(ctx, time.Minute, "-c", "safe.directory="+s.Repo, "-C", s.Repo, "cat-file", "-e", ref+"^{commit}")
+	if err != nil {
+		return SourceProbe{}, err
+	}
+	if res.ExitCode != 0 {
+		return SourceProbe{}, fmt.Errorf("%w: %s", ErrNotAvailable, s.Repo)
+	}
+	return SourceProbe{Detail: "commit " + ref + " is in " + s.Repo, NeedsGit: true}, nil
+}
+
 // DirSource builds from a directory the operator names (--source). A git checkout is read with
 // `git archive <commit>`, so the tree is exactly the commit whatever is checked out; a plain tree is
 // copied as it is (without .git), and then the commit must be a full sha, because nothing can
@@ -210,12 +266,145 @@ func (s DirSource) Fetch(ctx context.Context, env SourceEnv, ref, dest string) (
 	return ref, nil
 }
 
+// Check implements SourceChecker.
+func (s DirSource) Check(ctx context.Context, env SourceEnv, ref string) (SourceProbe, error) {
+	fi, err := env.FS.Stat(s.Dir)
+	if err != nil || !fi.IsDir() {
+		return SourceProbe{}, fmt.Errorf("%s is not a directory", s.Dir)
+	}
+	if _, err := env.FS.Lstat(filepath.Join(s.Dir, ".git")); err == nil {
+		p, err := GitArchiveSource{Repo: s.Dir, Label: "dir"}.Check(ctx, env, ref)
+		if errors.Is(err, ErrNotAvailable) {
+			return SourceProbe{}, fmt.Errorf("commit %s is not in %s", ref, s.Dir)
+		}
+		return p, err
+	}
+	if !fullSHARe.MatchString(ref) {
+		return SourceProbe{}, fmt.Errorf("%s has no git history, so --commit must be a full 40-character sha", s.Dir)
+	}
+	if !treeComplete(env.FS, s.Dir) {
+		return SourceProbe{}, fmt.Errorf("%s is not a llama.cpp source tree (no CMakeLists.txt)", s.Dir)
+	}
+	return SourceProbe{Detail: s.Dir + " is a source tree"}, nil
+}
+
 // treeComplete tells whether dir holds an extracted llama.cpp tree. Extraction is a rename of a
 // finished directory, so a tree at its final path is whole; the marker file catches trees put there
 // by hand and directories that were emptied.
 func treeComplete(fsys FS, dir string) bool {
 	fi, err := fsys.Stat(filepath.Join(dir, "CMakeLists.txt"))
 	return err == nil && fi.Mode().IsRegular()
+}
+
+// ---- the kit sources (KIT-04) ----------------------------------------------------------
+
+// kitFS lets the kit lookup read through the build manager's FS.
+type kitFS struct{ FS }
+
+func (k kitFS) OpenRead(name string) (io.ReadCloser, error) { return k.FS.Open(name) }
+
+// KitTarballSource is the first offline source: the source tarball of the commit on any content root,
+// kit/src/<stem>-<commit>.tar.gz, accepted only when its sha256 is the one the kit recorded
+// (rebuild-kit.md sections 3.2.1 and 4.3.1). A tarball that fails the check is skipped with
+// ErrSourceDamaged so that the next source (the kit mirror) is tried; a commit with no tarball is
+// ErrNotAvailable. The digest is checked twice: before extraction, to pick a good root, and again
+// over the bytes that are extracted, so a file replaced in between is refused.
+type KitTarballSource struct {
+	// Roots are the content roots to look on, the internal root first.
+	Roots []string
+	// Stem is the kit name of the source ("llama.cpp"); default kit.SourceStemLlama.
+	Stem string
+}
+
+func (s KitTarballSource) stem() string {
+	if s.Stem != "" {
+		return s.Stem
+	}
+	return kit.SourceStemLlama
+}
+
+// Name implements Source.
+func (KitTarballSource) Name() string { return "kit-tarball" }
+
+// Network implements Source.
+func (KitTarballSource) Network() bool { return false }
+
+func (s KitTarballSource) find(env SourceEnv, ref string) (kit.Tarball, error) {
+	tb, err := kit.SourceFinder{FS: kitFS{env.FS}, Roots: s.Roots}.FindTarball(s.stem(), ref)
+	if errors.Is(err, kit.ErrSourceNotFound) {
+		return kit.Tarball{}, fmt.Errorf("%w: no tarball for %s in the kit", ErrNotAvailable, ref)
+	}
+	return tb, err
+}
+
+// Check implements SourceChecker.
+func (s KitTarballSource) Check(_ context.Context, env SourceEnv, ref string) (SourceProbe, error) {
+	tb, err := s.find(env, ref)
+	if err != nil {
+		return SourceProbe{}, err
+	}
+	return SourceProbe{Detail: "kit tarball " + tb.Path + " (sha256 matches the kit manifest)"}, nil
+}
+
+// Fetch implements Source: the tarball's top-level directory (git archive --prefix) is dropped.
+func (s KitTarballSource) Fetch(_ context.Context, env SourceEnv, ref, dest string) (string, error) {
+	tb, err := s.find(env, ref)
+	if err != nil {
+		return "", err
+	}
+	f, err := env.FS.Open(tb.Path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if err := extractTar(env.FS, io.TeeReader(f, h), dest, 1); err != nil {
+		return "", fmt.Errorf("extracting %s: %w", tb.Path, err)
+	}
+	// extractTar stops at the end of the tar stream; read what is left so the digest covers the file.
+	if _, err := io.Copy(io.Discard, io.TeeReader(f, h)); err != nil {
+		return "", err
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != tb.SHA256 {
+		return "", fmt.Errorf("%w: %s changed while it was read", ErrSourceDamaged, tb.Path)
+	}
+	return tb.Commit, nil
+}
+
+// KitSources is the offline chain of --from-kit: the verified source tarball of the commit on any
+// root, then the git mirror kit/git/<stem>.git of every root (`git archive <commit>`), in root order.
+// stem is the kit name of the source ("llama.cpp", see Recipe.Name).
+func KitSources(stem string, roots []string) []Source {
+	out := []Source{KitTarballSource{Roots: roots, Stem: stem}}
+	for _, root := range roots {
+		out = append(out, GitArchiveSource{Repo: kit.MirrorDir(root, stem), Label: "kit-mirror"})
+	}
+	return out
+}
+
+// ChainWithKit is the default chain of a node that has a kit: the kit sources, then (online only) the
+// GitHub clone. Options.Sources takes it; Request.Offline drops the clone.
+func ChainWithKit(stem string, roots []string, cloneURL string) []Source {
+	return append(KitSources(stem, roots), GitCloneSource{URL: cloneURL})
+}
+
+// sourceChain is the chain a build walks: Request.Sources and --from-kit replace Options.Sources.
+// (--source replaces everything with the one directory; ensureSource and the preflight apply that.)
+func (m *Manager) sourceChain(req Request) []Source {
+	switch {
+	case req.Sources != nil:
+		return req.Sources
+	case req.FromKit:
+		return KitSources(m.opt.Recipe.Name, m.kitRoots())
+	}
+	return m.opt.Sources
+}
+
+func (m *Manager) kitRoots() []string {
+	if m.opt.KitRoots == nil {
+		return nil
+	}
+	return m.opt.KitRoots()
 }
 
 // existingTree returns the full sha of an already-extracted tree for ref: src/<ref> for a full sha,
@@ -274,15 +463,12 @@ func (m *Manager) ensureSource(ctx context.Context, req Request, in Inputs) (str
 		}
 	}
 
-	sources := m.opt.Sources
-	if req.Sources != nil {
-		sources = req.Sources
-	}
+	sources := m.sourceChain(req)
 	if explicit {
 		sources = []Source{DirSource{Dir: req.SourceDir}}
 	}
 	env := SourceEnv{Exec: m.opt.Exec, FS: fsys, Lookup: m.opt.Lookup, Log: m.log}
-	var hard error
+	var hard, damaged error
 	for _, s := range sources {
 		if req.Offline && s.Network() {
 			continue
@@ -314,6 +500,9 @@ func (m *Manager) ensureSource(ctx context.Context, req Request, in Inputs) (str
 			}
 			m.log.Warn("the source failed", "source", s.Name(), "commit", ref, "error", err)
 			hard = fmt.Errorf("%s: %w", s.Name(), err)
+			if errors.Is(err, ErrSourceDamaged) {
+				damaged = hard
+			}
 			continue
 		}
 		final := filepath.Join(srcRoot, sha)
@@ -330,6 +519,8 @@ func (m *Manager) ensureSource(ctx context.Context, req Request, in Inputs) (str
 	}
 
 	switch {
+	case damaged != nil:
+		return fail(CodeSourceDamaged, "A llama.cpp source package of the kit is damaged and no other source has the commit "+ref+": "+damaged.Error(), "source_damaged", damaged)
 	case hard != nil:
 		return fail(CodeBuildFailed, "The llama.cpp source could not be fetched: "+hard.Error(), "source_failed", hard)
 	case req.Offline:
@@ -347,10 +538,19 @@ func (m *Manager) touch(dir string) {
 	}
 }
 
-// extractTar unpacks a tar stream, gzip-compressed or not, into dest, dropping the first strip path
-// components of every name. Names that are absolute or climb out with "..", links that point
-// outside the tree and special files are refused. pax headers (git archive writes the commit id in
-// one) are skipped.
+// ExtractArchive unpacks a tar stream, gzip-compressed or not, into dest (an existing directory),
+// dropping the first strip path components of every name. It is the one extraction every kit archive
+// goes through (source tarballs, prebuilt builds, the CUDA redistributables; the whisper and agent
+// builds reuse it). It refuses, without writing past the offending entry: names that are absolute or
+// climb out with "..", special files and hard links, a symlink whose target is absolute, climbs out
+// of the tree, or is not in its cleaned form (a/../b is how a chain of links reaches outside), an
+// entry whose parent directory is a symlink (nothing is ever written through a link), and a file or
+// directory that would replace a symlink. pax headers (git archive writes the commit id in one) are
+// skipped.
+func ExtractArchive(fsys FS, r io.Reader, dest string, strip int) error {
+	return extractTar(fsys, r, dest, strip)
+}
+
 func extractTar(fsys FS, r io.Reader, dest string, strip int) error {
 	br := bufio.NewReader(r)
 	if magic, err := br.Peek(2); err == nil && magic[0] == 0x1f && magic[1] == 0x8b {
@@ -364,6 +564,51 @@ func extractTar(fsys FS, r io.Reader, dest string, strip int) error {
 		r = br
 	}
 	tr := tar.NewReader(r)
+	real := map[string]bool{"": true} // directories (slash paths below dest) known to be real directories
+	// prepare checks that every parent of rel is a real directory, creating the missing ones.
+	prepare := func(rel string) error {
+		dir := path.Dir(rel)
+		if dir == "." {
+			return nil
+		}
+		var cur string
+		for _, part := range strings.Split(dir, "/") {
+			cur = path.Join(cur, part)
+			if real[cur] {
+				continue
+			}
+			fi, err := fsys.Lstat(filepath.Join(dest, filepath.FromSlash(cur)))
+			switch {
+			case errors.Is(err, os.ErrNotExist):
+				if err := fsys.MkdirAll(filepath.Join(dest, filepath.FromSlash(cur)), 0o755); err != nil {
+					return err
+				}
+			case err != nil:
+				return err
+			case !fi.IsDir():
+				return fmt.Errorf("%q is a link or a file where a directory is needed", cur)
+			}
+			real[cur] = true
+		}
+		return nil
+	}
+	// replaceable refuses to write over a symlink (and over a directory with a file).
+	replaceable := func(target string, wantDir bool) error {
+		fi, err := fsys.Lstat(target)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return errors.New("it would replace a link")
+		}
+		if fi.IsDir() != wantDir {
+			return errors.New("it would replace a directory with a file or the reverse")
+		}
+		return nil
+	}
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -383,14 +628,21 @@ func extractTar(fsys FS, r io.Reader, dest string, strip int) error {
 			continue
 		}
 		target := filepath.Join(dest, filepath.FromSlash(rel))
+		if err := prepare(rel); err != nil {
+			return fmt.Errorf("the entry %q: %w", hdr.Name, err)
+		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
+			if err := replaceable(target, true); err != nil {
+				return fmt.Errorf("the entry %q: %w", hdr.Name, err)
+			}
 			if err := fsys.MkdirAll(target, 0o755); err != nil {
 				return err
 			}
+			real[rel] = true
 		case tar.TypeReg:
-			if err := fsys.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
+			if err := replaceable(target, false); err != nil {
+				return fmt.Errorf("the entry %q: %w", hdr.Name, err)
 			}
 			perm := os.FileMode(0o644)
 			if hdr.Mode&0o111 != 0 {
@@ -400,7 +652,7 @@ func extractTar(fsys FS, r io.Reader, dest string, strip int) error {
 			if err != nil {
 				return err
 			}
-			_, cerr := io.Copy(w, tr) //nolint:gosec // the archive is a pinned commit from the kit or git
+			_, cerr := io.Copy(w, tr) //nolint:gosec // the archive is a pinned commit or a build from the kit, verified by its digest
 			if err := w.Close(); cerr == nil {
 				cerr = err
 			}
@@ -408,12 +660,13 @@ func extractTar(fsys FS, r io.Reader, dest string, strip int) error {
 				return cerr
 			}
 		case tar.TypeSymlink:
-			if path.IsAbs(hdr.Linkname) || !insideTree(path.Join(path.Dir(rel), hdr.Linkname)) {
-				return fmt.Errorf("the link %q points outside the tree", hdr.Name)
+			if !safeLinkTarget(rel, hdr.Linkname) {
+				return fmt.Errorf("the link %q points outside the tree or is not a plain relative path", hdr.Name)
 			}
-			if err := fsys.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
+			if err := replaceable(target, false); err != nil {
+				return fmt.Errorf("the entry %q: %w", hdr.Name, err)
 			}
+			_ = fsys.RemoveAll(target)
 			if err := fsys.Symlink(hdr.Linkname, target); err != nil {
 				return err
 			}
@@ -421,6 +674,17 @@ func extractTar(fsys FS, r io.Reader, dest string, strip int) error {
 			return fmt.Errorf("unsupported entry %q (type %c) in the archive", hdr.Name, hdr.Typeflag)
 		}
 	}
+}
+
+// safeLinkTarget reports whether a symlink named rel (slash path inside the tree) may point at link:
+// relative, not empty, in cleaned form (so ".." only leads) and inside the tree. With every parent
+// directory a real one, the cleaned form resolves on disk exactly as it reads, so a link can never
+// reach outside however the links are chained.
+func safeLinkTarget(rel, link string) bool {
+	if link == "" || path.IsAbs(link) || path.Clean(link) != link {
+		return false
+	}
+	return insideTree(path.Join(path.Dir(rel), link))
 }
 
 // stripName drops strip leading components of a tar name and reports whether the rest is a safe
@@ -483,7 +747,7 @@ func copyTree(fsys FS, src, dst, rel string, log *slog.Logger) error {
 			if err != nil {
 				return err
 			}
-			if path.IsAbs(link) || !insideTree(path.Join(rel, link)) {
+			if !safeLinkTarget(path.Join(rel, name), link) {
 				if log != nil {
 					log.Warn("skipping a symlink that leaves the source tree", "path", from)
 				}

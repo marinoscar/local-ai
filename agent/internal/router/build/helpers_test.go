@@ -416,7 +416,7 @@ func newHarness(t *testing.T, opts ...hopt) *harness {
 			}
 			return "", execx.ErrNotFound
 		},
-		Agent: h.agent, Probe: h.probe, Recorder: h.rec, Audit: h.audit,
+		Agent: h.agent, Probe: h.probe, Recorder: h.rec, Audit: h.audit, CompileUser: CompileAsCaller,
 		Clock: h.clk.Now, Sleep: h.clk.Sleep,
 		FreeBytes:       func(string) (uint64, error) { return 10 << 30, nil },
 		MemAvailableMiB: func() (int64, error) { return 10240, nil },

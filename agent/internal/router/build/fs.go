@@ -1,8 +1,10 @@
 package build
 
 import (
+	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -31,6 +33,8 @@ type FS interface {
 	Stat(path string) (os.FileInfo, error)
 	Lstat(path string) (os.FileInfo, error)
 	Chtimes(path string, atime, mtime time.Time) error
+	// Chown changes the owner of the path itself, never of what a symlink points at (lchown).
+	Chown(path string, uid, gid int) error
 }
 
 // OSFS is the real filesystem.
@@ -91,3 +95,38 @@ func (OSFS) Lstat(path string) (os.FileInfo, error) { return os.Lstat(path) }
 
 // Chtimes implements FS.
 func (OSFS) Chtimes(path string, atime, mtime time.Time) error { return os.Chtimes(path, atime, mtime) }
+
+// Chown implements FS.
+func (OSFS) Chown(path string, uid, gid int) error { return os.Lchown(path, uid, gid) }
+
+// chownTree changes the owner of dir and everything below it without following links. A node that
+// vanishes while the walk runs (a leftover being deleted) is not an error.
+func chownTree(fsys FS, dir string, uid, gid int) error {
+	if err := fsys.Chown(dir, uid, gid); err != nil {
+		return err
+	}
+	entries, err := fsys.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		p := filepath.Join(dir, e.Name())
+		fi, err := fsys.Lstat(p)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
+			if err := chownTree(fsys, p, uid, gid); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := fsys.Chown(p, uid, gid); err != nil {
+			return err
+		}
+	}
+	return nil
+}

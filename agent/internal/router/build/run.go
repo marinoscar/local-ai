@@ -17,6 +17,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 	"github.com/marinoscar/local-ai/agent/internal/execx"
+	"github.com/marinoscar/local-ai/agent/internal/kit"
 )
 
 const (
@@ -38,6 +39,15 @@ type run struct {
 	tools   Tools
 	logW    io.WriteCloser
 	logOpen bool
+	// redistRoot is the unpacked CUDA redistributable tree of option B ("" when the system's nvcc
+	// is used).
+	redistRoot string
+	// drop is set when the compile runs as another user (Options.CompileUser): uid and gid are
+	// that user's, setpriv the program that drops to it.
+	drop        bool
+	uid, gid    int
+	setpriv     string
+	compileUser string
 }
 
 // Build runs the whole procedure of llama-router.md section 4.10: resolve the inputs, check the
@@ -51,12 +61,7 @@ type run struct {
 // changes nothing but the build directory (kept as <id>.tmp.failed with its build.log); a failure
 // after it has switched current back (LAI-LLM-019) unless there was nothing to switch back to.
 func (m *Manager) Build(ctx context.Context, req Request) (Result, error) {
-	progress := func(s Stage, msg string) {
-		m.log.Info(msg, "stage", string(s))
-		if req.Progress != nil {
-			req.Progress(Progress{Stage: s, Message: msg})
-		}
-	}
+	progress := m.progressFn(req)
 	// cancelled turns a stage error into the context's error when the caller gave up.
 	cancelled := func(e *Error) error {
 		if ctx.Err() != nil {
@@ -65,13 +70,41 @@ func (m *Manager) Build(ctx context.Context, req Request) (Result, error) {
 		return e
 	}
 
-	in, e := m.resolveErr(ctx, req)
-	if e != nil {
-		return Result{}, cancelled(e)
+	if req.Prebuilt != "" {
+		return m.restorePrebuilt(ctx, req, progress)
 	}
-	tools, e := m.Preflight(in.Backend)
-	if e != nil {
-		return Result{}, e
+
+	var (
+		in         Inputs
+		tools      Tools
+		redist     *kit.CudaRedist
+		redistRoot string
+		report     *Report
+	)
+	if req.DryRun || req.FromKit {
+		// The offline preflight (rebuild-kit.md section 4.3.1 step 1): every check, reported at once.
+		var rerr error
+		in, rerr = m.Resolve(ctx, req)
+		rep := m.preflightFor(ctx, req, in, rerr)
+		if ctx.Err() != nil {
+			return Result{}, ctx.Err()
+		}
+		report = &rep
+		if e := rep.Err(); e != nil {
+			return Result{Preflight: report, DryRun: req.DryRun}, e
+		}
+		if req.DryRun {
+			return Result{Preflight: report, DryRun: true}, nil
+		}
+		tools, redist = rep.Tools, rep.Redist
+	} else {
+		var e *Error
+		if in, e = m.resolveErr(ctx, req); e != nil {
+			return Result{}, cancelled(e)
+		}
+		if tools, e = m.Preflight(in.Backend); e != nil {
+			return Result{}, e
+		}
 	}
 	if err := m.opt.FS.MkdirAll(filepath.Join(m.root, buildsDir), 0o755); err != nil {
 		return Result{}, newErr(CodeBuildFailed, StagePreflight, "The builds folder could not be created.", err, "cause", "filesystem")
@@ -94,6 +127,16 @@ func (m *Manager) Build(ctx context.Context, req Request) (Result, error) {
 		return Result{}, cancelled(e)
 	}
 	plan := NewPlan(m.root, in, sha)
+	if redist != nil {
+		progress(StageSource, "Unpacking the CUDA redistributable "+redist.Version+" of the kit")
+		root, e := m.prepareRedist(ctx, *redist)
+		if e != nil {
+			return Result{}, cancelled(e)
+		}
+		plan = plan.WithCudaRoot(root)
+		redistRoot = root
+		tools.NVCC = filepath.Join(root, "bin", "nvcc")
+	}
 
 	curTarget, err := m.currentTarget()
 	if err != nil {
@@ -105,79 +148,62 @@ func (m *Manager) Build(ctx context.Context, req Request) (Result, error) {
 			nil, "cause", "active_build", "build_id", plan.BuildID)
 	}
 
-	r := &run{m: m, req: req, in: in, plan: plan, tools: tools}
+	r := &run{m: m, req: req, in: in, plan: plan, tools: tools, redistRoot: redistRoot}
 	if e := r.prepare(); e != nil {
 		return Result{}, e
-	}
-	abort := func(e *Error) error {
-		if ctx.Err() != nil {
-			r.discard()
-			return ctx.Err()
-		}
-		r.keepFailed(e)
-		return e
 	}
 
 	progress(StageConfigure, fmt.Sprintf("Building llama.cpp %s for %s%s, %d parallel jobs",
 		in.ShortCommit, in.Backend, archSuffix(in.CudaArch), in.Jobs))
-	if _, e := r.cmd(ctx, StageConfigure, tools.CMake, plan.ConfigureArgs, m.opt.Timing.Configure); e != nil {
-		return Result{}, abort(e)
+	if _, e := r.compile(ctx, StageConfigure, tools.CMake, plan.ConfigureArgs, m.opt.Timing.Configure); e != nil {
+		return Result{}, r.abort(ctx, e)
 	}
 	progress(StageBuild, "Compiling (this takes a while)")
-	if _, e := r.cmd(ctx, StageBuild, tools.CMake, plan.BuildArgs, m.opt.Timing.Build); e != nil {
-		return Result{}, abort(e)
+	if _, e := r.compile(ctx, StageBuild, tools.CMake, plan.BuildArgs, m.opt.Timing.Build); e != nil {
+		return Result{}, r.abort(ctx, e)
 	}
 
 	progress(StageInstall, "Installing the programs")
 	sums, e := r.install()
 	if e != nil {
-		return Result{}, abort(e)
+		return Result{}, r.abort(ctx, e)
 	}
 	if e := r.checkRunpath(); e != nil {
-		return Result{}, abort(e)
+		return Result{}, r.abort(ctx, e)
 	}
 	progress(StageSmoke, "Testing the new build")
 	smoke, e := r.smoke(ctx)
 	if e != nil {
-		return Result{}, abort(e)
+		return Result{}, r.abort(ctx, e)
 	}
 	info, e := r.writeBuildJSON(ctx, sums, smoke)
 	if e != nil {
-		return Result{}, abort(e)
+		return Result{}, r.abort(ctx, e)
 	}
-	r.closeLog()
-	oldDir, e := r.place()
-	if e != nil {
-		return Result{}, abort(e)
-	}
+	res, err := m.completeBuild(ctx, r, info, curTarget, progress)
+	res.Preflight = report
+	return res, err
+}
 
-	res := Result{BuildID: plan.BuildID, BuildJSON: info, Path: plan.FinalDir, LogPath: filepath.Join(plan.FinalDir, buildLog)}
-	protect := []string{plan.BuildID}
-	if in.Activate {
-		progress(StageSwitch, "Switching to the new build")
-		ar, e := m.activate(ctx, activation{
-			req: req, plan: plan, curTarget: curTarget, oldDir: oldDir, info: info,
-		}, progress)
-		res.Warnings = append(res.Warnings, ar.warnings...)
-		if e != nil {
-			return Result{}, e
-		}
-		res.Switched, res.PreviousBuild, res.DefaultModel = true, ar.previous, ar.defaultModel
-		// current is the new build and the build it replaced is the previous one; the previous_build
-		// of the state is not recorded yet, so it must not widen the keep set.
-		protect = append(protect, buildName(curTarget), ar.previous)
-	} else {
-		protect = append(protect, buildName(curTarget))
-		if m.opt.PreviousBuild != nil {
-			protect = append(protect, m.opt.PreviousBuild())
+// progressFn is the progress callback of a request: the log, then the caller's Progress.
+func (m *Manager) progressFn(req Request) func(Stage, string) {
+	return func(s Stage, msg string) {
+		m.log.Info(msg, "stage", string(s))
+		if req.Progress != nil {
+			req.Progress(Progress{Stage: s, Message: msg})
 		}
 	}
+}
 
-	progress(StageRetention, "Removing builds and sources that are no longer needed")
-	removed, warns := m.retain(in.Keep, plan, protect)
-	res.Removed = removed
-	res.Warnings = append(res.Warnings, warns...)
-	return res, nil
+// abort ends a failed build: a cancelled context removes the half-built directory and returns
+// ctx.Err(); any other failure keeps the directory as <id>.tmp.failed with its log.
+func (r *run) abort(ctx context.Context, e *Error) error {
+	if ctx.Err() != nil {
+		r.discard()
+		return ctx.Err()
+	}
+	r.keepFailed(e)
+	return e
 }
 
 // resolveErr is Resolve with a typed error, so Build never wraps a nil *Error in an interface.
@@ -235,7 +261,61 @@ func (r *run) prepare() *Error {
 		return fail(err)
 	}
 	r.logW, r.logOpen = w, true
+	return r.handOver()
+}
+
+// handOver makes builds/<id>.tmp (and its bin/) owned by the compile user, so that an unprivileged
+// compile can write its build tree there (rebuild-kit.md section 7). The log stays root's: only the
+// build manager writes it. With CompileAsCaller nothing changes hands.
+func (r *run) handOver() *Error {
+	user := r.m.opt.CompileUser
+	if user == CompileAsCaller {
+		return nil
+	}
+	fail := func(cause string, err error) *Error {
+		return newErr(CodeBuildFailed, StagePreflight,
+			"The compile must run as the user "+user+", and that could not be arranged: "+err.Error(), err,
+			"cause", cause, "user", user, "build_id", r.plan.BuildID)
+	}
+	uid, gid, err := r.m.opt.LookupUser(user)
+	if err != nil {
+		return fail("no_compile_user", err)
+	}
+	path, err := r.m.opt.Lookup("setpriv")
+	if err != nil {
+		return fail("no_setpriv", err)
+	}
+	for _, dir := range []string{r.plan.OutDir, filepath.Join(r.plan.OutDir, "bin")} {
+		if err := r.m.opt.FS.Chown(dir, uid, gid); err != nil {
+			return fail("chown", err)
+		}
+	}
+	r.drop, r.uid, r.gid, r.setpriv, r.compileUser = true, uid, gid, path, user
 	return nil
+}
+
+// takeBack gives builds/<id>.tmp and everything in it to root:root again, before anything of it is
+// run or renamed into place (rebuild-kit.md section 7).
+func (r *run) takeBack() *Error {
+	if !r.drop {
+		return nil
+	}
+	if err := chownTree(r.m.opt.FS, r.plan.OutDir, 0, 0); err != nil {
+		return newErr(CodeBuildFailed, StageInstall, "The new build could not be handed back to root.", err, "cause", "chown", "build_id", r.plan.BuildID)
+	}
+	return nil
+}
+
+// compile runs the configure or the build step. With a compile user it is
+// `setpriv --reuid <user> --regid <user> --clear-groups <program> <args>`: a build script that is
+// not trustworthy cannot write system files. Errors and the log name the program (cmake), not
+// setpriv.
+func (r *run) compile(ctx context.Context, stage Stage, path string, args []string, timeout time.Duration) (execx.Result, *Error) {
+	if !r.drop {
+		return r.cmd(ctx, stage, path, args, timeout)
+	}
+	wrapped := append([]string{"--reuid", r.compileUser, "--regid", r.compileUser, "--clear-groups", path}, args...)
+	return r.cmdNamed(ctx, stage, filepath.Base(path), r.setpriv, wrapped, timeout)
 }
 
 func (r *run) closeLog() {
@@ -257,6 +337,7 @@ func (r *run) keepFailed(e *Error) {
 	r.closeLog()
 	fsys := r.m.opt.FS
 	_ = fsys.RemoveAll(r.plan.BuildDir)
+	_ = r.takeBack()
 	_ = fsys.RemoveAll(r.plan.FailedDir)
 	logPath := filepath.Join(r.plan.OutDir, buildLog)
 	if err := fsys.Rename(r.plan.OutDir, r.plan.FailedDir); err == nil {
@@ -309,6 +390,12 @@ func toolEnv() []string { return []string{"PATH=" + execx.FixedPath, "LC_ALL=C"}
 // cmd runs one program of the build, appending the command line, both output streams and the exit
 // status to build.log. A non-zero exit, a timeout and a start failure are LAI-LLM-018.
 func (r *run) cmd(ctx context.Context, stage Stage, path string, args []string, timeout time.Duration) (execx.Result, *Error) {
+	return r.cmdNamed(ctx, stage, filepath.Base(path), path, args, timeout)
+}
+
+// cmdNamed is cmd for a program that is run through a wrapper: name is what the log and the errors
+// call it.
+func (r *run) cmdNamed(ctx context.Context, stage Stage, name, path string, args []string, timeout time.Duration) (execx.Result, *Error) {
 	line := "$ " + path + " " + strings.Join(args, " ") + "\n"
 	r.logf("%s", line)
 	res, err := r.m.opt.Exec.Run(ctx, execx.Cmd{Path: path, Args: args, Timeout: timeout, MaxOut: maxToolOut, Env: toolEnv()})
@@ -319,7 +406,6 @@ func (r *run) cmd(ctx context.Context, stage Stage, path string, args []string, 
 	if res.Truncated {
 		r.logf("[output truncated]\n")
 	}
-	name := filepath.Base(path)
 	switch {
 	case err != nil && ctx.Err() != nil:
 		return res, &Error{Code: CodeBuildFailed, Stage: stage, Message: "cancelled", Err: ctx.Err(), Details: map[string]any{}}
@@ -352,8 +438,27 @@ func (r *run) logf(format string, a ...any) {
 func (r *run) install() (map[string]string, *Error) {
 	fsys := r.m.opt.FS
 	sums := map[string]string{}
+	// The compile is over. Everything it wrote is root's again before anything of it is read, run
+	// or renamed into place (rebuild-kit.md section 7), and what the compile user could have
+	// replaced with a link, bin/ of the output, is made again. Only plain files are copied.
+	if e := r.takeBack(); e != nil {
+		return nil, e
+	}
+	if fi, err := fsys.Lstat(filepath.Join(r.plan.BuildDir, "bin")); err == nil && !fi.IsDir() {
+		return nil, newErr(CodeBuildFailed, StageInstall, "Building llama.cpp failed: the build produced no bin directory.", nil, "cause", "not_regular")
+	}
+	outBin := filepath.Join(r.plan.OutDir, "bin")
+	if err := fsys.RemoveAll(outBin); err != nil {
+		return nil, newErr(CodeBuildFailed, StageInstall, "The output folder of the build could not be prepared.", err, "cause", "install")
+	}
+	if err := fsys.MkdirAll(outBin, 0o755); err != nil {
+		return nil, newErr(CodeBuildFailed, StageInstall, "The output folder of the build could not be prepared.", err, "cause", "install")
+	}
 	for _, name := range binaries {
 		from := filepath.Join(r.plan.BuildDir, "bin", name)
+		if fi, err := fsys.Lstat(from); err == nil && !fi.Mode().IsRegular() {
+			return nil, newErr(CodeBuildFailed, StageInstall, "Building llama.cpp failed: "+name+" is not a regular file.", nil, "cause", "not_regular", "binary", name)
+		}
 		sum, err := copyFile(fsys, from, filepath.Join(r.plan.OutDir, "bin", name), 0o755, true)
 		if err != nil {
 			cause := "install"
@@ -363,6 +468,12 @@ func (r *run) install() (map[string]string, *Error) {
 			return nil, newErr(CodeBuildFailed, StageInstall, "Building llama.cpp failed: "+name+" was not produced.", err, "cause", cause, "binary", name)
 		}
 		sums[name] = sum
+	}
+	if r.redistRoot != "" {
+		_ = fsys.RemoveAll(filepath.Join(r.plan.OutDir, "lib"))
+		if err := r.m.copyRedistLibs(r.redistRoot, filepath.Join(r.plan.OutDir, "lib")); err != nil {
+			return nil, newErr(CodeBuildFailed, StageInstall, "The CUDA libraries could not be copied into the build.", err, "cause", "redist_libs")
+		}
 	}
 	if err := fsys.RemoveAll(r.plan.BuildDir); err != nil {
 		r.m.log.Warn("could not delete the build tree", "dir", r.plan.BuildDir, "error", err)
