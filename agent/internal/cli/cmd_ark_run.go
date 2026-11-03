@@ -153,6 +153,9 @@ func (c *Call) arkRun(rs arkRunSpec) error {
 				if json.Unmarshal(ev.Data, &d) == nil {
 					o := outcome(d.Item)
 					o.result, o.reason, o.code = d.Result, d.Reason, d.Code
+					if rs.scheduled && !c.Global.JSON { // one journal line per item (ark_sync_scheduled.go)
+						c.arkItemLine(d, o.progressed)
+					}
 				}
 			case agentevents.TypeSyncDone:
 				var d agentevents.SyncDone
@@ -200,9 +203,18 @@ func (c *Call) arkRun(rs arkRunSpec) error {
 			return s.RunID, nil
 		},
 	}
-	if rs.kind == kindSync {
+	switch {
+	case rs.kind == kindSync && rs.scheduled:
+		// Under systemd: cancel at once, then wait for the stop for at most scheduledStopGrace.
+		guard, stopGuard := newStopGuard(scheduledStopGrace)
+		defer stopGuard()
+		fs.Interrupt = guard.out
 		fs.OnInterrupt = func(ctx context.Context) progress.InterruptAction {
-			return c.askToCancelSync(ctx, cl, rs.scheduled, &cancelledByUs)
+			return c.scheduledInterrupt(ctx, cl, guard, &cancelledByUs)
+		}
+	case rs.kind == kindSync:
+		fs.OnInterrupt = func(ctx context.Context) progress.InterruptAction {
+			return c.askToCancelSync(ctx, cl, false, &cancelledByUs)
 		}
 	}
 	res, ferr := c.Follow(fs)

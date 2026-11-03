@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/config"
@@ -82,6 +83,21 @@ func (e *Engine) RootRun(rootID string) (RootRun, bool) {
 	defer e.mu.Unlock()
 	rr, ok := e.rootRuns[rootID]
 	return rr, ok
+}
+
+// LastDriveSync is the newest time a run that ended done finished on any ark drive, mounted or not (the
+// record in root-runs.json survives unplugging); zero when none did. The cloud snapshot's
+// drive_last_synced_at reads it.
+func (e *Engine) LastDriveSync() time.Time {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var newest time.Time
+	for id, rr := range e.rootRuns {
+		if strings.HasPrefix(id, "ark-") && rr.LastDone.After(newest) {
+			newest = rr.LastDone
+		}
+	}
+	return newest
 }
 
 // SyncState is the engine's state for status.ark.sync: "running" or "cancelling" while a run is active,

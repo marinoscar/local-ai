@@ -1,0 +1,27 @@
+[Unit]
+Description=Local AI ark sync (asks the agent to run one scheduled sync and waits for it)
+Documentation=https://github.com/marinoscar/local-ai/blob/main/docs/specs/ark-sync.md
+Requires=localai-agent.service
+After=localai-agent.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/aictl ark sync --scheduled --wait
+# Exit codes: aictl.md §3.4. 0 = finished OK, or the whole run was skipped (offline/mode/battery/disabled);
+# 8 = finished with warnings (some items failed or skipped, last good copies kept) -> still success;
+# 9 = finished with errors, 3 = agent not reachable -> the unit fails, so it shows in `systemctl --failed`.
+SuccessExitStatus=8
+# The agent stops the run itself after sync.max_run_hours; this is a backstop.
+TimeoutStartSec=13h
+# On stop/timeout, aictl receives SIGTERM and sends DELETE /api/v1/ark/sync (graceful cancel).
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=60s
+Nice=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=

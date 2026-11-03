@@ -94,6 +94,9 @@ type arkStack struct {
 	kit    *kitready.Source
 	plans  *plan.Gatherer
 	bucket *throttle.TokenBucket
+	// extras writes START-HERE.html and the inventory copy on the ark drives (ark_extras.go); the
+	// drive manager calls its Write for a drive it has just initialised.
+	extras *driveExtras
 
 	// resolvers and itemResolvers are the registries of the source resolvers: the planner half
 	// (plan.Resolvers) and the engine half (run.ItemResolvers). registerSources fills them with the
@@ -227,12 +230,14 @@ func (d *Daemon) buildArk(ctx context.Context, idx *ark.Index) (*arkStack, error
 		return nil, fmt.Errorf("readiness service: %w", err)
 	}
 
+	s.extras = s.newDriveExtras()
 	s.engine, err = run.New(run.Deps{
 		Journal: jr, Machine: machine, Planner: adapt.GathererPlanner{G: s.plans}, Copies: idx, FS: fsys, JournalDir: d.syncDir(),
 		Settings: d.syncSettings, Net: d.netState, Power: run.PowerFunc(d.onBattery), Catalog: catalogRefresh{d},
 		Resolvers: s.itemResolvers, Retention: s.ret,
 		Unknown: func(root ark.Root) ([]string, error) { return jr.Items.UnknownStaging(fsys, root) },
 		Events:  c.Bus, Ready: s.readyRefresher(), Lock: run.FileLock{Path: filepath.Join(d.syncDir(), "lock")},
+		Hooks: run.Hooks{Extras: s.extras.Run},
 		Clock: syncClock{clock}, Logger: lg,
 	})
 	if err != nil {
@@ -330,6 +335,14 @@ func (l *lateRuns) LastRuns(rootID string) (*ready.RunInfo, time.Time) {
 		return adapt.ReadyRuns{Engine: e}.LastRuns(rootID)
 	}
 	return nil, time.Time{}
+}
+
+// LastDriveSync implements ready.DriveSyncSource.
+func (l *lateRuns) LastDriveSync() time.Time {
+	if e := l.e.Load(); e != nil {
+		return e.LastDriveSync()
+	}
+	return time.Time{}
 }
 
 // SyncState is the engine's state for status.ark.sync ("" while it is not built).

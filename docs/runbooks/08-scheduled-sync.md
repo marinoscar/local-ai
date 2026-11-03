@@ -19,7 +19,7 @@ Use this when you want to know what the node does by itself at night, check whet
 
 | Job | When | What it does | Skips when |
 |---|---|---|---|
-| **Nightly sync** (`localai-sync.timer` → `localai-sync.service`) | Every night at **03:15**, plus a random delay of up to 45 minutes. If the computer was off, it runs soon after it starts | Refreshes the catalog, plans each content root (internal disk and any plugged-in AI-ARK drive), downloads with resume, verifies, swaps in, spends up to 90 minutes re-checking old files for disk damage, writes the readiness report, tells the cloud | The node is in offline or survival mode (`LAI-SYN-002`), there is no internet (`LAI-SYN-001`), it is on battery (`LAI-SYN-003`), or sync is disabled. Skipped is **not** failed |
+| **Nightly sync** (`localai-sync.timer` → `localai-sync.service`) | Every night at **03:15**, plus a random delay of up to 45 minutes. If the computer was off, it runs soon after it starts | Refreshes the catalog, plans each content root (internal disk and any plugged-in AI-ARK drive), downloads with resume, verifies, swaps in, spends up to 90 minutes re-checking old files for disk damage, writes the readiness report, tells the cloud | The node is in offline or survival mode (`LAI-SYN-002`), there is no internet (`LAI-SYN-001`), it is on battery (`LAI-SYN-003`), sync is disabled, there is no place to store content, or another sync is already running. Skipped is **not** failed: the unit succeeds and `journalctl -u localai-sync` says `i Sync skipped: <why>.` |
 | **Monthly drill** (`localai-drill.timer` → `localai-drill.service`) | **First Sunday of the month at 04:30**, plus up to 30 minutes | A self-test that proves everything works with no internet: files, each survival brain, photo question, library search, speech both ways, maps, Portal, manuals, rebuild kit | Survival mode (`LAI-DRL-003`), a sync is running (`LAI-DRL-002`, tries again daily for a week), someone is chatting (`LAI-DRL-004`, waits up to 48 h), battery below 50 % (`LAI-DRL-005`) |
 
 When the timer's drill is skipped (one of the reasons above), it prints `i Drill skipped: <reason>` and the timer does not count it as a failure. The drill never disconnects the network and never changes the mode. While it runs, the agent blocks every connection that isn't to the computer itself, so a feature that secretly needs the internet fails the test.
@@ -48,11 +48,31 @@ When the timer's drill is skipped (one of the reasons above), it prints `i Drill
 3. **What the last sync did:**
 
    ```
+   systemctl status localai-sync.service
    journalctl -u localai-sync -n 50
    aictl logs --unit sync -n 100
    ```
 
-   - **What you should see:** one line per item (`downloaded`, `already up to date`, `failed` with a code) and a summary `✓ Sync finished: 2 downloaded, 14 already up to date, 0 failed.`
+   - **What you should see:** `status` shows `Active: inactive (dead)` and, on the `Main PID` line, `status=0/SUCCESS` (or `8`, which is also fine). `journalctl` shows one line per item and a last line with the summary, for example:
+
+     ```
+     ✓ wikipedia-es-nopic: downloaded (2026-10)
+     ✓ docs-bundle: already up to date (catalog-2026.11.02-1)
+     ! stackexchange-electronics: left out, budget [LAI-SYN-041]
+     ✓ Sync finished: 1 downloaded, 1 already up to date, 0 failed, 1 skipped.
+     ```
+
+     A line that starts with `✓` is fine. A line that starts with `!` is a warning with its code in brackets: look it up with `aictl doctor`. An item on an AI-ARK drive starts with the drive's id (`ark-3f9c0a12/docs-bundle`).
+   - **What the number at the end means** (`status=` in `systemctl status`, or `Result` in `systemctl --failed`):
+
+     | Number | Meaning | Is the unit "failed"? | What to do |
+     |---|---|---|---|
+     | `0` | Everything is up to date, or the night was skipped on purpose (`i Sync skipped: …`) | No | Nothing |
+     | `8` | Finished, but some items failed or were left out. The last good copies are still there | No | Read the `!` lines when convenient |
+     | `9` | The sync failed or was stopped | **Yes** | Read `journalctl -u localai-sync -n 100`, then `aictl doctor` |
+     | `3` | The agent was not running, so nothing happened | **Yes** | `sudo systemctl start localai-agent`, then `sudo systemctl start localai-sync.service` |
+
+   - **If it doesn't work:** `systemctl --failed` lists `localai-sync.service`: the table above says why (it is `9` or `3`). After you fix the cause, run it again with `sudo systemctl start localai-sync.service` and read the journal again; the failed mark clears when a run succeeds.
 4. **Elsewhere:** the desktop app (status and a notification after each sync), the Portal's **7 Status and battery** screen (ark colour), the cloud's node page → **Ark** tab, and on the drive itself `READY.json` and `START-HERE.html`.
 
 ---
@@ -89,7 +109,7 @@ When the timer's drill is skipped (one of the reasons above), it prints `i Drill
    - **What you should see:** a progress line per download, then the summary. Ctrl-C asks "Cancel the sync too? [y/N]"; **N** keeps it running in the background.
    - Only one root: `--root internal` or `--root <ark-root-id>`. Only one item: `--item <id>`.
    - **If it doesn't work:** `LAI-SYN-005`: a sync is already running (`aictl ark status` shows it; stop it with `aictl ark sync --cancel`). `LAI-SYN-011`: the node is in offline mode; add `--allow-offline-mode` to use whatever network exists, or `aictl mode online`. `LAI-SYN-010`: refused in survival mode.
-7. **Stop a running sync:** `aictl ark sync --cancel`. Half-downloaded files are kept and resume next time.
+7. **Stop a running sync:** `aictl ark sync --cancel`. Half-downloaded files are kept and resume next time. The same happens when you stop the nightly run with `sudo systemctl stop localai-sync`: it asks the agent to cancel and waits up to 50 seconds for it to stop.
 8. **Re-check every file now** (finds disk damage; long on big drives):
 
    ```

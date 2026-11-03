@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # verify-units.sh: run `systemd-analyze verify` on the generated localai-llama.service and
 # localai-kiwix.service and localai-whisper.service files and on the embedded localai-agent.service, localai-drill.service and
-# localai-drill.timer templates.
+# localai-drill.timer templates and the localai-sync.service and localai-sync.timer templates.
 # Spec: docs/specs/llama-router.md section 3.2 to 3.4 (issue ROUTER-04), docs/specs/companion-services.md
 # section 3.3 (issues SVC-02 and SVC-05), docs/specs/drill.md section 3.3 (issue DRILL-01), docs/specs/agent.md
 # section 3.6 (issue AGENT-20).
@@ -102,5 +102,22 @@ check_drill() {
   fi
 }
 check_drill
+
+# The nightly sync service and its timer are verified together (SYNC-14, ark-sync.md section 3.7); the
+# service Requires the agent unit, which is copied next to it from the same embedded templates.
+check_sync() {
+  local dir="$tmp/sync"
+  mkdir -p "$dir"
+  cp "$units/localai-sync.service" "$units/localai-sync.timer" "$units/localai-agent.service" "$dir/"
+  local out
+  if out="$(systemd-analyze verify "$dir/localai-sync.service" "$dir/localai-sync.timer" 2>&1)" && [[ -z "$out" ]]; then
+    echo "ok   sync service and timer"
+  else
+    echo "FAIL sync service and timer" >&2
+    echo "$out" | sed 's/^/     /' >&2
+    fail=1
+  fi
+}
+check_sync
 
 exit "$fail"
