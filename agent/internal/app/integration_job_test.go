@@ -88,9 +88,14 @@ func TestIntegrationCloudModelLoadJob(t *testing.T) {
 	// ark.verify is the re-verification's (SYNC-13): once the sync run is over the slot is free, and the
 	// job starts a run of trigger verify (the run slot is shared, so while the sync was active it would
 	// have answered started: false with that run's id).
-	if err := d.Components().SyncEngine.Wait(ctx, syncRes.RunID); err != nil {
-		t.Fatal(err)
+	// Its own deadline: the shared 30 s above has been spent by the steps before it on a loaded runner.
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer waitCancel()
+	if err := d.Components().SyncEngine.Wait(waitCtx, syncRes.RunID); err != nil {
+		t.Fatalf("the sync run %s did not end: %v", syncRes.RunID, err)
 	}
+	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	cloudSrv.QueueJob(cloudfake.Job{ID: "job-verify", Type: "localai.ark.verify", Token: "claim-token-3", Params: map[string]any{}, Force: true})
 	if err := cloudSrv.WaitJob(ctx, "job-verify", cloudfake.JobSucceeded); err != nil {
 		rec, _ := cloudSrv.Job("job-verify")
