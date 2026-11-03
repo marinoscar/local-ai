@@ -81,13 +81,14 @@ func (m *Manager) completeBuild(ctx context.Context, r *run, info BuildInfo, cur
 // hands the build to the prebuilt exporter. It returns the warnings of what failed.
 func (m *Manager) recordActivated(ctx context.Context, plan Plan) []string {
 	var warns []string
-	if m.opt.NodeConfig != nil {
-		cur := ""
-		if m.opt.Node != nil {
-			cur = strings.ToLower(strings.TrimSpace(m.opt.Node().Commit))
-		}
+	record := m.opt.RecordCommit
+	if record == nil && m.opt.NodeConfig != nil {
+		record = m.opt.NodeConfig.RecordLlamaCommit
+	}
+	if record != nil {
+		cur := strings.ToLower(strings.TrimSpace(m.defaults().Commit))
 		if cur == "" || !strings.HasPrefix(plan.Commit, cur) {
-			if err := m.opt.NodeConfig.RecordLlamaCommit(plan.Commit); err != nil {
+			if err := record(plan.Commit); err != nil {
 				warns = append(warns, "node.yaml could not be updated with the new llama.commit: "+err.Error())
 			}
 		}
@@ -167,9 +168,9 @@ func (m *Manager) restorePrebuilt(ctx context.Context, req Request, progress fun
 		Activate: !req.NoActivate, Keep: req.Keep,
 	}
 	if in.Keep <= 0 {
-		in.Keep = DefaultKeep
+		in.Keep = m.defaultKeep()
 	}
-	plan := NewPlan(m.root, in, info.Commit)
+	plan := m.plan(in, info.Commit)
 	if req.DryRun {
 		return Result{BuildID: plan.BuildID, BuildJSON: info, DryRun: true, Restored: true}, nil
 	}

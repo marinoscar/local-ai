@@ -276,6 +276,9 @@ type BuildInfo struct {
 type Smoke struct {
 	Version string   `json:"version"`
 	Devices []string `json:"devices"`
+	// Checks lists the steps a whisper.cpp smoke test passed ("static", "help", "transcribe"); llama's
+	// smoke test leaves it empty.
+	Checks []string `json:"checks,omitempty"`
 }
 
 // Result is what Build returns on success (aictl.md section 4.23, --json).
@@ -420,11 +423,61 @@ type Options struct {
 	// either is a warning: the build is already in use.
 	NodeConfig NodeRecorder
 	Exporter   PrebuiltExporter
-	// SmokeModel returns the path of the smallest verified llama model on this computer, for the
-	// completion of the smoke test (`llama-cli -m <model> -n 8 -p "Hello" -ngl 99 --no-warmup`,
-	// rebuild-kit.md section 4.3.3); ok is false when there is none. nil, or no model, skips that
-	// step with a warning in Result.Warnings.
+	// SmokeModel returns the path of the smallest verified model of the recipe's program on this
+	// computer (a llama model for llama.cpp, a whisper model for whisper.cpp), for the completion of
+	// the smoke test (`llama-cli -m <model> -n 8 -p "Hello" -ngl 99 --no-warmup`, rebuild-kit.md
+	// section 4.3.3; `whisper-cli -m <model> -f <sample> -l en -nt`, companion-services.md section
+	// 4.2.1); ok is false when there is none. nil, or no model, skips that step with a warning in
+	// Result.Warnings.
 	SmokeModel func() (path string, ok bool)
+
+	// Defaults replaces Node as the source of the values a Request falls back to (commit, backend,
+	// CUDA architecture). whisper.cpp uses it: its commit and backend are node.yaml's whisper
+	// block, with "auto" meaning the llama backend (WhisperDefaults). nil: derived from Node.
+	Defaults func() Defaults
+	// Services asks the agent to restart the recipe's service (POST /services/<name>/restart). It is
+	// used for any recipe and takes precedence over Agent, which is llama's (RestartLlama).
+	Services ServiceRestarter
+	// ServiceCheck is the post-switch check of a recipe whose service is not llama's: it returns nil
+	// when the restarted service answers, ErrServiceNotConfigured when there is nothing to check
+	// (the service has no configuration yet: a warning, not a failure) and any other error to have
+	// the switch undone. nil skips the check with a warning.
+	ServiceCheck func(ctx context.Context) error
+	// SmokeAudio returns the bytes of the sample recording (a 16 kHz mono WAV of speech in English)
+	// the whisper smoke test transcribes (the drill's en.wav, companion-services.md section 4.2.1).
+	// nil, or an error, falls back to samples/jfk.wav of the source tree being built; with neither
+	// the transcription is skipped with a warning.
+	SmokeAudio func() ([]byte, error)
+	// RecordCommit records the node.yaml commit of the recipe's program after a switch to another
+	// commit; it replaces NodeConfig (llama's) when set.
+	RecordCommit func(commit string) error
+}
+
+// Defaults are the node.yaml values a Request falls back to.
+type Defaults struct {
+	// Commit and Backend are the recipe's own keys (llama.commit, whisper.backend); Backend may be
+	// "auto" for a recipe with AllowAuto.
+	Commit, Backend string
+	// LlamaBackend is what "auto" resolves to: llama.backend.
+	LlamaBackend string
+	// CudaArch is the semicolon list of llama.cuda_arch, "" when unset.
+	CudaArch string
+}
+
+// defaults returns the values a Request falls back to.
+func (m *Manager) defaults() Defaults {
+	switch {
+	case m.opt.Defaults != nil:
+		return m.opt.Defaults()
+	case m.opt.Node != nil:
+		n := m.opt.Node()
+		d := Defaults{Commit: n.Commit, Backend: n.Backend, LlamaBackend: n.Backend}
+		if n.CudaArch != nil {
+			d.CudaArch = *n.CudaArch
+		}
+		return d
+	}
+	return Defaults{}
 }
 
 // Manager is the build manager. It is safe to call Build from one goroutine at a time; the build
@@ -437,6 +490,12 @@ type Manager struct {
 
 // New returns a Manager.
 func New(opt Options) *Manager {
+	if opt.Recipe.Name == "" {
+		opt.Recipe = LlamaRecipe
+	}
+	if opt.Root == "" {
+		opt.Root = opt.Recipe.Root
+	}
 	if opt.Root == "" {
 		opt.Root = DefaultRoot
 	}
@@ -452,9 +511,6 @@ func New(opt Options) *Manager {
 	}
 	if opt.FS == nil {
 		opt.FS = OSFS{}
-	}
-	if opt.Recipe.Name == "" {
-		opt.Recipe = LlamaRecipe
 	}
 	if opt.Sources == nil {
 		opt.Sources = []Source{GitCloneSource{URL: opt.Recipe.CloneURL}}
@@ -520,10 +576,12 @@ var (
 // given, and changes nothing. A caller prints "Building llama.cpp <commit> for <backend> (sm <arch>),
 // <jobs> parallel jobs" from it.
 func (m *Manager) Resolve(ctx context.Context, req Request) (Inputs, error) {
-	var node config.LlamaBlock
-	if m.opt.Node != nil {
-		node = m.opt.Node()
-	}
+	in, err := m.resolve(ctx, req)
+	return in, m.voiceErr(err)
+}
+
+func (m *Manager) resolve(ctx context.Context, req Request) (Inputs, error) {
+	node := m.defaults()
 	commit := strings.ToLower(strings.TrimSpace(req.Commit))
 	if commit == "" {
 		commit = strings.ToLower(strings.TrimSpace(node.Commit))
@@ -540,6 +598,9 @@ func (m *Manager) Resolve(ctx context.Context, req Request) (Inputs, error) {
 	if backend == "" {
 		backend = node.Backend
 	}
+	if (backend == "auto" || backend == "") && m.opt.Recipe.AllowAuto {
+		backend = strings.TrimSpace(node.LlamaBackend)
+	}
 	switch backend {
 	case BackendCUDA, BackendVulkan, BackendCPU:
 	case "":
@@ -553,12 +614,12 @@ func (m *Manager) Resolve(ctx context.Context, req Request) (Inputs, error) {
 	in := Inputs{Commit: commit, ShortCommit: commit[:min(9, len(commit))], Backend: backend, Activate: !req.NoActivate}
 	in.Keep = req.Keep
 	if in.Keep <= 0 {
-		in.Keep = DefaultKeep
+		in.Keep = m.defaultKeep()
 	}
 	if backend == BackendCUDA {
 		arch := strings.TrimSpace(req.CudaArch)
-		if arch == "" && node.CudaArch != nil {
-			arch = strings.TrimSpace(*node.CudaArch)
+		if arch == "" {
+			arch = strings.TrimSpace(node.CudaArch)
 		}
 		if arch == "" {
 			var err *Error

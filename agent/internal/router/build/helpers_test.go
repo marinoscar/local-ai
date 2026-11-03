@@ -232,6 +232,11 @@ func (r *recRec) RecordBuild(id string) error { r.ids = append(r.ids, id); retur
 // static program (no .dynamic); otherwise runpath and rpath, when not empty, become DT_RUNPATH and
 // DT_RPATH.
 func elfFixture(dynamic bool, runpath, rpath string) []byte {
+	return elfFixtureNeeded(dynamic, runpath, rpath)
+}
+
+// elfFixtureNeeded is elfFixture with DT_NEEDED entries for the given shared libraries.
+func elfFixtureNeeded(dynamic bool, runpath, rpath string, needed ...string) []byte {
 	const (
 		ehsize  = 64
 		shentsz = 64
@@ -250,6 +255,9 @@ func elfFixture(dynamic bool, runpath, rpath string) []byte {
 		_ = binary.Write(&dyn, binary.LittleEndian, val)
 	}
 	if dynamic {
+		for _, lib := range needed {
+			putDyn(1, addStr(lib)) // DT_NEEDED
+		}
 		if runpath != "" {
 			putDyn(29, addStr(runpath)) // DT_RUNPATH
 		}

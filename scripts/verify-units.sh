@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # verify-units.sh: run `systemd-analyze verify` on the generated localai-llama.service and
-# localai-kiwix.service files and on the embedded localai-agent.service, localai-drill.service and
+# localai-kiwix.service and localai-whisper.service files and on the embedded localai-agent.service, localai-drill.service and
 # localai-drill.timer templates.
 # Spec: docs/specs/llama-router.md section 3.2 to 3.4 (issue ROUTER-04), docs/specs/companion-services.md
-# section 3.3 (issue SVC-02), docs/specs/drill.md section 3.3 (issue DRILL-01), docs/specs/agent.md
+# section 3.3 (issues SVC-02 and SVC-05), docs/specs/drill.md section 3.3 (issue DRILL-01), docs/specs/agent.md
 # section 3.6 (issue AGENT-20).
 #
 # The files checked are the golden files of the unit generators (agent/internal/router/testdata/golden,
-# agent/internal/svc/kiwix/testdata): `go test` proves each generator renders exactly those bytes, so
+# agent/internal/svc/kiwix/testdata and agent/internal/svc/whisper/testdata): `go test` proves each generator renders exactly those bytes, so
 # verifying them verifies the generator's output. Checked: the router unit (ai-n3 and ai-n1 profiles),
 # the single-mode unit, the router unit together with the environment drop-in, the kiwix unit, the
-# agent unit and the drill service with its timer (agent/internal/setup/units, embedded in the binary).
+# whisper unit, the agent unit and the drill service with its timer (agent/internal/setup/units, embedded in the binary).
 #
 # systemd-analyze verify wants the program of ExecStart to exist and be executable. When the real
 # path is absent this script installs an empty stub there (needs root, or sudo) and removes it on
@@ -24,9 +24,10 @@ set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 golden="$root/agent/internal/router/testdata/golden"
 kiwix_golden="$root/agent/internal/svc/kiwix/testdata/localai-kiwix.service.golden"
+whisper_golden="$root/agent/internal/svc/whisper/testdata/localai-whisper.service.golden"
 aictl=/usr/local/bin/aictl
 units="$root/agent/internal/setup/units"
-bins=(/opt/localai/llama.cpp/current/bin/llama-server /opt/localai/kiwix-tools/current/kiwix-serve /opt/localai/bin/aiagent "$aictl")
+bins=(/opt/localai/llama.cpp/current/bin/llama-server /opt/localai/kiwix-tools/current/kiwix-serve /opt/localai/whisper.cpp/current/bin/whisper-server /opt/localai/bin/aiagent "$aictl")
 
 command -v systemd-analyze >/dev/null 2>&1 || { echo "verify-units: systemd-analyze not found" >&2; exit 2; }
 
@@ -80,6 +81,7 @@ check router-ai-n1 "$golden/localai-llama.router.ai-n1.service"
 check single-ai-n3 "$golden/localai-llama.single.service"
 check router-with-dropin "$golden/localai-llama.router.ai-n1.service" "$golden/50-env.conf"
 check kiwix "$kiwix_golden" "" localai-kiwix.service
+check whisper "$whisper_golden" "" localai-whisper.service
 
 # The agent unit is verified on its own (its ExecStart is /opt/localai/bin/aiagent).
 check agent "$units/localai-agent.service" "" localai-agent.service

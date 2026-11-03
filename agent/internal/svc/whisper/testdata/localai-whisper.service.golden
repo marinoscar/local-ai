@@ -1,0 +1,33 @@
+[Unit]
+Description=Local AI speech-to-text (whisper.cpp server)
+Documentation=https://github.com/marinoscar/local-ai/blob/main/docs/specs/companion-services.md
+After=local-fs.target
+ConditionPathExists=/etc/localai/whisper.env
+ConditionPathExists=/opt/localai/whisper.cpp/current/bin/whisper-server
+
+[Service]
+Type=simple
+User=localai
+Group=localai
+SupplementaryGroups=video render
+EnvironmentFile=/etc/localai/whisper.env
+ExecStart=/opt/localai/whisper.cpp/current/bin/whisper-server \
+  --host 127.0.0.1 --port 8081 \
+  --model ${WHISPER_MODEL} \
+  --threads ${WHISPER_THREADS} \
+  --language auto \
+  $WHISPER_DEVICE_ARGS
+WorkingDirectory=/var/lib/localai
+Restart=on-failure
+RestartSec=5
+LimitMEMLOCK=infinity
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

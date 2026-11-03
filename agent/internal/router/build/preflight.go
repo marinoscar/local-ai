@@ -173,6 +173,10 @@ func (m *Manager) PreflightReport(ctx context.Context, req Request) Report {
 // preflightFor is PreflightReport over inputs Build already resolved (err is the error of that
 // resolution, nil when in is good).
 func (m *Manager) preflightFor(ctx context.Context, req Request, in Inputs, err error) Report {
+	return m.voiceReport(m.preflightRaw(ctx, req, in, err))
+}
+
+func (m *Manager) preflightRaw(ctx context.Context, req Request, in Inputs, err error) Report {
 	rep := Report{Checks: []Check{}}
 	p := &preflight{m: m, ctx: ctx, req: req, rep: &rep, seen: map[string]bool{},
 		env: SourceEnv{Exec: m.opt.Exec, FS: m.opt.FS, Lookup: m.opt.Lookup, Log: m.log}}
@@ -245,13 +249,13 @@ func (p *preflight) source() {
 	title := "Source of llama.cpp " + p.in.ShortCommit
 	m, req, ref := p.m, p.req, p.in.Commit
 	explicit := req.SourceDir != ""
-	if explicit && filepath.Clean(req.SourceDir) == filepath.Join(m.root, srcDir, ref) && treeComplete(m.opt.FS, req.SourceDir) {
+	if explicit && !m.opt.Recipe.ScratchSource && filepath.Clean(req.SourceDir) == filepath.Join(m.root, srcDir, ref) && treeComplete(m.opt.FS, req.SourceDir) {
 		explicit = false
 	}
 	if !explicit {
 		if sha := m.existingTree(ref); sha != "" {
 			p.rep.Source = "tree"
-			p.pass(CheckSource, title, "already extracted in "+filepath.Join(m.root, srcDir, sha))
+			p.pass(CheckSource, title, "already extracted in "+m.srcPath(sha))
 			return
 		}
 	}

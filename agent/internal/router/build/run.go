@@ -63,6 +63,11 @@ type run struct {
 // changes nothing but the build directory (kept as <id>.tmp.failed with its build.log); a failure
 // after it has switched current back (LAI-LLM-019) unless there was nothing to switch back to.
 func (m *Manager) Build(ctx context.Context, req Request) (Result, error) {
+	res, err := m.build(ctx, req)
+	return m.voiceResult(res), m.voiceErr(err)
+}
+
+func (m *Manager) build(ctx context.Context, req Request) (Result, error) {
 	progress := m.progressFn(req)
 	// cancelled turns a stage error into the context's error when the caller gave up.
 	cancelled := func(e *Error) error {
@@ -83,7 +88,7 @@ func (m *Manager) Build(ctx context.Context, req Request) (Result, error) {
 		redistRoot string
 		report     *Report
 	)
-	if req.DryRun || req.FromKit {
+	if req.DryRun || req.FromKit || m.opt.Recipe.KitPreflight {
 		// The offline preflight (rebuild-kit.md section 4.3.1 step 1): every check, reported at once.
 		var rerr error
 		in, rerr = m.Resolve(ctx, req)
@@ -128,7 +133,11 @@ func (m *Manager) Build(ctx context.Context, req Request) (Result, error) {
 	if e != nil {
 		return Result{}, cancelled(e)
 	}
-	plan := NewPlan(m.root, in, sha)
+	if m.opt.Recipe.ScratchSource {
+		// The tree is scratch: the kit holds the tarball it came from.
+		defer func() { _ = m.opt.FS.RemoveAll(m.srcPath(sha)) }()
+	}
+	plan := m.plan(in, sha)
 	if redist != nil {
 		progress(StageSource, "Unpacking the CUDA redistributable "+redist.Version+" of the kit")
 		root, e := m.prepareRedist(ctx, *redist)
@@ -190,6 +199,7 @@ func (m *Manager) Build(ctx context.Context, req Request) (Result, error) {
 // progressFn is the progress callback of a request: the log, then the caller's Progress.
 func (m *Manager) progressFn(req Request) func(Stage, string) {
 	return func(s Stage, msg string) {
+		msg = m.say(msg)
 		m.log.Info(msg, "stage", string(s))
 		if req.Progress != nil {
 			req.Progress(Progress{Stage: s, Message: msg})
@@ -357,7 +367,7 @@ func (r *run) keepFailed(e *Error) {
 			e.Message += " Missing package? Try: sudo apt install " + strings.Join(pk, " ")
 		}
 	}
-	r.m.log.Error("llama.cpp build failed", "build_id", r.plan.BuildID, "code", e.Code, "stage", string(e.Stage), "log", logPath)
+	r.m.log.Error(r.m.opt.Recipe.Name+" build failed", "build_id", r.plan.BuildID, "code", e.Code, "stage", string(e.Stage), "log", logPath)
 }
 
 // tailLines returns the last n lines of a file, reading only its end.
@@ -456,7 +466,7 @@ func (r *run) install() (map[string]string, *Error) {
 	if err := fsys.MkdirAll(outBin, 0o755); err != nil {
 		return nil, newErr(CodeBuildFailed, StageInstall, "The output folder of the build could not be prepared.", err, "cause", "install")
 	}
-	for _, name := range binaries {
+	for _, name := range r.m.opt.Recipe.Programs {
 		from := filepath.Join(r.plan.BuildDir, "bin", name)
 		if fi, err := fsys.Lstat(from); err == nil && !fi.Mode().IsRegular() {
 			return nil, newErr(CodeBuildFailed, StageInstall, "Building llama.cpp failed: "+name+" is not a regular file.", nil, "cause", "not_regular", "binary", name)
@@ -666,7 +676,7 @@ func buildName(target string) string {
 	return filepath.Base(filepath.Clean(target))
 }
 
-// auditSwitch writes llama.build.switch.
+// auditSwitch writes the switch audit line of the recipe (llama.build.switch, whisper.build.switch).
 func (m *Manager) auditSwitch(req Request, result audit.Result, code string, target map[string]string) {
 	if m.opt.Audit == nil {
 		return
@@ -675,7 +685,8 @@ func (m *Manager) auditSwitch(req Request, result audit.Result, code string, tar
 	if actor.Kind == "" {
 		actor = audit.CLIRoot()
 	}
-	if err := m.opt.Audit.Write(audit.Event{Action: audit.ActionLlamaBuildSwitch, Result: result, Code: code, Actor: actor, Target: target}); err != nil {
-		m.log.Warn("could not write the audit line", "action", audit.ActionLlamaBuildSwitch, "error", err)
+	action := m.opt.Recipe.AuditAction
+	if err := m.opt.Audit.Write(audit.Event{Action: action, Result: result, Code: m.code(code), Actor: actor, Target: target}); err != nil {
+		m.log.Warn("could not write the audit line", "action", action, "error", err)
 	}
 }
