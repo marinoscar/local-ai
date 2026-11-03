@@ -656,7 +656,7 @@ func TestFetchRejectsBadJobs(t *testing.T) {
 		"short sha":        func(j *FileJob) { j.ExpectedSHA256 = "abcd" },
 		"non-hex sha":      func(j *FileJob) { j.ExpectedSHA256 = strings.Repeat("z", 64) },
 		"ftp":              func(j *FileJob) { j.URL = "ftp://files.example.test/a" },
-		"credentials":      func(j *FileJob) { j.URL = "https://user:pw@files.example.test/a" },
+		"credentials":      func(j *FileJob) { j.URL = "https://" + userinfo + "@files.example.test/a" },
 		"no host":          func(j *FileJob) { j.URL = "https:///a" },
 	} {
 		t.Run(name, func(t *testing.T) {
