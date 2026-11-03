@@ -500,6 +500,8 @@ The script reads the `codes.go` layout described in its header: a const block (`
 | LAI-KIT-042 | error | The kit is for a different Ubuntu version | Sync the kit after the upgrade, with internet. |
 | LAI-KIT-043 | warning | The kit's CUDA version doesn't fit this driver | Sync the kit with internet; meanwhile use the prebuilt or Vulkan. |
 | LAI-KIT-044 | critical | The kit's agent files failed their signature check | Don't install them. Use another drive and report it. |
+| LAI-KIT-045 | warning | The kit's list of pinned versions is damaged or newer than this agent | Nothing breaks. Sync the catalog with internet; it brings a fresh list. |
+| LAI-KIT-046 | warning | The kit's index and guide could not be refreshed | The kit itself is fine. Run `aictl ark sync`; it rewrites them. |
 
 ### `LAI-DRL` — owner: [drill.md](drill.md)
 > Copied from [drill.md](drill.md) §8 (authoritative; Spanish fixes are there).
