@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "run_id": "drl-20261101T043512Z-0001",
+  "trigger": "scheduled",
+  "node_id": "ai-n3",
+  "agent_version": "0.4.0",
+  "catalog_version": "2026.11.02-1",
+  "mode": "online",
+  "quick": false,
+  "started_at": "2026-11-01T04:35:12Z",
+  "finished_at": "2026-11-01T04:37:01Z",
+  "overall": "warn",
+  "survival_ready": true,
+  "counts": {
+    "pass": 3,
+    "warn": 1,
+    "fail": 0,
+    "skip": 0
+  },
+  "checks": [
+    {
+      "id": "drl.llm.answer.qwen3.5-9b-q4km",
+      "area": "llm",
+      "result": "pass",
+      "ms": 41230,
+      "details": {
+        "answer": "READY",
+        "load_ms": 28400,
+        "tokens_per_s": 31.2
+      }
+    },
+    {
+      "id": "drl.vlm.photo.vlm-small",
+      "area": "vision",
+      "result": "pass",
+      "ms": 63120,
+      "details": {
+        "answer": "7",
+        "load_ms": 35100
+      }
+    },
+    {
+      "id": "drl.stt.es",
+      "area": "speech",
+      "result": "warn",
+      "code": "LAI-DRL-031",
+      "ms": 2900,
+      "details": {
+        "language": "es",
+        "text": "el veloz murciélago hindú comía feliz cardillo y kiwi",
+        "wer": 0.33
+      }
+    },
+    {
+      "id": "drl.kit.rebuild_dry_run",
+      "area": "kit",
+      "result": "pass",
+      "ms": 1800
+    }
+  ],
+  "restored": {
+    "loaded_models": [
+      "qwen3.5-9b-q4km"
+    ],
+    "default_model": "qwen3.5-9b-q4km",
+    "ok": true
+  },
+  "network_fence": {
+    "enabled": true,
+    "blocked_dials": 0
+  }
+}
