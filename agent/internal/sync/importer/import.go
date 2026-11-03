@@ -69,6 +69,20 @@ type (
 	UnusableDriveError struct{ Root, State string }
 )
 
+// Code is the doctor code of each error, which a run that failed on it reports.
+func (*SeveralDrivesError) Code() string { return doctor.ARK015 }
+
+// Code implements the same for a drive that is not mounted.
+func (*UnknownDriveError) Code() string { return doctor.AGT020 }
+
+// Code is LAI-ARK-004 for a drive with filesystem errors, LAI-AGT-020 for any other state.
+func (e *UnusableDriveError) Code() string {
+	if e.State == string(ark.StateUnclean) {
+		return doctor.ARK004
+	}
+	return doctor.AGT020
+}
+
 func (e *SeveralDrivesError) Error() string {
 	return doctor.ARK015 + ": several ark drives are connected: " + strings.Join(e.Roots, ", ")
 }
