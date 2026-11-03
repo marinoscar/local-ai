@@ -37,6 +37,7 @@ var ErrPendingCorrupt = errors.New("update: pending.json is not valid")
 
 // readPending returns the marker, or nil when there is none.
 func (r *Runner) readPending() (*Pending, error) {
+	r.init()
 	data, err := readLimited(r.FS, r.Paths.Pending(), 64<<10)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -53,6 +54,7 @@ func (r *Runner) readPending() (*Pending, error) {
 
 // writePending writes the marker atomically, root 0600, fsynced.
 func (r *Runner) writePending(p Pending) error {
+	r.init()
 	data, err := jsonMarshal(p)
 	if err != nil {
 		return err
@@ -67,6 +69,7 @@ func (r *Runner) writePending(p Pending) error {
 }
 
 func (r *Runner) removePending() error {
+	r.init()
 	if err := r.FS.Remove(r.Paths.Pending()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}

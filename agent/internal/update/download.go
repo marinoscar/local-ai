@@ -189,7 +189,7 @@ func (r *Runner) store(resp *http.Response, part string, have, limit int64) (ret
 	switch {
 	case copyErr != nil:
 		// The partial file is kept: a later run resumes it.
-		return false, netError("download", copyErr)
+		return false, fail(doctor.AGT009, "download", "The download was interrupted; run the update again to resume it.", copyErr)
 	case have+n > limit:
 		_ = r.FS.Remove(part)
 		return false, fail(doctor.AGT009, "download", "The file is larger than the agent allows, so it was not downloaded.", nil)

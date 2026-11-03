@@ -42,7 +42,7 @@ func TestDispatch(t *testing.T) {
 		{"release file name is the agent, not the cli", []string{"./aiagent-linux-amd64", "version"}, 0, "aiagent ", ""},
 		{"migrate llama-qwen is a stub", []string{"aiagent", "migrate", "llama-qwen", "--dry-run"}, 1, "", "not implemented"},
 		{"migrate without target", []string{"aiagent", "migrate"}, 2, "", "usage:"},
-		{"update-rollback-check is a stub", []string{"aiagent", "update-rollback-check"}, 1, "", "not implemented"},
+		{"update-rollback-check takes no argument", []string{"aiagent", "update-rollback-check", "now"}, 2, "", "usage:"},
 		{"no argument prints usage", []string{"aiagent"}, 2, "", "usage:"},
 		{"unknown subcommand prints usage", []string{"aiagent", "bogus"}, 2, "", "usage:"},
 		{"version with a bad flag", []string{"aiagent", "version", "--yaml"}, 2, "", "usage:"},
