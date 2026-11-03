@@ -487,6 +487,7 @@ type arkUnavailable struct{}
 
 var _ api.ArkSyncPlanner = arkUnavailable{}
 var _ api.ArkReadyView = arkUnavailable{}
+var _ api.ArkPruner = arkUnavailable{}
 
 func (arkUnavailable) err() error {
 	return api.NewError(api.CodeStarting, http.StatusServiceUnavailable, map[string]any{"reason": "sync_engine_not_ready"})
@@ -497,6 +498,11 @@ func (u arkUnavailable) DryRun(context.Context, api.ArkSyncRequest) (any, error)
 
 // Ready implements api.ArkReadyView.
 func (u arkUnavailable) Ready(context.Context, string) ([]any, error) { return nil, u.err() }
+
+// Prune implements api.ArkPruner.
+func (u arkUnavailable) Prune(context.Context, api.ArkPruneRequest) (api.ArkPruneResult, error) {
+	return api.ArkPruneResult{}, u.err()
+}
 
 // arkJobs is jobs.Ark over the engine. The cloud's ark.verify waits for the re-verification (SYNC-13): a
 // command of that type is refused with LAI-CLD-057, like one of a type this node does not run.

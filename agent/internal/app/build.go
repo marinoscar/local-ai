@@ -520,6 +520,12 @@ func (d *Daemon) buildServer() error {
 				Planner: plan.NewDryRun(d.ark.plans), Starter: adapt.Starter{Engine: d.ark.engine}, Control: adapt.Controller{Engine: d.ark.engine},
 			})
 		}},
+		{"ark prune", func() error {
+			if d.ark == nil { // the stack did not come up: the route answers 503
+				return api.RegisterArkPrune(reg, api.ArkPruneDeps{Pruner: arkUnavailable{}, Audit: d.audit, Logger: d.log})
+			}
+			return api.RegisterArkPrune(reg, api.ArkPruneDeps{Pruner: adapt.Pruner{Engine: d.ark.engine, Retention: d.ark.ret}, Audit: d.audit, Logger: d.log})
+		}},
 		{"speech", func() error { return reg.Add(d.piper.Routes()...) }},
 	}
 	for _, r := range regs {
