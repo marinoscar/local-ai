@@ -1,0 +1,65 @@
+name: whisper-build
+# Builds whisper.cpp for real, the way `aictl rebuild-whisper` does (SVC-05, companion-services.md
+# section 4.2.1): the CPU backend, from a kit-style source tarball (kit/src/whisper.cpp-<commit>.tar.gz,
+# one top-level directory), with the build manager of agent/internal/router/build (WhisperRecipe) and
+# the NETWORK DISABLED for the whole build: the test binary runs inside `unshare -n`, so the preflight,
+# the extraction, cmake, the compile, the static-link check and the smoke test (whisper-cli --help of
+# both programs and a transcription of the sample of the source with a tiny model) cannot reach the
+# internet. Only the preparation (the source of the pinned release and the model file) has network.
+#
+# The pin: WHISPER_CPP_TAG is the release the kit pins until the kit-whisper-cpp catalog item (issue
+# #52) carries the commit; the job resolves it to its commit and names it in the tarball, as the
+# git_mirror resolver does. Move the tag when the pin moves.
+on:
+  pull_request:
+    paths: ['agent/internal/router/build/**', 'agent/internal/svc/whisper/**', '.github/workflows/whisper-build.yml']
+  push:
+    branches: [main]
+    paths: ['agent/internal/router/build/**', 'agent/internal/svc/whisper/**', '.github/workflows/whisper-build.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  WHISPER_CPP_TAG: v1.9.5
+  WHISPER_CPP_URL: https://github.com/ggml-org/whisper.cpp.git
+  WHISPER_MODEL_URL: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin
+jobs:
+  cpu-offline-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: Build tools (the kit's debs closure installs these offline on a node)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config
+      - name: Prepare the kit-style source tarball of the pinned release (network)
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch "$WHISPER_CPP_TAG" "$WHISPER_CPP_URL" "$RUNNER_TEMP/whisper-src"
+          commit="$(git -C "$RUNNER_TEMP/whisper-src" rev-parse HEAD)"
+          echo "whisper.cpp $WHISPER_CPP_TAG is commit $commit"
+          mkdir -p "$RUNNER_TEMP/kit"
+          git -C "$RUNNER_TEMP/whisper-src" archive --format=tar --prefix="whisper.cpp-$commit/" HEAD | gzip -n > "$RUNNER_TEMP/kit/whisper.cpp-$commit.tar.gz"
+          echo "WHISPER_TARBALL=$RUNNER_TEMP/kit/whisper.cpp-$commit.tar.gz" >> "$GITHUB_ENV"
+          rm -rf "$RUNNER_TEMP/whisper-src"
+      - name: Fetch a small model for the transcription step of the smoke test (network)
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 -o "$RUNNER_TEMP/ggml-tiny.en.bin" "$WHISPER_MODEL_URL"
+          test "$(wc -c < "$RUNNER_TEMP/ggml-tiny.en.bin")" -gt 50000000
+          echo "WHISPER_MODEL=$RUNNER_TEMP/ggml-tiny.en.bin" >> "$GITHUB_ENV"
+      - name: Compile the test binary (network)
+        working-directory: agent
+        run: go test -c -o "$RUNNER_TEMP/build.test" ./internal/router/build
+      - name: Build whisper.cpp (CPU) inside a network namespace (unshare -n)
+        run: |
+          set -euo pipefail
+          sudo unshare -n env \
+            LOCALAI_EXPECT_NO_NETWORK=1 \
+            LOCALAI_WHISPER_BACKEND=cpu \
+            LOCALAI_WHISPER_KIT_TARBALL="$WHISPER_TARBALL" \
+            LOCALAI_WHISPER_MODEL="$WHISPER_MODEL" \
+            "$RUNNER_TEMP/build.test" -test.run '^TestWhisperRealBuild$' -test.v -test.timeout 40m

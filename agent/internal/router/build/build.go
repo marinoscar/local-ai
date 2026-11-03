@@ -444,7 +444,9 @@ type Options struct {
 	// the switch undone. nil skips the check with a warning.
 	ServiceCheck func(ctx context.Context) error
 	// SmokeAudio returns the bytes of the sample recording (a 16 kHz mono WAV of speech in English)
-	// the whisper smoke test transcribes; nil, or an error, skips the transcription with a warning.
+	// the whisper smoke test transcribes (the drill's en.wav, companion-services.md section 4.2.1).
+	// nil, or an error, falls back to samples/jfk.wav of the source tree being built; with neither
+	// the transcription is skipped with a warning.
 	SmokeAudio func() ([]byte, error)
 	// RecordCommit records the node.yaml commit of the recipe's program after a switch to another
 	// commit; it replaces NodeConfig (llama's) when set.

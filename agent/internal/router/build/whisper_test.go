@@ -73,6 +73,9 @@ type whisperEnv struct {
 	helpRC   map[string]int
 	programs map[string][]byte // what `cmake --build` writes, by program
 
+	// sampleInTree is samples/jfk.wav of the source tarball ("" none).
+	sampleInTree string
+
 	recorded    []string
 	sampleSeen  []byte // the bytes of the sample at the time whisper-cli ran
 	staleAtConf bool   // the stale file of the scratch tree still existed when cmake configured
@@ -188,11 +191,15 @@ func (w *whisperEnv) answer(c execx.Cmd) (execx.Result, error, bool) {
 func (w *whisperEnv) tarball(sha string, where, recorded string) string {
 	w.t.Helper()
 	pre := "whisper.cpp-" + sha + "/"
-	data := makeTar(w.t, []tarEntry{
+	entries := []tarEntry{
 		{name: pre, typ: tar.TypeDir},
 		{name: pre + "CMakeLists.txt", body: "project(whisper)\n"},
 		{name: pre + "examples/server/server.cpp", body: "int main() {}\n"},
-	}, true)
+	}
+	if w.sampleInTree != "" {
+		entries = append(entries, tarEntry{name: pre + "samples/jfk.wav", body: w.sampleInTree})
+	}
+	data := makeTar(w.t, entries, true)
 	name := "whisper.cpp-" + sha + ".tar.gz"
 	w.write(filepath.Join(w.kitEnv.root, "kit", "src", name), string(data))
 	if recorded == "" {
@@ -913,8 +920,8 @@ func TestWhisperSmokeStepsThatCannotRunAreSkippedWithAWarning(t *testing.T) {
 		{"no sample recording", func(w *whisperEnv) { w.opts.SmokeAudio = nil }, "no sample recording"},
 		{"an unreadable sample recording", func(w *whisperEnv) {
 			w.opts.SmokeAudio = func() ([]byte, error) { return nil, errors.New("embed broken") }
-		}, "cannot be read"},
-		{"an empty sample recording", func(w *whisperEnv) { w.audio = nil }, "cannot be read"},
+		}, "no sample recording"},
+		{"an empty sample recording", func(w *whisperEnv) { w.audio = nil }, "no sample recording"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -946,6 +953,42 @@ func TestWhisperSmokeStepsThatCannotRunAreSkippedWithAWarning(t *testing.T) {
 			info := readBuildInfo(t, filepath.Join(w.root(), "builds", testID, "BUILD.json"))
 			if want := []string{"static", "help"}; !reflect.DeepEqual(info.Smoke.Checks, want) {
 				t.Errorf("smoke checks = %v, want %v", info.Smoke.Checks, want)
+			}
+		})
+	}
+}
+
+// Without the agent's recording the sample that ships with the pinned source is used; the agent's own
+// recording wins when there is one.
+func TestWhisperSmokeSampleComesFromTheAgentThenFromTheSource(t *testing.T) {
+	const fromSource = "RIFF source sample"
+	tests := []struct {
+		name  string
+		setup func(w *whisperEnv)
+		want  string
+	}{
+		{"the agent's recording is preferred", func(w *whisperEnv) {}, string(sampleWAV)},
+		{"no recording from the agent: samples/jfk.wav of the source", func(w *whisperEnv) { w.opts.SmokeAudio = nil }, fromSource},
+		{"a broken recording from the agent: samples/jfk.wav of the source", func(w *whisperEnv) {
+			w.opts.SmokeAudio = func() ([]byte, error) { return nil, errors.New("embed broken") }
+		}, fromSource},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWhisperEnv(t)
+			w.sampleInTree = fromSource
+			w.tarball(testSHA, "src", "")
+			tc.setup(w)
+			res, err := w.build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(w.sampleSeen) != tc.want {
+				t.Errorf("whisper-cli transcribed %q, want %q", w.sampleSeen, tc.want)
+			}
+			info := readBuildInfo(t, filepath.Join(w.root(), "builds", testID, "BUILD.json"))
+			if want := []string{"static", "help", "transcribe"}; !reflect.DeepEqual(info.Smoke.Checks, want) || len(res.Warnings) != 0 {
+				t.Errorf("checks %v, warnings %v", info.Smoke.Checks, res.Warnings)
 			}
 		})
 	}

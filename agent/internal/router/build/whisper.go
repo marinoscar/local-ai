@@ -125,8 +125,8 @@ func SharedWhisperLibs(fsys FS, path string) ([]string, error) {
 
 // smokeWhisper is the smoke test of a whisper.cpp build (companion-services.md section 4.2.1): no
 // whisper or ggml shared library is referenced, both programs answer --help with status 0, and, when
-// a verified model and the sample recording are available, `whisper-cli -m <model> -f <sample> -l en
-// -nt` exits 0 and prints text. A step that cannot run for lack of a model or a sample is skipped
+// a verified model and a sample recording are available (the agent's, else samples/jfk.wav of the
+// source), `whisper-cli -m <model> -f <sample> -l en -nt` exits 0 and prints text. A step that cannot run for lack of a model or a sample is skipped
 // with a warning; a failure is the recipe's UnusableCode (LAI-KIT-021) and nothing is switched.
 func smokeWhisper(r *run, ctx context.Context) (Smoke, *Error) {
 	fsys := r.m.opt.FS
@@ -197,14 +197,22 @@ func (r *run) transcribe(ctx context.Context) (bool, *Error) {
 	if !ok || model == "" {
 		return skip("no speech model is available to test it with.")
 	}
-	if opt.SmokeAudio == nil {
-		return skip("no sample recording is available.")
-	}
-	audio, err := opt.SmokeAudio()
-	if err != nil || len(audio) == 0 {
-		return skip("the sample recording cannot be read.")
-	}
 	fsys := opt.FS
+	// The sample is the agent's recording (Options.SmokeAudio, the drill media); without one, the
+	// sample that ships with the pinned source, samples/jfk.wav (16 kHz mono, English speech), which
+	// is in the tree being built and so needs nothing from the network or the disk of the node.
+	var audio []byte
+	if opt.SmokeAudio != nil {
+		if b, err := opt.SmokeAudio(); err == nil {
+			audio = b
+		}
+	}
+	if len(audio) == 0 {
+		audio, _ = fsys.ReadFile(filepath.Join(r.plan.SourceDir, "samples", "jfk.wav"))
+	}
+	if len(audio) == 0 {
+		return skip("no sample recording is available (the agent has none and the source has no samples/jfk.wav).")
+	}
 	if err := fsys.MkdirAll(opt.ScratchDir, 0o755); err != nil {
 		return false, newErr(CodeBuildFailed, StageSmoke, "The scratch folder for the sample recording could not be created.", err, "cause", "filesystem")
 	}
