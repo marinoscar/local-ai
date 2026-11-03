@@ -92,6 +92,9 @@ const (
 	// CodeDriveUnplugged: a drive was pulled without ejecting (warning, cleared after 24 h or when
 	// the drive comes back clean).
 	CodeDriveUnplugged = doctor.ARK007
+	// CodeEjectBlocked: the drive cannot be ejected because something still uses it (warning). Raised
+	// as an alert when an accepted eject failed to unmount; the eject route answers it with the blockers.
+	CodeEjectBlocked = doctor.ARK009
 )
 
 // Root is one content root: the internal disk or an ark drive's localai directory.
