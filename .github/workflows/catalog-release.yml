@@ -1,0 +1,80 @@
+name: catalog-release
+# A push to main that changes catalog/CATALOG_VERSION -> lint the catalog with the agent's own validator
+# (built from this commit), check the version rule, then tag the commit catalog-<CATALOG_VERSION> and move
+# the tag catalog-stable to it. THIS WORKFLOW IS THE ONLY TAGGER OF catalog-* TAGS: one run tags the catalog
+# and the docs together (docs/architecture/overview.md section 3.8). Nodes read the tags through the GitHub
+# matching-refs API with catalog-stable as the fallback; the cloud imports the same tag as a tarball.
+# Spec: docs/specs/catalog.md section 1 (distribution, release tags, cloud import contract). Owner: CAT-04.
+#
+# - Lint fails: no tag is created and catalog-stable does not move.
+# - catalog-<V> already exists, or V is not greater than the latest catalog-* tag: the job fails and nothing
+#   is overwritten (scripts/catalog-version-guard.sh).
+# - The only force-push is catalog-stable, in the same atomic push as the new tag (scripts/catalog-tag.sh).
+# - Needs no secret: the default GITHUB_TOKEN with contents: write. A tag pushed with GITHUB_TOKEN does not
+#   start other workflows (GitHub's rule), so release-catalog.yml (signed draft release) only runs for it if
+#   the owner adds the optional secret CATALOG_RELEASE_TOKEN (a token that may push tags; owner step in the
+#   PR of CAT-04). Without it the tags still serve nodes and the cloud; only the draft release is not built.
+on:
+  push:
+    branches: [main]
+    paths: ['catalog/CATALOG_VERSION']
+permissions:
+  contents: write
+concurrency:
+  # Runs are serialised and never cancelled mid-tag. GitHub keeps only the newest queued run, so when two
+  # bumps land back to back the older one may never be tagged; the newer version supersedes it.
+  group: catalog-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0 # every tag, for the version guard
+          token: ${{ secrets.CATALOG_RELEASE_TOKEN || github.token }}
+      - name: Read the version
+        id: version
+        run: |
+          set -euo pipefail
+          [ -f catalog/CATALOG_VERSION ] || { echo "::error::catalog/CATALOG_VERSION does not exist at this commit"; exit 1; }
+          v="$(tr -d '\r\n' < catalog/CATALOG_VERSION)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "CATALOG_VERSION is $v"
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: Build aiagent from this commit
+        working-directory: agent
+        env:
+          CGO_ENABLED: '0'
+          GOFLAGS: -mod=vendor
+        run: go build -o "$RUNNER_TEMP/aiagent" ./cmd/aiagent
+      - name: "Lint the catalog (a failure ends the job; no tag, catalog-stable stays)"
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/aiagent" ctl catalog lint catalog/
+      - name: Version guard (new, and greater than the latest catalog-* tag)
+        run: |
+          set -euo pipefail
+          git fetch --tags --force --quiet origin
+          scripts/catalog-version-guard.sh --file catalog/CATALOG_VERSION
+      - name: Tag catalog-<version> and move catalog-stable (one atomic push)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          scripts/catalog-tag.sh --sha "$GITHUB_SHA" "$VERSION"
+      - name: Summary
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "### Catalog $VERSION released"
+            echo
+            echo "- tag \`catalog-$VERSION\` and the moving tag \`catalog-stable\` now point at \`$GITHUB_SHA\`"
+            echo "- nodes: \`catalog.channel: stable\` resolves the highest \`catalog-*\` tag; the cloud imports \`archive/refs/tags/catalog-$VERSION.tar.gz\`"
+          } >> "$GITHUB_STEP_SUMMARY"
