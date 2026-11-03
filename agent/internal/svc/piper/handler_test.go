@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -63,7 +64,7 @@ func TestSynthesisStreamsAChunkedWAV(t *testing.T) {
 	pcm := sine(44100, 0.4) // one second at 22 050 Hz? no: 44100 samples is two seconds
 	e := newEnv(t, envOpts{voices: bothVoices, scripts: []fake.Script{{Chunks: chunks(pcm, 20000)}}})
 
-	resp, body := e.ok(map[string]any{"text": secretText, "language": "en"}, nil)
+	resp, body := e.ok(map[string]any{"text": spokenText, "language": "en"}, nil)
 	e.waitDone(1)
 
 	if resp.StatusCode != http.StatusOK {
@@ -102,21 +103,21 @@ func TestSynthesisStreamsAChunkedWAV(t *testing.T) {
 		t.Errorf("command %s %q", c.Path, c.Args)
 	}
 	for _, a := range c.Args {
-		if strings.Contains(a, "Zebra") {
+		if strings.Contains(a, spokenMarker) {
 			t.Errorf("text in the argv: %q", a)
 		}
 	}
 	p := e.streamer.Procs()[0]
-	if got := string(p.Stdin()); got != secretText+"\n" {
+	if got := string(p.Stdin()); got != spokenText+"\n" {
 		t.Errorf("stdin = %q", got)
 	}
 	if !p.Waited() {
 		t.Error("the process was not waited for")
 	}
-	if strings.Contains(e.logs.String(), "Zebra") || strings.Contains(e.logs.String(), "secret phrase") {
+	if strings.Contains(e.logs.String(), spokenMarker) || strings.Contains(e.logs.String(), "stays out of the logs") {
 		t.Errorf("the text is in the log:\n%s", e.logs.String())
 	}
-	for _, want := range []string{"tts done", "chars=" + "41", "voice=piper-en-medium", "language=en", "elapsed_ms=2000"} {
+	for _, want := range []string{"tts done", fmt.Sprintf("chars=%d", len([]rune(spokenText))), "voice=piper-en-medium", "language=en", "elapsed_ms=2000"} {
 		if !strings.Contains(e.logs.String(), want) {
 			t.Errorf("log lacks %q:\n%s", want, e.logs.String())
 		}
@@ -340,7 +341,7 @@ func TestPiperFailuresBeforeAudioAreJSONErrors(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		resp := e.tts(context.Background(), map[string]any{"text": secretText, "language": "en"}, nil)
+		resp := e.tts(context.Background(), map[string]any{"text": spokenText, "language": "en"}, nil)
 		apitest.Record(t, resp)
 		b, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
@@ -367,7 +368,7 @@ func TestPiperFailuresBeforeAudioAreJSONErrors(t *testing.T) {
 				t.Errorf("%s: the process was not waited for", c.name)
 			}
 		}
-		if strings.Contains(e.logs.String(), "Zebra") {
+		if strings.Contains(e.logs.String(), spokenMarker) {
 			t.Errorf("%s: the text is in the log:\n%s", c.name, e.logs.String())
 		}
 		if !strings.Contains(e.logs.String(), "tts failed") || !strings.Contains(e.logs.String(), doctor.SVC023) {

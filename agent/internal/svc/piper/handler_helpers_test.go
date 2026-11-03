@@ -22,8 +22,11 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 )
 
-// secretText is spoken in every test and must never reach a log line.
-const secretText = "Zebra-Quokka-7431 keeps the secret phrase"
+// spokenText is spoken in several tests; its distinctive marker must never reach a log line.
+const (
+	spokenMarker = "Zebra-Quokka-7431"
+	spokenText   = spokenMarker + " stays out of the logs"
+)
 
 // syncBuffer is a log sink safe for the concurrent handler.
 type syncBuffer struct {
