@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"regexp"
 	"runtime"
 	"strings"
@@ -12,6 +13,10 @@ import (
 
 func runCmd(t *testing.T, ctx context.Context, args ...string) (int, string, string) {
 	t.Helper()
+	// No test starts the real daemon: it is root-only and listens on the machine's ports.
+	old := serve
+	serve = func(context.Context, io.Writer) int { return 0 }
+	t.Cleanup(func() { serve = old })
 	var out, errb bytes.Buffer
 	code := run(ctx, args, &out, &errb)
 	return code, out.String(), errb.String()
@@ -37,7 +42,7 @@ func TestDispatch(t *testing.T) {
 		{"aictl anything", []string{"aictl", "bogus"}, 2, "", "Unknown command"},
 		{"aictl no args", []string{"aictl"}, 2, "", "aictl: command line"},
 		{"aiagent ctl --help", []string{"aiagent", "ctl", "--help"}, 0, "aictl: command line", ""},
-		{"aiagent serve stops on cancel", []string{"aiagent", "serve"}, 0, "", ""},
+		{"aiagent serve runs the daemon", []string{"aiagent", "serve"}, 0, "", ""},
 		{"aiagent version", []string{"aiagent", "version"}, 0, "aiagent ", ""},
 		{"release file name is the agent, not the cli", []string{"./aiagent-linux-amd64", "version"}, 0, "aiagent ", ""},
 		{"migrate llama-qwen is a stub", []string{"aiagent", "migrate", "llama-qwen", "--dry-run"}, 1, "", "not implemented"},
