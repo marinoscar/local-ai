@@ -2,10 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
-	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"io"
 	"log/slog"
 	"sync"
@@ -15,8 +11,10 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
+	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/modes"
 	"github.com/marinoscar/local-ai/agent/internal/state"
+	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 )
 
 // FatalError is a startup failure that ends the process: exit 1, and systemd restarts the agent
@@ -102,7 +100,6 @@ type Daemon struct {
 	localaiGID  int
 	haveLocalAI bool
 
-	bindErr   error // set when only one listener came up
 	shutdown1 sync.Once
 }
 
@@ -274,9 +271,6 @@ func (a *auditSlot) Write(ev audit.Event) error {
 	return l.Write(ev)
 }
 
-// errNotStarted is returned by operations that need a started daemon.
-var errNotStarted = errors.New("app: the daemon is not started")
-
 // modeName is the current mode for /health, from memory.
 func (d *Daemon) modeName() string {
 	if m := d.c.Modes; m != nil {
@@ -287,5 +281,3 @@ func (d *Daemon) modeName() string {
 	}
 	return string(modes.Offline)
 }
-
-func (d *Daemon) String() string { return fmt.Sprintf("daemon(root=%q)", d.env.Root) }

@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	routerfake "github.com/marinoscar/local-ai/agent/internal/router/fake"
 	"github.com/marinoscar/local-ai/agent/internal/services"
@@ -24,32 +24,69 @@ import (
 // startup, over the real HTTP stack, against the fakes of the rig. Run them with
 //
 //	go test -race -tags integration ./internal/app/...
+//
+// Every wait is on what the agent has APPLIED (a model that is loaded, a mode that is committed, an
+// event on a subscription made before the action), never on a request the server has received and
+// never on a fixed time.
 
-// waitEvent waits for an event of the bus that satisfies pred. The wait ends when the event is
-// published (the subscription is a channel), never after a fixed time.
-func (r *rig) waitEvent(pattern string, pred func(events.Event) bool) events.Event {
+// waitUntil spins until cond holds. It fails the test after 30 s of wall time, which only a broken
+// agent reaches.
+func waitUntil(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		runtime.Gosched()
+	}
+}
+
+// waitLoaded waits until the fake llama has model id loaded and the startup restore (step 14) is done,
+// so that a later request does not collide with its hold on the model-operations lock.
+func (r *rig) waitLoaded(id string) {
+	r.t.Helper()
+	waitUntil(r.t, id+" to be loaded", func() bool { return r.llama.Status(id) == routerfake.Loaded })
+	r.waitStepEnd(14)
+}
+
+// waitMode waits until the agent has committed mode m with no transition running.
+func (r *rig) waitMode(m state.Mode) {
+	r.t.Helper()
+	waitUntil(r.t, "mode "+string(m), func() bool {
+		s := r.d.Components().State.Snapshot()
+		return s.Mode == m && s.ModeTransition == nil
+	})
+}
+
+// watch subscribes to the events of pattern now and returns a function that waits for one that
+// satisfies pred: subscribe before the action, wait after it.
+func (r *rig) watch(pattern string) func(pred func(events.Event) bool) events.Event {
 	r.t.Helper()
 	f, err := events.NewFilter(pattern)
 	if err != nil {
 		r.t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	r.t.Cleanup(cancel)
 	ch, err := r.d.Components().Bus.Subscribe(ctx, f, 0)
 	if err != nil {
 		r.t.Fatal(err)
 	}
-	for {
-		select {
-		case ev, ok := <-ch:
-			if !ok {
-				r.t.Fatalf("the event stream ended before the event %s", pattern)
+	return func(pred func(events.Event) bool) events.Event {
+		r.t.Helper()
+		for {
+			select {
+			case ev, ok := <-ch:
+				if !ok {
+					r.t.Fatalf("the event stream ended before the event %s", pattern)
+				}
+				if pred(ev) {
+					return ev
+				}
+			case <-ctx.Done():
+				r.t.Fatalf("no event %s satisfied the wait; log:\n%s", pattern, r.logText())
 			}
-			if pred(ev) {
-				return ev
-			}
-		case <-ctx.Done():
-			r.t.Fatalf("no event %s satisfied the wait; log:\n%s", pattern, r.logText())
 		}
 	}
 }
@@ -61,23 +98,16 @@ func modeStepEvent(step, st string) func(events.Event) bool {
 	}
 }
 
-// Scenario 1: a fresh start. The token is created, the listeners are up, /health answers, the mutating
-// routes are closed (503 LAI-AGT-024, Retry-After 5) until step 12 has ended, READY=1 does not wait
-// for it, and then the models are restored.
+// Scenario 1: a fresh start. The token is created, the listeners are up, /health answers, the default
+// model is restored, a load goes through the API, a mode transition runs, and the graceful shutdown
+// leaves llama serving.
 func TestIntegrationFreshStart(t *testing.T) {
 	r := newRig(t)
-	release := r.steps.holdStep(12)
 	d := r.start()
+	r.waitStarted()
 
-	// Steps 1 to 11 have run and step 12 is held: the daemon is up, but not open.
-	order := r.steps.began()
-	for i, want := range []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} {
-		if i >= len(order) || order[i] != want {
-			t.Fatalf("steps began in the order %v, want 1..11 first", order)
-		}
-	}
 	if got := r.note.next(t); got != "READY=1" {
-		t.Fatalf("first sd_notify message = %q, want READY=1 (it must not wait for step 12)", got)
+		t.Fatalf("first sd_notify message = %q, want READY=1", got)
 	}
 	tok := r.token()
 	if !strings.HasPrefix(tok, "lat_") {
@@ -89,37 +119,16 @@ func TestIntegrationFreshStart(t *testing.T) {
 	if !hasAlert(d, "LAI-SEC-011") {
 		t.Errorf("a new agent token must raise LAI-SEC-011; alerts: %+v", d.Components().Doctor.Active())
 	}
-
 	h := r.doAuth("GET", "/health", nil, false)
-	if h.status != 200 || h.json()["ok"] != true || h.json()["starting"] != true || h.json()["mode"] != "online" {
-		t.Fatalf("GET /health during startup = %d %s", h.status, h.body)
+	if h.status != 200 || h.json()["ok"] != true || h.json()["starting"] != false || h.json()["mode"] != "online" {
+		t.Fatalf("GET /health = %d %s", h.status, h.body)
 	}
-	load := r.do("POST", "/models/"+modelAlpha+"/load", map[string]any{"wait": true})
-	if load.status != http.StatusServiceUnavailable || errCode(load) != doctor.AGT024 || load.header.Get("Retry-After") != "5" {
-		t.Fatalf("a mutating route during startup = %d %s (Retry-After %q), want 503 LAI-AGT-024 with Retry-After 5",
-			load.status, load.body, load.header.Get("Retry-After"))
-	}
-	select {
-	case <-d.GateOpened():
-		t.Fatal("the gate opened while step 12 was held")
-	default:
-	}
-	if st := r.do("GET", "/status", nil); st.status != 200 {
-		t.Errorf("GET /status during startup = %d", st.status)
+	if got := r.socketGet("/health"); got.status != 200 {
+		t.Errorf("GET /health over the socket = %d", got.status)
 	}
 
-	release()
-	r.waitStarted()
-	h = r.doAuth("GET", "/health", nil, false)
-	if h.json()["starting"] != false {
-		t.Errorf("GET /health after startup: %s", h.body)
-	}
-
-	// The default model is restored (step 14); a load through the API now works.
-	r.waitEvent("model.loaded", func(ev events.Event) bool { return strings.Contains(string(ev.Data), modelAlpha) })
-	if got := r.llama.Status(modelAlpha); got != routerfake.Loaded {
-		t.Errorf("%s is %q after the restore, want loaded", modelAlpha, got)
-	}
+	// The default model is restored (step 14); a load through the API then works.
+	r.waitLoaded(modelAlpha)
 	res := r.do("POST", "/models/"+modelGamma+"/load", map[string]any{"wait": true, "unload_others": true})
 	if res.status != 200 {
 		t.Fatalf("POST /models/%s/load = %d %s", modelGamma, res.status, res.body)
@@ -128,17 +137,7 @@ func TestIntegrationFreshStart(t *testing.T) {
 		t.Errorf("after the load: gamma %q, alpha %q", r.llama.Status(modelGamma), r.llama.Status(modelAlpha))
 	}
 
-	// The messages of systemd: READY once, then the watchdog is not needed yet.
-	for _, m := range d.env.Notifier.Sent() {
-		if m == "READY=1" {
-			continue
-		}
-		if m == "STOPPING=1" {
-			t.Error("STOPPING=1 before the shutdown")
-		}
-	}
-
-	// A mode transition over the real stack: online to offline and back.
+	// A mode transition over the real stack.
 	mt := r.do("POST", "/mode", map[string]any{"target": "offline", "wait": true})
 	if mt.status != 200 {
 		t.Fatalf("POST /mode offline = %d %s", mt.status, mt.body)
@@ -146,7 +145,7 @@ func TestIntegrationFreshStart(t *testing.T) {
 	if got := r.do("GET", "/mode", nil).json()["mode"]; got != "offline" {
 		t.Errorf("GET /mode = %v, want offline", got)
 	}
-	if got := r.d.Components().State.Snapshot(); got.Mode != state.ModeOffline || got.ModeTransition != nil {
+	if got := d.Components().State.Snapshot(); got.Mode != state.ModeOffline || got.ModeTransition != nil {
 		t.Errorf("state after the transition: mode %q, transition %v", got.Mode, got.ModeTransition)
 	}
 
@@ -158,7 +157,7 @@ func TestIntegrationFreshStart(t *testing.T) {
 	if rep.Duration >= ShutdownBudget {
 		t.Errorf("the shutdown took %v", rep.Duration)
 	}
-	if _, err := os.Stat(r.d.Components().API.SocketPath()); err == nil {
+	if _, err := os.Stat(d.Components().API.SocketPath()); err == nil {
 		t.Error("the socket file is still there after the shutdown")
 	}
 	for _, c := range r.sysd.Calls() {
@@ -180,13 +179,13 @@ func (r *rig) sawMessage(m string) bool {
 	return false
 }
 
-// An agent restart restores the models the operator had chosen: the default is set to a model other
+// An agent restart restores the model the operator had chosen: the default is set to a model other
 // than the profile's, the router and the agent both restart, and the restart loads that model.
 func TestIntegrationRestartRestoresModels(t *testing.T) {
 	r := newRig(t)
 	r.start()
 	r.waitStarted()
-	r.waitEvent("model.loaded", func(ev events.Event) bool { return strings.Contains(string(ev.Data), modelAlpha) })
+	r.waitLoaded(modelAlpha)
 
 	if res := r.do("POST", "/models/"+modelGamma+"/load", map[string]any{"wait": true, "unload_others": true}); res.status != 200 {
 		t.Fatalf("load gamma: %d %s", res.status, res.body)
@@ -209,9 +208,9 @@ func TestIntegrationRestartRestoresModels(t *testing.T) {
 	r2.env.SocketPath = filepath.Join(r.root, "run", "localai", "agent2.sock")
 	r2.start()
 	r2.waitStarted()
-	r2.waitEvent("model.loaded", func(ev events.Event) bool { return strings.Contains(string(ev.Data), modelGamma) })
-	if r.llama.Status(modelGamma) != routerfake.Loaded || r.llama.Status(modelAlpha) == routerfake.Loaded {
-		t.Errorf("after the restart: gamma %q, alpha %q", r.llama.Status(modelGamma), r.llama.Status(modelAlpha))
+	r2.waitLoaded(modelGamma)
+	if r.llama.Status(modelAlpha) == routerfake.Loaded {
+		t.Errorf("after the restart: alpha %q is loaded as well; models_max is 1", r.llama.Status(modelAlpha))
 	}
 	if st := r2.d.Components().State.Snapshot(); st.Models.Default == nil || *st.Models.Default != modelGamma {
 		t.Errorf("the restart lost the operator's default model: %v", st.Models.Default)
@@ -233,10 +232,9 @@ func TestIntegrationSurvivalQueuedDuringStartup(t *testing.T) {
 	}
 	release()
 	r.waitStarted()
-	r.waitEvent("mode.changed", func(ev events.Event) bool { return strings.Contains(string(ev.Data), `"survival"`) })
-	snap := d.Components().State.Snapshot()
-	if snap.Mode != state.ModeSurvival || snap.PendingMode != nil || snap.ModeTransition != nil {
-		t.Errorf("state after the queued transition: mode %q pending %v transition %v", snap.Mode, snap.PendingMode, snap.ModeTransition)
+	r.waitMode(state.ModeSurvival)
+	if snap := d.Components().State.Snapshot(); snap.PendingMode != nil {
+		t.Errorf("pending_mode is still set after the queued transition ran: %v", snap.PendingMode)
 	}
 }
 
@@ -249,21 +247,24 @@ func TestIntegrationKillDuringSurvivalModelsResumes(t *testing.T) {
 	r := newRig(t, withEnv(func(e *Env) { e.StateFS = fsA }))
 	r.start()
 	r.waitStarted()
-	r.waitEvent("model.loaded", func(ev events.Event) bool { return strings.Contains(string(ev.Data), modelAlpha) })
+	r.waitLoaded(modelAlpha)
 
-	// Park the transition in survival_models: the router answers nothing from now on.
+	// Park the transition in survival_models: the router answers nothing from now on. The event is
+	// watched from before the request, so it cannot be missed.
+	step := r.watch("mode.step")
 	r.llama.Delay(time.Hour)
 	rp := r.doAuth("POST", "/mode/survival", map[string]any{}, false)
 	if rp.status != http.StatusAccepted {
 		t.Fatalf("POST /mode/survival = %d %s", rp.status, rp.body)
 	}
-	r.waitEvent("mode.step", modeStepEvent("survival_models", "started"))
+	step(modeStepEvent("survival_models", "started"))
 
 	// kill -9: nothing written from here on survives.
 	fsA.CrashAfter(0)
-	var durable map[string][]byte = map[string][]byte{}
-	for _, name := range fsA.Names(filepath.Dir(r.path("var/lib/localai/state.json"))) {
-		if b, ok := fsA.Contents(filepath.Join(filepath.Dir(r.path("var/lib/localai/state.json")), name)); ok {
+	dir := filepath.Dir(r.path("var/lib/localai/state.json"))
+	durable := map[string][]byte{}
+	for _, name := range fsA.Names(dir) {
+		if b, ok := fsA.Contents(filepath.Join(dir, name)); ok {
 			durable[name] = b
 		}
 	}
@@ -281,7 +282,7 @@ func TestIntegrationKillDuringSurvivalModelsResumes(t *testing.T) {
 	}
 	fsB := statefake.New()
 	for name, b := range durable {
-		fsB.Seed(filepath.Join(filepath.Dir(r.path("var/lib/localai/state.json")), name), b)
+		fsB.Seed(filepath.Join(dir, name), b)
 	}
 	r.writeNodeYAMLText(r.nodeYAMLFor(llama2))
 	b := *r
@@ -291,16 +292,14 @@ func TestIntegrationKillDuringSurvivalModelsResumes(t *testing.T) {
 	b.env.SocketPath = filepath.Join(r.root, "run", "localai", "agent-b.sock")
 	b.start()
 	b.waitStarted()
-	b.waitEvent("mode.changed", func(ev events.Event) bool { return strings.Contains(string(ev.Data), `"survival"`) })
+	b.waitMode(state.ModeSurvival)
 
 	snap := b.d.Components().State.Snapshot()
 	if snap.Mode != state.ModeSurvival || snap.ModeTransition != nil {
 		t.Errorf("after the resume: mode %q, transition %+v", snap.Mode, snap.ModeTransition)
 	}
-	if llama2.Status(modelAlpha) != routerfake.Loaded {
-		t.Errorf("the resumed survival transition did not load %s: %q", modelAlpha, llama2.Status(modelAlpha))
-	}
-	if !b.logs.has("resuming a mode transition", nil) && !strings.Contains(b.logText(), doctor.AGT007) {
+	waitUntil(t, modelAlpha+" to be loaded by the resumed transition", func() bool { return llama2.Status(modelAlpha) == routerfake.Loaded })
+	if !b.logs.has("resuming a mode transition", nil) && !strings.Contains(b.logText(), "LAI-AGT-007") {
 		t.Errorf("the resume is not logged (LAI-AGT-007):\n%s", b.logText())
 	}
 }

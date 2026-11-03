@@ -232,7 +232,7 @@ func TestPendingAlerts(t *testing.T) {
 	d.raiseSeverity(doctor.AGT014, doctor.Critical, nil)
 	d.raise(doctor.SEC011, nil)
 	d.clearAlert(doctor.SEC011)
-	d.raise("LAI-XXX-999", nil)
+	d.raise("not-a-doctor-code", nil)
 	if len(d.pending) != 3 {
 		t.Fatalf("pending = %+v", d.pending)
 	}

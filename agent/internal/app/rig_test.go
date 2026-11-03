@@ -9,13 +9,11 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -490,16 +488,3 @@ func hasAlert(d *Daemon, code string) bool {
 	}
 	return false
 }
-
-// freePort returns a TCP port nobody listens on.
-func freePort(t *testing.T) int {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	return ln.Addr().(*net.TCPAddr).Port
-}
-
-func itoa(n int) string { return strconv.Itoa(n) }
