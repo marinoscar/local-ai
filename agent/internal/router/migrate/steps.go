@@ -147,7 +147,7 @@ func (e *Engine) m2Key(_ context.Context, p *Plan) error {
 	key, err := e.readKey(e.paths.LegacyKey)
 	if err != nil {
 		if err == errBadKeyShape {
-			return fail(CodeBadKey, M2, "%s is not 64 lowercase hex digits", e.paths.LegacyKey)
+			return fail(CodeCredShape, M2, "%s is not 64 lowercase hex digits", e.paths.LegacyKey)
 		}
 		return wrap(CodeStopped, M2, err, "cannot read the legacy key")
 	}

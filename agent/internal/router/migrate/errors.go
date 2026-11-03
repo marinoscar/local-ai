@@ -17,13 +17,13 @@ const (
 	// CodeInterrupted: the migration did not finish (an interruption, a failure after the first change, or
 	// a verification that failed and was rolled back); running it again continues or retries.
 	CodeInterrupted = doctor.LLM029
-	// CodeBadKey: the old key file is not 64 lowercase hex digits.
-	CodeBadKey = doctor.SEC010
+	// CodeCredShape: the old key file is not 64 lowercase hex digits.
+	CodeCredShape = doctor.SEC010
 	// CodeBuild is the code of a failed build when the build manager gave none.
 	CodeBuild = doctor.LLM018
-	// CodeOldRunning and CodeOldKeyPath are the doctor findings of checks.go.
-	CodeOldRunning = doctor.LLM016
-	CodeOldKeyPath = doctor.SEC015
+	// CodeOldRunning and CodeOldCredPath are the doctor findings of checks.go.
+	CodeOldRunning  = doctor.LLM016
+	CodeOldCredPath = doctor.SEC015
 )
 
 // Error is a failure of the migration, with the doctor code every visible error carries. Its message and

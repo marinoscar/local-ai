@@ -160,7 +160,7 @@ func (e *Engine) r3RestoreKey(_ context.Context, _ *Plan, _ bool) error {
 	}
 	key, kerr := e.readKey(e.paths.NewKey)
 	if kerr != nil {
-		return fail(CodeBadKey, "R3", "the current key %s cannot be read or is not 64 hex digits: the old key path cannot be restored", e.paths.NewKey)
+		return fail(CodeCredShape, "R3", "the current key %s cannot be read or is not 64 hex digits: the old key path cannot be restored", e.paths.NewKey)
 	}
 	if err := e.fs.MkdirAll(e.paths.LegacyKeyDir(), 0o700); err != nil {
 		return wrap(CodeInterrupted, "R3", err, "cannot create %s", e.paths.LegacyKeyDir())

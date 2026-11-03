@@ -397,7 +397,7 @@ func (e *Engine) ensureKeyLink() (fixed bool, err error) {
 		}
 	}
 	if _, err := e.readKey(e.paths.NewKey); err != nil {
-		return false, fail(CodeBadKey, M9, "%s is missing or not a valid key: the old key path is left alone", e.paths.NewKey)
+		return false, fail(CodeCredShape, M9, "%s is missing or not a valid key: the old key path is left alone", e.paths.NewKey)
 	}
 	return true, e.linkKey()
 }

@@ -171,7 +171,7 @@ func (e *Engine) Preflight(ctx context.Context) (*Plan, error) {
 	key, kerr := e.readKey(e.paths.LegacyKey)
 	switch {
 	case errors.Is(kerr, errBadKeyShape):
-		e.add(p, CodeBadKey, "key_shape", "%s is not 64 lowercase hex digits; the migration will not copy a key it cannot vouch for", e.paths.LegacyKey)
+		e.add(p, CodeCredShape, "key_shape", "%s is not 64 lowercase hex digits; the migration will not copy a key it cannot vouch for", e.paths.LegacyKey)
 	case kerr != nil:
 		e.add(p, CodeStopped, "key_unreadable", "cannot read the legacy key %s: %v", e.paths.LegacyKey, kerr)
 	default:

@@ -367,7 +367,7 @@ func TestDetailsOfTheExitCodes(t *testing.T) {
 	if CodeOf(e) != CodeStopped || CodeOf(os.ErrNotExist) != "" {
 		t.Fatal("CodeOf")
 	}
-	if got := problemsError([]Problem{{Code: CodeStopped, Cause: "a", Message: "m"}, {Code: CodeBadKey, Message: "n"}}); got.Code != CodeStopped || len(got.Details["also"].([]string)) != 1 {
+	if got := problemsError([]Problem{{Code: CodeStopped, Cause: "a", Message: "m"}, {Code: CodeCredShape, Message: "n"}}); got.Code != CodeStopped || len(got.Details["also"].([]string)) != 1 {
 		t.Fatalf("%+v", got)
 	}
 	if problemsError(nil) != nil {
