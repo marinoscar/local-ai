@@ -1,0 +1,36 @@
+[Unit]
+Description=Local AI library (kiwix-serve)
+Documentation=https://github.com/marinoscar/local-ai/blob/main/docs/specs/companion-services.md
+After=local-fs.target
+ConditionPathExists=/var/lib/localai/kiwix/library.xml
+ConditionPathExists=/opt/localai/kiwix-tools/current/kiwix-serve
+
+[Service]
+Type=simple
+User=localai
+Group=localai
+ExecStart=/opt/localai/kiwix-tools/current/kiwix-serve \
+  --address=127.0.0.1 --port=8888 \
+  --urlRootLocation=/library \
+  --monitorLibrary --skipInvalid --blockexternal \
+  --threads=4 \
+  --library /var/lib/localai/kiwix/library.xml
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+ReadOnlyPaths=/
+
+[Install]
+WantedBy=multi-user.target
