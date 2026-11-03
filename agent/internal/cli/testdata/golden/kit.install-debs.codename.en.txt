@@ -1,0 +1,6 @@
+== stdout ==
+== stderr ==
+✗ This computer needs packages for noble-amd64, but the kit only has:
+  debs/resolute-amd64.  [LAI-KIT-042]
+  → Fix: Sync the kit after the upgrade, with internet.
+== exit 1 ==

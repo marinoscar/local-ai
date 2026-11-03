@@ -401,6 +401,7 @@ const (
 	KIT044 = "LAI-KIT-044"
 	KIT045 = "LAI-KIT-045"
 	KIT046 = "LAI-KIT-046"
+	KIT047 = "LAI-KIT-047"
 
 	// LAI-DRL
 	DRL001 = "LAI-DRL-001"
@@ -2546,6 +2547,12 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "The kit's index and guide could not be refreshed", ES: "No se pudo actualizar el índice y la guía del kit"},
 		Fix:      Msg{EN: "The kit itself is fine. Run `aictl ark sync`; it rewrites them.", ES: "El kit está bien. Ejecute `aictl ark sync`; los reescribe."},
+	},
+	{
+		ID:       KIT047,
+		Severity: Error,
+		Title:    Msg{EN: "Installing from the kit failed", ES: "Falló la instalación desde el kit"},
+		Fix:      Msg{EN: "Nothing was replaced. Read the message, then run `aictl kit verify --full` and try again.", ES: "No se reemplazó nada. Lea el mensaje, ejecute `aictl kit verify --full` e intente otra vez."},
 	},
 	{
 		ID:       DRL001,

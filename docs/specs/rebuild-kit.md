@@ -163,7 +163,7 @@ Rotating a key is a catalog/agent release; old keys stay embedded for 2 years so
 | `aictl kit` / `aictl kit status [--root <id>]` | which kit parts are present and verified for this node, and for every pinned node on a drive |
 | `aictl kit verify [--root <id>] [--part <name>] [--full]` | §4.4. `--part` limits the run to one top-level kit part of §3.1: `catalog`, `installers`, `bin`, `src`, `git`, `toolchains`, `tools`, `desktop`, `debs`, `nvidia`, `cuda`, `prebuilt`, `iso`; an unknown name → exit 2 |
 | `aictl kit install <tool>` | installs a tool from the kit into `/opt/localai` (`kiwix-tools`, `pmtiles`, `piper`, `agent`), verifying first. The per-tool install functions come from companion-services (SVC-02 kiwix-tools/pmtiles, SVC-08 piper); the CLI dispatcher is KIT-06 |
-| `aictl kit install-debs [--root <id>] [--packages …]` | installs packages from the kit's local apt repo (§Offline apt) |
+| `aictl kit install-debs [--root <id>] [--packages …] [--dry-run]` | installs packages from the kit's local apt repo (§Offline apt); verifies first, `--dry-run` changes nothing |
 | `aictl kit export-build` | exports this node's current llama/whisper builds into `kit/prebuilt/` on every writable root (also done by sync after a new build) |
 | `aictl rebuild-llama …` | §4.3 |
 | `aictl rebuild-whisper …` | same flags, for whisper.cpp ([companion-services.md](companion-services.md) §4.2.1, which owns the whisper build target, smoke and base command; this spec adds `--prebuilt`, `--from-kit`, `--dry-run` and export) |
@@ -219,7 +219,7 @@ sudo apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/localai-ark.
 sudo apt-get install -y --no-install-recommends -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/localai-ark.list -o Dir::Etc::sourceparts=- <packages>
 sudo rm /etc/apt/sources.list.d/localai-ark.list
 ```
-`aictl kit install-debs` wraps exactly this. Versions in the closure may be **newer** than what's installed on an old system (the closure is taken from `-updates`/`-security`); apt upgrades the dependencies it needs, which is intended.
+`aictl kit install-debs` wraps exactly this, in this order and with these additions ([aictl.md](aictl.md) §4.23c): the repositories it will list are verified before the source file exists (`SHA256SUMS`, the `.deb` files against `PACKAGES.lock`, the `Packages` index against the lock, no file apt could prefer over the index); apt's simulated plan must stay inside the verified lock and remove nothing; the source file is removed on every path. Versions in the closure may be **newer** than what's installed on an old system (the closure is taken from `-updates`/`-security`); apt upgrades the dependencies it needs, which is intended.
 
 #### 4.1.5 NVIDIA driver packages (§Driver packages)
 One `apt_closure` per `(codename, arch, driver branch)` in the pins, e.g. `kit-nvidia-resolute-amd64-595-open` with packages `nvidia-driver-595-open`, `nvidia-utils-595`, `libnvidia-compute-595`, `nvidia-dkms-595-open`, `dkms`, and `linux-headers-generic` plus the **prebuilt signed module packages for the current kernel flavours** (`linux-modules-nvidia-595-open-generic` and the meta package for the node's kernel series). Prebuilt signed modules matter: they work with Secure Boot and don't need DKMS to compile. DKMS is the fallback when the kernel is newer than the prebuilt modules, and needs the headers for that exact kernel (§5 limits).
@@ -376,6 +376,7 @@ Plain list, also printed in the rebuild runbook:
 | LAI-KIT-044 | critical | The kit's agent files failed their signature check | Don't install them. Use another drive and report it. | No los instale. Use otro disco y repórtelo. |
 | LAI-KIT-045 | warning | The kit's list of pinned versions is damaged or newer than this agent | Nothing breaks. Sync the catalog with internet; it brings a fresh list. | Nada se dañó. Sincronice el catálogo con internet; trae una lista nueva. |
 | LAI-KIT-046 | warning | The kit's index and guide could not be refreshed | The kit itself is fine. Run `aictl ark sync`; it rewrites them. | El kit está bien. Ejecute `aictl ark sync`; los reescribe. |
+| LAI-KIT-047 | error | Installing from the kit failed | Nothing was replaced. Read the message, then run `aictl kit verify --full` and try again. | No se reemplazó nada. Lea el mensaje, ejecute `aictl kit verify --full` e intente otra vez. |
 
 ## 9. Test plan
 

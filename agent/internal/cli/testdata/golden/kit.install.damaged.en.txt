@@ -1,0 +1,8 @@
+== stdout ==
+== stderr ==
+… Checking kiwix-tools in the kit
+✗ The kit file kiwix-tools_linux-x86_64-3.8.2.tar.gz does not match its
+  checksum, so it was not installed.  [LAI-KIT-001]
+  → Fix: Run `aictl kit verify --full`; sync the drive on a computer with
+         internet.
+== exit 1 ==

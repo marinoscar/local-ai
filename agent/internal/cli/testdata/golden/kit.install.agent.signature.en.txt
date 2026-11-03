@@ -1,0 +1,7 @@
+== stdout ==
+== stderr ==
+… Checking agent in the kit
+✗ The agent files in the kit failed their signature check, so nothing was
+  replaced.  [LAI-KIT-044]
+  → Fix: Don't install them. Use another drive and report it.
+== exit 1 ==

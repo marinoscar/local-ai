@@ -218,7 +218,7 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
     sudo aictl kit install-debs --packages cmake
     ```
 
-    Several packages: separate them with commas (`--packages cmake,ninja-build`). Without `--packages` it installs everything a rebuild needs. With several drives or roots, add `--root <root-id>`.
+    Several packages: separate them with commas (`--packages cmake,ninja-build`). Without `--packages` it installs everything a rebuild needs. With several drives or roots, add `--root <root-id>`. To see what it would install without changing anything, add `--dry-run`.
     - **What you should see:** the packages being checked and installed, then `✓`.
     - **If it doesn't work:** `LAI-KIT-001` (a package file in the kit is damaged): `aictl kit verify --part debs --full`, then use another drive or sync this one with internet. `LAI-KIT-042`: the kit is for a different Ubuntu version (step 2).
 
