@@ -501,8 +501,8 @@ func (p *llamaPrinter) Write(b []byte) (int, error) {
 }
 
 // startHeartbeat prints "Still working (12 min so far)" every llamaHeartbeatEvery until the returned
-// function is called, and with -v the last line of the build log. A build is 20 to 40 minutes of
-// silence otherwise.
+// function is called, and with -v the last line of the build log. A build is a long silence
+// otherwise.
 func (p *llamaPrinter) startHeartbeat(buildsDir string) (stop func()) {
 	if p.c.Global.JSON || p.c.Global.Quiet {
 		return func() {}

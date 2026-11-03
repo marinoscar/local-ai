@@ -1,0 +1,3 @@
+== stdout ==
+i The drill of 3 hours ago (scheduled) was skipped: survival mode.
+== exit 0 ==

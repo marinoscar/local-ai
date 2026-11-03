@@ -3,23 +3,59 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"strings"
 
 	"github.com/marinoscar/local-ai/agent/internal/cli/out"
 )
 
-// `aictl services` (aictl.md section 4.13), list only: the companion services and whether they
-// are running, from GET /services. start, stop and restart belong to AICTL-10.
+// `aictl services` (aictl.md section 4.13): the companion services and whether they are running, from
+// GET /services (AICTL-04), and `services start|stop|restart <name> [--force]` (AICTL-10), which
+// call POST /services/{name}/{action}. `restart` and `services restart` share serviceAction
+// (cmd_restart.go), so the two forms behave identically.
 
 func init() {
 	Register(&Command{
-		Name:        "services",
-		Summary:     "List the services (llama, kiwix, whisper) and whether they run.",
-		Description: "Changing a service (start, stop, restart) is not available yet.\n--json prints the agent body unchanged.",
-		Timeout:     readOnlyTimeout,
-		Run:         runServices,
+		Name:    "services",
+		Summary: "List the services (llama, kiwix, whisper), or start, stop or restart one.",
+		Description: `Without a subcommand it lists the services and whether they run. --json prints the agent body unchanged.
+  aictl services start|stop|restart <llama|kiwix|whisper> [--force]
+Starting llama also waits until the router answers and loads the models that were loaded before. Stopping
+llama in survival mode needs --force. "aictl restart <name>" is the same as "aictl services restart <name>".`,
+		Timeout: readOnlyTimeout,
+		Run:     runServices,
 	})
+	for _, action := range []string{"start", "stop", "restart"} {
+		attachAll(at(serviceActionCommand(action), "services"))
+	}
+}
+
+// serviceActionCommand is `services <action> <name> [--force]`.
+func serviceActionCommand(action string) *Command {
+	summary := map[string]string{
+		"start":   "Start a service (llama, kiwix or whisper).",
+		"stop":    "Stop a service (llama, kiwix or whisper).",
+		"restart": "Restart a service (llama, kiwix or whisper).",
+	}[action]
+	return &Command{
+		Name:    action,
+		Summary: summary,
+		Usage:   "<llama|kiwix|whisper> [--force]",
+		Description: `Waits until the service is ` + map[string]string{"stop": "stopped", "start": "running", "restart": "running again"}[action] + ` (at most 60 seconds). For llama it also waits for the router and loads
+the models that were loaded before. --force is sent to the agent as given: it is needed only to stop
+llama in survival mode. --json prints the agent body unchanged.`,
+		Timeout: restartTimeout,
+		Flags: func(fs *flag.FlagSet) {
+			fs.Bool("force", false, "send force to the agent (to stop llama in survival mode)")
+		},
+		Run: func(c *Call) error {
+			if err := c.exactArgs(1, "<llama|kiwix|whisper>"); err != nil {
+				return err
+			}
+			return c.serviceAction(c.Args[0], action)
+		},
+	}
 }
 
 // decodeServices accepts the list either as a bare array or as {"services": [...]}: agent.md
@@ -39,10 +75,6 @@ func decodeServices(raw []byte) ([]wireService, error) {
 
 func runServices(c *Call) error {
 	if len(c.Args) > 0 {
-		switch c.Args[0] {
-		case "start", "stop", "restart":
-			return notImplemented("services "+c.Args[0], "AICTL-10")(c)
-		}
 		return roNoArgs(c)
 	}
 	var list []wireService

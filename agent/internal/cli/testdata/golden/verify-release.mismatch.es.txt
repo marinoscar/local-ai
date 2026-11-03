@@ -1,0 +1,7 @@
+== stdout ==
+== stderr ==
+✗ Una actualización descargada no pasó la comprobación de firma o suma de
+  verificación y se descartó. La firma es correcta, pero estos archivos no
+  coinciden con su suma o faltan: ai-desktop.deb.  [LAI-AGT-010]
+  → Solución: No la instale a mano. Informe al mantenedor.
+== exit 1 ==

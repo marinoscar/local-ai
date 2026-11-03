@@ -1,0 +1,16 @@
+== stdout ==
+✓ The internet is blocked during the test
+✓ Brain answered (qwen3.5-9b-q4km) · 2.1 s
+✓ Library search worked
+✓ Map tiles were served
+! Speech to text (Spanish): Speech recognition is less accurate than expected.
+  [LAI-DRL-031]
+  → Fix: Nothing urgent. A bigger whisper model helps.
+✗ Text to speech (English): The voice failed.  [LAI-DRL-034]
+  → Fix: Run `aictl doctor`.
+i The rebuild kit is present (skipped)
+✗ Drill failed: 1 check did not pass.
+== stderr ==
+… Drill: switching to a private test (nothing is published during the test)
+… Drill: running the checks
+== exit 9 ==

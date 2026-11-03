@@ -1,0 +1,16 @@
+== stdout ==
+✓ Internet está bloqueado durante la prueba
+✓ El cerebro respondió (qwen3.5-9b-q4km) · 2.1 s
+✓ La búsqueda en la biblioteca funcionó
+✓ Se sirvieron los mosaicos del mapa
+! Voz a texto (español): El reconocimiento de voz es menos preciso de lo
+  esperado.  [LAI-DRL-031]
+  → Solución: Nada urgente. Un modelo whisper más grande ayuda.
+✗ Texto a voz (inglés): Falló la voz.  [LAI-DRL-034]
+  → Solución: Ejecute `aictl doctor`.
+i El kit de reconstrucción está presente (omitido)
+✗ El simulacro falló: 1 comprobación no pasó.
+== stderr ==
+… Simulacro: pasando a una prueba privada (durante la prueba no se publica nada)
+… Simulacro: ejecutando las comprobaciones
+== exit 9 ==

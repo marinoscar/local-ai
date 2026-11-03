@@ -178,7 +178,7 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
     sudo aictl rebuild-llama --from-kit
     ```
 
-    - **What you should see:** `… Building llama.cpp <commit> for cuda (sm 75), 5 parallel jobs (about 20–40 minutes)`, then `✓ Build … passed its test (CUDA0: …)` and `✓ Switched to the new build. <model> is loaded again.`
+    - **What you should see:** `… Building llama.cpp <commit> for cuda (sm 75), 5 parallel jobs`, then `✓ Build … passed its test (CUDA0: …)` and `✓ Switched to the new build. <model> is loaded again.`
     - The new build is tested before it is used. If the AI doesn't come back with it, the previous build is restored by itself.
     - **If it doesn't work:**
       - `LAI-KIT-002` (the kit doesn't have the needed llama.cpp version): choose a commit the kit has. `ls /media/$USER/AI-ARK/localai/kit/src/` shows `llama.cpp-<commit>.tar.gz` files; run `sudo aictl rebuild-llama --from-kit --commit <commit>`. `LAI-KIT-001` (the source in the kit is damaged): `aictl kit verify --full`, or use another drive.

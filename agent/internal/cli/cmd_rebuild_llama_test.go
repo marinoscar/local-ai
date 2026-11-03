@@ -149,7 +149,7 @@ func TestRebuildLlamaSpecExampleLinesAreExact(t *testing.T) {
 			t.Errorf("stdout lacks %q:\n%s", want, r.out)
 		}
 	}
-	if want := "… Building llama.cpp " + lShort + " for cuda (sm 75), 5 parallel jobs  (about 20–40 minutes)"; !strings.Contains(unwrap(r.errOut), strings.Join(strings.Fields(want), " ")) {
+	if want := "… Building llama.cpp " + lShort + " for cuda (sm 75), 5 parallel jobs"; !strings.Contains(unwrap(r.errOut), strings.Join(strings.Fields(want), " ")) {
 		t.Errorf("stderr lacks the plan line:\n%s", r.errOut)
 	}
 }

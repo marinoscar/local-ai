@@ -1,0 +1,3 @@
+== stdout ==
+✓ Signature OK (Local AI release key). 4 files checked: all match.
+== exit 0 ==

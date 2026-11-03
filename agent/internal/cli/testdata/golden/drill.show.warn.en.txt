@@ -1,0 +1,7 @@
+== stdout ==
+! The drill of 3 hours ago (scheduled) passed with 1 warning.
+✓ Survival mode is ready on this node.
+! Speech to text (Spanish): Speech recognition is less accurate than expected.
+  [LAI-DRL-031]
+  → Fix: Nothing urgent. A bigger whisper model helps.
+== exit 8 ==

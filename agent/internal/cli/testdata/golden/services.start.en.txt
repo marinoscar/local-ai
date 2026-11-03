@@ -1,0 +1,5 @@
+== stdout ==
+✓ The AI model service is running. Qwen 3.5 9B is loaded.
+== stderr ==
+… Starting the AI model service
+== exit 0 ==
