@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# verify-units.sh: run `systemd-analyze verify` on the generated localai-llama.service files and on
-# the embedded localai-drill.service and localai-drill.timer templates.
-# Spec: docs/specs/llama-router.md section 3.2 to 3.4 (ROUTER-04); docs/specs/drill.md section 3.3 (DRILL-01).
+# verify-units.sh: run `systemd-analyze verify` on the generated localai-llama.service and
+# localai-kiwix.service files and on the embedded localai-drill.service and localai-drill.timer templates.
+# Spec: docs/specs/llama-router.md section 3.2 to 3.4 (issue ROUTER-04), docs/specs/companion-services.md
+# section 3.3 (issue SVC-02), docs/specs/drill.md section 3.3 (issue DRILL-01).
 #
-# The files checked are the golden files of the unit generator (agent/internal/router/testdata/golden):
-# `go test ./internal/router` proves the generator renders exactly those bytes, so verifying them
-# verifies the generator's output. Checked: the router unit (ai-n3 and ai-n1 profiles), the single-mode
-# unit, and the router unit together with the environment drop-in.
+# The files checked are the golden files of the unit generators (agent/internal/router/testdata/golden,
+# agent/internal/svc/kiwix/testdata): `go test` proves each generator renders exactly those bytes, so
+# verifying them verifies the generator's output. Checked: the router unit (ai-n3 and ai-n1 profiles),
+# the single-mode unit, the router unit together with the environment drop-in, the kiwix unit and the
+# drill service with its timer (agent/internal/setup/units, embedded in the binary).
 #
 # systemd-analyze verify wants the program of ExecStart to exist and be executable. When the real
 # path is absent this script installs an empty stub there (needs root, or sudo) and removes it on
@@ -19,9 +21,10 @@ set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
 golden="$root/agent/internal/router/testdata/golden"
-bin=/opt/localai/llama.cpp/current/bin/llama-server
-units="$root/agent/internal/setup/units"
+kiwix_golden="$root/agent/internal/svc/kiwix/testdata/localai-kiwix.service.golden"
 aictl=/usr/local/bin/aictl
+units="$root/agent/internal/setup/units"
+bins=(/opt/localai/llama.cpp/current/bin/llama-server /opt/localai/kiwix-tools/current/kiwix-serve "$aictl")
 
 command -v systemd-analyze >/dev/null 2>&1 || { echo "verify-units: systemd-analyze not found" >&2; exit 2; }
 
@@ -39,29 +42,29 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for stub in "$bin" "$aictl"; do
-  if [[ ! -e "$stub" ]]; then
+for bin in "${bins[@]}"; do
+  if [[ ! -e "$bin" ]]; then
     # The first missing component below an existing directory: removed as a whole on exit.
-    d="$stub"
+    d="$bin"
     while [[ ! -e "$(dirname "$d")" ]]; do d="$(dirname "$d")"; done
     created+=("$d")
-    $sudo mkdir -p "$(dirname "$stub")"
-    $sudo install -m 0755 /dev/null "$stub"
+    $sudo mkdir -p "$(dirname "$bin")"
+    $sudo install -m 0755 /dev/null "$bin"
   fi
 done
 
 fail=0
-check() { # name, unit file, optional drop-in file
-  local name="$1" unit="$2" dropin="${3:-}"
+check() { # name, unit file, optional drop-in file, optional unit name (default localai-llama.service)
+  local name="$1" unit="$2" dropin="${3:-}" uname="${4:-localai-llama.service}"
   local dir="$tmp/$name"
   mkdir -p "$dir"
-  cp "$unit" "$dir/localai-llama.service"
+  cp "$unit" "$dir/$uname"
   if [[ -n "$dropin" ]]; then
-    mkdir -p "$dir/localai-llama.service.d"
-    cp "$dropin" "$dir/localai-llama.service.d/50-env.conf"
+    mkdir -p "$dir/$uname.d"
+    cp "$dropin" "$dir/$uname.d/50-env.conf"
   fi
   local out
-  if out="$(systemd-analyze verify "$dir/localai-llama.service" 2>&1)" && [[ -z "$out" ]]; then
+  if out="$(systemd-analyze verify "$dir/$uname" 2>&1)" && [[ -z "$out" ]]; then
     echo "ok   $name"
   else
     echo "FAIL $name" >&2
@@ -74,6 +77,7 @@ check router-ai-n3 "$golden/localai-llama.router.service"
 check router-ai-n1 "$golden/localai-llama.router.ai-n1.service"
 check single-ai-n3 "$golden/localai-llama.single.service"
 check router-with-dropin "$golden/localai-llama.router.ai-n1.service" "$golden/50-env.conf"
+check kiwix "$kiwix_golden" "" localai-kiwix.service
 
 # The drill service and its timer are verified together; the service Requires the agent unit, which
 # lives in another issue, so a stub of it stands in inside the temporary directory.
