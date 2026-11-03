@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -18,7 +19,13 @@ type notifyListener struct {
 
 func newNotifyListener(t *testing.T, abstract bool) *notifyListener {
 	t.Helper()
-	name := filepath.Join(t.TempDir(), "n.sock")
+	// A short directory: the socket path must fit sun_path (108 bytes), which t.TempDir of a long subtest name does not.
+	dir, err := os.MkdirTemp("", "lai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	name := filepath.Join(dir, "n.sock")
 	addr := &net.UnixAddr{Name: name, Net: "unixgram"}
 	display := name
 	if abstract {
