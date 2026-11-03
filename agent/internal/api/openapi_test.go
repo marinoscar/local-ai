@@ -1042,8 +1042,13 @@ func compareStruct(t *testing.T, s *apispec.Spec, path string, typ reflect.Type,
 func TestTypesMirrorSchemas(t *testing.T) {
 	s := loadSpec(t)
 	for name, typ := range map[string]reflect.Type{
-		"Health":        reflect.TypeOf(Health{}),
-		"ErrorEnvelope": reflect.TypeOf(ErrorEnvelope{}),
+		"Health":             reflect.TypeOf(Health{}),
+		"ErrorEnvelope":      reflect.TypeOf(ErrorEnvelope{}),
+		"Cloud":              reflect.TypeOf(Cloud{}),
+		"CloudEnrollRequest": reflect.TypeOf(CloudEnrollRequest{}),
+		"CloudEnrolled":      reflect.TypeOf(CloudEnrolled{}),
+		"CloudUnenrolled":    reflect.TypeOf(CloudUnenrolled{}),
+		"ResendKeyResult":    reflect.TypeOf(ResendKeyResult{}),
 	} {
 		node, err := s.Schema(name)
 		if err != nil {

@@ -1,14 +1,15 @@
 name: units-verify
 # `systemd-analyze verify` on the generated localai-llama.service files (ROUTER-04, llama-router.md
-# sections 3.2 to 3.4). The files are the golden files of the unit generator; the agent workflow's
-# go test proves the generator renders exactly those bytes. The logic is in scripts/verify-units.sh so
+# sections 3.2 to 3.4) and localai-kiwix.service (SVC-02, companion-services.md section 3.3). The files
+# are the golden files of the unit generators; the agent workflow's go test proves each generator
+# renders exactly those bytes. The logic is in scripts/verify-units.sh so
 # it runs the same by hand.
 on:
   pull_request:
-    paths: ['agent/internal/router/unit*.go', 'agent/internal/router/testdata/golden/**', 'scripts/verify-units.sh', '.github/workflows/units-verify.yml']
+    paths: ['agent/internal/router/unit*.go', 'agent/internal/router/testdata/golden/**', 'agent/internal/svc/kiwix/unit*.go', 'agent/internal/svc/kiwix/testdata/**', 'scripts/verify-units.sh', '.github/workflows/units-verify.yml']
   push:
     branches: [main]
-    paths: ['agent/internal/router/unit*.go', 'agent/internal/router/testdata/golden/**', 'scripts/verify-units.sh', '.github/workflows/units-verify.yml']
+    paths: ['agent/internal/router/unit*.go', 'agent/internal/router/testdata/golden/**', 'agent/internal/svc/kiwix/unit*.go', 'agent/internal/svc/kiwix/testdata/**', 'scripts/verify-units.sh', '.github/workflows/units-verify.yml']
 permissions:
   contents: read
 jobs:
@@ -18,5 +19,5 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: systemd-analyze version
         run: systemd-analyze --version | head -1
-      - name: verify the router, single and drop-in files
+      - name: verify the router, single, drop-in and kiwix files
         run: scripts/verify-units.sh
