@@ -223,6 +223,7 @@ func (e *Engine) stepPersist(_ context.Context, t *Transition) ([]Warning, error
 	err := e.d.State.MutateSync(func(s *state.State) error {
 		prev = s.Mode
 		ts := now
+		s.RecordModeChange(ts, t.Target)
 		s.Mode = t.Target
 		s.ModeChangedAt = &ts
 		s.ModeTransition = nil
