@@ -100,7 +100,6 @@ func newFakePlanet(t *testing.T, dates ...string) *fakePlanet {
 }
 
 func (p *fakePlanet) pattern() string { return p.srv.URL + "/{date}.pmtiles" }
-func (p *fakePlanet) host() string    { return strings.TrimPrefix(strings.Split(p.srv.URL, "//")[1], "") }
 func (p *fakePlanet) requests() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()

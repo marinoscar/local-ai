@@ -291,7 +291,7 @@ func srcLookup(inner func(string) (string, error)) func(string) (string, error) 
 // srcNet is the node's network for a test: the picture the daemon is told, and a dialer for the sync
 // downloader that counts every attempt and refuses it. A test that expects no network asserts
 // dials() == 0 when it ends. The hosts of the catalog's kiwix and pmtiles_extract items are counted
-// apart (libraryDials): while the node is online the planner asks every wanted item's resolver, and
+// apart (libDial): while the node is online the planner asks every wanted item's resolver, and
 // those two resolvers read metadata from their origin, which is their job and not a producer's.
 type srcNet struct {
 	mu      sync.Mutex
@@ -355,9 +355,6 @@ func (n *srcNet) dialsOutside(allowed ...string) int {
 	}
 	return out
 }
-
-// libraryDials are the attempts to reach the origin of a kiwix or pmtiles_extract item.
-func (n *srcNet) libraryDials() int { return int(n.libDial.Load()) }
 
 // srcRig is a node that has the kit and docs source types wired.
 type srcRig struct {
