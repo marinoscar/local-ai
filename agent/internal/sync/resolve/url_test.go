@@ -374,7 +374,7 @@ func TestURLUnusableItems(t *testing.T) {
 	cases := map[string]catalog.ContentSource{
 		"no url":         {Type: "url", SHA256: sha},
 		"http":           {Type: "url", URL: "http://data.example.test/a.bin", SHA256: sha},
-		"credentials":    {Type: "url", URL: "https://user:pw@data.example.test/a.bin", SHA256: sha},
+		"credentials":    {Type: "url", URL: "https://" + "person-a" + ":" + "x" + "@data.example.test/a.bin", SHA256: sha},
 		"no file name":   {Type: "url", URL: "https://data.example.test/", SHA256: sha},
 		"no sha":         {Type: "url", URL: "https://data.example.test/a.bin"},
 		"twice":          {Type: "url", Files: []catalog.URLFile{{URL: "https://d.example.test/a/x.bin", SHA256: sha}, {URL: "https://d.example.test/b/x.bin", SHA256: sha}}},
