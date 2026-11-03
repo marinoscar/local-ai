@@ -52,6 +52,11 @@ type ProduceEnv struct {
 	StagingDir string
 	// Checkpoints persists the resume points of the downloads Produce makes (the journal's).
 	Checkpoints download.Checkpointer
+	// RootID and Root name the content root the item is staged on (its id and absolute path) and
+	// MinFree is the root's min_free_bytes: what a producer that downloads a file itself (an archive it
+	// unpacks) needs for a download.FileJob.
+	RootID, Root string
+	MinFree      int64
 }
 
 // CompanionFile is one file of a Companion, as the producer made it.
@@ -290,7 +295,7 @@ func (r *runner) produce() bool {
 		}
 		defer release()
 	}
-	p, err := r.rsl.Produce(r.ctx, ProduceEnv{StagingDir: s, Checkpoints: r.cp})
+	p, err := r.rsl.Produce(r.ctx, ProduceEnv{StagingDir: s, Checkpoints: r.cp, RootID: r.job.Root.ID, Root: r.job.Root.Path, MinFree: r.job.MinFree})
 	if err != nil {
 		return r.produceError(err)
 	}

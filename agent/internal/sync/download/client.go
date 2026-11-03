@@ -155,6 +155,11 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
+// Transport is the shared transport (TLS rules, timeouts, no proxy, no transparent decompression), for
+// the clients of small metadata requests (the resolvers' HEAD and JSON reads) that must dial the way
+// the downloads do. The caller sets its own redirect policy on its own http.Client.
+func (h *HTTPClient) Transport() http.RoundTripper { return h.c.Transport }
+
 // Source returns the Source of one URL. With useAuth the request carries the token, but only when
 // the URL is https and its host is an auth host.
 func (h *HTTPClient) Source(rawURL string, useAuth bool) Source {
