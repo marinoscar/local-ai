@@ -1,0 +1,8 @@
+== stdout ==
+✓ Installed kiwix-tools 3.8.2 from the kit and made it the current version.
+i The library service keeps the old version until it restarts: run
+  `aictl restart kiwix`.
+== stderr ==
+… Checking kiwix-tools in the kit
+… Installing kiwix-tools
+== exit 0 ==

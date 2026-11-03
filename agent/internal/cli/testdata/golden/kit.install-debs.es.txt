@@ -1,0 +1,9 @@
+== stdout ==
+✓ Se instalaron 2 paquetes desde el kit: cmake, curl.
+i También los necesitan: cmake-data.
+== stderr ==
+… Comprobando cada archivo de debs/noble-amd64 del kit
+… Leyendo la lista de paquetes del kit
+… Calculando qué instalar
+… Instalando desde el kit
+== exit 0 ==

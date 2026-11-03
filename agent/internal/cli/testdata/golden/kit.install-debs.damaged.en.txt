@@ -1,0 +1,8 @@
+== stdout ==
+== stderr ==
+… Checking every file of the kit's debs/noble-amd64
+✗ These files in the kit do not match their checksums, so nothing was installed:
+  pool/cmake_3.28.3-1_amd64.deb (changed).  [LAI-KIT-001]
+  → Fix: Run `aictl kit verify --full`; sync the drive on a computer with
+         internet.
+== exit 1 ==

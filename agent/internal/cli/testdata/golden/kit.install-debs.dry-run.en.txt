@@ -1,0 +1,9 @@
+== stdout ==
+✓ Dry run: nothing was changed. These 2 packages would be installed from the
+  kit: cmake-data, cmake.
+i Also needed by them: cmake-data.
+== stderr ==
+… Checking every file of the kit's debs/noble-amd64
+… Reading the package list of the kit
+… Working out what to install
+== exit 0 ==

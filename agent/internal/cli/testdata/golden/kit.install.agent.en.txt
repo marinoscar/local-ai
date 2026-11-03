@@ -1,0 +1,8 @@
+== stdout ==
+✓ Installed the agent 0.5.0 from the kit and restarted it.
+i The previous version 0.4.0 is kept (aiagent.prev).
+== stderr ==
+… Checking agent in the kit
+… Installing agent
+… Restarting the agent
+== exit 0 ==
