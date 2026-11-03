@@ -1,0 +1,8 @@
+== stdout ==
+i La versión 0.2.0 está disponible (usted tiene la 0.1.0).
+== stderr ==
+… Descargando y comprobando la firma
+✗ Una actualización descargada no pasó la comprobación de firma o suma de
+  verificación y se descartó. No se reemplazó nada.  [LAI-AGT-010]
+  → Solución: No la instale a mano. Informe al mantenedor.
+== exit 1 ==

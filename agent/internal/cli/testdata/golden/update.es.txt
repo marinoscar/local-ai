@@ -1,0 +1,8 @@
+== stdout ==
+i La versión 0.2.0 está disponible (usted tiene la 0.1.0).
+✓ Actualizado a 0.2.0. Todo está en marcha.
+== stderr ==
+¿Actualizar ahora? El agente se reinicia; los modelos siguen funcionando. [s/N] … Descargando y comprobando la firma
+… Instalando la nueva versión
+… Reiniciando el agente y esperando a que responda
+== exit 0 ==

@@ -1,0 +1,3 @@
+== stdout ==
+i You are up to date: version 0.2.0 is the newest.  [LAI-AGT-015]
+== exit 0 ==

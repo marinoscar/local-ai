@@ -1,0 +1,4 @@
+== stdout ==
+i Version 0.2.0 is available (you have 0.1.0).  [LAI-AGT-015]
+  → Fix: Run `sudo aictl update` when convenient.
+== exit 0 ==

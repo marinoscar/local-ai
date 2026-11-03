@@ -1,0 +1,10 @@
+== stdout ==
+i Version 0.2.0 is available (you have 0.1.0).
+== stderr ==
+Update now? The agent restarts; models keep running. [y/N] … Downloading and checking the signature
+… Installing the new version
+… Restarting the agent and waiting for it
+✗ The new version 0.2.0 did not start properly, so the previous version 0.1.0
+  was put back automatically. Nothing is lost.  [LAI-AGT-009]
+  → Fix: Nothing is broken. Report the version in the details to the maintainer.
+== exit 1 ==

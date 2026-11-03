@@ -1,0 +1,11 @@
+== stdout ==
+i La versión 0.2.0 está disponible (usted tiene la 0.1.0).
+== stderr ==
+… Descargando y comprobando la firma
+… Instalando la nueva versión
+… Reiniciando el agente y esperando a que responda
+✗ La nueva versión 0.2.0 no arrancó bien, así que se volvió automáticamente a la
+  versión anterior 0.1.0. No se perdió nada.  [LAI-AGT-009]
+  → Solución: No hay nada roto. Informe al mantenedor de la versión que aparece
+              en los detalles.
+== exit 1 ==

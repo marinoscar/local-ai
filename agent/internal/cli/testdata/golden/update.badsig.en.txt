@@ -1,0 +1,8 @@
+== stdout ==
+i Version 0.2.0 is available (you have 0.1.0).
+== stderr ==
+… Downloading and checking the signature
+✗ The downloaded update failed its signature or checksum check and was
+  discarded. Nothing was replaced.  [LAI-AGT-010]
+  → Fix: Do not install it by hand. Report it to the maintainer.
+== exit 1 ==
