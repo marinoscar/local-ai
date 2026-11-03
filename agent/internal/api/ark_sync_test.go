@@ -35,16 +35,32 @@ func (f *fakeStarter) Start(_ context.Context, req ArkSyncRequest) (ArkSyncStart
 	return f.res, f.err
 }
 
+type fakeControl struct {
+	body       any
+	ok         bool
+	cancelled  ArkSyncCancelled
+	cancelErr  error
+	cancelReqs []ArkSyncCancelRequest
+}
+
+func (f *fakeControl) Current(context.Context) (any, bool) { return f.body, f.ok }
+
+func (f *fakeControl) Cancel(_ context.Context, req ArkSyncCancelRequest) (ArkSyncCancelled, error) {
+	f.cancelReqs = append(f.cancelReqs, req)
+	return f.cancelled, f.cancelErr
+}
+
 type arkSyncRig struct {
 	t       *testing.T
 	planner *fakePlanner
 	starter *fakeStarter
+	control *fakeControl
 	h       http.Handler
 }
 
 func newArkSyncRig(t *testing.T, withStarter bool) *arkSyncRig {
 	t.Helper()
-	r := &arkSyncRig{t: t, planner: &fakePlanner{plans: []map[string]any{{
+	r := &arkSyncRig{t: t, control: &fakeControl{}, planner: &fakePlanner{plans: []map[string]any{{
 		"root": "internal", "profile": "small-8gb", "catalog_version": "2026.11.02-1",
 		"budget_bytes": 220, "planned_bytes": 100, "items": []map[string]any{{"pos": 1, "id": "a", "kind": "model", "action": "keep"}},
 		"findings": []any{},
@@ -52,6 +68,7 @@ func newArkSyncRig(t *testing.T, withStarter bool) *arkSyncRig {
 	deps := ArkSyncDeps{Planner: r.planner, NewOpID: func() string { return "op_7k2m9q4r8t1c" }}
 	if withStarter {
 		deps.Starter = r.starter
+		deps.Control = r.control
 	}
 	reg := NewRegistry()
 	if err := RegisterArkSync(reg, deps); err != nil {
@@ -66,14 +83,20 @@ func (r *arkSyncRig) post(body string) *httptest.ResponseRecorder {
 	return recordOK(r.t, do(r.h, req{method: "POST", target: "/api/v1/ark/sync", body: body, header: jsonHeaders(nil)}))
 }
 
+func (r *arkSyncRig) call(method string) *httptest.ResponseRecorder {
+	return recordOK(r.t, do(r.h, req{method: method, target: "/api/v1/ark/sync", header: jsonHeaders(nil)}))
+}
+
 func TestArkSyncRoutesMetadata(t *testing.T) {
 	routes := ArkSyncRoutes(ArkSyncDeps{})
-	if len(routes) != 1 {
+	if len(routes) != 3 {
 		t.Fatalf("routes = %d", len(routes))
 	}
-	rt := routes[0]
-	if rt.Method != http.MethodPost || rt.Pattern != "/ark/sync" || len(rt.Auth) != 1 || rt.Auth[0] != AuthOp || rt.Timeout != 10*time.Second {
-		t.Errorf("route = %+v", rt)
+	for i, method := range []string{http.MethodPost, http.MethodGet, http.MethodDelete} {
+		rt := routes[i]
+		if rt.Method != method || rt.Pattern != "/ark/sync" || len(rt.Auth) != 1 || rt.Auth[0] != AuthOp || rt.Timeout != 10*time.Second {
+			t.Errorf("route %d = %+v", i, rt)
+		}
 	}
 	if err := RegisterArkSync(NewRegistry(), ArkSyncDeps{}); err == nil {
 		t.Fatal("RegisterArkSync must refuse a missing planner")
@@ -189,5 +212,75 @@ func TestArkSyncRealStart(t *testing.T) {
 		if e.Error.Details["run_id"] != "run-20261102T031500Z-a1f3" {
 			t.Errorf("details = %v", e.Error.Details)
 		}
+	})
+}
+
+func TestArkSyncStartedSkippedRunAnswers202WithTheReason(t *testing.T) {
+	r := newArkSyncRig(t, true)
+	r.starter.res = ArkSyncStarted{RunID: "run-20261102T031500Z-a1f3", State: "skipped", Reason: "battery", Code: doctor.SYN003}
+	rec := r.post(`{"trigger": "scheduled"}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	want := `{"run_id":"run-20261102T031500Z-a1f3","state":"skipped","reason":"battery","code":"LAI-SYN-003","events":"/api/v1/events?types=sync.*"}`
+	if got := strings.TrimSpace(rec.Body.String()); got != want {
+		t.Errorf("body = %s", got)
+	}
+}
+
+func TestArkSyncGet(t *testing.T) {
+	t.Run("the active or last run", func(t *testing.T) {
+		r := newArkSyncRig(t, true)
+		r.control.ok = true
+		r.control.body = map[string]any{"run_id": "run-20261102T031500Z-a1f3", "trigger": "manual", "state": "running", "started_at": "2026-11-02T03:15:02Z", "finished_at": nil, "totals": map[string]any{"items": 31}}
+		rec := r.call(http.MethodGet)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"run_id":"run-20261102T031500Z-a1f3"`) || !strings.Contains(rec.Body.String(), `"state":"running"`) {
+			t.Fatalf("%d %s", rec.Code, rec.Body.String())
+		}
+	})
+	t.Run("no run yet is 404 LAI-AGT-021", func(t *testing.T) {
+		r := newArkSyncRig(t, true)
+		expectError(t, r.call(http.MethodGet), http.StatusNotFound, doctor.AGT021)
+	})
+	t.Run("without an engine the agent answers 503 starting", func(t *testing.T) {
+		r := newArkSyncRig(t, false)
+		e := expectError(t, r.call(http.MethodGet), http.StatusServiceUnavailable, CodeStarting)
+		if e.Error.Details["reason"] != "sync_engine_not_ready" {
+			t.Errorf("details = %v", e.Error.Details)
+		}
+	})
+}
+
+func TestArkSyncDelete(t *testing.T) {
+	t.Run("a run is cancelling", func(t *testing.T) {
+		r := newArkSyncRig(t, true)
+		r.control.cancelled = ArkSyncCancelled{RunID: "run-20261102T031500Z-a1f3", Active: true}
+		rec := r.call(http.MethodDelete)
+		if rec.Code != http.StatusAccepted || rec.Header().Get("X-LocalAI-Op-Id") != "op_7k2m9q4r8t1c" {
+			t.Fatalf("%d %s, op id %q", rec.Code, rec.Body.String(), rec.Header().Get("X-LocalAI-Op-Id"))
+		}
+		if got := strings.TrimSpace(rec.Body.String()); got != `{"run_id":"run-20261102T031500Z-a1f3","state":"cancelling"}` {
+			t.Errorf("body = %s", got)
+		}
+		if len(r.control.cancelReqs) != 1 || r.control.cancelReqs[0].OpID != "op_7k2m9q4r8t1c" || r.control.cancelReqs[0].Actor.Kind != audit.KindOperator {
+			t.Errorf("cancel requests = %+v", r.control.cancelReqs)
+		}
+	})
+	t.Run("nothing running is idle, and still 202 (idempotent)", func(t *testing.T) {
+		r := newArkSyncRig(t, true)
+		r.control.cancelled = ArkSyncCancelled{RunID: "run-20261102T031500Z-a1f3"}
+		rec := r.call(http.MethodDelete)
+		if got := strings.TrimSpace(rec.Body.String()); rec.Code != http.StatusAccepted || got != `{"run_id":"run-20261102T031500Z-a1f3","state":"idle"}` {
+			t.Fatalf("%d %s", rec.Code, got)
+		}
+	})
+	t.Run("an error of the engine passes through", func(t *testing.T) {
+		r := newArkSyncRig(t, true)
+		r.control.cancelErr = errors.New("boom")
+		expectError(t, r.call(http.MethodDelete), http.StatusInternalServerError, CodeInternal)
+	})
+	t.Run("without an engine the agent answers 503 starting", func(t *testing.T) {
+		r := newArkSyncRig(t, false)
+		expectError(t, r.call(http.MethodDelete), http.StatusServiceUnavailable, CodeStarting)
 	})
 }

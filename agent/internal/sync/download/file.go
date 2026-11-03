@@ -166,6 +166,10 @@ type FileJob struct {
 	Commit bool
 	// Source replaces the HTTP source (a LocalSource for local_copy and import).
 	Source Source
+	// OnProgress, when set, is called after every block that reached the .part with the file's new
+	// offset (the engine turns it into sync.progress, at most once a second per item). It must not
+	// block.
+	OnProgress func(offset int64)
 }
 
 // StagingDir is <Root>/.staging/<Item>/<Version>.
@@ -822,6 +826,9 @@ func (f *fetch) write(ctx context.Context, block []byte) error {
 		if err == nil {
 			_, _ = f.h.Write(block)
 			f.offset += int64(len(block))
+			if j.OnProgress != nil {
+				j.OnProgress(f.offset)
+			}
 			return nil
 		}
 		if !isNoSpace(err) && !errors.Is(err, io.ErrShortWrite) {
