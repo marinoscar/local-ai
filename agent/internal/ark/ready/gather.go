@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/fs"
 	"path/filepath"
 	"time"
 
@@ -166,6 +165,3 @@ func isUnknownProfile(err error) (*plan.ErrUnknownProfile, bool) {
 	}
 	return nil, false
 }
-
-// isNotExist is errors.Is(err, fs.ErrNotExist).
-func isNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }

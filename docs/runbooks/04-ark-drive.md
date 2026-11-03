@@ -176,7 +176,7 @@ The exact procedure is [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting-
 | **Yellow** | Everything essential is here; something is old, a less important item is missing, orthe drive hasn't been synced for more than 30 days (`LAI-ARK-008`) | Sync it overnight on a node with internet |
 | **Red** | Something essential (tier 1, a survival model, the kit or the manuals) is missing or damaged, the drive has errors, orit hasn't been synced for more than 90 days | Read the problem codes in `aictl ark status`; fix them before an emergency |
 
-"Survival capable: yes" means: the survival brains, speech, at least one essential library book and the map are all verified. Colour rules in detail: [ark-sync.md §4.12.2](../specs/ark-sync.md#4122-colour-rules). The cloud is stricter about drive age (amber from 21 days, alert at 30), see [08](08-scheduled-sync.md).
+"Survival capable: yes" means: the survival brains, speech in English and Spanish, at least one essential library book and the map (with its styles) are all verified. An item that is out of date does not count until it has been updated. If the date columns show "clock wrong", the computer's clock is behind a date it has already seen: set the right date and time (`LAI-AGT-012`); until then the colours ignore age. Colour rules in detail: [ark-sync.md §4.12.2](../specs/ark-sync.md#4122-colour-rules). The cloud is stricter about drive age (amber from 21 days, alert at 30), see [08](08-scheduled-sync.md).
 
 **Drive states you may see in `aictl ark drives`:**
 - `ready`: in use.
