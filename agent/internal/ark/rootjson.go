@@ -94,21 +94,21 @@ func (r RootJSON) Validate() error {
 // MarshalJSON writes the fixed key order (see RootJSON), compact. Encode is the file form.
 func (r RootJSON) MarshalJSON() ([]byte, error) {
 	by, err := jsonord.Object([]jsonord.KV{
-		{"node_id", r.CreatedBy.NodeID},
-		{"agent_version", r.CreatedBy.AgentVersion},
+		{Key: "node_id", Val: r.CreatedBy.NodeID},
+		{Key: "agent_version", Val: r.CreatedBy.AgentVersion},
 	}, r.CreatedBy.Extra)
 	if err != nil {
 		return nil, err
 	}
 	raw, err := jsonord.Object([]jsonord.KV{
-		{"schema_version", r.SchemaVersion},
-		{"root_id", r.RootID},
-		{"kind", r.Kind},
-		{"profile", r.Profile},
-		{"created_at", r.CreatedAt.UTC().Format(time.RFC3339)},
-		{"created_by", json.RawMessage(by)},
-		{"label", r.Label},
-		{"notes", r.Notes},
+		{Key: "schema_version", Val: r.SchemaVersion},
+		{Key: "root_id", Val: r.RootID},
+		{Key: "kind", Val: r.Kind},
+		{Key: "profile", Val: r.Profile},
+		{Key: "created_at", Val: r.CreatedAt.UTC().Format(time.RFC3339)},
+		{Key: "created_by", Val: json.RawMessage(by)},
+		{Key: "label", Val: r.Label},
+		{Key: "notes", Val: r.Notes},
 	}, r.Extra)
 	if err != nil {
 		return nil, err

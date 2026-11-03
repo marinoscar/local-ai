@@ -11,7 +11,7 @@ import (
 
 func TestObjectOrderAndEscaping(t *testing.T) {
 	extra := map[string]json.RawMessage{"zeta": json.RawMessage(`1`), "alpha": json.RawMessage(`{"k":[1,2]}`)}
-	got, err := jsonord.Object([]jsonord.KV{{"b", "x&y<z>"}, {"a", 2}}, extra)
+	got, err := jsonord.Object([]jsonord.KV{{Key: "b", Val: "x&y<z>"}, {Key: "a", Val: 2}}, extra)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +22,7 @@ func TestObjectOrderAndEscaping(t *testing.T) {
 }
 
 func TestObjectMarshalError(t *testing.T) {
-	_, err := jsonord.Object([]jsonord.KV{{"bad", make(chan int)}}, nil)
+	_, err := jsonord.Object([]jsonord.KV{{Key: "bad", Val: make(chan int)}}, nil)
 	if err == nil || !strings.Contains(err.Error(), "bad") {
 		t.Fatalf("want an error naming the key, got %v", err)
 	}
