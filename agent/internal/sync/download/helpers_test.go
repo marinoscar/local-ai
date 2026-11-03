@@ -337,6 +337,12 @@ func (s *testServer) serve(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "file.bin", lm, bytes.NewReader(data))
 }
 
+func (s *testServer) setHandler(h func(n int, w http.ResponseWriter, r *http.Request) bool) {
+	s.mu.Lock()
+	s.handler = h
+	s.mu.Unlock()
+}
+
 func (s *testServer) requests() []reqRec {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -551,3 +557,7 @@ func mustFetch(t *testing.T, e *env, j FileJob) Result {
 }
 
 func drain(r io.Reader) { _, _ = io.Copy(io.Discard, r) }
+
+func sumHex(b []byte) string { return hex.EncodeToString(b) }
+
+func itoaN(n int64) string { return strconv.FormatInt(n, 10) }
