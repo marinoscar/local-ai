@@ -442,12 +442,6 @@ func (r *rig) hookedIDs() []string {
 	return append([]string(nil), r.hooked...)
 }
 
-func (r *rig) activeCalls() [][]string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([][]string(nil), r.active...)
-}
-
 // recv waits for a subscriber event or fails the test.
 func recv(t *testing.T, ch <-chan ark.DriveEvent, d time.Duration) ark.DriveEvent {
 	t.Helper()
