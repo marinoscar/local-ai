@@ -1,0 +1,13 @@
+[Unit]
+Description=Local AI nightly ark sync (timer)
+Documentation=https://github.com/marinoscar/local-ai/blob/main/docs/specs/ark-sync.md
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=45min
+AccuracySec=1min
+Persistent=true
+Unit=localai-sync.service
+
+[Install]
+WantedBy=timers.target
