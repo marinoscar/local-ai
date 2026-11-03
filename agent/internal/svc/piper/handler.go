@@ -91,6 +91,11 @@ type Service struct {
 	clock   config.Clock
 	metrics *health.Metrics
 	log     *slog.Logger
+
+	// afterRequest is called when a synthesis request has finished and been counted, after its
+	// process was waited for and its slot given back. Tests use it to know the handler is done
+	// without sleeping; nothing else sets it.
+	afterRequest func()
 }
 
 // New returns the Service.
@@ -182,6 +187,9 @@ func (s *Service) serveTTS(w http.ResponseWriter, r *http.Request) {
 		if ranFor > 0 {
 			s.metrics.TTSSeconds(ranFor.Seconds())
 		}
+		if s.afterRequest != nil {
+			s.afterRequest()
+		}
 	}()
 	fail := func(res string, err error) {
 		result = res
@@ -257,13 +265,13 @@ func (s *Service) serveTTS(w http.ResponseWriter, r *http.Request) {
 	release, err := s.limiter.Acquire(r.Context())
 	switch {
 	case errors.Is(err, ErrBusy):
-		fail(resultBusy, api.NewError(doctor.SVC015, http.StatusTooManyRequests, nil))
+		fail(resultBusy, busy(nil))
 		return
 	case errors.Is(err, context.Canceled):
 		result = resultClientGone
 		return
 	case err != nil:
-		fail(resultBusy, api.NewError(doctor.SVC015, http.StatusTooManyRequests, map[string]any{"reason": "queue_timeout"}))
+		fail(resultBusy, busy(map[string]any{"reason": "queue_timeout"}))
 		return
 	}
 	defer release()
@@ -347,6 +355,14 @@ func (s *Service) serveTTS(w http.ResponseWriter, r *http.Request) {
 		}
 		api.WriteError(w, r, synthAPIError(serr))
 	}
+}
+
+// busy is 429 LAI-SVC-015 with the Retry-After every 429 carries (agent.md section 3.7): a synthesis
+// takes a few seconds, so ask the caller to come back in 3.
+func busy(details map[string]any) *api.Error {
+	e := api.NewError(doctor.SVC015, http.StatusTooManyRequests, details)
+	e.RetryAfter = 3
+	return e
 }
 
 func tooLong(chars int) *api.Error {

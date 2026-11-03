@@ -1,6 +1,7 @@
 package piper
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 
@@ -95,6 +96,9 @@ func (BlockValidator) ValidateBlock(raw config.RawBlock) config.Problems {
 		probs = append(probs, config.Problem{Path: path, Message: msg, Severity: config.SeverityError})
 	}
 	c := DefaultConfig()
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil // an empty block is the defaults
+	}
 	if err := raw.DecodeStrict(&c); err != nil {
 		bad("", err.Error())
 		return probs

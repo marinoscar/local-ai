@@ -59,10 +59,14 @@ func CatalogVoices(c *catalog.Catalog, planned []string) []CatalogVoice {
 		}
 		return CatalogVoice{ID: m.ID, Language: lang, DisplayName: m.DisplayName}, true
 	}
+	byID := make(map[string]*catalog.Model, len(c.Models))
+	for i := range c.Models {
+		byID[c.Models[i].ID] = &c.Models[i]
+	}
 	seen := map[string]bool{}
 	var out []CatalogVoice
 	for _, id := range planned {
-		if m, ok := c.Model(id); ok && !seen[id] {
+		if m, ok := byID[id]; ok && !seen[id] {
 			if v, ok := voice(m); ok {
 				seen[id] = true
 				out = append(out, v)
