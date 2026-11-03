@@ -496,6 +496,8 @@ func TestAbortErrors(t *testing.T) {
 	}
 	g := newGate()
 	r.add(g.check("drl.hang", 1))
+	// The restore on the way out waits for the test, so the run is still active at the second Abort.
+	r.rest.hold = make(chan struct{})
 	res, _ := r.eng.Start(context.Background(), StartRequest{})
 	<-g.started
 	if _, err := r.eng.Abort("drl-20200101T000000Z-aaaa"); !errors.Is(err, ErrNoRun) {
@@ -507,6 +509,7 @@ func TestAbortErrors(t *testing.T) {
 	if id, err := r.eng.Abort(""); err != nil || id != res.RunID {
 		t.Fatalf("a second Abort is idempotent: %q, %v", id, err)
 	}
+	close(r.rest.hold)
 	r.wait()
 	if _, err := r.eng.Abort(""); !errors.Is(err, ErrNoRun) {
 		t.Fatalf("Abort after the end = %v, want ErrNoRun", err)

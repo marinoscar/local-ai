@@ -144,6 +144,9 @@ type fakeRestorer struct {
 	restores   []Captured
 	// restoreCtxErr records ctx.Err() seen by Restore: an abort must not cancel the restore.
 	restoreCtxErr error
+	// hold, when set, makes Restore wait until it is closed, so a test can keep an aborted run alive
+	// between two calls without racing the run's end.
+	hold chan struct{}
 }
 
 func (r *fakeRestorer) Capture(context.Context) (Captured, error) {
@@ -153,6 +156,9 @@ func (r *fakeRestorer) Capture(context.Context) (Captured, error) {
 }
 
 func (r *fakeRestorer) Restore(ctx context.Context, c Captured) (Restored, error) {
+	if r.hold != nil {
+		<-r.hold
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.restores = append(r.restores, c)
