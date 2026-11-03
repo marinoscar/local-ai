@@ -35,7 +35,10 @@ func (d *DryRun) DryRun(ctx context.Context, req api.ArkSyncRequest) (any, error
 	if err != nil {
 		return nil, err
 	}
-	inputs, err := d.g.GatherAll(ctx, rootIDs, GatherOptions{Resolve: true})
+	// The same rule the engine's preflight follows, so a dry run plans what the run would: the internet
+	// is reachable and the mode allows it (the offline mode only with allow_offline_mode).
+	online := d.g.d.Network().MayUse(req.AllowOfflineMode)
+	inputs, err := d.g.GatherAll(ctx, rootIDs, GatherOptions{Resolve: true, Online: &online})
 	if err != nil {
 		return nil, gatherError(err)
 	}

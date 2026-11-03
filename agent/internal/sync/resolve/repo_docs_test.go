@@ -798,3 +798,109 @@ func sortedCopy(s []string) []string {
 	}
 	return out
 }
+
+// failRunner fails the test on any tool run: the planner's local question must not run anything.
+type failRunner struct{ t *testing.T }
+
+func (f failRunner) Run(_ context.Context, c execx.Cmd) (execx.Result, error) {
+	f.t.Errorf("a tool ran: %s %v", c.Path, c.Args)
+	return execx.Result{}, errors.New("no tool may run")
+}
+
+// ResolveLocal is the planner's offline question: is there material on a root to build the docs from.
+// It reads the mirror's ref files only (no tool, no network) and answers with Resolve's version.
+func TestRepoDocsResolveLocalReadsOnlyTheMirrorsRefs(t *testing.T) {
+	const version = "2026.11.02-1"
+	ask := func(t *testing.T, item plan.CatalogItem, roots ...string) (plan.Resolved, bool) {
+		t.Helper()
+		r := newRepoDocs(t, version, false, nil)
+		r.Env.Runner = failRunner{t}
+		r.Inventory = func() string { return "/etc/localai/inventory.local.yaml" }
+		return r.ResolveLocal(context.Background(), item, roots)
+	}
+	loose := func(t *testing.T, tag string) string {
+		root := t.TempDir()
+		ref := filepath.Join(root, "kit", "git", "local-ai.git", "refs", "tags", tag)
+		if err := os.MkdirAll(filepath.Dir(ref), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(ref, []byte(strings.Repeat("1", 40)+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+	packed := func(t *testing.T, lines string) string {
+		root := t.TempDir()
+		dir := filepath.Join(root, "kit", "git", "local-ai.git")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "packed-refs"), []byte(lines), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+	sha := strings.Repeat("2", 40)
+	tag := "catalog-" + version
+
+	t.Run("a loose tag on any root: the docs keep their inventory suffix, the catalog does not", func(t *testing.T) {
+		got, ok := ask(t, docsItem(), t.TempDir(), loose(t, tag))
+		if !ok || got.Version != "catalog-"+version+"+inv" {
+			t.Errorf("docs = (%+v, %v)", got, ok)
+		}
+		got, ok = ask(t, contentItem("kit-catalog", "kit", catalog.ContentSource{Type: "repo_docs"}), loose(t, tag))
+		if !ok || got.Version != "catalog-"+version {
+			t.Errorf("catalog = (%+v, %v)", got, ok)
+		}
+	})
+	t.Run("a packed tag", func(t *testing.T) {
+		if _, ok := ask(t, docsItem(), packed(t, "# pack-refs with: peeled fully-peeled sorted \n"+sha+" refs/heads/main\n"+sha+" refs/tags/"+tag+"\n^"+sha+"\n")); !ok {
+			t.Error("a tag in packed-refs was not found")
+		}
+	})
+	t.Run("a real mirror made by git", func(t *testing.T) {
+		needTool(t, "git")
+		files, v := repoTree(t)
+		root := t.TempDir()
+		mirrorWithTag(t, root, files, "catalog-"+v)
+		r := newRepoDocs(t, v, false, nil)
+		r.Env.Runner = failRunner{t}
+		if got, ok := r.ResolveLocal(context.Background(), docsItem(), []string{root}); !ok || got.Version != "catalog-"+v {
+			t.Errorf("(%+v, %v)", got, ok)
+		}
+	})
+	t.Run("no answer when the material is not there", func(t *testing.T) {
+		for name, roots := range map[string][]string{
+			"no roots":                    {},
+			"a root without a mirror":     {t.TempDir()},
+			"a mirror without the tag":    {loose(t, "catalog-0.0.1")},
+			"a longer tag is not the tag": {loose(t, tag+"-rc1"), packed(t, sha+" refs/tags/"+tag+"0\n")},
+			"a branch of that name":       {packed(t, sha+" refs/heads/"+tag+"\n")},
+		} {
+			if _, ok := ask(t, docsItem(), roots...); ok {
+				t.Errorf("%s: answered", name)
+			}
+		}
+	})
+	t.Run("no answer for another source type, or without a usable catalog version", func(t *testing.T) {
+		if _, ok := ask(t, contentItem("x", "docs", catalog.ContentSource{Type: "url"}), loose(t, tag)); ok {
+			t.Error("a url item answered")
+		}
+		r := newRepoDocs(t, "../x", false, nil)
+		if _, ok := r.ResolveLocal(context.Background(), docsItem(), []string{loose(t, tag)}); ok {
+			t.Error("a path-like version answered")
+		}
+		r.CatalogVersion = nil
+		if _, ok := r.ResolveLocal(context.Background(), docsItem(), []string{loose(t, tag)}); ok {
+			t.Error("no catalog version answered")
+		}
+	})
+	t.Run("a cancelled context answers nothing", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		r := newRepoDocs(t, version, false, nil)
+		if _, ok := r.ResolveLocal(ctx, docsItem(), []string{loose(t, tag)}); ok {
+			t.Error("answered after cancel")
+		}
+	})
+}

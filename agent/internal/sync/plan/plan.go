@@ -621,7 +621,8 @@ func (r *run) decide(c cand) ItemPlan {
 			break
 		}
 	}
-	if localFrom == "" && r.offline {
+	localBuild := localFrom == "" && r.offline && in.LocalBuild[it.ID]
+	if localFrom == "" && r.offline && !localBuild {
 		if hasPres {
 			return keep(ReasonUnresolved)
 		}
@@ -672,9 +673,12 @@ func (r *run) decide(c cand) ItemPlan {
 	} else {
 		ip.Action = ActionDownload
 	}
-	if localFrom != "" {
+	switch {
+	case localFrom != "":
 		ip.Source, ip.FromRoot = SourceLocalCopy, localFrom
-	} else {
+	case localBuild:
+		ip.Source = SourceLocalBuild
+	default:
 		ip.Source = SourceNetwork
 	}
 	return ip

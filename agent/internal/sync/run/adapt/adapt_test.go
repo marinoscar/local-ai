@@ -217,7 +217,9 @@ func TestControllerServesGetAndDelete(t *testing.T) {
 	}
 	r.wait(got.RunID)
 	body, _ = c.Current(bg)
-	if st = body.(run.RunStatus); st.State != run.StateCancelled || st.Items != nil {
+	// An ended run carries what became of each item (ark-sync.md section 3.5); how many items had been
+	// decided by the time the cancel landed depends on scheduling, so only the state is asserted here.
+	if st = body.(run.RunStatus); st.State != run.StateCancelled {
 		t.Fatalf("after cancel: %+v", st)
 	}
 	if res, _ := c.Cancel(bg, api.ArkSyncCancelRequest{}); res.Active || res.RunID != got.RunID {

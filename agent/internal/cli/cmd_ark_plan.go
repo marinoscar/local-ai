@@ -148,6 +148,8 @@ func (c *Call) printPlan(p arkPlan) {
 			orphans = true
 		case it.Source == "local_copy" && (it.Action == "download" || it.Action == "update"):
 			note = pick(l, "local copy", "copia local")
+		case it.Source == "local_build" && (it.Action == "download" || it.Action == "update"):
+			note = pick(l, "built from local files", "se construye con archivos locales")
 		}
 		rows = append(rows, []string{fmt.Sprint(it.Pos), it.ID, fmt.Sprint(orAny(it.Tier, "-")), it.Action, orText(version, "-"), size, note})
 		if it.Action == "download" || it.Action == "update" {
@@ -155,7 +157,7 @@ func (c *Call) printPlan(p arkPlan) {
 			if n == 0 {
 				n = it.FinalBytes
 			}
-			if it.Source == "local_copy" {
+			if it.Source == "local_copy" || it.Source == "local_build" {
 				localN++
 				localBytes += n
 			} else {
