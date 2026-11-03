@@ -1,6 +1,0 @@
-== stdout ==
-Qué puede hacer con el kit de reconstrucción:
-  install       Install kiwix-tools, pmtiles, piper or the agent from the kit.
-  install-debs  Install packages from the kit's offline apt repository.
-Ejecute `aictl help kit <comando>` para ver los detalles.
-== exit 2 ==

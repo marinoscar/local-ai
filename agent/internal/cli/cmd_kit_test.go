@@ -303,18 +303,18 @@ func mustContain(t *testing.T, s string, parts ...string) {
 
 // ---- the group ----------------------------------------------------------------------------------
 
-func TestKitGroupListsItsSubcommandsAndExits2(t *testing.T) {
+// `aictl kit` alone is `aictl kit status` (rebuild-kit.md section 3.5; the status command is KIT-03,
+// cmd_kit_status.go), and a word that is not a subcommand lists the subcommands (exit 2).
+func TestKitAloneIsStatus(t *testing.T) {
 	f := newKitFix(t)
-	r := f.run(t, "kit")
-	if r.code != ExitUsage || r.errOut != "" {
-		t.Fatalf("exit %d\n%s\n%s", r.code, r.out, r.errOut)
+	alone, status := f.run(t, "kit"), f.run(t, "kit", "status")
+	if alone.code != ExitOK || alone != status {
+		t.Fatalf("exit %d\n%s\n%s\nstatus: %d\n%s", alone.code, alone.out, alone.errOut, status.code, status.out)
 	}
-	checkGolden(t, "kit.en", r)
-	es := f.run(t, "--lang", "es", "kit")
-	if es.code != ExitUsage {
-		t.Fatalf("exit %d", es.code)
+	es, esStatus := f.run(t, "--lang", "es", "kit"), f.run(t, "--lang", "es", "kit", "status")
+	if es.code != ExitOK || es != esStatus {
+		t.Fatalf("exit %d\n%s", es.code, es.out)
 	}
-	checkGolden(t, "kit.es", es)
 }
 
 func TestKitGroupUnknownSubcommandAndJSON(t *testing.T) {
@@ -324,8 +324,8 @@ func TestKitGroupUnknownSubcommandAndJSON(t *testing.T) {
 		t.Fatalf("exit %d\n%s", r.code, r.errOut)
 	}
 	r = f.run(t, "--json", "kit")
-	var doc struct{ Error struct{ Code string } }
-	if r.code != ExitUsage || json.Unmarshal([]byte(r.out), &doc) != nil || doc.Error.Code != CodeUsage {
+	var doc struct{ Roots []struct{ Root string } }
+	if r.code != ExitOK || json.Unmarshal([]byte(r.out), &doc) != nil || len(doc.Roots) != 1 || doc.Roots[0].Root != "internal" {
 		t.Fatalf("exit %d out %q err %q", r.code, r.out, r.errOut)
 	}
 }
@@ -348,8 +348,10 @@ func TestRegisterKitSubJoinsTheGroup(t *testing.T) {
 		t.Fatalf("real kit group: %v", subNames(real))
 	}
 	for _, s := range real.Sub {
-		if s.Marks&MarkRoot == 0 || s.Marks&MarkLocal == 0 {
-			t.Errorf("%s must be marked [local] [root]", s.Name)
+		// status and verify only read (aictl.md section 4.23c: [local]); the installers write /opt/localai.
+		wantRoot := s.Name == "install" || s.Name == "install-debs"
+		if s.Marks&MarkLocal == 0 || (s.Marks&MarkRoot != 0) != wantRoot {
+			t.Errorf("%s is marked %s", s.Name, s.Marks)
 		}
 	}
 }

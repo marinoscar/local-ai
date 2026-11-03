@@ -1,0 +1,35 @@
+== stdout ==
+
+Rebuild kit on this computer's disk: yellow
+PART        STATE     CODE         LAST READ AGAIN
+catalog     ok                     1 day ago
+installers  ok
+bin         ok                     1 day ago
+src         ok                     1 day ago
+git         ok                     1 day ago
+toolchains  ok                     1 day ago
+tools       ok                     1 day ago
+debs        ok                     1 day ago
+nvidia      ok                     1 day ago
+cuda        ok                     1 day ago
+prebuilt    not here  LAI-KIT-040
+
+What ai-n3 (resolute, amd64, cuda) needs from the kit:
+NEEDED                                             STATE    CODE
+the llama.cpp source for 993868924                 ok
+the whisper.cpp source for 1a418d8a9               ok
+the agent program for amd64                        ok
+the agent source node-v0.4.0                       ok
+the Go toolchain for amd64                         ok
+the offline packages for resolute-amd64            ok
+the NVIDIA driver packages for resolute-amd64-595  ok
+the CUDA toolkit 12.4                              ok
+kiwix-tools for amd64                              ok
+pmtiles for amd64                                  ok
+piper for amd64                                    ok
+a prebuilt llama.cpp for 993868924-cuda            warning  LAI-KIT-040
+! The kit has no prebuilt llama.cpp for this computer's current build
+  (993868924-cuda). This is only a warning.  [LAI-KIT-040]
+  → Fix: Run `aictl ark sync` with internet, or `aictl ark import` from a good
+         drive.
+== exit 0 ==

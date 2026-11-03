@@ -1,0 +1,23 @@
+== stdout ==
+
+Rebuild kit on this computer's disk: green
+  Nothing needed reading again (13 items checked by name, size and record).
+PART        STATE  CODE
+catalog     ok
+installers  ok
+bin         ok
+src         ok
+git         ok
+toolchains  ok
+tools       ok
+debs        ok
+nvidia      ok
+cuda        ok
+prebuilt    ok
+✓ Everything this computer needs is in the kit and every file checked out.
+== stderr ==
+… Reading the records of the kit
+… Checking the signature of the agent files
+… Checking what this computer needs
+… Checking that llama.cpp could be rebuilt from the kit
+== exit 0 ==
