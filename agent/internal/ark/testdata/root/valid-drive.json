@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "root_id": "ark-3f9c0a12",
+  "kind": "ark_drive",
+  "profile": "ark-drive-full",
+  "created_at": "2026-11-02T18:04:11Z",
+  "created_by": {
+    "node_id": "ai-n3",
+    "agent_version": "0.4.0"
+  },
+  "label": "AI-ARK",
+  "notes": ""
+}

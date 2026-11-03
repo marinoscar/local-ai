@@ -245,7 +245,7 @@ func (b *StatusBuilder) services(ctx context.Context) []ServiceRow {
 	for _, s := range b.src.Services.Snapshot(ctx) {
 		rows = append(rows, ServiceRow{
 			Name: s.Name, Unit: s.Unit, Active: s.Active, Sub: s.Sub, Since: timePtr(s.Since),
-			Restarts: s.Restarts, Healthy: s.Healthy,
+			Restarts: s.Restarts, Healthy: s.Healthy, State: s.Health,
 		})
 	}
 	return rows

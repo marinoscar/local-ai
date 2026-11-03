@@ -984,7 +984,8 @@ export interface paths {
         put?: never;
         /**
          * Start a drill
-         * @description `trigger: scheduled` is what `localai-drill.service` sends. Owned by drill.md section 3.1. agent.md
+         * @description `trigger: scheduled` is what `localai-drill.service` sends. A manual run a precondition refuses is
+         *     409; a scheduled one answers 202 with `state: skipped`. Owned by drill.md section 3.1. agent.md
          *     section 3.8.28.
          *
          */
@@ -1142,7 +1143,10 @@ export interface components {
         /** @description One companion service. `name` and `unit` are always present (`unit` is null for piper and maps). The agent
          *     fields (`active`, `sub`, `since`, `restarts`, `healthy`, `enabled`, `last_exit`) are in agent.md section 3.8.4
          *     and 3.8.22; the supervisor fields (`state`, `last_check`, `detail`, `books`, `model`, `device`, `voices`,
-         *     `maps`, `problems`) are owned by companion-services.md section 4.6, hence the open object.
+         *     `maps`, `problems`) are owned by companion-services.md section 4.6, hence the open object. A service
+         *     without a unit (piper, maps) has no `active`, `sub`, `restarts` or `enabled`. `state` is the health state
+         *     of companion-services.md section 4.6; `problems` is worst first, with LAI-SVC-051 first when the restart
+         *     budget is spent.
          *      */
         Service: {
             name: string;
@@ -1166,16 +1170,23 @@ export interface components {
             /** Format: date-time */
             last_check?: string;
             detail?: string;
-            books?: {
+            books?: ({
+                content_id: string;
+                name: string;
+                root: string;
+            } & {
                 [key: string]: unknown;
-            }[];
+            })[];
             model?: string;
             device?: string;
             voices?: string[];
             maps?: string[];
-            problems?: {
+            problems?: ({
+                code: string;
+                severity: components["schemas"]["Severity"];
+            } & {
                 [key: string]: unknown;
-            }[];
+            })[];
         } & {
             [key: string]: unknown;
         };
@@ -2042,8 +2053,19 @@ export interface components {
              */
             trigger: "manual" | "scheduled";
         };
+        /** @description The run id. A scheduled run that a precondition held back answers 202 too, with `state: skipped`,
+         *     the doctor code and a plain reason (the document of that run says the same), and `retry_at` when
+         *     the agent will try again (drill.md section 4.1).
+         *      */
         DrillAccepted: {
             run_id: string;
+            /** @enum {string} */
+            state?: "skipped";
+            /** @description LAI-DRL-002, 003, 004 or 005. */
+            code?: string;
+            reason?: string;
+            /** Format: date-time */
+            retry_at?: string;
         };
         /** @description The results document, owned by drill.md section 3.4. */
         DrillResults: {
@@ -2054,12 +2076,22 @@ export interface components {
             started_at: string;
             /** Format: date-time */
             finished_at?: string | null;
+            /**
+             * @description Absent for a run that completed.
+             * @enum {string}
+             */
+            state?: "running" | "skipped" | "aborted";
             /** @enum {string} */
-            overall: "pass" | "warn" | "fail" | "aborted";
+            overall: "pass" | "warn" | "fail" | "aborted" | "skipped" | "running";
             survival_ready?: boolean;
             checks?: {
                 [key: string]: unknown;
             }[];
+            /** @description Why a skipped or aborted run did not complete. */
+            code?: string;
+            reason?: string;
+            /** Format: date-time */
+            retry_at?: string;
         } & {
             [key: string]: unknown;
         };

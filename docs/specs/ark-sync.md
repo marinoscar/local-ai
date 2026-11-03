@@ -96,7 +96,10 @@ Modes: directories 0755, files 0644, owner root. Services that read content (`lo
 ```
 - `kind` ∈ `internal | ark_drive`.
 - `profile` is the profile this root is planned with. Internal roots always use `node.yaml: profile` and ignore this field (it's informational). Drive roots use this field, default `ark-drive-full`. It is changed with `aictl ark drives set-profile <root-id> <profile>` (PIN).
-- If `ROOT.json` is missing on a drive that has a `localai/` directory with content, the agent recreates it with defaults and logs `LAI-ARK-010` (info).
+- If `ROOT.json` is missing on a drive that has a `localai/` directory with content, the agent recreates it with defaults and logs `LAI-ARK-010` (info). The defaults are the drive's label, `sync.ark_drive.default_profile`, this node and agent version, and the current time. Only `ROOT.json` is written: the layout is never created on a drive except by `aictl ark init`. A read-only drive is not written; it is served with the defaults in memory and the file is recreated when the drive is writable. A `localai/` directory that is empty counts as no `localai/` (uninitialized).
+- Rules of the file (`agent/internal/ark/rootjson.go`): `schema_version` must be `1`; `kind` must be `internal` or `ark_drive`; `root_id` must be `internal` or `ark-<8 lowercase hex>` and fit `kind`; `created_at` is RFC 3339. Keys the agent does not know (also inside `created_by`) are kept when it rewrites the file. The agent writes the known keys in the order above, then the unknown ones sorted by name, through the atomic writer (temp file, `fsync`, rename, `fsync` of the directory), mode 0644.
+- The root id always comes from the filesystem UUID, never from the file: a stale `root_id` after `tune2fs -U random` is logged and ignored. The UUID may be the 36-character dashed form or any 8 to 32 hex digits (dashes dropped, first 8 digits kept); a UUID with a non-hex character, fewer than 8 digits or all zeros gives no root id and the drive is not used as a root.
+- A damaged `ROOT.json` on a drive (not JSON, wrong type, impossible value) or one with a newer `schema_version` is never rewritten: the drive's root is `unusable` and the error says why. On the internal root the file is informational, so a damaged one is renamed to `ROOT.json.damaged-<UTC time>` and replaced by the defaults, and a newer schema is left alone.
 
 ### 3.3 node.yaml keys owned by this spec
 
@@ -316,6 +319,11 @@ Notes:
 - Path `/srv/localai`, root id `internal`, created by the installer. Profile from `node.yaml: profile` plus `profile_overrides`.
 - It is always "mounted". If `/srv/localai` is missing or not a directory, the agent recreates it, empty, and raises `LAI-ARK-020` (doctor severity `warning`; the READY root colour is red because every tier-1 item is now missing, §4.12.2).
 - It must be on a local filesystem. If `statfs` reports a network filesystem (nfs, cifs, fuse.sshfs), raise `LAI-ARK-021` and treat the root as read-only.
+- **Checks** (`agent/internal/ark/internal.go`) run at agent start and every 6 hours, in this order:
+  1. `statfs` on the root (on the nearest existing parent when the root is missing). Network means NFS (`0x6969`), SMB/CIFS (`0xFF534D42`, `0xFE534D42`) or any FUSE (`0x65735546`). Then nothing is written at all, not even a missing directory, and the root is `read_only`. A `statfs` that fails counts as local.
+  2. Missing, or not a directory: whatever is there (a file, a dangling symlink) is **renamed** to `<path>.replaced-<UTC time>`, never deleted, and the root is recreated empty with the layout of overview.md §3.3. A symlink to a directory counts as a directory (an operator may point `/srv/localai` at a bigger disk). `LAI-ARK-020` is raised by the check that recreated it and stays raised until a sync or import has refilled the root.
+  3. Otherwise missing layout directories are created (silently), `.staging/` and `.trash/` are set to 0700, and a missing `ROOT.json` is written with `kind: internal`.
+  The layout helper creates only directories, with explicit modes (the umask does not matter), and `chown`s the top directory to `localai` only when it created it. A file where a layout directory belongs is an error and is never replaced. Any failure (read-only filesystem, disk full, permission) leaves the root `read_only` (`unusable` when the directory itself does not exist) and the next check tries again.
 
 #### 4.1.2 Ark drive
 **Detection** (in `agent/internal/ark/detect.go`):
@@ -332,7 +340,7 @@ Notes:
 | duplicate UUID | another mounted ark drive has the same UUID | second one → `unusable`, `LAI-ARK-006` (a cloned drive: give it a new UUID with `tune2fs -U random`) |
 | read-only | mount options contain `ro` (per-mount) or super options contain `ro` | `read_only`, `LAI-ARK-003`. Served and importable, never written |
 | errors | `/sys/fs/ext4/<dev-name>/errors_count` > 0 (dev-name is the basename of the source, e.g. `sdb1`; for dm devices resolve `/sys/dev/block/<maj:min>/dm/name`) | `unclean`, `LAI-ARK-004`. Treated as **read-only** until fixed; served, but every item is re-verified before it is served (§4.13) |
-| initialized | `<mount>/localai/ROOT.json` exists | missing and `<mount>/localai` absent → `uninitialized` (`LAI-ARK-010`). The UI offers **Set up this drive** (`aictl ark init`), which creates `localai/` and `ROOT.json`. An uninitialized drive is never written without that explicit action |
+| initialized | `<mount>/localai/ROOT.json` exists | missing and `<mount>/localai` absent or empty → `uninitialized` (`LAI-ARK-010`). The UI offers **Set up this drive** (`aictl ark init`), which creates `localai/` and `ROOT.json`. An uninitialized drive is never written without that explicit action |
 | writable | create and remove `<mount>/localai/.staging/.probe` | failure → `read_only` with `LAI-ARK-003` (detail: errno) |
 
 **Ordering.** Drives are ordered by mount time (mountinfo mount id ascending), then root id. This order is the "best copy" order (§4.2).

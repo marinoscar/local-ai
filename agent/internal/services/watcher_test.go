@@ -442,3 +442,38 @@ func TestWatcherName(t *testing.T) {
 		t.Errorf("Name = %q", got)
 	}
 }
+
+func TestWatcherOnlyWatchesTheNamedServices(t *testing.T) {
+	r := newRig(t)
+	w := services.NewWatcher(services.WatcherOptions{
+		Manager: r.mgr, Prober: r.prober, Ports: services.Ports{Llama: 8080, Kiwix: 8888, Whisper: 8081},
+		Publisher: r.pub, Clock: r.clock, Only: []string{"llama"},
+	})
+	got := w.Snapshot(context.Background())
+	if len(got) != 1 || got[0].Name != "llama" {
+		t.Fatalf("snapshot = %+v, want llama only", got)
+	}
+	// Only llama's unit is read and subscribed: the other two belong to the health supervisor.
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := w.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	sctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	if err := w.Stop(sctx); err != nil {
+		t.Fatal(err)
+	}
+	var subscribed string
+	for _, c := range r.mgr.Calls() {
+		if c.Unit == services.UnitKiwix || c.Unit == services.UnitWhisper {
+			t.Errorf("the limited watcher touched %s", c.Unit)
+		}
+		if c.Verb == services.VerbSubscribe {
+			subscribed = c.Unit
+		}
+	}
+	if subscribed != "["+services.UnitLlama+"]" {
+		t.Errorf("subscribed to %s", subscribed)
+	}
+}
