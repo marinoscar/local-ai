@@ -70,11 +70,12 @@ type Index struct {
 
 	vmu      sync.RWMutex
 	verified map[markKey]struct{} // serve-time verification passed (unclean roots)
+	excluded map[markKey]struct{} // copies that failed verification and could not be moved aside
 }
 
 // NewIndex returns an empty index that reads manifests through fsys. Call Rebuild at start.
 func NewIndex(fsys config.FS) *Index {
-	ix := &Index{fsys: fsys, verified: map[markKey]struct{}{}}
+	ix := &Index{fsys: fsys, verified: map[markKey]struct{}{}, excluded: map[markKey]struct{}{}}
 	ix.snap.Store(&snapshot{roots: map[string]Root{}, items: map[string][]entry{}})
 	return ix
 }
@@ -222,6 +223,26 @@ func (ix *Index) MarkServeVerified(rootID, itemID, version string) {
 	ix.vmu.Unlock()
 }
 
+// Exclude takes one copy out of the index's answers, in memory only: a copy that failed re-verification
+// (bit rot, LAI-SYN-025) or turned out not to match its own MANIFEST (a drive copy an import found
+// damaged, LAI-SYN-070) on a root that cannot be written, so the files cannot be moved to quarantine
+// (ark-sync.md sections 4.13 and 4.14). Nothing is written to the root. The exclusion belongs to that
+// exact version, survives rebuilds of the same copy and is dropped when the root is unmounted or the
+// version changes, so a drive that is plugged in again, or a copy that was replaced, is judged anew.
+func (ix *Index) Exclude(rootID, itemID, version string) {
+	ix.vmu.Lock()
+	ix.excluded[markKey{rootID, itemID, version}] = struct{}{}
+	ix.vmu.Unlock()
+}
+
+// Excluded reports whether Exclude was called for the copy and it is still in force.
+func (ix *Index) Excluded(rootID, itemID, version string) bool {
+	ix.vmu.RLock()
+	defer ix.vmu.RUnlock()
+	_, ok := ix.excluded[markKey{rootID, itemID, version}]
+	return ok
+}
+
 func (ix *Index) isMarked(e entry) bool {
 	ix.vmu.RLock()
 	defer ix.vmu.RUnlock()
@@ -229,22 +250,25 @@ func (ix *Index) isMarked(e entry) bool {
 	return ok
 }
 
-// pruneMarks keeps only the marks of copies the new snapshot still has on a scannable root.
+// pruneMarks keeps only the marks and exclusions of copies the new snapshot still has on a scannable
+// root.
 func (ix *Index) pruneMarks(s *snapshot) {
 	ix.vmu.Lock()
 	defer ix.vmu.Unlock()
-	for k := range ix.verified {
-		keep := false
-		if r, ok := s.roots[k.rootID]; ok && scannable(r.State) {
-			for _, e := range s.items[k.itemID] {
-				if e.rootID == k.rootID && e.version == k.version {
-					keep = true
-					break
+	for _, set := range []map[markKey]struct{}{ix.verified, ix.excluded} {
+		for k := range set {
+			keep := false
+			if r, ok := s.roots[k.rootID]; ok && scannable(r.State) {
+				for _, e := range s.items[k.itemID] {
+					if e.rootID == k.rootID && e.version == k.version {
+						keep = true
+						break
+					}
 				}
 			}
-		}
-		if !keep {
-			delete(ix.verified, k)
+			if !keep {
+				delete(set, k)
+			}
 		}
 	}
 }
@@ -270,6 +294,9 @@ func (ix *Index) eligible(s *snapshot, itemID string) []entry {
 			continue
 		}
 		if r.State == StateUnclean && !ix.isMarked(e) {
+			continue
+		}
+		if ix.Excluded(e.rootID, itemID, e.version) {
 			continue
 		}
 		out = append(out, e)
