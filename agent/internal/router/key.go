@@ -1,8 +1,11 @@
 package router
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +62,55 @@ func (k StaticKey) Key() (string, error) {
 // Fingerprint is the only form of the key that may appear in a log line, an error or an event: the
 // last four characters behind an ellipsis.
 func Fingerprint(key string) string { return logx.Redact(key) }
+
+// KeyFingerprint is how the key is shown to people: the first four and the last four characters
+// around an ellipsis ("ab12…9f3c", security-model.md section 2). It is the form of state.key, of
+// POST /key/rotate and of the key.rotated event. A value shorter than 16 characters is not a key
+// this node makes, and is shown as "…" alone rather than half-revealed.
+func KeyFingerprint(key string) string {
+	r := []rune(key)
+	if len(r) < 16 {
+		return "…"
+	}
+	return string(r[:4]) + "…" + string(r[len(r)-4:])
+}
+
+// KeyBytes is the size of a llama key before hex encoding: 32 random bytes, 64 hex digits.
+const KeyBytes = 32
+
+// GenerateKey returns a new llama key: KeyBytes random bytes read from src (nil: crypto/rand) as 64
+// lower-case hex digits.
+func GenerateKey(src io.Reader) (string, error) {
+	if src == nil {
+		src = rand.Reader
+	}
+	var b [KeyBytes]byte
+	if _, err := io.ReadFull(src, b[:]); err != nil {
+		return "", fmt.Errorf("router: no randomness for a new key: %w", err)
+	}
+	return hex.EncodeToString(b[:]), nil
+}
+
+// WriteKey replaces the key file at path (empty: DefaultKeyPath) with key, atomically (temp file,
+// fsync, rename, directory fsync), mode 0600, owner root:root (config.PolicyAPIKey). The old file
+// stays whole until the rename, so a failure leaves the old key in place. The error never contains
+// the key.
+func WriteKey(fsys config.FS, path, key string) error {
+	if err := checkKey(key); err != nil {
+		return err
+	}
+	if fsys == nil {
+		fsys = config.OSFS{}
+	}
+	if path == "" {
+		path = DefaultKeyPath
+	}
+	p := config.PolicyAPIKey
+	if err := config.WriteFileAtomicFS(fsys, path, []byte(key+"\n"), p.Mode, p.UID, p.GID); err != nil && !errors.Is(err, config.ErrNotDurable) {
+		return fmt.Errorf("router: could not write the key file: %w", err)
+	}
+	return nil
+}
 
 func checkKey(k string) error {
 	if k == "" || len(k) > maxKeyLen {

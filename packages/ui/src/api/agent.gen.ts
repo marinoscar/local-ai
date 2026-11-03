@@ -252,8 +252,7 @@ export interface paths {
          * Delete a model's files
          * @description Query `root` (default all roots) and `keep_last` (default true). A loaded model is refused
          *     (409 LAI-AGT-022, "Unload it first"). With `keep_last=true` it refuses to remove the last verified copy
-         *     across all mounted roots (409, code defined by ark-sync.md section 4.10). Audit `model.delete`.
-         *     agent.md section 3.8.12.
+         *     across all mounted roots (409 LAI-SYN-044). Audit `model.delete`. agent.md section 3.8.12.
          *
          */
         delete: operations["deleteModel"];
@@ -1577,7 +1576,18 @@ export interface components {
                 root: string;
                 bytes: number;
             }[];
+            /** @description Present when a root's copy was left in place: the last verified copy under keep_last, or no copy on that root. */
+            kept?: {
+                root: string;
+                /** @enum {string} */
+                reason: "last_verified_copy" | "not_present";
+            }[];
             op_id: string;
+            /** @description Present when the router reload after the delete had a problem; the files are already deleted. */
+            warnings?: {
+                code: string;
+                message: string;
+            }[];
         };
         /** @description GET /key (agent.md section 3.8.13). */
         Key: {
@@ -2563,10 +2573,10 @@ export interface operations {
     listModels: {
         parameters: {
             query?: {
-                /** @description 1 keeps the models with loadable true. */
-                loadable?: "1";
-                /** @description For example llama. */
-                engine?: string;
+                /** @description 1 keeps the models with loadable true; 0 or absent keeps all. */
+                loadable?: "0" | "1";
+                /** @description Keeps one engine. */
+                engine?: "llama" | "whisper" | "piper";
             };
             header?: never;
             path?: never;
@@ -2584,6 +2594,7 @@ export interface operations {
                     "application/json": components["schemas"]["ModelList"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["Internal"];
@@ -2687,12 +2698,14 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description LAI-AGT-022 the model is loaded; the last verified copy would be removed (code from ark-sync.md section 4.10). */
+            /** @description LAI-AGT-022 another model operation is running (details.op_id), or the model is loaded (details.reason loaded); LAI-SYN-044 the last verified copy would be removed. */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             500: components["responses"]["Internal"];
             503: components["responses"]["Starting"];
+            /** @description LAI-AGT-099 with details.reason deadline_exceeded: the delete ran past its 60 s deadline. */
+            504: components["responses"]["GatewayTimeout"];
         };
     };
     loadModel: {
@@ -2833,6 +2846,8 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            /** @description LAI-ARK-001: there is no writable content root. */
+            422: components["responses"]["Unprocessable"];
             500: components["responses"]["Internal"];
             503: components["responses"]["Starting"];
         };
@@ -2890,12 +2905,17 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            /** @description LAI-AGT-022: another model operation is running (details.op_id); the old key stays. */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
-            /** @description LAI-LLM-001: the llama restart failed; the new key stays (details.key_rotated is true). LAI-AGT-099: a bug. */
+            /** @description LAI-LLM-001: the llama restart failed; the new key stays (details.key_rotated is true, details.fingerprint names it). LAI-AGT-099: a bug, or the key file could not be written (details.key_rotated is false and the old key stays). */
             500: components["responses"]["Internal"];
+            /** @description LAI-LLM-004: the router did not answer while the models were restored; the new key stays (details.key_rotated is true). */
+            502: components["responses"]["BadGateway"];
             503: components["responses"]["Starting"];
+            /** @description LAI-AGT-099 with details.reason deadline_exceeded: the handler ran past its 15 min deadline; a rotation that already wrote the key stays. */
+            504: components["responses"]["GatewayTimeout"];
         };
     };
     getMode: {

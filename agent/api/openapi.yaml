@@ -389,11 +389,9 @@ paths:
       description: "All engines. `?loadable=1` keeps `loadable: true`; `?engine=llama` filters by engine. agent.md section 3.8.7."
       x-localai-auth: op
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-15
       parameters:
-        - {name: loadable, in: query, schema: {type: string, enum: ["1"]}, description: "1 keeps the models with loadable true."}
-        - {name: engine, in: query, schema: {type: string}, description: "For example llama."}
+        - {name: loadable, in: query, schema: {type: string, enum: ["0", "1"]}, description: "1 keeps the models with loadable true; 0 or absent keeps all."}
+        - {name: engine, in: query, schema: {type: string, enum: [llama, whisper, piper]}, description: "Keeps one engine."}
       responses:
         "200":
           description: The models.
@@ -409,6 +407,7 @@ paths:
                     models:
                       - {id: qwen3.5-9b-q4km, display_name: "Qwen 3.5 9B", summary: "Fast general assistant", engine: llama, roles: [chat, reasoning, coder], survival_tier: 1, in_profile: true, size_bytes: 5868826976, present: true, verified: true, locations: [{root: /srv/localai, complete: true, verified_at: "2026-11-02T03:10:00Z"}], loadable: true, loadable_reason: null, status: loaded, loaded: true, default: true, aliases: [qwen3.5-9b], requirements: {backends: [cuda, vulkan, cpu], min_vram_mib: 6400, min_ram_mib: 8192}, last_load_ms: 7100}
                       - {id: qwen3.6-35b-a3b-q4km, display_name: "Qwen 3.6 35B A3B", engine: llama, in_profile: false, present: false, verified: false, locations: [], loadable: false, loadable_reason: {code: LAI-CAT-005, message: "Needs 11.0 GB of graphics memory; this computer has 8.0 GB."}, status: absent, loaded: false, default: false, aliases: []}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "500": {$ref: "#/components/responses/Internal"}
@@ -472,8 +471,6 @@ paths:
       description: Like a `GET /models` entry plus `files` and `preset`. An unknown id is `404 LAI-AGT-021`. agent.md section 3.8.7.
       x-localai-auth: op
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-15
       responses:
         "200":
           description: The model.
@@ -492,12 +489,9 @@ paths:
       description: |
         Query `root` (default all roots) and `keep_last` (default true). A loaded model is refused
         (409 LAI-AGT-022, "Unload it first"). With `keep_last=true` it refuses to remove the last verified copy
-        across all mounted roots (409, code defined by ark-sync.md section 4.10). Audit `model.delete`.
-        agent.md section 3.8.12.
+        across all mounted roots (409 LAI-SYN-044). Audit `model.delete`. agent.md section 3.8.12.
       x-localai-auth: admin
       x-localai-timeout: "60 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-15
       parameters:
         - {name: root, in: query, schema: {type: string}, description: "A content root path or root id."}
         - {name: keep_last, in: query, schema: {type: boolean, default: true}}
@@ -518,11 +512,14 @@ paths:
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
           $ref: "#/components/responses/Conflict"
-          description: "LAI-AGT-022 the model is loaded; the last verified copy would be removed (code from ark-sync.md section 4.10)."
+          description: "LAI-AGT-022 another model operation is running (details.op_id), or the model is loaded (details.reason loaded); LAI-SYN-044 the last verified copy would be removed."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "500": {$ref: "#/components/responses/Internal"}
         "503": {$ref: "#/components/responses/Starting"}
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+          description: "LAI-AGT-099 with details.reason deadline_exceeded: the delete ran past its 60 s deadline."
 
   /models/{id}/load:
     parameters:
@@ -660,8 +657,6 @@ paths:
         the drive if its profile includes the model. agent.md section 3.8.11.
       x-localai-auth: op
       x-localai-timeout: "10 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-15
       requestBody:
         required: false
         content:
@@ -687,6 +682,9 @@ paths:
           description: "LAI-SYN-010 survival mode; LAI-AGT-023 offline mode without allow_offline_mode; LAI-SYN-005 a run is already active."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+          description: "LAI-ARK-001: there is no writable content root."
         "500": {$ref: "#/components/responses/Internal"}
         "503": {$ref: "#/components/responses/Starting"}
 
@@ -701,8 +699,6 @@ paths:
         There is deliberately no example: a 64-hex key literal in the repository trips scripts/check-redaction.sh.
       x-localai-auth: op
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-15
       responses:
         "200":
           description: The key and how to use it.
@@ -728,8 +724,6 @@ paths:
         Audit `key.rotate`. agent.md section 3.8.14.
       x-localai-auth: admin
       x-localai-timeout: "15 min"
-      x-localai-status: planned
-      x-localai-issue: AGENT-15
       requestBody:
         required: false
         content:
@@ -756,13 +750,21 @@ paths:
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
-        "409": {$ref: "#/components/responses/Conflict"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-022: another model operation is running (details.op_id); the old key stays."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "500":
           $ref: "#/components/responses/Internal"
-          description: "LAI-LLM-001: the llama restart failed; the new key stays (details.key_rotated is true). LAI-AGT-099: a bug."
+          description: "LAI-LLM-001: the llama restart failed; the new key stays (details.key_rotated is true, details.fingerprint names it). LAI-AGT-099: a bug, or the key file could not be written (details.key_rotated is false and the old key stays)."
+        "502":
+          $ref: "#/components/responses/BadGateway"
+          description: "LAI-LLM-004: the router did not answer while the models were restored; the new key stays (details.key_rotated is true)."
         "503": {$ref: "#/components/responses/Starting"}
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+          description: "LAI-AGT-099 with details.reason deadline_exceeded: the handler ran past its 15 min deadline; a rotation that already wrote the key stays."
 
   /mode:
     get:
@@ -2823,7 +2825,27 @@ components:
             properties:
               root: {type: string}
               bytes: {type: integer, minimum: 0}
+        kept:
+          description: "Present when a root's copy was left in place: the last verified copy under keep_last, or no copy on that root."
+          type: array
+          items:
+            type: object
+            required: [root, reason]
+            additionalProperties: false
+            properties:
+              root: {type: string}
+              reason: {type: string, enum: [last_verified_copy, not_present]}
         op_id: {type: string}
+        warnings:
+          description: "Present when the router reload after the delete had a problem; the files are already deleted."
+          type: array
+          items:
+            type: object
+            required: [code, message]
+            additionalProperties: false
+            properties:
+              code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+              message: {type: string}
 
     Key:
       description: "GET /key (agent.md section 3.8.13)."

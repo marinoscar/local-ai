@@ -33,6 +33,17 @@ func (s Snapshot) FitMemory(backend string) int64 {
 	return total
 }
 
+// FitUsedMiB is the GPU memory in use on the GPUs the fit rules count for a backend, the same set
+// FitMemory sums (VRAMUsedMiB already includes the GTT of a unified-memory APU). The bench helper
+// reads it every 250 ms (llama-router.md section 4.13); it is 0 for the cpu backend.
+func (s Snapshot) FitUsedMiB(backend string) int64 {
+	var total int64
+	for _, g := range s.fitGPUs(backend) {
+		total += g.VRAMUsedMiB
+	}
+	return total
+}
+
 // OthersMiB is G_others of llama-router.md section 4.3.1 for a backend: the GPU memory in use by
 // processes outside the localai-llama cgroup. A GPU whose share cannot be measured counts as 0.
 func (s Snapshot) OthersMiB(backend string) int64 {
@@ -60,6 +71,11 @@ func (s Snapshot) UnifiedMemory(backend string) bool {
 		}
 	}
 	return false
+}
+
+// FitGPUs returns a copy of the GPUs the fit rules count for a backend (the set FitMemory sums).
+func (s Snapshot) FitGPUs(backend string) []GPU {
+	return append([]GPU(nil), s.fitGPUs(backend)...)
 }
 
 func (s Snapshot) fitGPUs(backend string) []GPU {

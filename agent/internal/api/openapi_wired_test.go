@@ -17,6 +17,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
 	hwfake "github.com/marinoscar/local-ai/agent/internal/hardware/fake"
+	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/portal"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 )
@@ -73,6 +74,9 @@ func implementedRoutes(t *testing.T) []api.Route {
 	routes = append(routes, api.ModelOpsRoutes(api.ModelOpsDeps{})...)
 	// GET /cloud, POST /cloud/enroll, DELETE /cloud and POST /cloud/resend-key (AGENT-17).
 	routes = append(routes, api.CloudRoutes(api.CloudDeps{})...)
+	// GET /models, GET and DELETE /models/{id}, POST /models/{id}/download, GET /key and POST
+	// /key/rotate (AGENT-15); the handlers are not called, so the dependencies stay empty.
+	routes = append(routes, modelsapi.Routes(modelsapi.Deps{})...)
 	return routes
 }
 
@@ -112,7 +116,7 @@ func TestPlannedOperations(t *testing.T) {
 		issue, _ := op.Raw["x-localai-issue"].(string)
 		byIssue[issue] = append(byIssue[issue], op.Key())
 	}
-	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs", "GET /doctor", "GET /mode", "POST /mode", "POST /mode/survival", "GET /status", "GET /portal/status", "GET /profile", "PUT /profile", "GET /catalog", "POST /catalog/refresh", "POST /models/{id}/load", "POST /models/{id}/unload", "PUT /models/default", "GET /cloud", "DELETE /cloud", "POST /cloud/enroll", "POST /cloud/resend-key"} {
+	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs", "GET /doctor", "GET /mode", "POST /mode", "POST /mode/survival", "GET /status", "GET /portal/status", "GET /profile", "PUT /profile", "GET /catalog", "POST /catalog/refresh", "POST /models/{id}/load", "POST /models/{id}/unload", "PUT /models/default", "GET /models", "GET /models/{id}", "DELETE /models/{id}", "POST /models/{id}/download", "GET /key", "POST /key/rotate", "GET /cloud", "DELETE /cloud", "POST /cloud/enroll", "POST /cloud/resend-key"} {
 		if !implementedKeys[key] {
 			t.Errorf("%s must be implemented", key)
 		}

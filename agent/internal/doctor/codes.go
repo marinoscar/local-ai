@@ -233,6 +233,7 @@ const (
 	SYN041 = "LAI-SYN-041"
 	SYN042 = "LAI-SYN-042"
 	SYN043 = "LAI-SYN-043"
+	SYN044 = "LAI-SYN-044"
 	SYN050 = "LAI-SYN-050"
 	SYN051 = "LAI-SYN-051"
 	SYN052 = "LAI-SYN-052"
@@ -1604,6 +1605,12 @@ var table = []Code{
 		Severity: Info,
 		Title:    Msg{EN: "Old versions were deleted to make room", ES: "Se borraron versiones antiguas para hacer sitio"},
 		Fix:      Msg{EN: "Nothing to do.", ES: "No hay que hacer nada."},
+	},
+	{
+		ID:       SYN044,
+		Severity: Warning,
+		Title:    Msg{EN: "The last verified copy was kept; nothing was deleted", ES: "Se conservó la última copia verificada; no se borró nada"},
+		Fix:      Msg{EN: "This is the only verified copy on this computer. Copy it to another drive first (`aictl ark sync --root <drive>`), or delete it anyway with `aictl delete <model> --allow-last-copy`.", ES: "Es la única copia verificada de este equipo. Cópiela primero a otro disco (`aictl ark sync --root <disco>`), o bórrela igualmente con `aictl delete <modelo> --allow-last-copy`."},
 	},
 	{
 		ID:       SYN050,

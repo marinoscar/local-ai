@@ -33,8 +33,11 @@ const (
 	// load counts as failed: a llama restart takes a few seconds.
 	DefaultDownGrace = 20 * time.Second
 	// DefaultRestartWait bounds the wait for the router to answer after the orchestrator restarted
-	// llama (llama-router.md section 4.6).
+	// llama (llama-router.md section 4.6) and the boot restore's wait for /health at agent start.
 	DefaultRestartWait = 120 * time.Second
+	// DefaultHealthWait bounds the wait for /health after RestartAndRestore restarted llama
+	// (llama-router.md section 4.11).
+	DefaultHealthWait = 60 * time.Second
 	// DefaultProgressEvery is the shortest gap between two forwarded progress events.
 	DefaultProgressEvery = time.Second
 	// loadedNotSeenPolls is how many polls in a row may show a model we asked to load as
@@ -45,6 +48,8 @@ const (
 // Timing groups the waits of the orchestrator. A zero field takes its default; tests shorten them.
 type Timing struct {
 	LoadPoll, EvictPoll, EvictTimeout, UnloadHang, DownGrace, RestartWait, ProgressEvery time.Duration
+	// HealthWait is how long RestartAndRestore waits for /health after the restart.
+	HealthWait time.Duration
 }
 
 func (t Timing) withDefaults() Timing {
@@ -60,6 +65,7 @@ func (t Timing) withDefaults() Timing {
 	def(&t.DownGrace, DefaultDownGrace)
 	def(&t.RestartWait, DefaultRestartWait)
 	def(&t.ProgressEvery, DefaultProgressEvery)
+	def(&t.HealthWait, DefaultHealthWait)
 	return t
 }
 
@@ -120,9 +126,13 @@ type OrchestratorOptions struct {
 	Suppress func(opID string) (release func())
 	// Progress forwards load progress (the watcher); nil forwards none.
 	Progress ProgressSource
-	// Restarter restarts llama after an unload hangs; nil leaves the hang as an error.
+	// Restarter restarts llama after an unload hangs, and for RestartAndRestore; nil leaves the
+	// hang as an error and makes RestartAndRestore refuse.
 	Restarter LlamaRestarter
-	Timing    Timing
+	// Builds tells which llama.cpp build is installed (current/BUILD.json); RestartAndRestore
+	// records it in state.llama.build. nil skips that.
+	Builds BuildSource
+	Timing Timing
 	// Clock measures every wait; Sleep waits between polls (tests advance a manual clock in it).
 	// The default Sleep returns early when the orchestrator shuts down.
 	Clock  config.Clock
