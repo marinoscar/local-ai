@@ -87,6 +87,10 @@ type Input struct {
 	// ProfileUnknown: the root's profile is not in the catalog (LAI-CAT-003). There is nothing to
 	// judge the root against, so the report is red.
 	ProfileUnknown bool
+	// Failure is the doctor code of a root that could not be read at all (its filesystem would not
+	// answer). Like ProfileUnknown it makes the report red with that one problem, and nothing is
+	// claimed about the content.
+	Failure string
 	// CatalogVersion is the catalog in use ("" when none is loaded).
 	CatalogVersion string
 
@@ -171,9 +175,13 @@ func Build(in Input) Report {
 	}
 	rep.LastFullReverifyAt = b.lastFullReverify()
 
-	if in.ProfileUnknown {
+	blocked := in.ProfileUnknown || in.Failure != ""
+	switch {
+	case in.ProfileUnknown:
 		b.add(CodeUnknownProfile, "", Red)
-	} else {
+	case in.Failure != "":
+		b.add(in.Failure, "", Red)
+	default:
 		rep.Items = b.items()
 		for _, it := range rep.Items {
 			rep.Counts.add(it.Status)
@@ -182,7 +190,7 @@ func Build(in Input) Report {
 	b.rootRules()
 
 	needs := NeedsFor(in.Catalog, in.Profile, in.Loadable)
-	rep.SurvivalCapable = !in.ProfileUnknown && needs.Met(Verified(rep))
+	rep.SurvivalCapable = !blocked && needs.Met(Verified(rep))
 
 	rep.Overall = b.overall
 	rep.Problems = b.sortedProblems()

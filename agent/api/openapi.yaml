@@ -895,11 +895,14 @@ paths:
       tags: [ark]
       operationId: getArk
       summary: The readiness report of every mounted root
-      description: Shape owned by ark-sync.md section 3.5 and 4.12.1. agent.md section 3.8.17.
+      description: |
+        Shape owned by ark-sync.md section 3.5 and 4.12.1. agent.md section 3.8.17. One report per mounted
+        content root, internal first: the `READY.json` of the root, with the title of every problem in the
+        language of the request (Accept-Language, else `ui.language`). The report of a read-only root is
+        computed and kept in memory, never written to the drive. A node with no mounted root answers an
+        empty list.
       x-localai-auth: op
       x-localai-timeout: "10 s"
-      x-localai-status: planned
-      x-localai-issue: SYNC-12
       responses:
         "200":
           description: One READY.json per mounted root.
@@ -2504,6 +2507,17 @@ components:
               properties:
                 state: {type: string}
                 last_success_at: {type: [string, "null"], format: date-time}
+            metrics:
+              description: "The readiness gauges of ark-sync.md section 7: localai_ark_root_overall (0 green, 1 yellow, 2 red), localai_ark_root_free_bytes and localai_ark_reverify_age_days_max, one of each per mounted root (label root)."
+              type: array
+              items:
+                type: object
+                required: [name, value]
+                additionalProperties: false
+                properties:
+                  name: {type: string}
+                  labels: {type: object, additionalProperties: {type: string}}
+                  value: {type: number}
         cloud:
           type: object
           required: [enrolled]
@@ -2998,22 +3012,105 @@ components:
         already: {type: boolean, enum: [true]}
 
     ArkRoots:
-      description: "Owned by ark-sync.md section 4.12.1 (READY.json)."
+      description: "Owned by ark-sync.md section 3.5 (GET /ark) and 4.12.1 (READY.json)."
       type: object
       required: [roots]
       additionalProperties: false
       properties:
         roots:
           type: array
+          items: {$ref: "#/components/schemas/ReadyReport"}
+
+    ReadyReport:
+      description: "READY.json, schema v1 (ark-sync.md section 4.12.1): the readiness of one content root. `generated_by.node_id` and `root.path` are dropped before the report goes to the cloud (cloud ReadyReportV1)."
+      type: object
+      required: [schema_version, generated_at, generated_by, root, overall, survival_capable, clock_wrong, last_sync, last_full_reverify_at, counts, items, problems]
+      additionalProperties: true
+      properties:
+        schema_version: {type: integer, const: 1}
+        generated_at: {type: string, format: date-time}
+        generated_by:
+          type: object
+          required: [node_id, agent_version]
+          additionalProperties: true
+          properties:
+            node_id: {type: string}
+            agent_version: {type: string}
+        root:
+          type: object
+          required: [id, kind, path, profile, catalog_version, fs_total_bytes, fs_free_bytes, budget_bytes, used_bytes, trash_bytes, read_only]
+          additionalProperties: true
+          properties:
+            id: {type: string}
+            kind: {type: string, enum: [internal, ark_drive]}
+            path: {type: string}
+            profile: {type: string}
+            catalog_version: {type: [string, "null"]}
+            fs_total_bytes: {type: integer, minimum: 0}
+            fs_free_bytes: {type: integer, minimum: 0}
+            budget_bytes: {type: integer, minimum: 0}
+            used_bytes: {type: integer, minimum: 0}
+            trash_bytes: {type: integer, minimum: 0}
+            read_only: {type: boolean}
+        overall: {type: string, enum: [green, yellow, red]}
+        survival_capable: {type: boolean, description: "This root alone holds everything survival needs. The node-level value, over every mounted root, is in GET /status."}
+        clock_wrong: {type: boolean, description: "True when the clock is earlier than a time the node has already seen: every item's freshness is then omitted and no age rule is applied."}
+        last_sync:
+          type: [object, "null"]
+          required: [run_id, trigger, finished_at, state, age_days]
+          additionalProperties: true
+          properties:
+            run_id: {type: string}
+            trigger: {type: string}
+            finished_at: {type: string, format: date-time}
+            state: {type: string}
+            age_days: {type: integer, minimum: 0}
+        last_full_reverify_at: {type: [string, "null"], format: date-time}
+        counts:
+          type: object
+          required: [verified, stale, missing, skipped, failed, quarantined, orphan]
+          additionalProperties: false
+          properties:
+            verified: {type: integer, minimum: 0}
+            stale: {type: integer, minimum: 0}
+            missing: {type: integer, minimum: 0}
+            skipped: {type: integer, minimum: 0}
+            failed: {type: integer, minimum: 0}
+            quarantined: {type: integer, minimum: 0}
+            orphan: {type: integer, minimum: 0}
+        items:
+          type: array
           items:
             type: object
-            required: [schema_version, generated_at, root, overall]
+            required: [id, kind, tier, status]
             additionalProperties: true
             properties:
-              schema_version: {type: integer}
-              generated_at: {type: string, format: date-time}
-              root: {type: object, additionalProperties: true}
-              overall: {type: string, enum: [green, yellow, red]}
+              id: {type: string}
+              kind: {type: string}
+              tier: {type: integer, minimum: 1, maximum: 3}
+              survival: {type: boolean}
+              status: {type: string, enum: [verified, stale, missing, skipped, failed, quarantined, orphan]}
+              version: {type: string}
+              reason: {type: string}
+              code: {type: string, pattern: "^LAI-[A-Z]{3}-[0-9]{3}$"}
+              verified_at: {type: string, format: date-time}
+              last_reverified_at: {type: string, format: date-time}
+              checked_current_at: {type: string, format: date-time}
+              age_days: {type: integer, minimum: 0}
+              freshness: {type: string, enum: [green, yellow, red]}
+              bytes: {type: integer, minimum: 0}
+              trust: {type: string, enum: [pinned, sidecar, signed_index, computed, tofu]}
+        problems:
+          type: array
+          items:
+            type: object
+            required: [code, severity, title]
+            additionalProperties: true
+            properties:
+              code: {type: string, pattern: "^LAI-[A-Z]{3}-[0-9]{3}$"}
+              severity: {type: string, enum: [info, warning, error, critical]}
+              item: {type: string}
+              title: {type: string}
 
     ArkDrive:
       description: "A drive of GET /ark/drives (ark-sync.md section 3.5). `root_id` is null only when there is no usable filesystem UUID."
