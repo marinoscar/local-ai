@@ -29,7 +29,8 @@ type words struct {
 	keepUnresolvedOffline, keepBudget, refreshDue, catalogPin     string
 	was, oldKept, fromLocal, localWaits, frees, budgetNote        string
 	diskNote, unresolved, unresolvedOffline, readOnlyNote, orphan string
-	itemsWord, andMore, sevInfo, sevWarning, sevError             string
+	itemOne, itemMany, andMore, sevInfo, sevWarning, sevError     string
+	actions                                                       map[Action]string
 }
 
 var en = words{
@@ -51,7 +52,8 @@ var en = words{
 	frees:      "frees %s of old versions in .trash",
 	budgetNote: "budget", diskNote: "not enough free disk space", unresolved: "unresolved", unresolvedOffline: "unresolved (offline)",
 	readOnlyNote: "read-only root", orphan: "not in profile; run `aictl ark prune --orphans`",
-	itemsWord: "items", andMore: "and %d more",
+	itemOne: "item", itemMany: "items", andMore: "and %d more",
+	actions: map[Action]string{ActionKeep: "keep", ActionDownload: "download", ActionUpdate: "update", ActionSkip: "skip", ActionOrphan: "orphan"},
 	sevInfo: "info", sevWarning: "warning", sevError: "error",
 }
 
@@ -74,7 +76,8 @@ var es = words{
 	frees:      "libera %s de versiones antiguas en .trash",
 	budgetNote: "presupuesto", diskNote: "no hay espacio libre suficiente en el disco", unresolved: "sin resolver", unresolvedOffline: "sin resolver (sin conexión)",
 	readOnlyNote: "raíz de solo lectura", orphan: "no está en el perfil; ejecute `aictl ark prune --orphans`",
-	itemsWord: "elementos", andMore: "y %d más",
+	itemOne: "elemento", itemMany: "elementos", andMore: "y %d más",
+	actions: map[Action]string{ActionKeep: "conservar", ActionDownload: "descargar", ActionUpdate: "actualizar", ActionSkip: "omitir", ActionOrphan: "huérfano"},
 	sevInfo: "info", sevWarning: "aviso", sevError: "error",
 }
 
@@ -135,7 +138,7 @@ func Render(p RootPlan, lang string) string {
 	rows := make([]row, len(p.Items))
 	itemW, tierW, actionW, versionW, sizeW := colItem, max(colTier, runes(w.cTier)), max(colAction, runes(w.cAction)), colVersion, max(colSize, runes(w.cSize))
 	for i, it := range p.Items {
-		r := row{pos: "--", id: it.ID, tier: "-", action: string(it.Action), version: displayVersion(it), size: "-", note: note(p, it, w)}
+		r := row{pos: "--", id: it.ID, tier: "-", action: w.actions[it.Action], version: displayVersion(it), size: "-", note: note(p, it, w)}
 		if it.Pos > 0 {
 			r.pos = strconv.Itoa(it.Pos)
 		}
@@ -196,7 +199,11 @@ func Render(p RootPlan, lang string) string {
 	}
 
 	t := p.Totals()
-	line(w.downloads, t.Items, w.itemsWord, FormatGB(t.NetworkBytes), FormatGB(t.LocalBytes))
+	noun := w.itemMany
+	if t.Items == 1 {
+		noun = w.itemOne
+	}
+	line(w.downloads, t.Items, noun, FormatGB(t.NetworkBytes), FormatGB(t.LocalBytes))
 	line(w.peak, FormatGB(p.PeakBytes), FormatGB(p.FreeFloorBytes))
 	line("%s", w.dryRun)
 	return b.String()
