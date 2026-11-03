@@ -249,6 +249,8 @@ func (s State) Connectivity() string { return s.Store.Snapshot().Connectivity.Va
 // assembles their inputs from node.yaml, the catalog, the hardware and the state exactly as the daemon
 // does (the daemon is stopped), runs both and starts nothing.
 type Renderer struct {
+	// Root is "" on a real node; tests point it at a temporary directory.
+	Root     string
 	Paths    local.Paths
 	Config   *config.Store
 	State    *state.Store
@@ -271,14 +273,14 @@ func (r *Renderer) build() {
 		cache = router.Ownership{UID: r.LocalAI.UID, GID: r.LocalAI.GID}
 	}
 	r.gen, r.err = router.NewGenerator(router.GeneratorOptions{
-		Paths: router.DefaultPaths(""), IniState: router.StateIni{Store: r.State}, Systemd: r.Systemd,
+		Paths: router.DefaultPaths(r.Root), IniState: router.StateIni{Store: r.State}, Systemd: r.Systemd,
 		LocalAI: r.LocalAI, INIOwner: ini, DropInOwner: drop, Version: r.Version,
 	})
 	if r.err != nil {
 		return
 	}
 	r.ugen, r.err = router.NewUnitGenerator(router.UnitGeneratorOptions{
-		Paths: router.DefaultUnitPaths(""), State: router.StateUnit{Store: r.State}, Systemd: r.Systemd,
+		Paths: router.DefaultUnitPaths(r.Root), State: router.StateUnit{Store: r.State}, Systemd: r.Systemd,
 		LocalAI: r.LocalAI, UnitOwner: unit, CacheOwner: cache,
 	})
 }
