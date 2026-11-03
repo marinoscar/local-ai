@@ -7,7 +7,8 @@ package api
 // TestTypesMirrorSchemas fails when a field exists on one side only. A route's own issue adds its
 // types (and its openapi.yaml entry, and removes its x-localai-status: planned marker) in the same PR.
 //
-// Implemented so far: GET /health (AGENT-05) and the error envelope of every non-2xx response.
+// Implemented so far: GET /health (AGENT-05), the error envelope of every non-2xx response and the /cloud
+// routes (AGENT-17).
 
 // Health is the body of GET /health (agent.md section 3.8.1; schema Health).
 type Health struct {
@@ -35,4 +36,50 @@ type ErrorBody struct {
 	Message string         `json:"message"`
 	Fix     string         `json:"fix"`
 	Details map[string]any `json:"details"`
+}
+
+// Cloud is the body of GET /cloud (agent.md section 3.8.26; schema Cloud). Only enrolled is
+// guaranteed by the schema; this agent always sends every member, null or empty when not known.
+type Cloud struct {
+	Enrolled        bool    `json:"enrolled"`
+	URL             *string `json:"url"`
+	State           string  `json:"state"`
+	ServerNodeID    *string `json:"server_node_id"`
+	Name            *string `json:"name"`
+	Since           *string `json:"since"`
+	LastHeartbeatAt *string `json:"last_heartbeat_at"`
+	LastClaimAt     *string `json:"last_claim_at"`
+	LastError       *string `json:"last_error"`
+	// Credential is the node credential masked as nod_...<last four>; the credential is never returned.
+	Credential     *string        `json:"credential"`
+	EligibleTypes  []string       `json:"eligible_types"`
+	ServerFeatures []string       `json:"server_features"`
+	StateTransport string         `json:"state_transport"`
+	Inflight       map[string]any `json:"inflight"`
+	KeySynced      bool           `json:"key_synced"`
+}
+
+// CloudEnrollRequest is the body of POST /cloud/enroll (schema CloudEnrollRequest).
+type CloudEnrollRequest struct {
+	URL        string `json:"url"`
+	Credential string `json:"credential"`
+}
+
+// CloudEnrolled is the answer of POST /cloud/enroll (schema CloudEnrolled).
+type CloudEnrolled struct {
+	State        string `json:"state"`
+	ServerNodeID string `json:"server_node_id,omitempty"`
+	Reattached   bool   `json:"reattached,omitempty"`
+	LastError    string `json:"last_error,omitempty"`
+}
+
+// CloudUnenrolled is the answer of DELETE /cloud (schema CloudUnenrolled).
+type CloudUnenrolled struct {
+	Enrolled bool `json:"enrolled"`
+}
+
+// ResendKeyResult is the answer of POST /cloud/resend-key (schema ResendKeyResult).
+type ResendKeyResult struct {
+	KeySynced   bool   `json:"key_synced"`
+	Fingerprint string `json:"fingerprint"`
 }
