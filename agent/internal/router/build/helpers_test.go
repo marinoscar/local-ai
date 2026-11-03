@@ -352,6 +352,7 @@ type harness struct {
 	devices      string
 	versionRes   *execx.Result
 	devicesRes   *execx.Result
+	cliRes       *execx.Result
 	systemctl    execx.Result
 	tools        map[string]bool
 
@@ -417,7 +418,8 @@ func newHarness(t *testing.T, opts ...hopt) *harness {
 			return "", execx.ErrNotFound
 		},
 		Agent: h.agent, Probe: h.probe, Recorder: h.rec, Audit: h.audit, CompileUser: CompileAsCaller,
-		Clock: h.clk.Now, Sleep: h.clk.Sleep,
+		SmokeModel: func() (string, bool) { return "/models/tiny.gguf", true },
+		Clock:      h.clk.Now, Sleep: h.clk.Sleep,
 		FreeBytes:       func(string) (uint64, error) { return 10 << 30, nil },
 		MemAvailableMiB: func() (int64, error) { return 10240, nil },
 		NumCPU:          func() int { return 8 },
@@ -521,6 +523,11 @@ func (h *harness) world(c execx.Cmd) (execx.Result, error, bool) {
 			}
 			return okErrOut(h.devices), nil, true
 		}
+	case "llama-cli":
+		if h.cliRes != nil {
+			return *h.cliRes, nil, true
+		}
+		return okOut("Hello there, friend\n"), nil, true
 	case "systemctl":
 		return h.systemctl, nil, true
 	}

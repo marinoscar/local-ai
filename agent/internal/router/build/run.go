@@ -48,6 +48,8 @@ type run struct {
 	uid, gid    int
 	setpriv     string
 	compileUser string
+	// warnings are what the stages found worth telling the caller (Result.Warnings).
+	warnings []string
 }
 
 // Build runs the whole procedure of llama-router.md section 4.10: resolve the inputs, check the

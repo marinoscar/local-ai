@@ -159,7 +159,7 @@ Every node builds its own llama.cpp for its own GPU. All nodes should run the **
     ```
 
     - **What you should see:** `✓ Switched to the new build. <model> is loaded again.`, `llama.cpp <commit>-<backend>` in `aictl version`, and the drill passing.
-    - **If it doesn't work:** if the AI doesn't come back on the new build, it switches back by itself (`LAI-LLM-019`, `LAI-KIT-022`). Report the log in the issue.
+    - **If it doesn't work:** if the AI doesn't come back on the new build, it switches back by itself (`LAI-LLM-019`). Report the log in the issue.
     - The new build is also saved into the kit of every writable content root by itself (`sudo aictl kit export-build` does it again by hand), so the drives can restore it with `aictl rebuild-llama --prebuilt`.
 44. **Then each other node,** one at a time, with the same `--commit`. ai-n1 builds `vulkan`, ai-n2 and ai-n3 `cuda` (ai-n2 is compute 8.9, ai-n3 7.5; detected automatically). Use `--jobs 2` on a node short of memory. Check its card in the cloud afterwards.
 45. **Record the commit:** set `llama.commit` in each node's `/etc/localai/node.yaml` if `rebuild-llama` didn't, so a later offline rebuild uses the same one, and note it in [architecture/lab-inventory.md](../architecture/lab-inventory.md) §2.

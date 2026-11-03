@@ -46,7 +46,8 @@ func (m *Manager) completeBuild(ctx context.Context, r *run, info BuildInfo, cur
 		return Result{}, r.abort(ctx, e)
 	}
 
-	res := Result{BuildID: plan.BuildID, BuildJSON: info, Path: plan.FinalDir, LogPath: filepath.Join(plan.FinalDir, buildLog)}
+	res := Result{BuildID: plan.BuildID, BuildJSON: info, Path: plan.FinalDir, LogPath: filepath.Join(plan.FinalDir, buildLog),
+		Warnings: append([]string(nil), r.warnings...)}
 	protect := []string{plan.BuildID}
 	if in.Activate {
 		progress(StageSwitch, "Switching to the new build")

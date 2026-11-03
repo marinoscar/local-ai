@@ -51,6 +51,8 @@ const (
 	ConfigureTimeout = 30 * time.Minute
 	// SmokeTimeout bounds each smoke command.
 	SmokeTimeout = time.Minute
+	// GenerateTimeout bounds the llama-cli completion of the smoke test (rebuild-kit.md section 4.3.3).
+	GenerateTimeout = 2 * time.Minute
 
 	// MinFreeBytes is the free space on the root's filesystem a build needs before it starts.
 	MinFreeBytes uint64 = 2 << 30
@@ -308,6 +310,8 @@ type Result struct {
 // inject Clock and Sleep.
 type Timing struct {
 	Configure, Build, Smoke time.Duration
+	// Generate bounds the llama-cli completion of the smoke test (120 s).
+	Generate time.Duration
 	// Systemctl bounds `systemctl restart` on the path without the agent.
 	Systemctl time.Duration
 	// HealthWait is how long /health may take after the restart (60 s).
@@ -330,6 +334,7 @@ func (t Timing) withDefaults() Timing {
 	def(&t.Configure, ConfigureTimeout)
 	def(&t.Build, BuildTimeout)
 	def(&t.Smoke, SmokeTimeout)
+	def(&t.Generate, GenerateTimeout)
 	def(&t.Systemctl, 2*time.Minute)
 	def(&t.HealthWait, time.Minute)
 	def(&t.CheckWait, 3*time.Minute)
@@ -415,6 +420,11 @@ type Options struct {
 	// either is a warning: the build is already in use.
 	NodeConfig NodeRecorder
 	Exporter   PrebuiltExporter
+	// SmokeModel returns the path of the smallest verified llama model on this computer, for the
+	// completion of the smoke test (`llama-cli -m <model> -n 8 -p "Hello" -ngl 99 --no-warmup`,
+	// rebuild-kit.md section 4.3.3); ok is false when there is none. nil, or no model, skips that
+	// step with a warning in Result.Warnings.
+	SmokeModel func() (path string, ok bool)
 }
 
 // Manager is the build manager. It is safe to call Build from one goroutine at a time; the build
