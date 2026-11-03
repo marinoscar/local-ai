@@ -30,6 +30,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
 	"github.com/marinoscar/local-ai/agent/internal/sync/resolve"
 	"github.com/marinoscar/local-ai/agent/internal/sync/run"
+	"github.com/marinoscar/local-ai/agent/internal/sync/run/adapt"
 )
 
 // The kit and docs source types (#271): git_mirror, repo_docs and apt_closure are registered on the
@@ -691,20 +692,181 @@ func TestSourceItemsAreResolvedAndSyncedOnline(t *testing.T) {
 	}
 }
 
-// A node with no internet, in online mode, plans every item from what the catalog pins and runs nothing
-// of the three producers: the items whose version only a resolver can name stay unresolved, the ones
-// the catalog names show their version, and none is planned as a download. No tool runs and nothing
-// dials out. (A producer is never reached offline through the planner; the test after this one drives
-// the producers directly.)
-func TestOfflineNodePlansFromCatalogPinsWithoutTheNetwork(t *testing.T) {
+// getRun is GET /ark/sync as the operator's tool sees it.
+func (sr *srcRig) getRun() (body map[string]any, items map[string]map[string]any) {
+	sr.t.Helper()
+	got := sr.do("GET", "/ark/sync", nil)
+	if got.status != http.StatusOK {
+		sr.t.Fatalf("GET /ark/sync = %d %s", got.status, got.body)
+	}
+	body = got.json()
+	items = map[string]map[string]any{}
+	list, _ := body["items"].([]any)
+	for _, v := range list {
+		m, _ := v.(map[string]any)
+		id, _ := m["item"].(string)
+		items[id] = m
+	}
+	return body, items
+}
+
+// engineRows is the plan the run engine would make now, for the internal root, with the engine's own
+// verdict on the network: what a real run of these flags plans (not the dry-run route's).
+func (sr *srcRig) engineRows(allowOfflineMode bool) plan.RootPlan {
+	sr.t.Helper()
+	n := sr.net.get()
+	pl := adapt.GathererPlanner{G: sr.d.ark.plans}
+	plans, err := pl.Plan(context.Background(), run.PlanRequest{RootIDs: []string{"internal"}, Offline: !plan.Network{Mode: n.Mode, Online: n.Online}.MayUse(allowOfflineMode)})
+	if err != nil || len(plans.Plans) != 1 {
+		sr.t.Fatalf("engine plan: %v %+v", err, plans)
+	}
+	return plans.Plans[0]
+}
+
+// rowsOf keeps the rows of these items, as JSON, so two plans compare byte for byte.
+func rowsOf(t *testing.T, p plan.RootPlan, ids ...string) string {
+	t.Helper()
+	var rows []plan.ItemPlan
+	for _, id := range ids {
+		it, ok := p.Item(id)
+		if !ok {
+			t.Fatalf("no row for %s", id)
+		}
+		rows = append(rows, it)
+	}
+	b, err := json.Marshal(struct {
+		Offline bool
+		Rows    []plan.ItemPlan
+	}{p.Offline, rows})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// A node with no internet, with the lab repository's mirror on its root (#275): the docs and the kit
+// catalog are planned and built through the engine from that mirror, with no network at all, while the
+// llama.cpp mirror and the apt closure, which need the network, are skipped with their reason. No tool
+// that reaches a remote runs, nothing dials out, and the dry run shows what the run does.
+func TestOfflineNodeBuildsFromALocalMirrorAndSkipsWhatNeedsTheNetwork(t *testing.T) {
 	sr := newSrcRig(t, "online", false)
 	sr.fx.seed(t, sr.g, sr.root())
 	sr.start()
 	sr.waitStarted()
 	sr.aptCanRun()
-	before := sr.runner.calls() // what the daemon itself ran while starting
+	all := []string{"kit-llama-cpp", "docs-bundle", "kit-catalog", "kit-debs-resolute-" + sr.arch}
 
-	p := sr.planOf("kit-llama-cpp", "docs-bundle", "kit-catalog", "kit-debs-resolute-"+sr.arch)
+	p := sr.planOf(all...)
+	if !p.Offline {
+		t.Error("the plan of a node with no internet says it is online")
+	}
+	for _, it := range p.Items {
+		switch it.ID {
+		case "docs-bundle", "kit-catalog":
+			if it.Action != plan.ActionDownload || it.Source != plan.SourceLocalBuild || it.ToVersion != "catalog-"+sr.fx.version {
+				t.Errorf("%s: %s source %q version %q, want a local build of the catalog's version", it.ID, it.Action, it.Source, it.ToVersion)
+			}
+		default:
+			if it.Action != plan.ActionSkip || it.Reason != plan.ReasonUnresolved || it.ToVersion != "" {
+				t.Errorf("%s: %s (%s) version %q, want skip unresolved", it.ID, it.Action, it.Reason, it.ToVersion)
+			}
+		}
+	}
+	// The dry run shows what the run plans.
+	if got, want := rowsOf(t, p, all...), rowsOf(t, sr.engineRows(false), all...); got != want {
+		t.Errorf("the dry run and the run's plan differ:\n dry run %s\n run     %s", got, want)
+	}
+	if v := networkVerbs(sr.runner.calls()); len(v) != 0 {
+		t.Errorf("planning ran network verbs: %v", v)
+	}
+
+	st := sr.syncItems(all...)
+	if st.State != run.StateDone {
+		t.Fatalf("the run ended %+v\n%s", st, sr.logText())
+	}
+	for _, id := range []string{"docs-bundle", "kit-catalog"} {
+		if res, code := resultOf(st, id); res != "verified" && res != "done" {
+			t.Errorf("%s ended %q %s, want it built from the mirror: %v\n%s", id, res, code, st.Items, sr.logText())
+		}
+	}
+	for _, id := range []string{"kit-llama-cpp", "kit-debs-resolute-" + sr.arch} {
+		if res, _ := resultOf(st, id); res != "skipped" {
+			t.Errorf("%s ended %q, want skipped (%v)", id, res, st.Items)
+		}
+	}
+	if v := networkVerbs(sr.runner.calls()); len(v) != 0 {
+		t.Errorf("network verbs ran on a node with no internet: %v", v)
+	}
+	if n := sr.net.dials(); n != 0 {
+		t.Errorf("the node dialled out %d times", n)
+	}
+	for _, w := range []struct{ rel, id string }{{"docs", "docs-bundle"}, {"kit/catalog", "kit-catalog"}} {
+		m := sr.manifestAt(w.rel)
+		if m.ItemID != w.id || m.State != manifest.StateVerified || m.Version != "catalog-"+sr.fx.version {
+			t.Errorf("%s manifest = %+v", w.rel, m)
+		}
+	}
+	for _, f := range []string{"docs/index.html", "kit/catalog/CATALOG_VERSION"} {
+		if _, err := os.Stat(filepath.Join(sr.root(), filepath.FromSlash(f))); err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+	for _, rel := range []string{"kit/git/llama.cpp.git", "kit/debs"} {
+		if _, err := os.Stat(filepath.Join(sr.root(), filepath.FromSlash(rel), manifest.FileName)); err == nil {
+			t.Errorf("%s was installed", rel)
+		}
+	}
+
+	// GET /ark/sync says what became of each item (the spec: the ended run carries items), and the
+	// totals the CLI's exit code reads: two skipped, none failed.
+	body, items := sr.getRun()
+	totals, _ := body["totals"].(map[string]any)
+	if totals["failed"] != float64(0) || totals["skipped"] != float64(2) {
+		t.Errorf("totals = %v, want 0 failed and 2 skipped", totals)
+	}
+	if len(items) != 4 {
+		t.Fatalf("GET /ark/sync items = %v, want one per item", body["items"])
+	}
+	for id, want := range map[string]string{"docs-bundle": "verified", "kit-catalog": "verified", "kit-llama-cpp": "skipped", "kit-debs-resolute-" + sr.arch: "skipped"} {
+		got := items[id]
+		if got["result"] != want && !(want == "verified" && got["result"] == "done") {
+			t.Errorf("GET item %s = %v, want %s", id, got, want)
+		}
+		if want == "skipped" && got["reason"] != string(plan.ReasonUnresolved) {
+			t.Errorf("GET item %s has no reason: %v", id, got)
+		}
+	}
+
+	// A second offline run finds the docs and the catalog current and builds nothing again.
+	archives := func() int {
+		n := 0
+		for _, c := range sr.runner.calls() {
+			if c == "git archive" {
+				n++
+			}
+		}
+		return n
+	}
+	built := archives()
+	if st = sr.syncItems("docs-bundle", "kit-catalog"); st.State != run.StateDone || st.Result != run.ResultOK {
+		t.Fatalf("the second run ended %+v\n%s", st, sr.logText())
+	}
+	if archives() != built {
+		t.Error("the second offline run built the docs again")
+	}
+}
+
+// With no internet and no mirror on any root, nothing can be built: every source item is skipped,
+// no tool runs and nothing dials out (the offline-first rule of #271 kept by #275).
+func TestOfflineNodeWithoutAMirrorSkipsEverySourceItem(t *testing.T) {
+	sr := newSrcRig(t, "online", false)
+	sr.start()
+	sr.waitStarted()
+	sr.aptCanRun()
+	all := []string{"kit-llama-cpp", "docs-bundle", "kit-catalog", "kit-debs-resolute-" + sr.arch}
+	before := sr.runner.calls()
+
+	p := sr.planOf(all...)
 	if !p.Offline {
 		t.Error("the plan of a node with no internet says it is online")
 	}
@@ -724,11 +886,11 @@ func TestOfflineNodePlansFromCatalogPinsWithoutTheNetwork(t *testing.T) {
 		}
 	}
 
-	st := sr.syncItems("kit-llama-cpp", "docs-bundle", "kit-catalog")
+	st := sr.syncItems(all[:3]...)
 	if st.State != run.StateDone {
 		t.Fatalf("the run ended %v", st)
 	}
-	for _, id := range []string{"kit-llama-cpp", "docs-bundle", "kit-catalog"} {
+	for _, id := range all[:3] {
 		if res, _ := resultOf(st, id); res != "skipped" {
 			t.Errorf("%s ended %q, want skipped (%v)", id, res, st.Items)
 		}
@@ -743,6 +905,86 @@ func TestOfflineNodePlansFromCatalogPinsWithoutTheNetwork(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(sr.root(), filepath.FromSlash(rel), manifest.FileName)); err == nil {
 			t.Errorf("%s was installed", rel)
 		}
+	}
+}
+
+// In offline mode with the internet reachable, a run with allow_offline_mode uses the network: the
+// resolvers run and every source item is planned and built, as in online mode (#275). Without the
+// flag, the same node plans offline, and the run is refused (LAI-SYN-011). The dry run follows the
+// same rule as the run.
+func TestAllowOfflineModeResolvesEverySourceItem(t *testing.T) {
+	sr := newSrcRig(t, "offline", true)
+	sr.fx.seed(t, sr.g, sr.root())
+	sr.start()
+	sr.waitStarted()
+	sr.aptCanRun()
+	pinned, version := sr.fx.llamaPinned, sr.fx.version
+	all := []string{"kit-llama-cpp", "docs-bundle", "kit-catalog", "kit-debs-resolute-" + sr.arch}
+
+	// Without the flag: offline, the llama mirror and the apt closure are skipped, and the run is refused.
+	p := sr.planOf(all...)
+	if !p.Offline {
+		t.Error("the dry run of an offline-mode node without the flag is not offline")
+	}
+	if it, _ := p.Item("kit-llama-cpp"); it.Action != plan.ActionSkip {
+		t.Errorf("kit-llama-cpp = %+v, want skipped while offline", it)
+	}
+	if got := sr.do("POST", "/ark/sync", map[string]any{"items": all}); got.status != http.StatusConflict || errCode(got) != doctor.SYN011 {
+		t.Errorf("POST /ark/sync in offline mode = %d %s, want 409 %s", got.status, got.body, doctor.SYN011)
+	}
+
+	// With the flag, the dry run resolves everything...
+	dry := sr.do("POST", "/ark/sync", map[string]any{"dry_run": true, "items": all, "allow_offline_mode": true})
+	if dry.status != http.StatusOK {
+		t.Fatalf("dry run = %d %s", dry.status, dry.body)
+	}
+	var plans []plan.RootPlan
+	if err := json.Unmarshal([]byte(dry.body), &plans); err != nil || len(plans) != 1 {
+		t.Fatalf("dry run body %s: %v", dry.body, err)
+	}
+	p = plans[0]
+	if p.Offline {
+		t.Error("an allow_offline_mode dry run with the internet reachable is offline")
+	}
+	want := map[string]string{
+		"kit-llama-cpp":                pinned[:12],
+		"docs-bundle":                  "catalog-" + version,
+		"kit-catalog":                  "catalog-" + version,
+		"kit-debs-resolute-" + sr.arch: sr.debVersion,
+	}
+	for _, it := range p.Items {
+		if it.Action != plan.ActionDownload || it.ToVersion != want[it.ID] || it.Source != plan.SourceNetwork {
+			t.Errorf("%s: %s source %q version %q, want a network download of %q (reason %q)", it.ID, it.Action, it.Source, it.ToVersion, want[it.ID], it.Reason)
+		}
+	}
+	// ...and it is the plan the run makes.
+	if got, want := rowsOf(t, p, all...), rowsOf(t, sr.engineRows(true), all...); got != want {
+		t.Errorf("the dry run and the run's plan differ:\n dry run %s\n run     %s", got, want)
+	}
+
+	// The run: the llama mirror is cloned (the fixture's origin stands for the network), and the docs
+	// and catalog are built.
+	got := sr.do("POST", "/ark/sync", map[string]any{"items": []string{"kit-llama-cpp", "docs-bundle", "kit-catalog"}, "allow_offline_mode": true})
+	if got.status != http.StatusAccepted {
+		t.Fatalf("POST /ark/sync with allow_offline_mode = %d %s", got.status, got.body)
+	}
+	id, _ := got.json()["run_id"].(string)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err := sr.d.Components().SyncEngine.Wait(ctx, id); err != nil {
+		t.Fatalf("the run %s did not end: %v\n%s", id, err, sr.logText())
+	}
+	st, _ := sr.d.Components().SyncEngine.Status()
+	if st.State != run.StateDone || st.Result != run.ResultOK {
+		t.Fatalf("the run ended %+v\n%s", st, sr.logText())
+	}
+	for _, it := range []string{"kit-llama-cpp", "docs-bundle", "kit-catalog"} {
+		if res, code := resultOf(st, it); res != "verified" && res != "done" {
+			t.Errorf("%s ended %q %s: %v", it, res, code, st.Items)
+		}
+	}
+	if m := sr.manifestAt("kit/git/llama.cpp.git"); m.State != manifest.StateVerified || m.Version != pinned[:12] {
+		t.Errorf("mirror manifest = %+v", m)
 	}
 }
 
@@ -812,6 +1054,20 @@ func TestSurvivalModeRefusesTheSourceRun(t *testing.T) {
 	got := sr.do("POST", "/ark/sync", map[string]any{"items": []string{"kit-llama-cpp", "docs-bundle", "kit-catalog"}})
 	if got.status != http.StatusConflict || errCode(got) != doctor.SYN010 {
 		t.Errorf("POST /ark/sync in survival mode = %d %s, want 409 %s", got.status, got.body, doctor.SYN010)
+	}
+	// allow_offline_mode is for the offline mode only: survival still refuses.
+	got = sr.do("POST", "/ark/sync", map[string]any{"items": []string{"kit-llama-cpp"}, "allow_offline_mode": true})
+	if got.status != http.StatusConflict || errCode(got) != doctor.SYN010 {
+		t.Errorf("POST /ark/sync in survival mode with allow_offline_mode = %d %s, want 409 %s", got.status, got.body, doctor.SYN010)
+	}
+	// And a dry run in survival mode plans offline even with the flag.
+	if p := sr.planOf("kit-llama-cpp"); !p.Offline {
+		t.Error("the dry run in survival mode is not offline")
+	}
+	dry := sr.do("POST", "/ark/sync", map[string]any{"dry_run": true, "items": []string{"kit-llama-cpp"}, "allow_offline_mode": true})
+	var plans []plan.RootPlan
+	if err := json.Unmarshal([]byte(dry.body), &plans); dry.status != http.StatusOK || err != nil || len(plans) != 1 || !plans[0].Offline {
+		t.Errorf("the dry run in survival mode with allow_offline_mode = %d %s", dry.status, dry.body)
 	}
 	if calls := sr.runner.calls(); len(calls) != len(before) {
 		t.Errorf("tools ran in survival mode: %v", calls[len(before):])

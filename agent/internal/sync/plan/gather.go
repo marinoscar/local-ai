@@ -68,6 +68,23 @@ type Network struct {
 	Online bool
 }
 
+// MayUse says whether a run may use the network in this state: the internet is reachable and the mode
+// allows it. Survival never does; the offline mode does only when the person asked for it
+// (allow_offline_mode); an unknown (empty) mode is treated as online. This is the one rule the dry run
+// and the run engine's preflight both follow, so the two plans agree.
+func (n Network) MayUse(allowOfflineMode bool) bool {
+	if !n.Online {
+		return false
+	}
+	switch n.Mode {
+	case ModeSurvival:
+		return false
+	case ModeOffline:
+		return allowOfflineMode
+	}
+	return true
+}
+
 // CopyIndex is what the gatherer reads from the best-copy index (*ark.Index implements it).
 type CopyIndex interface {
 	ItemIDs() []string
@@ -96,6 +113,19 @@ type ResolverFunc func(ctx context.Context, it CatalogItem) (Resolved, error)
 // Resolve implements Resolver.
 func (f ResolverFunc) Resolve(ctx context.Context, it CatalogItem) (Resolved, error) {
 	return f(ctx, it)
+}
+
+// LocalResolver is the optional second half of a Resolver for a source type whose producer can work
+// with no network from material already on a mounted root (repo_docs from a local-ai.git mirror).
+// When the node may not use the network, the gatherer asks it instead of falling back to what the
+// catalog pins, and a "yes" makes the item plannable: the planner builds it here (source local_build)
+// instead of skipping it as unresolved.
+//
+// ResolveLocal reads local files only: it never dials and never runs a tool. rootPaths are the paths
+// of every mounted content root. ok is false when the item needs the network or the material is not
+// there.
+type LocalResolver interface {
+	ResolveLocal(ctx context.Context, it CatalogItem, rootPaths []string) (Resolved, bool)
 }
 
 // Resolvers is the registry of resolvers by catalog source type ("git_mirror", "apt_closure",
@@ -212,8 +242,15 @@ func (g *Gatherer) Roots() []ark.Root {
 // GatherOptions tune one gather.
 type GatherOptions struct {
 	// Resolve asks the resolvers for the target version and size (network metadata). Without it, or
-	// offline, items are planned from what the catalog pins.
+	// offline, items are planned from what the catalog pins; offline (with Resolve set), an item whose
+	// producer can work from material on a root (LocalResolver) is planned from that material.
 	Resolve bool
+	// Online, when set, replaces the gatherer's own reading of the network (Deps.Network) for this
+	// gather: the run's real connectivity and allow_offline_mode (Network.MayUse). True means the
+	// network may be used: resolvers run, the plan is not offline and its mode is online (an
+	// allow_offline_mode run in offline mode is planned as online). False means no network, whatever
+	// the mode says. Nil: Deps.Network decides, as before.
+	Online *bool
 	// ResolveTimeout bounds one resolver call; DefaultResolveTimeout when zero.
 	ResolveTimeout time.Duration
 }
@@ -280,6 +317,12 @@ func (g *Gatherer) Gather(ctx context.Context, rootID string, opt GatherOptions)
 	net := g.d.Network()
 	in.Mode = net.Mode
 	in.Offline = !net.Online || (net.Mode != "" && net.Mode != ModeOnline)
+	if opt.Online != nil {
+		in.Offline = !*opt.Online
+		if *opt.Online {
+			in.Mode = ModeOnline // the planner reads any other mode as "no network"
+		}
+	}
 
 	g.copies(&in, root.ID)
 	journalItems := g.journalItems(root.ID)
@@ -421,7 +464,9 @@ func (g *Gatherer) dirBytes(dir string, keep func(name string) bool, depth int) 
 // resolve fills Resolved for the desired items. An item a registered resolver answers takes the
 // answer; one the resolver fails on is left unresolved (the plan then keeps what is present and
 // skips what is not); an item with no resolver, or any item when resolving is off or the node is
-// offline, takes what the catalog pins (FromCatalog), and stays unresolved when it pins nothing.
+// offline, takes what the catalog pins (FromCatalog), and stays unresolved when it pins nothing. The
+// one exception offline is an item whose resolver is a LocalResolver and says yes: it takes that
+// answer and is marked in LocalBuild.
 func (g *Gatherer) resolve(ctx context.Context, in *PlanInput, root ark.Root, opt GatherOptions) {
 	in.Resolved = map[string]Resolved{}
 	d := DesiredItems(in.Catalog, in.Profile, in.Overrides, in.Root, in.Node)
@@ -431,10 +476,30 @@ func (g *Gatherer) resolve(ctx context.Context, in *PlanInput, root ark.Root, op
 		res Resolver
 	}
 	var jobs []job
+	var rootPaths []string
 	for _, it := range d.Items {
-		if res, ok := g.d.Resolvers.For(it.SourceType()); ok && opt.Resolve && !in.Offline {
+		res, hasRes := g.d.Resolvers.For(it.SourceType())
+		if hasRes && opt.Resolve && !in.Offline {
 			jobs = append(jobs, job{it, res})
 			continue
+		}
+		if hasRes && opt.Resolve && in.Offline {
+			// No network: an item whose producer can work from material on a root is still planned.
+			if lr, ok := res.(LocalResolver); ok {
+				if rootPaths == nil {
+					for _, r := range g.d.Roots() {
+						rootPaths = append(rootPaths, r.Path)
+					}
+				}
+				if r, ok := lr.ResolveLocal(ctx, it, rootPaths); ok && r.Version != "" {
+					in.Resolved[it.ID] = r
+					if in.LocalBuild == nil {
+						in.LocalBuild = map[string]bool{}
+					}
+					in.LocalBuild[it.ID] = true
+					continue
+				}
+			}
 		}
 		if r, ok := FromCatalog(it, in.Catalog.Version); ok {
 			in.Resolved[it.ID] = r

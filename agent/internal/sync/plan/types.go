@@ -119,6 +119,10 @@ type PlanInput struct {
 	// Offline forbids the network (connectivity none, or a caller that is importing). An item whose
 	// target version has no local copy is then unresolved. Local copies work in every mode.
 	Offline bool
+	// LocalBuild marks the items (by id) that a producer can build here with no network from material
+	// already on a mounted root (the gatherer fills it offline from a LocalResolver). Offline, such an
+	// item is planned with source local_build instead of skipped as unresolved. Ignored online.
+	LocalBuild map[string]bool
 	// Now is the only clock the planner has.
 	Now time.Time
 }
@@ -160,6 +164,9 @@ type Source string
 const (
 	SourceNetwork   Source = "network"
 	SourceLocalCopy Source = "local_copy"
+	// SourceLocalBuild: made on this root by the item's producer from material already on a root (the
+	// docs from a local-ai.git mirror); it needs no network, so it is planned offline too.
+	SourceLocalBuild Source = "local_build"
 )
 
 // Tier is the survival tier of a row: 1 to 3, or "k" for the pinned class (kit and docs), which is
@@ -296,7 +303,7 @@ func (p RootPlan) Totals() Totals {
 			continue
 		}
 		t.Items++
-		if it.Source == SourceLocalCopy {
+		if it.Source == SourceLocalCopy || it.Source == SourceLocalBuild {
 			t.LocalBytes += it.NeedBytes
 		} else {
 			t.NetworkBytes += it.NeedBytes
