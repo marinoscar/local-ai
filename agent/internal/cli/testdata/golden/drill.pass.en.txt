@@ -1,0 +1,11 @@
+== stdout ==
+✓ The internet is blocked during the test
+✓ Brain answered (qwen3.5-9b-q4km) · 2.1 s
+✓ Library search worked
+✓ Map tiles were served
+✓ Drill passed.
+✓ Survival mode is ready on this node.
+== stderr ==
+… Drill: switching to a private test (nothing is published during the test)
+… Drill: running the checks
+== exit 0 ==

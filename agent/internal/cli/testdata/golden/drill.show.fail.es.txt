@@ -1,0 +1,8 @@
+== stdout ==
+✗ El simulacro de hace 3 horas (programado) falló: 1 comprobación no pasó.
+! Voz a texto (español): El reconocimiento de voz es menos preciso de lo
+  esperado.  [LAI-DRL-031]
+  → Solución: Nada urgente. Un modelo whisper más grande ayuda.
+✗ Texto a voz (inglés): Falló la voz.  [LAI-DRL-034]
+  → Solución: Ejecute `aictl doctor`.
+== exit 9 ==

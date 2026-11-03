@@ -1,0 +1,8 @@
+== stdout ==
+✗ The drill of 3 hours ago (scheduled) failed: 1 check did not pass.
+! Speech to text (Spanish): Speech recognition is less accurate than expected.
+  [LAI-DRL-031]
+  → Fix: Nothing urgent. A bigger whisper model helps.
+✗ Text to speech (English): The voice failed.  [LAI-DRL-034]
+  → Fix: Run `aictl doctor`.
+== exit 9 ==

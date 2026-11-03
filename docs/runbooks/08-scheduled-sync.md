@@ -142,7 +142,7 @@ When the timer's drill is skipped (one of the reasons above), it prints `i Drill
     - **From a script or over SSH without a terminal:** add `--wait` so it waits for the end and gives the real result.
 
     - **What you should see:** one line per check and a last line, for example:
-      `✓ Brain answered in 2.1 s` / `✓ Library search worked` / `✓ Maps tiles served` / `! Speech-to-text slow (8.2 s)` / `✓ Drill passed with 1 warning. Next drill: in 30 days.`
+      `✓ Brain answered (qwen3.5-9b-q4km) · 2.1 s` / `✓ Library search worked` / `✓ Map tiles were served` / `! Speech to text (Spanish): Speech recognition is less accurate than expected.  [LAI-DRL-031]` / `! Drill passed with 1 warning.` and then `✓ Survival mode is ready on this node.`
     - **If it doesn't work:** `LAI-DRL-002`, `003`, `004`, `005`: it refused to start (sync running, survival mode, AI in use, battery below 50 %).
 11. **Read the last result** without running a new one:
 
@@ -155,7 +155,7 @@ When the timer's drill is skipped (one of the reasons above), it prints `i Drill
 12. **How to read it:**
     - **Pass:** every check passed.Exit code 0.    - **Pass with warnings** (exit 8): everything essential works, something is slow or second-best (for example `LAI-DRL-021` a brain slower than expected, `LAI-DRL-031` speech less accurate, `LAI-DRL-033` a language uses another language's voice). Fix when convenient.
     - **Fail** (exit 9): a check failed. Each failed check has a code and a fix. The most important ones: `LAI-DRL-011` essential content missing, `LAI-DRL-012` stored files damaged, `LAI-DRL-020` a survival brain couldn't start, `LAI-DRL-023` the photo brain failed the test image, `LAI-DRL-030` library search broken, `LAI-DRL-050` Portal or chat broken, `LAI-DRL-060` manuals missing, `LAI-DRL-071` llama.cpp couldn't be rebuilt offline, `LAI-DRL-090` the normal brain wasn't put back (press **Switch brain** and choose it).
-    - **"Survival ready: yes"** means every critical check passed or only warned. That's the one that matters in an emergency.
+    - **"Survival mode is ready on this node."** means every critical check passed or only warned. That's the one that matters in an emergency.
     - `LAI-DRL-091` (something tried to use the internet during the drill): report it; an offline feature may be broken.
     - All codes: [drill.md §8](../specs/drill.md#8-doctor-codes-shown-in-the-desktop-english-and-spanish). The cloud shows the result on the node card ("Drill ✔") and raises `LAI-CLD-024` on failure.
 
