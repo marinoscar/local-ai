@@ -38,7 +38,7 @@ func spec(t *testing.T) *apispec.Spec {
 // of the auth service (auth.Service.Routes), GET /doctor (api.DoctorRoute), the three /mode routes
 // (api.ModeRoutes), the five routes of statusapi.Routes, GET /portal/status (portal.Route), the three model
 // operation routes (api.ModelOpsRoutes), the four /cloud routes (api.CloudRoutes), POST, GET and
-// DELETE /ark/sync (api.ArkSyncRoutes) and GET /ark (api.ArkRoutes).
+// DELETE /ark/sync (api.ArkSyncRoutes), GET /ark (api.ArkRoutes) and GET /ark/drives (api.ArkDrivesRoutes).
 //
 // A later issue whose routes come from a constructor adds it HERE, with fakes for its dependencies, in
 // the PR that deletes the operations' x-localai-status: planned and x-localai-issue from openapi.yaml.
@@ -92,6 +92,9 @@ func implementedRoutes(t *testing.T) []api.Route {
 	routes = append(routes, api.ArkRoutes(api.ArkDeps{})...)
 	// POST /ark/prune (SYNC-08); the pruner is not called, so it stays nil.
 	routes = append(routes, api.ArkPruneRoutes(api.ArkPruneDeps{})...)
+
+	// GET /ark/drives (SYNC-02); the view is not called, so it stays nil.
+	routes = append(routes, api.ArkDrivesRoutes(api.ArkDrivesDeps{})...)
 	return routes
 }
 

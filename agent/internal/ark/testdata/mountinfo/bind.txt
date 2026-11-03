@@ -1,0 +1,4 @@
+401 29 8:17 / /media/operator/AI-ARK rw,nosuid,nodev,relatime shared:80 - ext4 /dev/sdb1 rw,errors=remount-ro
+402 29 8:17 /localai /srv/localai-bind rw,nosuid,nodev,relatime shared:80 - ext4 /dev/sdb1 rw,errors=remount-ro
+403 29 8:17 / /srv/second-mount rw,relatime shared:80 - ext4 /dev/sdb1 rw,errors=remount-ro
+404 29 8:33 /data /mnt/only-a-subdir rw,relatime - ext4 /dev/sdc1 rw

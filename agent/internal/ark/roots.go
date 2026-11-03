@@ -77,6 +77,21 @@ const (
 	CodeInternalRecreated = doctor.ARK020
 	// CodeNetworkFS: the root is on a network filesystem and is used read-only (warning).
 	CodeNetworkFS = doctor.ARK021
+
+	// The drive layer's codes (detect.go, classify.go).
+	// CodeNotExt4: a drive labelled AI-ARK is not ext4; it is never read or written (error).
+	CodeNotExt4 = doctor.ARK002
+	// CodeDriveReadOnly: the drive is mounted read-only, or a write probe failed (warning).
+	CodeDriveReadOnly = doctor.ARK003
+	// CodeDriveUnclean: the drive's filesystem has recorded errors (error).
+	CodeDriveUnclean = doctor.ARK004
+	// CodeNotMounted: an AI-ARK drive is plugged in but not mounted (warning).
+	CodeNotMounted = doctor.ARK005
+	// CodeDuplicateUUID: two mounted drives have the same filesystem UUID (error).
+	CodeDuplicateUUID = doctor.ARK006
+	// CodeDriveUnplugged: a drive was pulled without ejecting (warning, cleared after 24 h or when
+	// the drive comes back clean).
+	CodeDriveUnplugged = doctor.ARK007
 )
 
 // Root is one content root: the internal disk or an ark drive's localai directory.
@@ -99,7 +114,15 @@ type Root struct {
 	MountID int
 	// State is the root's state; see RootState.
 	State RootState
+	// Unclean: the drive's filesystem has recorded errors (ext4 errors_count above zero), whatever
+	// State says. See NeedsServeVerify.
+	Unclean bool
 }
+
+// NeedsServeVerify reports whether the files of this root must be re-hashed before they are served
+// (ark-sync.md section 4.1.3 step 4): the drive's filesystem has errors. The hashing itself is the
+// verifier's job (section 4.13); the drive layer only raises the flag.
+func (r Root) NeedsServeVerify() bool { return r.Unclean || r.State == StateUnclean }
 
 // Problem is one doctor finding about a root. Severity is the code's default from the doctor table.
 type Problem struct {

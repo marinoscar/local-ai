@@ -477,7 +477,14 @@ export interface paths {
         };
         /**
          * Detected AI-ARK drives
-         * @description Shape owned by ark-sync.md section 3.5. agent.md section 3.8.17.
+         * @description Shape owned by ark-sync.md section 3.5 and 4.1.2. agent.md section 3.8.17. Every drive whose
+         *     filesystem label is exactly `AI-ARK`, mounted or only plugged in: the mounted ones in mount
+         *     order (the best-copy order), then the ones that are not mounted. `problems[].title` and `.fix`
+         *     are in the language of the request (Accept-Language, else `ui.language`). `root_id` is null
+         *     only when there is no usable filesystem UUID (a drive that is not ext4); `mount` is null for a
+         *     drive that is not mounted; `ready` is null until a readiness report exists for the root. A node
+         *     with no AI-ARK drive answers an empty list.
+         *
          */
         get: operations["listArkDrives"];
         put?: never;
@@ -1831,16 +1838,27 @@ export interface components {
             fs_errors?: number;
             initialized?: boolean;
             profile?: string | null;
-            ready?: {
+            ready?: ({
                 overall: string;
                 /** Format: date-time */
                 generated_at: string;
             } & {
                 [key: string]: unknown;
-            };
-            problems?: {
+            }) | null;
+            problems?: ({
+                code: string;
+                /** @enum {string} */
+                severity?: "info" | "warning" | "error" | "critical";
+                title: string;
+                fix?: string;
+                details?: {
+                    [key: string]: unknown;
+                };
+            } & {
                 [key: string]: unknown;
-            }[];
+            })[];
+            /** @description A plain-language note for a state that has no doctor code of its own (a damaged ROOT.json). Not translated. */
+            detail?: string;
         } & {
             [key: string]: unknown;
         };
