@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/ark"
+	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/sync/download"
@@ -1084,3 +1085,57 @@ func TestPlanSummary(t *testing.T) {
 }
 
 var _ = events.TypeSyncDone
+
+func TestADriveThatGoesAwayCancelsOnlyItsOwnWork(t *testing.T) {
+	r := newRig(t)
+	r.set.Concurrency, r.set.PerRootWriters = 4, 1
+	r.addRoot(ark.Root{ID: driveID, Kind: ark.KindArkDrive, Path: r.dir + "/drive", State: ark.StateReady})
+	hold := newHold()
+	r.mach.beh = func(ctx context.Context, job item.Job) item.Result {
+		if !hold.waitOrCancel(ctx, job.Root.ID+"/"+job.Ref.ID) {
+			return cancelled(job)
+		}
+		return verified(job, "v1")
+	}
+	r.setPlans(map[string][]plan.ItemPlan{"internal": {row("i1", 1), row("i2", 1)}, driveID: {row("d1", 1), row("d2", 1)}})
+	eng := r.start()
+	if eng.RootGone(driveID) {
+		t.Fatal("RootGone without a run reported success")
+	}
+	id := r.startRun(StartRequest{Trigger: TriggerManual})
+	recvN(t, r.mach.startedCh, 2) // i1 and d1
+	if eng.RootGone("ark-ffffffff") {
+		t.Fatal("RootGone of a root the run does not use reported success")
+	}
+	if !eng.RootGone(driveID) {
+		t.Fatal("RootGone did not find the root")
+	}
+	// The drive's work stops and its second item never starts; internal goes on.
+	hold.release("internal/i1")
+	if got := recvN(t, r.mach.startedCh, 1); got[0] != "internal/i2" {
+		t.Fatalf("then started %v", got)
+	}
+	hold.release("internal/i2")
+	st := r.waitEnd(id)
+	if st.State != StateDone || st.Totals.Done != 2 || st.Totals.Skipped != 2 || st.Totals.Items != 4 {
+		t.Fatalf("status = %+v", st)
+	}
+	for _, it := range st.Items {
+		if it.Root == driveID && (it.Result != "skipped" || it.Reason != SkipRootGone || it.Code != doctor.ARK007) {
+			t.Fatalf("drive item = %+v", it)
+		}
+	}
+	if got := r.mach.order(); len(got) != 3 {
+		t.Fatalf("started = %v: the drive's second item must not start", got)
+	}
+}
+
+func TestSettingsValidatorIsAConfigBlockValidator(t *testing.T) {
+	var v SettingsValidator
+	if probs := v.ValidateBlock(nil); len(probs) != 0 {
+		t.Fatalf("problems = %v", probs)
+	}
+	if probs := v.ValidateBlock(config.RawBlock("concurrency: 9")); len(probs) != 1 || !probs.HasErrors() {
+		t.Fatalf("problems = %v", probs)
+	}
+}

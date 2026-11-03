@@ -82,7 +82,12 @@ var (
 	errCancelUser = errors.New("run: cancelled by a request")
 	errCancelMode = errors.New("run: cancelled by a mode switch")
 	errTimeLimit  = errors.New("run: max_run_hours reached")
+	errRootGone   = errors.New("run: the root was unplugged or is being ejected")
 )
+
+// SkipRootGone is the reason of an item that did not finish because its root went away (a drive
+// unplugged or ejected during the run, LAI-ARK-007).
+const SkipRootGone = "root_gone"
 
 // New checks the dependencies and returns an engine. It reads last-run.json when there is one.
 func New(d Deps) (*Engine, error) {
@@ -199,6 +204,8 @@ type runState struct {
 	warnings   []string
 	faulted    map[string]bool
 	touched    map[string]bool
+	rootCtx    map[string]context.Context
+	rootCancel map[string]context.CancelCauseFunc
 	rate       float64
 	rateAt     time.Time
 	rateBytes  int64
@@ -453,6 +460,28 @@ func (e *Engine) cancelWith(cause error) (string, bool) {
 	rs.mu.Unlock()
 	rs.cancel(cause)
 	return rs.id, true
+}
+
+// RootGone tells the engine that a root went away during a run (a drive unplugged, or being ejected:
+// drive.unmounted, SYNC-02): the transfers of that root are cancelled at the next block and checkpoint,
+// the rest of its items are skipped (root_gone, LAI-ARK-007), and the other roots go on. It reports
+// whether a run was active and working on that root. The next run resumes the interrupted items when
+// the drive is back.
+func (e *Engine) RootGone(rootID string) bool {
+	e.mu.Lock()
+	rs := e.active
+	e.mu.Unlock()
+	if rs == nil {
+		return false
+	}
+	rs.mu.Lock()
+	cancel := rs.rootCancel[rootID]
+	rs.mu.Unlock()
+	if cancel == nil {
+		return false
+	}
+	cancel(errRootGone)
+	return true
 }
 
 // CancelGraceful is the modes.SyncController call (modes.md section 2.1, step 3): cancel the active run
@@ -792,6 +821,23 @@ type taskDone struct {
 // are the gate's. It returns when every task has ended or the run was cancelled and its workers
 // stopped; tasks that never started are skipped with time_limit when the limit ended the run.
 func (e *Engine) schedule(rs *runState, tasks []*task) {
+	// One context per root, children of the run's: a drive that goes away cancels only its own work.
+	rs.mu.Lock()
+	rs.rootCtx, rs.rootCancel = map[string]context.Context{}, map[string]context.CancelCauseFunc{}
+	for _, t := range tasks {
+		if _, ok := rs.rootCtx[t.root.ID]; !ok {
+			c, cancel := context.WithCancelCause(rs.ctx)
+			rs.rootCtx[t.root.ID], rs.rootCancel[t.root.ID] = c, cancel
+		}
+	}
+	rs.mu.Unlock()
+	defer func() {
+		rs.mu.Lock()
+		for _, cancel := range rs.rootCancel {
+			cancel(nil)
+		}
+		rs.mu.Unlock()
+	}()
 	g := newGate(rs.settings.Concurrency)
 	perRoot := max(rs.settings.PerRootWriters, 1)
 	started := make([]bool, len(tasks))
@@ -832,8 +878,18 @@ func (e *Engine) schedule(rs *runState, tasks []*task) {
 			}
 			rs.mu.Lock()
 			faulted := rs.faulted[t.root.ID]
+			gone := errors.Is(context.Cause(rs.rootCtx[t.root.ID]), errRootGone)
 			dep, depOK := rs.outcome[t.row.After+"/"+t.row.ID]
 			rs.mu.Unlock()
+			if gone {
+				finished[i] = true
+				rs.recordSkip(t.root, t.row.ID, t.row.ToVersion, SkipRootGone, doctor.ARK007, false)
+				rs.mu.Lock()
+				rs.outcome[t.key()] = "skipped"
+				rs.mu.Unlock()
+				progressed = true
+				continue
+			}
 			if faulted {
 				finished[i] = true
 				rs.recordSkip(t.root, t.row.ID, t.row.ToVersion, string(plan.ReasonReadOnly), doctor.ARK003, false)
@@ -902,7 +958,10 @@ func (e *Engine) runTask(rs *runState, t *task, g *gate) item.Result {
 	if cur, ok := e.d.Journal.Items.Get(t.root.ID, t.row.ID); ok && cur.State == journal.StateSwapping {
 		job.Swap = e.swapPlanOf(t.root.ID, t.row.ID, cur.Version)
 	}
-	return e.d.Machine.Run(rs.ctx, rs.run, job)
+	rs.mu.Lock()
+	ctx := rs.rootCtx[t.root.ID]
+	rs.mu.Unlock()
+	return e.d.Machine.Run(ctx, rs.run, job)
 }
 
 // swapPlanOf finds the plan of the swap of version an earlier run left unfinished, in the newest run log
@@ -978,7 +1037,16 @@ func (rs *runState) record(t *task, res item.Result) {
 	rs.mu.Lock()
 	delete(rs.active, t.key())
 	if res.Cancelled {
+		gone := errors.Is(context.Cause(rs.rootCtx[t.root.ID]), errRootGone)
 		rs.mu.Unlock()
+		if gone {
+			// the drive went away under it: its .part and checkpoints wait for the drive to come back
+			rs.recordSkip(t.root, t.row.ID, t.row.ToVersion, SkipRootGone, doctor.ARK007, false)
+			rs.mu.Lock()
+			rs.outcome[t.key()] = "skipped"
+			rs.mu.Unlock()
+			return
+		}
 		if errors.Is(context.Cause(rs.ctx), errTimeLimit) {
 			// the time ran out under it: its .part and checkpoints wait for the next run
 			rs.recordSkip(t.root, t.row.ID, t.row.ToVersion, string(plan.ReasonTimeLimit), "", false)

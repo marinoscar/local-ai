@@ -583,21 +583,16 @@ func (r *runner) verify() bool {
 		return false
 	}
 	if r.rsl.Dir {
+		// A tree made of downloaded files (a local copy) first commits each .part like a file item;
+		// the tree pass then hashes everything once more, so the per-file pass skips its own re-read.
+		if len(r.rsl.Files) > 0 && !r.verifyFiles(false) {
+			return false
+		}
 		return r.verifyTree()
 	}
-	total := r.rsl.TotalBytes()
-	var done int64
-	for _, f := range r.rsl.Files {
-		if r.ctx.Err() != nil {
-			r.cancelled(journal.StateVerifying)
-			return false
-		}
-		if !r.verifyFile(f, done, total) {
-			return false
-		}
-		done += max(f.Size, r.sizes[f.Path])
+	if !r.verifyFiles(true) {
+		return false
 	}
-	_ = r.m.d.FS.SyncDir(r.stagingDir())
 	if !r.validate() {
 		return false
 	}
@@ -608,10 +603,33 @@ func (r *runner) verify() bool {
 	return true
 }
 
+// verifyFiles verifies and commits every file of the item in order, then makes the renames durable.
+// reread says whether each file is read back from disk here (a tree reads everything back in its own
+// pass). It returns false when r.res is final.
+func (r *runner) verifyFiles(reread bool) bool {
+	total := r.rsl.TotalBytes()
+	var done int64
+	for _, f := range r.rsl.Files {
+		if r.ctx.Err() != nil {
+			r.cancelled(journal.StateVerifying)
+			return false
+		}
+		if !r.verifyFile(f, done, total, reread) {
+			return false
+		}
+		done += max(f.Size, r.sizes[f.Path])
+	}
+	_ = r.m.d.FS.SyncDir(r.stagingDir())
+	if r.rsl.Dir {
+		_ = r.m.d.FS.SyncDir(filepath.Join(r.stagingDir(), TreeDir))
+	}
+	return true
+}
+
 // verifyFile verifies and commits one file. A re-read that differs from what was streamed after a
 // resumed download restarts the file from zero once (ark-sync.md section 4.5); any other mismatch is
 // quarantined.
-func (r *runner) verifyFile(f File, doneBefore, total int64) bool {
+func (r *runner) verifyFile(f File, doneBefore, total int64, reread bool) bool {
 	fsys := r.m.d.FS
 	final := r.finalPath(f)
 	if r.complete(f) {
@@ -630,7 +648,7 @@ func (r *runner) verifyFile(f File, doneBefore, total int64) bool {
 	}
 	for pass := 0; ; pass++ {
 		part := final + ".part"
-		sum, size, err := verifyFile(r.ctx, fsys, part, r.m.reread(), func(n int64) { r.report(journal.StateVerifying, doneBefore+n, total) })
+		sum, size, err := verifyFile(r.ctx, fsys, part, reread && r.m.reread(), func(n int64) { r.report(journal.StateVerifying, doneBefore+n, total) })
 		if err != nil {
 			return r.verifyIOError(err)
 		}

@@ -672,6 +672,7 @@ func (e *env) events(runID, itemID string) []string {
 	return out
 }
 
+func (e *env) docsDir() string { return filepath.Join(e.root.Path, "docs") }
 func (e *env) itemDir() string { return filepath.Join(e.root.Path, "models", "qwen-x") }
 
 // loadItem is what a reader of the root sees in dir: the manifest and its files, as ark.LoadItem does.

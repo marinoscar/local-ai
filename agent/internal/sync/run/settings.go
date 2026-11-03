@@ -92,3 +92,18 @@ func (s Settings) Validate() error {
 
 // MaxRun is max_run_hours as a duration (0: no limit).
 func (s Settings) MaxRun() time.Duration { return time.Duration(s.MaxRunHours) * time.Hour }
+
+// SettingsValidator validates the sync: block of node.yaml for the config store (config.Hooks.Blocks
+// registers it under "sync"): the strict decoding and the ranges of ParseSettings, reported as one
+// blocking problem.
+type SettingsValidator struct{}
+
+// ValidateBlock implements config.BlockValidator.
+func (SettingsValidator) ValidateBlock(raw config.RawBlock) config.Problems {
+	if _, err := ParseSettings(raw); err != nil {
+		return config.Problems{{Message: err.Error(), Severity: config.SeverityError}}
+	}
+	return nil
+}
+
+var _ config.BlockValidator = SettingsValidator{}
