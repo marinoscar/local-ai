@@ -134,6 +134,8 @@ type Server struct {
 	cmds     commandState
 	// holdClaims makes a claim without a job wait (a long poll); see HoldClaims.
 	holdClaims bool
+	holds      map[string]chan struct{} // route -> gate the next answer waits on
+	done       chan struct{}            // closed when the test ends, so a held answer never outlives it
 }
 
 // Bundle is a catalog the fake serves.
@@ -176,6 +178,7 @@ func New(t testing.TB) *Server {
 			HeartbeatIntervalS: 15, StateMinIntervalS: 5, StateMaxIntervalS: 60, ClaimWaitMaxMs: 25000},
 		creds: map[string]bool{}, revoked: map[string]bool{}, nodes: map[string]*Node{}, byID: map[string]*Node{},
 		script: map[string][]Reply{}, forever: map[string]Reply{}, lastSeq: map[string]int64{}, keys: map[string]string{},
+		holds: map[string]chan struct{}{}, done: make(chan struct{}),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/nodes/register", s.route(RouteRegister, s.register))
@@ -188,7 +191,22 @@ func New(t testing.TB) *Server {
 	s.cmdRoutes(mux)
 	s.Server = httptest.NewTLSServer(mux)
 	t.Cleanup(s.Server.Close)
+	t.Cleanup(func() { close(s.done) }) // runs before Server.Close, which waits for held answers
 	return s
+}
+
+// Hold makes the answer to the next request of route wait: the server handles the request and logs it
+// (so Count and WaitCount see it) but does not write the answer until release is called, which is how a
+// test pins the window between "the cloud received the request" and "the client applied the answer".
+// Only one request is held; release is safe to call more than once, and an unreleased hold ends with
+// the test.
+func (s *Server) Hold(route string) (release func()) {
+	gate := make(chan struct{})
+	s.mu.Lock()
+	s.holds[route] = gate
+	s.mu.Unlock()
+	var once sync.Once
+	return func() { once.Do(func() { close(gate) }) }
 }
 
 // Accept restricts the accepted credentials to cred (call it for each); without any call every
@@ -371,7 +389,16 @@ func (s *Server) route(name string, h handler) http.HandlerFunc {
 		s.reqs = append(s.reqs, Request{Route: name, Method: r.Method, Path: r.URL.Path, Header: r.Header.Clone(), Body: raw, Credential: cred})
 		close(s.changed)
 		s.changed = make(chan struct{})
+		gate := s.holds[name]
+		delete(s.holds, name)
 		s.mu.Unlock()
+		if gate != nil {
+			select {
+			case <-gate:
+			case <-r.Context().Done():
+			case <-s.done:
+			}
+		}
 		s.write(w, reply)
 	}
 }

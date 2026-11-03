@@ -585,7 +585,9 @@ func TestKeyRotate(t *testing.T) {
 	})
 	t.Run("an error keeps its code", func(t *testing.T) {
 		f := newFakes()
-		f.models.rotateFn = func(int) (modelsapi.KeyRotated, error) { return modelsapi.KeyRotated{}, api.NewError(doctor.AGT023, 409, nil) }
+		f.models.rotateFn = func(int) (modelsapi.KeyRotated, error) {
+			return modelsapi.KeyRotated{}, api.NewError(doctor.AGT023, 409, nil)
+		}
 		_, err := f.run(t, cloud.TypeKeyRotate, `{}`)
 		wantCode(t, err, doctor.AGT023)
 	})
@@ -620,7 +622,9 @@ func TestServiceRestart(t *testing.T) {
 	}
 	t.Run("a refusal keeps its code", func(t *testing.T) {
 		f := newFakes()
-		f.services.fn = func(int) (api.ServiceActionResult, error) { return api.ServiceActionResult{}, api.NewError(doctor.AGT023, 409, nil) }
+		f.services.fn = func(int) (api.ServiceActionResult, error) {
+			return api.ServiceActionResult{}, api.NewError(doctor.AGT023, 409, nil)
+		}
 		_, err := f.run(t, cloud.TypeServiceRestart, `{"service":"llama"}`)
 		wantCode(t, err, doctor.AGT023)
 	})

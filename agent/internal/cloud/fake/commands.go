@@ -352,6 +352,8 @@ func (s *Server) takeJobs(ctx context.Context, eab bool, want map[string]bool, l
 		case <-ch:
 		case <-ctx.Done():
 			return 200, envelope(map[string]any{"jobs": []any{}})
+		case <-s.done:
+			return 200, envelope(map[string]any{"jobs": []any{}})
 		}
 	}
 }
