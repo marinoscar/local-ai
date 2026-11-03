@@ -1,0 +1,9 @@
+== stdout ==
+i Restaurando la compilación lista llama.cpp de f3586e66b para cuda (sm 75)
+  desde llama.cpp-f3586e66b-cuda-noble-amd64-sm75.tar.gz
+i Restaurada desde llama.cpp-f3586e66b-cuda-noble-amd64-sm75.tar.gz; no se
+  compiló nada.
+✓ La versión f3586e66b-cuda superó su prueba (CUDA0: NVIDIA GeForce RTX 2070
+  with Max-Q Design).
+✓ Se cambió a la nueva versión. qwen3.5-9b-q4km está cargado otra vez.
+== exit 0 ==
