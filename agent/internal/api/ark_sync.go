@@ -75,6 +75,35 @@ type ArkSyncStarter interface {
 type ArkSyncStarted struct {
 	// RunID is run-YYYYMMDDTHHMMSSZ-<4 hex>.
 	RunID string
+	// State is "running" (or empty, the same), or "skipped" for a scheduled run that preflight ended
+	// at once; Reason then says why (offline, mode, battery, disabled, no_roots) and Code is its doctor
+	// code.
+	State  string
+	Reason string
+	Code   string
+}
+
+// ArkSyncController serves GET and DELETE /ark/sync (SYNC-07): the run engine implements it through
+// an adapter, because this package cannot import it.
+type ArkSyncController interface {
+	// Current is the body of GET /ark/sync: the active run or the last one, as a JSON-encodable value.
+	// ok is false when no run has happened yet (404 LAI-AGT-021).
+	Current(ctx context.Context) (body any, ok bool)
+	// Cancel cancels the active run and is idempotent. Active is false when nothing was running; RunID
+	// is then the last run's id, or empty when there never was one.
+	Cancel(ctx context.Context, req ArkSyncCancelRequest) (ArkSyncCancelled, error)
+}
+
+// ArkSyncCancelRequest is DELETE /ark/sync as the route saw it.
+type ArkSyncCancelRequest struct {
+	OpID  string
+	Actor audit.Actor
+}
+
+// ArkSyncCancelled is the answer of Cancel.
+type ArkSyncCancelled struct {
+	RunID  string
+	Active bool
 }
 
 // ArkSyncDeps are what the sync routes need. Planner is required; Starter is nil until the run
@@ -82,14 +111,18 @@ type ArkSyncStarted struct {
 type ArkSyncDeps struct {
 	Planner ArkSyncPlanner
 	Starter ArkSyncStarter
+	// Control serves GET and DELETE; nil answers 503 LAI-AGT-024 like a missing Starter.
+	Control ArkSyncController
 	// NewOpID makes the id of an operation (op_ plus 12 base32 characters); nil uses the default.
 	NewOpID func() string
 }
 
-// ArkSyncRoutes returns POST /ark/sync (op, 10 s).
+// ArkSyncRoutes returns POST, GET and DELETE /ark/sync (op, 10 s).
 func ArkSyncRoutes(d ArkSyncDeps) []Route {
 	return []Route{
 		{Method: http.MethodPost, Pattern: "/ark/sync", Auth: []Level{AuthOp}, Timeout: arkSyncTimeout, Handler: HandlerFunc(d.post)},
+		{Method: http.MethodGet, Pattern: "/ark/sync", Auth: []Level{AuthOp}, Timeout: arkSyncTimeout, Handler: HandlerFunc(d.get)},
+		{Method: http.MethodDelete, Pattern: "/ark/sync", Auth: []Level{AuthOp}, Timeout: arkSyncTimeout, Handler: HandlerFunc(d.delete)},
 	}
 }
 
@@ -124,7 +157,16 @@ type arkSyncBody struct {
 type arkSyncAccepted struct {
 	RunID  string `json:"run_id"`
 	State  string `json:"state"`
+	Reason string `json:"reason,omitempty"`
+	Code   string `json:"code,omitempty"`
 	Events string `json:"events"`
+}
+
+// arkSyncCancelling is the body of DELETE /ark/sync: state is "cancelling" while a run is stopping, and
+// "idle" when nothing was running (run_id is then the last run's, or empty).
+type arkSyncCancelling struct {
+	RunID string `json:"run_id"`
+	State string `json:"state"`
 }
 
 func (d ArkSyncDeps) post(w http.ResponseWriter, r *http.Request) error {
@@ -180,6 +222,43 @@ func (d ArkSyncDeps) post(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	WriteJSON(w, r, http.StatusAccepted, arkSyncAccepted{RunID: started.RunID, State: ArkSyncStateRunning, Events: arkSyncEventsURL})
+	state := started.State
+	if state == "" {
+		state = ArkSyncStateRunning
+	}
+	WriteJSON(w, r, http.StatusAccepted, arkSyncAccepted{RunID: started.RunID, State: state, Reason: started.Reason, Code: started.Code, Events: arkSyncEventsURL})
+	return nil
+}
+
+// get is GET /ark/sync: the active run, or the last one (ark-sync.md section 3.5).
+func (d ArkSyncDeps) get(w http.ResponseWriter, r *http.Request) error {
+	if d.Control == nil {
+		return NewError(CodeStarting, http.StatusServiceUnavailable, map[string]any{"reason": "sync_engine_not_ready"})
+	}
+	body, ok := d.Control.Current(r.Context())
+	if !ok {
+		return NewError(CodeNotFound, http.StatusNotFound, map[string]any{"kind": "sync_run"})
+	}
+	WriteJSON(w, r, http.StatusOK, body)
+	return nil
+}
+
+// delete is DELETE /ark/sync: cancel the active run, gracefully and idempotently.
+func (d ArkSyncDeps) delete(w http.ResponseWriter, r *http.Request) error {
+	if d.Control == nil {
+		return NewError(CodeStarting, http.StatusServiceUnavailable, map[string]any{"reason": "sync_engine_not_ready"})
+	}
+	info := InfoFrom(r.Context())
+	opID := d.opID()
+	SetOpID(w, opID)
+	res, err := d.Control.Cancel(r.Context(), ArkSyncCancelRequest{OpID: opID, Actor: AuditActor(info)})
+	if err != nil {
+		return err
+	}
+	state := "idle"
+	if res.Active {
+		state = "cancelling"
+	}
+	WriteJSON(w, r, http.StatusAccepted, arkSyncCancelling{RunID: res.RunID, State: state})
 	return nil
 }
