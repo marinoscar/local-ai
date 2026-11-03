@@ -290,6 +290,30 @@ func (r VerifyReport) Damaged() bool {
 	return false
 }
 
+// NodeProblems are the findings that say this computer's own parts are missing or inconsistent
+// (LAI-KIT-040 and 042, not the optional ones): what the drill's drl.kit.present check fails on.
+func (r VerifyReport) NodeProblems() []Finding {
+	var out []Finding
+	for _, f := range r.Findings {
+		if (f.Code == CodeKitMissingNode || f.Code == CodeKitWrongRelease) && !f.Optional {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// LabProblems are the findings about the other computers of the lab (LAI-KIT-041): the warning of
+// the drill's drl.kit.present check.
+func (r VerifyReport) LabProblems() []Finding {
+	var out []Finding
+	for _, f := range r.Findings {
+		if f.Code == CodeKitMissingLab {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // HasCode reports whether a finding carries code.
 func (r VerifyReport) HasCode(code string) bool {
 	for _, f := range r.Findings {
