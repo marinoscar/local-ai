@@ -27,6 +27,10 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 	"github.com/marinoscar/local-ai/agent/internal/svc/kiwix"
+	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
+	"github.com/marinoscar/local-ai/agent/internal/svc/whisper"
+	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
+	"github.com/marinoscar/local-ai/agent/internal/sync/run/adapt"
 	"github.com/marinoscar/local-ai/agent/internal/update"
 )
 
@@ -114,7 +118,28 @@ func (d *Daemon) build(ctx context.Context) error {
 		}
 	}
 
-	// Service watcher (llama) and the health supervisor (kiwix, whisper).
+	// The ark side: the monitor of the internal root, the best-copy index and the sync stack (journal,
+	// downloader, machine, planner, run engine, readiness service). The model views, the piper routes
+	// and the sync routes all read the one index.
+	var arkOwner *ark.Owner
+	if d.haveLocalAI && !env.Unprivileged {
+		arkOwner = &ark.Owner{UID: d.localaiUID, GID: d.localaiGID}
+	}
+	c.ArkMonitor = ark.NewMonitor(ark.OSFS{}, ark.InternalOptions{
+		Path: c.Paths.InternalRoot(), Profile: cfg.Get().Profile, NodeID: node, AgentVersion: env.Version,
+		Owner: arkOwner, Now: clock.Now, Logger: log,
+	}, clock, d.arkNotify)
+	c.ArkIndex = d.arkIndex()
+	if stack, err := d.buildArk(ctx, c.ArkIndex); err != nil {
+		d.log.Error("the ark sync stack could not be built; sync, READY.json and GET /ark are off", "code", doctor.AGT099, "error", err.Error())
+		d.raise(doctor.AGT099, map[string]any{"error": err.Error(), "subsystem": "ark sync"})
+	} else {
+		d.ark = stack
+		c.ArkRoots, c.SyncEngine, c.Ready = stack.roots, stack.engine, stack.ready
+		c.SyncResolvers, c.SyncItemResolvers = stack.resolvers, stack.itemResolvers
+	}
+
+	// Service watcher (llama) and the health supervisor (kiwix, whisper, piper).
 	ports := func() services.Ports {
 		p := cfg.Get().Ports
 		return services.Ports{Llama: p.Llama, Kiwix: p.Kiwix, Whisper: p.Whisper}
@@ -128,11 +153,14 @@ func (d *Daemon) build(ctx context.Context) error {
 		Clock: clock, Logger: log, Only: []string{"llama"},
 	})
 	metrics := health.NewMetrics()
+	d.piper = piper.New(d.piperDeps(metrics))
+	c.Piper = d.piper
 	sup, err := health.New(health.Options{
 		Manager: c.Systemd, Publisher: c.Bus, Mode: d.modeName, Metrics: metrics, Clock: clock, Logger: log,
 		Specs: []health.Spec{
 			health.KiwixSpec(prober, ports(), func() bool { return blockEnabled(cfg.Get(), "kiwix") }),
 			health.WhisperSpec(prober, ports(), func() bool { return blockEnabled(cfg.Get(), "whisper") }),
+			d.piper.Spec(),
 		},
 		RequireServices: func() []string {
 			if p := d.profile(); p != nil {
@@ -150,6 +178,13 @@ func (d *Daemon) build(ctx context.Context) error {
 	}
 	c.Kiwix = kiwix.NewInstaller(kiwix.Options{Runner: env.Runner, Logger: log, Root: c.Paths.Join(optDir + "/kiwix-tools")})
 	if err := c.Checks.Add(c.Kiwix.DoctorCheck(func() bool { return blockEnabled(cfg.Get(), "kiwix") })); err != nil {
+		return err
+	}
+	if err := c.Checks.Add(whisper.DoctorCheck(whisper.CheckOptions{
+		Root:    c.Paths.Join(whisper.Root),
+		Enabled: func() bool { return blockEnabled(cfg.Get(), "whisper") },
+		Backend: func() string { return whisperBackend(cfg.Get()) },
+	})); err != nil {
 		return err
 	}
 
@@ -236,6 +271,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	sdeps := statusapi.Deps{
 		Config: cfg, Catalog: c.Catalog, State: c.State, Hardware: c.Hardware, Mode: mv, Services: svcView, Models: merger,
 		Cloud: d.views, Tailscale: c.Tailscale, Alerts: c.Doctor, Counters: counterView{d: d, health: metrics, gauges: gauge},
+		Ark: d.arkView(), Content: d.contentView(),
 		CheckedAt: c.Prober.LastCheckedAt, Version: env.Version, StartedAt: d.began, Refresher: refresher{d},
 		Regenerator: statusapi.RouterRegenerator{Generator: c.Generator, Inputs: func(context.Context) (router.Inputs, error) { return d.routerInputs(), nil }},
 		Audit:       d.audit, Now: clock.Now, Logger: log,
@@ -261,9 +297,17 @@ func (d *Daemon) build(ctx context.Context) error {
 	// drill's arrive through the hook.
 	var snap cloud.SnapshotOptions
 	snap.Drill = reporter
-	if f := d.hooks.snapshot; f != nil {
+	if d.ark != nil {
+		snap.Ark, snap.Sync = d.ark.ready.CloudSource(), adapt.CloudSync{Engine: d.ark.engine}
+	}
+	if f := d.hooks.snapshot; f != nil { // a hook replaces what it supplies, and only that
 		s := f(c)
-		snap.Ark, snap.Sync = s.Ark, s.Sync
+		if s.Ark != nil {
+			snap.Ark = s.Ark
+		}
+		if s.Sync != nil {
+			snap.Sync = s.Sync
+		}
 		if s.Drill != nil {
 			snap.Drill = s.Drill
 		}
@@ -283,6 +327,9 @@ func (d *Daemon) build(ctx context.Context) error {
 
 	// The sync engine behind the model routes: the extension point, or the documented stub.
 	var syncEngine modelsapi.SyncEngine = noSyncEngine{}
+	if d.ark != nil {
+		syncEngine = adapt.Models{Engine: d.ark.engine, Retention: d.ark.ret}
+	}
 	if f := d.hooks.sync; f != nil {
 		if e := f(c); e != nil {
 			syncEngine = e
@@ -316,9 +363,13 @@ func (d *Daemon) build(ctx context.Context) error {
 	if mopts.Logger == nil {
 		mopts.Logger = log
 	}
+	var syncCtl modes.SyncController
+	if d.ark != nil {
+		syncCtl = d.ark.engine
+	}
 	c.Modes, err = modes.New(modes.Deps{
 		State: c.State, Events: c.Bus, Audit: d.audit, Link: link, Prober: c.Prober, Tailscale: c.Tailscale,
-		Models: c.Orchestrator, Services: c.Controller,
+		Models: c.Orchestrator, Services: c.Controller, Sync: syncCtl,
 		SurvivalServices: func() []string {
 			if p := d.profile(); p != nil {
 				return p.Survival.RequireServices
@@ -339,8 +390,12 @@ func (d *Daemon) build(ctx context.Context) error {
 	}
 
 	// The drill framework and the internal-root monitor.
+	var arkActivity drill.ArkActivity
+	if d.ark != nil {
+		arkActivity = d.ark.engine
+	}
 	c.Drill, err = drill.New(drill.Deps{
-		Registry: drill.NewRegistry(), Results: results, Observer: reporter,
+		Registry: drill.NewRegistry(), Results: results, Observer: reporter, Ark: arkActivity,
 		State: c.State, Publisher: c.Bus, Mode: mv, Llama: llamaActivity{lock: c.OpLock, view: c.RouterWatcher},
 		Power: powerSource{h: c.Hardware}, Metrics: gauge, NodeID: node, AgentVersion: env.Version,
 		CatalogVersion: func() string { return c.Catalog.Get().Catalog.Version }, Clock: clock, Logger: log,
@@ -348,15 +403,6 @@ func (d *Daemon) build(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("drill engine: %w", err)
 	}
-	var arkOwner *ark.Owner
-	if d.haveLocalAI && !env.Unprivileged {
-		arkOwner = &ark.Owner{UID: d.localaiUID, GID: d.localaiGID}
-	}
-	c.ArkMonitor = ark.NewMonitor(ark.OSFS{}, ark.InternalOptions{
-		Path: c.Paths.InternalRoot(), Profile: cfg.Get().Profile, NodeID: node, AgentVersion: env.Version,
-		Owner: arkOwner, Now: clock.Now, Logger: log,
-	}, clock, d.arkNotify)
-
 	// The routes and the server.
 	if err := d.buildServer(); err != nil {
 		return err
@@ -368,6 +414,9 @@ func (d *Daemon) build(ctx context.Context) error {
 	d.stoppers.drill = c.Drill
 	d.stoppers.orch = c.Orchestrator
 	d.stoppers.prober = c.Prober
+	if d.ark != nil {
+		d.stoppers.syncer = d.ark.engine
+	}
 	if d.hooksSync != nil {
 		d.stoppers.syncer = d.hooksSync
 	}
@@ -445,6 +494,21 @@ func (d *Daemon) buildServer() error {
 		{"drill", func() error {
 			return api.RegisterDrill(reg, api.DrillDeps{Service: drill.NewService(c.Drill), Audit: d.audit, Logger: d.log})
 		}},
+		{"ark", func() error {
+			if d.ark == nil {
+				return nil // the stack did not come up: the routes are not served, the alert says why
+			}
+			return api.RegisterArk(reg, api.ArkDeps{Ready: d.ark.ready})
+		}},
+		{"ark sync", func() error {
+			if d.ark == nil {
+				return nil
+			}
+			return api.RegisterArkSync(reg, api.ArkSyncDeps{
+				Planner: plan.NewDryRun(d.ark.plans), Starter: adapt.Starter{Engine: d.ark.engine}, Control: adapt.Controller{Engine: d.ark.engine},
+			})
+		}},
+		{"speech", func() error { return reg.Add(d.piper.Routes()...) }},
 	}
 	for _, r := range regs {
 		if err := r.add(); err != nil {
@@ -490,6 +554,9 @@ func (d *Daemon) buildClaimPlane(sdeps statusapi.Deps) error {
 		Router: c.Orchestrator, Models: d.models, Modes: c.Modes, Services: d.svcDeps,
 		Logs: services.NewJournal(d.env.Runner, ""), Catalog: sdeps, Link: c.Cloud, Status: sdeps.Builder(),
 		State: c.State, Hardware: c.Hardware, Clock: d.env.CloudClock, AgentUpdate: d.updater,
+	}
+	if d.ark != nil {
+		jd.Ark = arkJobs{adapt.Jobs{Engine: d.ark.engine}}
 	}
 	var recoverFn func(context.Context, cloud.InflightEntry) bool
 	if d.updater != nil {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -30,6 +31,7 @@ import (
 	routerfake "github.com/marinoscar/local-ai/agent/internal/router/fake"
 	"github.com/marinoscar/local-ai/agent/internal/services"
 	svcfake "github.com/marinoscar/local-ai/agent/internal/services/fake"
+	"github.com/marinoscar/local-ai/agent/internal/sync/download"
 )
 
 // The rig boots the real wiring of this package over fakes: a temp directory for /etc/localai,
@@ -207,7 +209,7 @@ func newRig(t *testing.T, opts ...rigOption) *rig {
 		Stdout: r.logs, Notifier: NewNotifier(r.note.name), Hooks: r.hooks, OnStep: r.steps.onStep,
 		TCPAddr: "127.0.0.1:0", SocketPath: sock, SocketHooks: noChown(),
 		Runner: r.ts, Lookup: r.ts.Lookup, Systemd: r.sysd, Hardware: r.hw,
-		CloudHTTP: offline{}, ModesHTTP: offline{}, CatalogGitHub: failingGitHub{},
+		CloudHTTP: offline{}, ModesHTTP: offline{}, CatalogGitHub: failingGitHub{}, SyncHTTP: offlineSyncHTTP(),
 		LookupLocalAI: func() (int, int, bool) { return 0, 0, false },
 		// The test process is an operator of the socket whoever runs it (CI runs as an ordinary user):
 		// the daemon itself is root in production, which always is.
@@ -220,6 +222,14 @@ func newRig(t *testing.T, opts ...rigOption) *rig {
 		o(r)
 	}
 	return r
+}
+
+// offlineSyncHTTP is the sync downloader's client for a node with no network: every dial fails, so a
+// test can never reach the internet through the sync engine.
+func offlineSyncHTTP() *download.HTTPClient {
+	return download.NewHTTPClient(download.ClientConfig{
+		DialContext: func(context.Context, string, string) (net.Conn, error) { return nil, errors.New("no network") },
+	})
 }
 
 // failingGitHub is a catalog source that is never reachable.

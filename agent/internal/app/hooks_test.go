@@ -295,15 +295,26 @@ func indexOf(log []string, s string) int {
 	return -1
 }
 
-// With no extension registered the daemon uses the documented stubs: the model routes refuse a
-// download with LAI-ARK-001 (no writable content root) and the claim loop does nothing.
-func TestStubsAnswerWhenNothingIsRegistered(t *testing.T) {
-	r := newRig(t)
+// A daemon whose sync stack could not be built (here: /var/lib/localai/sync is a file, so the journal
+// cannot open) degrades to the documented stubs: the model routes refuse a download with LAI-ARK-001
+// (no writable content root), the ark sync routes are not served, an alert says why, and the agent
+// still starts. With no claim plane registered the claim loop does nothing.
+func TestStubsAnswerWhenTheSyncStackIsMissing(t *testing.T) {
+	r := newRig(t, func(r *rig) { r.write("var/lib/localai/sync", "not a directory", 0o644) })
 	r.start()
 	r.waitStarted()
+	if r.d.ark != nil || r.d.Components().SyncEngine != nil {
+		t.Fatal("the sync stack was built over a journal directory that is a file")
+	}
+	if !hasAlert(r.d, doctor.AGT099) {
+		t.Errorf("no alert says the sync stack is off:\n%s", r.logText())
+	}
 	dl := r.do("POST", "/models/"+modelGamma+"/download", map[string]any{})
 	if dl.status != http.StatusUnprocessableEntity || errCode(dl) != doctor.ARK001 {
 		t.Errorf("POST /models/%s/download without a sync engine = %d %s, want 422 %s", modelGamma, dl.status, dl.body, doctor.ARK001)
+	}
+	if got := r.do("GET", "/ark/sync", nil); got.status != http.StatusNotFound {
+		t.Errorf("GET /ark/sync without the stack = %d, want 404 (not served)", got.status)
 	}
 	if n, info := r.d.claim.Inflight(); n != 0 || info != nil {
 		t.Errorf("no claim plane: in flight %d %v", n, info)

@@ -18,6 +18,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/router"
 	"github.com/marinoscar/local-ai/agent/internal/services"
 	"github.com/marinoscar/local-ai/agent/internal/state"
+	"github.com/marinoscar/local-ai/agent/internal/sync/download"
 	"github.com/marinoscar/local-ai/agent/internal/update"
 )
 
@@ -101,6 +102,13 @@ type Env struct {
 	RouterTiming router.Timing
 	// ModeOptions tunes the mode engine (tests: a fake clock, step timeouts).
 	ModeOptions modes.Options
+	// SyncHTTP is the HTTP client of the ark sync downloads (default download.NewHTTPClient with the
+	// agent's User-Agent and the Hugging Face login of sync.hf_token_file). A test points it at a local
+	// server or at a dialer that refuses everything, so a unit test never reaches the internet.
+	SyncHTTP *download.HTTPClient
+	// OnDriveEvent, when set, is told after the daemon has handled a drive.mounted or drive.unmounted
+	// event (the tests wait on it instead of sleeping). It runs on the event goroutine.
+	OnDriveEvent func(typ, rootID string)
 }
 
 func (e *Env) defaults() {

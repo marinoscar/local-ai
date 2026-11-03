@@ -5,6 +5,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
 	"github.com/marinoscar/local-ai/agent/internal/ark"
+	"github.com/marinoscar/local-ai/agent/internal/ark/ready"
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 	"github.com/marinoscar/local-ai/agent/internal/auth"
 	"github.com/marinoscar/local-ai/agent/internal/cloud"
@@ -20,6 +21,9 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 	"github.com/marinoscar/local-ai/agent/internal/svc/kiwix"
+	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
+	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
+	"github.com/marinoscar/local-ai/agent/internal/sync/run"
 	"github.com/marinoscar/local-ai/agent/internal/update"
 )
 
@@ -91,6 +95,21 @@ type Components struct {
 
 	// Kiwix is the installer whose doctor check is registered.
 	Kiwix *kiwix.Installer
+
+	// The ark side (nil when the sync stack could not be built, see ark.go): the best-copy index, the
+	// sync run engine, the readiness service behind GET /ark, the mounted roots (the drive manager
+	// calls ArkRoots.SetDrives before it publishes drive.mounted and drive.unmounted) and the empty
+	// registries of the source resolvers that the multi-part products (#257) fill: SyncResolvers is the
+	// planner half, SyncItemResolvers the engine half.
+	ArkIndex          *ark.Index
+	ArkRoots          *ArkRoots
+	SyncEngine        *run.Engine
+	Ready             *ready.Service
+	SyncResolvers     *plan.Resolvers
+	SyncItemResolvers *run.ItemResolvers
+
+	// Piper is the text-to-speech service whose routes are served.
+	Piper *piper.Service
 
 	// Notify and Watchdog are the sd_notify side.
 	Notify   *Notifier
