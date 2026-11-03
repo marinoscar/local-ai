@@ -1006,11 +1006,17 @@ func (e *Engine) swapPlanOf(rootID, itemID, version string) *journal.SwapPlan {
 	return nil
 }
 
-// resolve is the resolving step of a task: a local copy is built from the other root's manifest, any
-// other source goes to its registered resolver, and a source type with none to what the catalog pins.
+// resolve is the resolving step of a task: a local copy is built from the other root's manifest (unless
+// the source type is a product that is not copied between roots, a mirror: it is then made on this root
+// like a first copy), a source made with a producer goes to its TaskResolver, any other source to its
+// registered resolver, and a source type with none to what the catalog pins.
 func (e *Engine) resolve(ctx context.Context, t *task) (item.Resolution, error) {
-	if t.row.Source == plan.SourceLocalCopy && t.row.FromRoot != "" {
+	tr, isProduct := e.d.Resolvers.TaskFor(t.cat.SourceType())
+	if t.row.Source == plan.SourceLocalCopy && t.row.FromRoot != "" && (!isProduct || tr.CopiesLocally()) {
 		return LocalCopy(e.d.FS, e.d.Copies, t.row)
+	}
+	if isProduct {
+		return tr.ResolveTask(ctx, e.taskOf(t))
 	}
 	if r, ok := e.d.Resolvers.For(t.cat.SourceType()); ok {
 		return r.Resolve(ctx, t.cat, t.row)

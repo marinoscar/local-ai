@@ -325,6 +325,10 @@ func TestGitMirrorCloneUpdateFsckAndTarball(t *testing.T) {
 	if prod3.Parts[0].Kind != PartInPlace || prod3.Parts[0].From != "" {
 		t.Errorf("the present mirror should be updated in place: %+v", prod3.Parts[0])
 	}
+	// The mirror is never hashed whole: both the first clone and the update record HEAD only.
+	if prod.Parts[0].Record == nil || len(prod3.Parts[0].Record) != 1 || prod3.Parts[0].Record[0] != "HEAD" || len(prod3.Parts[0].Sums) != 0 {
+		t.Errorf("the mirror part must record HEAD only: first %+v, update %+v", prod.Parts[0], prod3.Parts[0])
+	}
 	if prod3.Version != newHead[:12] {
 		t.Errorf("version = %q, want the new head %q", prod3.Version, newHead[:12])
 	}
