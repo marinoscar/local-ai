@@ -1609,12 +1609,14 @@ paths:
       operationId: textToSpeech
       summary: Synthesize speech
       description: |
-        Owned by companion-services.md section 3.4. Produces `audio/wav` by exec'ing piper with a fixed argv.
-        agent.md section 3.8.25.
+        Owned by companion-services.md section 3.4. Produces `audio/wav` by exec'ing piper with a fixed argv; the
+        text goes to its stdin, never to its argv. The answer is chunked and starts before synthesis ends: the
+        44-byte WAV header carries 0xFFFFFFFF as the RIFF and data sizes (length unknown), followed by 16-bit
+        mono PCM at the voice's sample rate. A failure before the first audio is an ordinary error response; one
+        after it aborts the connection, so the client sees a truncated stream. Voice rules: companion-services.md
+        section 4.3.4; the caller sends its language in `X-LocalAI-UI-Language`. agent.md section 3.8.25.
       x-localai-auth: [op, portal]
       x-localai-timeout: "120 s"
-      x-localai-status: planned
-      x-localai-issue: SVC-08
       requestBody:
         required: true
         content:
@@ -1634,22 +1636,24 @@ paths:
           content:
             audio/wav:
               schema: {type: string, format: binary}
-        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+          description: "LAI-AGT-020: malformed body, an unknown voice (details.field voice, details.reason unknown_voice), a language other than auto, en or es, a speed outside 0.7 to 1.5, or no text left after cleanup (details.reason empty_after_cleanup)."
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "413":
           $ref: "#/components/responses/TooLarge"
-          description: "LAI-SVC-024: the text is over 2000 characters after cleanup; LAI-AGT-025 the body is over the limit."
+          description: "LAI-SVC-024: the text is over 2000 characters after cleanup (details.chars, details.max), or over 64 KiB before it; LAI-AGT-025 the body is over the limit."
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "429":
           $ref: "#/components/responses/RateLimited"
-          description: "LAI-SVC-015: more than 2 concurrent syntheses and 4 queued."
+          description: "LAI-SVC-015: more than 2 concurrent syntheses and 4 queued (Retry-After is set)."
         "500":
           $ref: "#/components/responses/Internal"
-          description: "LAI-SVC-023: piper failed; LAI-AGT-099 a bug."
+          description: "LAI-SVC-023: piper failed (details.reason is exit_status, timeout, empty_audio, start_failed or bad_voice_config; details.exit_code and details.stderr, the first 4 KiB, when it ran); LAI-AGT-099 a bug."
         "503":
           $ref: "#/components/responses/Starting"
-          description: "LAI-AGT-024 the agent is starting or stopping; LAI-SVC-022 no voice."
+          description: "LAI-AGT-024 the agent is starting or stopping; LAI-SVC-020 the voice program is not installed; LAI-SVC-022 no voice is installed (or piper.enabled is false)."
 
   /speech/voices:
     get:
@@ -1659,8 +1663,6 @@ paths:
       description: Needed by the Portal voice picker. companion-services.md section 3.4. agent.md section 3.8.25.
       x-localai-auth: [op, portal]
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: SVC-08
       responses:
         "200":
           description: The voices.
@@ -3433,7 +3435,7 @@ components:
       required: [text]
       additionalProperties: false
       properties:
-        text: {type: string, minLength: 1, maxLength: 2000}
+        text: {type: string, minLength: 1, description: "1 to 2000 characters after cleanup (Markdown, URLs, code blocks and emoji are removed or replaced); longer is 413 LAI-SVC-024."}
         voice: {type: [string, "null"], description: "A catalog piper model id."}
         language: {type: string, enum: [auto, en, es], default: auto}
         speed: {type: number, minimum: 0.7, maximum: 1.5, default: 1.0}

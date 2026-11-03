@@ -20,6 +20,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/portal"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
+	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
 )
 
 func spec(t *testing.T) *apispec.Spec {
@@ -83,6 +84,9 @@ func implementedRoutes(t *testing.T) []api.Route {
 	routes = append(routes, api.DrillRoutes(api.DrillDeps{})...)
 	// POST /ark/sync (SYNC-05: the dry-run branch; the planner is not called, so it stays nil).
 	routes = append(routes, api.ArkSyncRoutes(api.ArkSyncDeps{})...)
+	// POST /speech/tts and GET /speech/voices (SVC-08); the handlers are not called, so the
+	// dependencies stay empty.
+	routes = append(routes, piper.Routes(piper.Deps{})...)
 	// GET /ark (SYNC-12); the view is not called, so it stays nil.
 	routes = append(routes, api.ArkRoutes(api.ArkDeps{})...)
 	return routes
@@ -124,7 +128,7 @@ func TestPlannedOperations(t *testing.T) {
 		issue, _ := op.Raw["x-localai-issue"].(string)
 		byIssue[issue] = append(byIssue[issue], op.Key())
 	}
-	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs", "GET /doctor", "GET /mode", "POST /mode", "POST /mode/survival", "GET /status", "GET /portal/status", "GET /profile", "PUT /profile", "GET /catalog", "POST /catalog/refresh", "POST /models/{id}/load", "POST /models/{id}/unload", "PUT /models/default", "GET /models", "GET /models/{id}", "DELETE /models/{id}", "POST /models/{id}/download", "GET /key", "POST /key/rotate", "GET /cloud", "DELETE /cloud", "POST /cloud/enroll", "POST /cloud/resend-key", "POST /drill", "GET /drill", "DELETE /drill", "POST /drill/manual", "POST /ark/sync", "GET /ark"} {
+	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs", "GET /doctor", "GET /mode", "POST /mode", "POST /mode/survival", "GET /status", "GET /portal/status", "GET /profile", "PUT /profile", "GET /catalog", "POST /catalog/refresh", "POST /models/{id}/load", "POST /models/{id}/unload", "PUT /models/default", "GET /models", "GET /models/{id}", "DELETE /models/{id}", "POST /models/{id}/download", "GET /key", "POST /key/rotate", "GET /cloud", "DELETE /cloud", "POST /cloud/enroll", "POST /cloud/resend-key", "POST /drill", "GET /drill", "DELETE /drill", "POST /drill/manual", "POST /ark/sync", "POST /speech/tts", "GET /speech/voices", "GET /ark"} {
 		if !implementedKeys[key] {
 			t.Errorf("%s must be implemented", key)
 		}

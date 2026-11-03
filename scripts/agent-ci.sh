@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # agent-ci.sh: the Go pipeline for agent/ (ADR-0001, rebuild-kit.md). Used by CI and by hand.
 #
-#   scripts/agent-ci.sh check   go vet, go test -race, staticcheck (pinned), vendored deps are current
+#   scripts/agent-ci.sh check   go vet, go test -race (plus the integration tag of internal/app), staticcheck (pinned), vendored deps are current
 #   scripts/agent-ci.sh build   static linux/amd64 and linux/arm64 binaries into agent/dist/, asserted static
 #   scripts/agent-ci.sh repro   build twice into temp dirs; the sha256 of every binary must be identical
 #   scripts/agent-ci.sh all     check, then build, then repro
@@ -39,6 +39,8 @@ do_check() {
   fi
   echo "== go test -race"
   go test -race ./...
+  echo "== go test -race -tags integration ./internal/app/... (the daemon wiring, agent.md section 9.2)"
+  go test -race -tags integration ./internal/app/...
   if [[ "${SKIP_STATICCHECK:-0}" != "1" ]]; then
     echo "== staticcheck $STATICCHECK_VERSION"
     go run "honnef.co/go/tools/cmd/staticcheck@$STATICCHECK_VERSION" ./...
