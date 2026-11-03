@@ -1,0 +1,15 @@
+== stdout ==
+✓ The agent source in the kit: local-ai-node-v0.4.0-src.tar.gz (21 MB)
+✗ The Go toolchain in the kit: no go<version>.linux-amd64.tar.gz on any root.
+  [LAI-KIT-040]
+  → Fix: Run `aictl ark sync` with internet, or `aictl ark import` from a good
+         drive.
+✗ The source is complete and vendored: missing: vendor/github.com/example/dep.
+  [LAI-KIT-030]
+  → Fix: Sync the kit with internet.
+✓ The Go toolchain is new enough: Go 1.24.7
+✓ The compile can run as an unprivileged user: as localai
+✓ Free disk space for the build: 12.0 GB free in /var/lib/localai/build
+
+Not ready: fix the checks marked ✗ above, then run it again.
+== exit 1 ==

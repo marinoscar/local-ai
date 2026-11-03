@@ -69,6 +69,7 @@ func (e *fakeWhisperEngine) Build(ctx context.Context, req build.Request) (build
 type whisperFix struct {
 	*localFixture
 	eng  *fakeWhisperEngine
+	host *hostFix
 	made int
 	// probed are the URLs the speech probe was asked.
 	probed   []string
@@ -78,6 +79,7 @@ type whisperFix struct {
 func newWhisperFix(t *testing.T) *whisperFix {
 	t.Helper()
 	f := &whisperFix{localFixture: newLocalFixture(t)}
+	f.host = setKitHost(t, "noble", "amd64") // the computer's Ubuntu release and processor, for the exporter and the ready-made builds
 	f.eng = &fakeWhisperEngine{
 		in:  build.Inputs{Commit: wCommit, ShortCommit: wShort, Backend: "cuda", CudaArch: "75", Jobs: 5, Activate: true},
 		res: build.Result{BuildID: wShort + "-cuda", Switched: true, PreviousBuild: "0a1b2c3d4-cuda"},
@@ -278,7 +280,8 @@ func TestRebuildWhisperUsageErrors(t *testing.T) {
 		{"source and kit", []string{"--source", "/x", "--from-kit"}, "--source and --from-kit cannot be used together"},
 		{"activate and no-activate", []string{"--activate", "--no-activate"}, "--activate and --no-activate cannot be used together"},
 		{"an extra argument", []string{"now"}, "Unexpected argument"},
-		{"an unknown flag", []string{"--prebuilt", "x.tar.gz"}, "prebuilt"},
+		{"an unknown flag", []string{"--no-such-flag"}, "no-such-flag"},
+		{"prebuilt with a source", []string{"--prebuilt", "x.tar.gz", "--from-kit"}, "--prebuilt cannot be used with --source or --from-kit"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

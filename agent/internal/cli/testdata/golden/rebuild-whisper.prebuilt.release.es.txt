@@ -1,0 +1,9 @@
+== stdout ==
+== stderr ==
+✗ La compilación lista whisper.cpp-1a2b3c4d5-cuda-resolute-amd64-sm75.tar.gz no
+  corresponde a este equipo (versión de Ubuntu: la compilación es para resolute,
+  este equipo tiene noble). No se cambió nada. El kit tiene:
+  whisper.cpp-0a1b2c3d4-cpu-noble-amd64.tar.gz.  [LAI-KIT-048]
+  → Solución: No se cambió nada. Compile desde el código fuente del kit:
+              `sudo aictl rebuild-llama --from-kit` (o `rebuild-whisper`).
+== exit 1 ==

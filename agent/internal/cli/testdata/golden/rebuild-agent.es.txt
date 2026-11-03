@@ -1,0 +1,8 @@
+== stdout ==
+i Recompilando el agente 0.4.0 desde el kit con Go 1.24.7 (no se usa internet)
+✓ Se compiló aiagent v0.4.0 desde el kit del arca (sin usar internet). El agente
+  se reinició y está sano.
+i Se conserva el agente anterior 0.3.0 como /opt/localai/bin/aiagent.prev.
+== stderr ==
+… Compiling the agent (no internet is used)
+== exit 0 ==

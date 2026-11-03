@@ -1,0 +1,9 @@
+== stdout ==
+== stderr ==
+✗ The ready-made build whisper.cpp-1a2b3c4d5-cuda-resolute-amd64-sm75.tar.gz
+  does not fit this computer (Ubuntu version: the build is for resolute, this
+  computer has noble). Nothing was changed. The kit has:
+  whisper.cpp-0a1b2c3d4-cpu-noble-amd64.tar.gz.  [LAI-KIT-048]
+  → Fix: Nothing was changed. Build from the kit source instead:
+         `sudo aictl rebuild-llama --from-kit` (or `rebuild-whisper`).
+== exit 1 ==

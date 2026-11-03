@@ -69,6 +69,10 @@ const (
 	ActionLlamaBuildSwitch = "llama.build.switch"
 	// ActionWhisperBuildSwitch is the switch of a whisper.cpp build (aictl rebuild-whisper).
 	ActionWhisperBuildSwitch = "whisper.build.switch"
+	// ActionAgentBuildSwitch is the switch to an agent built from the kit (aictl rebuild-agent).
+	ActionAgentBuildSwitch = "agent.build.switch"
+	// ActionKitExportBuild is an export of the current builds into kit/prebuilt (aictl kit export-build).
+	ActionKitExportBuild = "kit.export_build"
 )
 
 // Actor is the "actor" object of an audit line.

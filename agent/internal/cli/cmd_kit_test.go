@@ -348,8 +348,9 @@ func TestRegisterKitSubJoinsTheGroup(t *testing.T) {
 		t.Fatalf("real kit group: %v", subNames(real))
 	}
 	for _, s := range real.Sub {
-		// status and verify only read (aictl.md section 4.23c: [local]); the installers write /opt/localai.
-		wantRoot := s.Name == "install" || s.Name == "install-debs"
+		// status and verify only read (aictl.md section 4.23c: [local]); the installers write /opt/localai and
+		// export-build writes the kit.
+		wantRoot := s.Name == "install" || s.Name == "install-debs" || s.Name == "export-build"
 		if s.Marks&MarkLocal == 0 || (s.Marks&MarkRoot != 0) != wantRoot {
 			t.Errorf("%s is marked %s", s.Name, s.Marks)
 		}

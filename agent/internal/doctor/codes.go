@@ -402,6 +402,8 @@ const (
 	KIT045 = "LAI-KIT-045"
 	KIT046 = "LAI-KIT-046"
 	KIT047 = "LAI-KIT-047"
+	KIT048 = "LAI-KIT-048"
+	KIT049 = "LAI-KIT-049"
 
 	// LAI-DRL
 	DRL001 = "LAI-DRL-001"
@@ -2553,6 +2555,18 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "Installing from the kit failed", ES: "Falló la instalación desde el kit"},
 		Fix:      Msg{EN: "Nothing was replaced. Read the message, then run `aictl kit verify --full` and try again.", ES: "No se reemplazó nada. Lea el mensaje, ejecute `aictl kit verify --full` e intente otra vez."},
+	},
+	{
+		ID:       KIT048,
+		Severity: Error,
+		Title:    Msg{EN: "The ready-made build doesn't fit this computer", ES: "La compilación lista no corresponde a este equipo"},
+		Fix:      Msg{EN: "Nothing was changed. Build from the kit source instead: `sudo aictl rebuild-llama --from-kit` (or `rebuild-whisper`).", ES: "No se cambió nada. Compile desde el código fuente del kit: `sudo aictl rebuild-llama --from-kit` (o `rebuild-whisper`)."},
+	},
+	{
+		ID:       KIT049,
+		Severity: Error,
+		Title:    Msg{EN: "A build could not be exported to the kit", ES: "No se pudo exportar una compilación al kit"},
+		Fix:      Msg{EN: "The kit's other files are untouched. Free some space on the drive, then run `sudo aictl kit export-build` again.", ES: "Los demás archivos del kit no se tocaron. Libere espacio en el disco y ejecute `sudo aictl kit export-build` otra vez."},
 	},
 	{
 		ID:       DRL001,

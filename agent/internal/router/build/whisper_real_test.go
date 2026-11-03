@@ -1,6 +1,7 @@
 package build
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,11 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/execx"
+	"github.com/marinoscar/local-ai/agent/internal/kit"
 )
 
 // TestWhisperRealBuild builds whisper.cpp for real, with the real programs, from a kit-style source
@@ -29,7 +32,8 @@ import (
 //	LOCALAI_EXPECT_NO_NETWORK=1   fail unless the network really is unreachable
 //
 // Nothing is activated: no service is restarted and no unit is touched. The build runs as the caller
-// (a CI runner has no localai user).
+// (a CI runner has no localai user). After the build the test exports it and restores it into a second
+// root (KIT-05: the export → restore round trip on a real CPU build).
 func TestWhisperRealBuild(t *testing.T) {
 	tarball := os.Getenv("LOCALAI_WHISPER_KIT_TARBALL")
 	if tarball == "" {
@@ -130,5 +134,44 @@ func TestWhisperRealBuild(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(scratch, "whisper.cpp-"+commit)); err == nil {
 		t.Error("the scratch source tree was left behind")
+	}
+
+	// KIT-05: the build is exported (kit.PrebuiltExporter, the hook of the manager) and restored into a
+	// second root, as another node of the same kind would: the real programs pass the same smoke test
+	// again, with nothing compiled, and are the exported bytes.
+	exportRoot := t.TempDir()
+	ex := &kit.PrebuiltExporter{
+		FS: kit.OSFS{}, Roots: func() []string { return []string{exportRoot} }, Program: kit.ProgramWhisper,
+		Codename: "testrelease", Arch: kitArch(runtime.GOARCH),
+		NodeID: func() string { return "node-ci" }, Kernel: func() string { return "ci" },
+	}
+	exp, err := ex.Export(ctx, res.Path)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	t.Logf("exported %s (%d bytes)", exp.File, exp.Size)
+	opt2 := opt
+	opt2.Root, opt2.ScratchDir = filepath.Join(t.TempDir(), "whisper.cpp"), t.TempDir()
+	restored, err := New(opt2).Build(ctx, Request{Prebuilt: filepath.Join(kit.PrebuiltDir(exportRoot), exp.File), PrebuiltSHA256: exp.SHA256, NoActivate: true})
+	if err != nil {
+		if e, ok := err.(*Error); ok {
+			t.Fatalf("restore: %s: %s\n%v", e.Code, e.Message, e.Details)
+		}
+		t.Fatal(err)
+	}
+	if !restored.Restored || restored.BuildID != res.BuildID {
+		t.Errorf("restore = %+v", restored)
+	}
+	for _, n := range WhisperRecipe.Programs {
+		a, err1 := os.ReadFile(filepath.Join(res.Path, "bin", n))
+		b, err2 := os.ReadFile(filepath.Join(restored.Path, "bin", n))
+		if err1 != nil || err2 != nil || !bytes.Equal(a, b) {
+			t.Errorf("%s differs after the restore (%v %v)", n, err1, err2)
+		}
+	}
+	a, _ := os.ReadFile(filepath.Join(res.Path, "BUILD.json"))
+	b, _ := os.ReadFile(filepath.Join(restored.Path, "BUILD.json"))
+	if !bytes.Equal(a, b) {
+		t.Error("BUILD.json was changed by the restore")
 	}
 }
