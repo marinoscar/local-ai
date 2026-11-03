@@ -497,7 +497,9 @@ export interface paths {
         };
         /**
          * The active or last sync run
-         * @description Shape owned by ark-sync.md section 3.5. agent.md section 3.8.18.
+         * @description The active run, or the last one (it survives an agent restart). `totals.rate_bps` and `eta_s` are 0
+         *     once the run has ended. Shape owned by ark-sync.md section 3.5. agent.md section 3.8.18.
+         *
          */
         get: operations["getArkSync"];
         put?: never;
@@ -512,7 +514,10 @@ export interface paths {
         post: operations["startArkSync"];
         /**
          * Cancel the active run
-         * @description Idempotent. Every active transfer stops at the next 1 MiB boundary and checkpoints. agent.md section 3.8.18.
+         * @description Idempotent. Every active transfer stops at the next 1 MiB boundary and checkpoints, leaving its `.part`
+         *     files for the next run. With no run active the answer is still `202`, with the state `idle` and the id
+         *     of the last run (empty when there never was one). agent.md section 3.8.18.
+         *
          */
         delete: operations["cancelArkSync"];
         options?: never;
@@ -1853,8 +1858,15 @@ export interface components {
         };
         SyncAccepted: {
             run_id: string;
-            /** @enum {string} */
-            state: "running";
+            /**
+             * @description `skipped` for a scheduled run that preflight ended at once (the run is already over).
+             * @enum {string}
+             */
+            state: "running" | "skipped";
+            /** @description For state skipped: offline, mode, battery, disabled or no_roots. */
+            reason?: string;
+            /** @description For state skipped: the doctor code (LAI-SYN-001, -002, -003 or LAI-ARK-001), when there is one. */
+            code?: string;
             events: string;
         };
         /** @description The dry-run plan of one root, owned by ark-sync.md section 4.4.4 (JSON form). */
@@ -1891,8 +1903,15 @@ export interface components {
             trigger: string;
             /** @enum {string} */
             state: "running" | "cancelling" | "done" | "cancelled" | "failed" | "skipped";
-            /** @description For state skipped: offline, mode, battery, disabled or no_roots. */
+            /** @description For state skipped: offline, mode, battery, disabled or no_roots. For a cancelled run switched out of online mode: mode. For a done run stopped by max_run_hours: time_limit. */
             reason?: string;
+            /** @description The doctor code of the end of the run (LAI-SYN-002 for a mode switch, the code of a skip or of a failed plan). */
+            code?: string;
+            /**
+             * @description Once the run has ended: ok, or partial when an item failed or was left for time, budget or disk.
+             * @enum {string}
+             */
+            result?: "ok" | "partial" | "failed" | "cancelled" | "skipped";
             /** Format: date-time */
             started_at: string;
             /** Format: date-time */
@@ -1904,13 +1923,25 @@ export interface components {
             active?: {
                 [key: string]: unknown;
             }[];
+            /** @description What became of each item (the ended run): root, item, result (verified, skipped, failed, quarantined), version, reason, code. */
+            items?: {
+                [key: string]: unknown;
+            }[];
+            warnings?: string[];
+            /** @description The overall READY colour of each root at the end of the run. */
+            ready?: {
+                [key: string]: string;
+            };
         } & {
             [key: string]: unknown;
         };
         SyncCancelling: {
             run_id: string;
-            /** @enum {string} */
-            state: "cancelling";
+            /**
+             * @description `idle`: no run was active, so nothing was cancelled (run_id is the last run's, or empty).
+             * @enum {string}
+             */
+            state: "cancelling" | "idle";
         };
         RunAccepted: {
             run_id: string;
@@ -3254,6 +3285,7 @@ export interface operations {
             /** @description LAI-AGT-021: no run has happened yet. */
             404: components["responses"]["NotFound"];
             500: components["responses"]["Internal"];
+            503: components["responses"]["Starting"];
         };
     };
     startArkSync: {
