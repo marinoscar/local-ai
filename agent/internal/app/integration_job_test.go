@@ -68,16 +68,32 @@ func TestIntegrationCloudModelLoadJob(t *testing.T) {
 	if b := r.read("var/lib/localai/audit.jsonl"); !containsAll(b, `"model.load"`, `"cloud"`, "job-load") {
 		t.Errorf("the audit log does not record the cloud job:\n%s", b)
 	}
-	// A job of a type the node cannot run is refused with a code, not run (the fake delivers it to a
-	// claim that did not ask for it, as a hostile cloud would): ark.sync waits for the
-	// sync engine, so the executor is absent.
+	// ark.sync is the sync engine's: the job starts a run (trigger cloud) and answers its id.
 	cloudSrv.QueueJob(cloudfake.Job{ID: "job-ark", Type: "localai.ark.sync", Token: "claim-token-2", Params: map[string]any{}, Force: true})
-	if err := cloudSrv.WaitJob(ctx, "job-ark", cloudfake.JobFailed); err != nil {
+	if err := cloudSrv.WaitJob(ctx, "job-ark", cloudfake.JobSucceeded); err != nil {
 		rec, _ := cloudSrv.Job("job-ark")
 		t.Fatalf("%v: job = %+v", err, rec)
 	}
-	if rec, _ := cloudSrv.Job("job-ark"); !containsAll(rec.Error, "LAI-CLD-057") {
-		t.Errorf("an ark.sync job without a sync engine = %q, want LAI-CLD-057", rec.Error)
+	rec, _ = cloudSrv.Job("job-ark")
+	var syncRes struct {
+		RunID   string `json:"sync_run_id"`
+		Started bool   `json:"started"`
+	}
+	if err := json.Unmarshal(rec.Result, &syncRes); err != nil || !syncRes.Started || !strings.HasPrefix(syncRes.RunID, "run-") {
+		t.Errorf("an ark.sync job = %s (%v), want a started run", rec.Result, err)
+	}
+	if st, ok := d.Components().SyncEngine.Status(); !ok || st.Trigger != "cloud" {
+		t.Errorf("the engine's run = %+v, want one started by the cloud", st)
+	}
+	// ark.verify waits for the re-verification (SYNC-13): refused with a code, not run (the fake
+	// delivers it to a claim that did not ask for it, as a hostile cloud would).
+	cloudSrv.QueueJob(cloudfake.Job{ID: "job-verify", Type: "localai.ark.verify", Token: "claim-token-3", Params: map[string]any{}, Force: true})
+	if err := cloudSrv.WaitJob(ctx, "job-verify", cloudfake.JobFailed); err != nil {
+		rec, _ := cloudSrv.Job("job-verify")
+		t.Fatalf("%v: job = %+v", err, rec)
+	}
+	if rec, _ := cloudSrv.Job("job-verify"); !containsAll(rec.Error, "LAI-CLD-057") {
+		t.Errorf("an ark.verify job = %q, want LAI-CLD-057", rec.Error)
 	}
 	if st := d.Components().State.Snapshot(); st.Mode != state.ModeOnline {
 		t.Errorf("mode = %q", st.Mode)

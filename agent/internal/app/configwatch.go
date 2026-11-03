@@ -43,6 +43,9 @@ func (d *Daemon) applyConfigChange(ctx context.Context, c config.Change) {
 	if hasPath(c.Changed, "kiwix") && kiwixThreads(c.Old) != kiwixThreads(c.New) && blockEnabled(c.New, "kiwix") {
 		d.writeKiwixUnit(ctx, kiwixThreads(c.New))
 	}
+	if hasPrefix(c.Changed, "sync") {
+		d.ark.applySettings() // the bandwidth limit moves the shared bucket at once; the rest is read per run
+	}
 	if c.Source == config.SourceReload && (hasPrefix(c.Changed, "profile") || hasPath(c.Changed, "llama.legacy_aliases") || hasPrefix(c.Changed, "catalog")) {
 		if _, err := d.sdeps.Regenerator.Regenerate(ctx); err != nil {
 			d.log.Warn("models.ini was not regenerated after node.yaml changed", "error", err.Error())
