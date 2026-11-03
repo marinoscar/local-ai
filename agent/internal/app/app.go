@@ -1,6 +1,12 @@
-// Package app wires the daemon: it owns the shared root context and starts and stops workers in a
-// fixed order. Later issues add workers (config, API, hardware, modes, cloud, sync, doctor, ...)
-// by registering them; this package holds no domain logic.
+// Package app wires the daemon: Serve runs the startup sequence of agent.md section 4.1 and the
+// graceful shutdown of section 4.12 over the subsystems of the other packages (daemon.go, start.go,
+// stop.go, build.go), reports readiness to systemd (sdnotify.go, watchdog.go) and offers the
+// extension points a slice that is not merged yet plugs into with one registration (hooks.go).
+//
+// App below is the generic ordered Worker runner of AGENT-01: workers start in registration order and
+// stop in reverse order under one shared context. The Daemon uses the Worker interface for its
+// periodic workers; this package holds no domain logic of its own, only wiring and the adapters that
+// connect the interfaces of one package to the values of another.
 package app
 
 import (
@@ -102,10 +108,6 @@ func (a *App) stopAll(started []Worker) {
 		cancel()
 	}
 }
-
-// Run is the entry point for `aiagent serve` today: an App with no workers yet. SIGTERM and SIGINT
-// are handled by the caller through SignalContext.
-func Run(ctx context.Context) error { return New().Run(ctx) }
 
 // SignalContext returns a context cancelled on SIGTERM or SIGINT (what systemd and Ctrl-C send).
 func SignalContext(parent context.Context) (context.Context, context.CancelFunc) {

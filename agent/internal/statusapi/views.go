@@ -86,6 +86,16 @@ type ArkInfo struct {
 	// SyncState is idle, running, cancelling or the like; "" means idle.
 	SyncState     string
 	LastSuccessAt time.Time
+	// Metrics are the gauges of ark-sync.md section 7 (localai_ark_root_overall and the others).
+	Metrics []ArkMetric
+}
+
+// ArkMetric is one gauge of status.ark.metrics: a name of the metric registry, its labels (root) and
+// the value.
+type ArkMetric struct {
+	Name   string
+	Labels map[string]string
+	Value  float64
 }
 
 // ArkRoot is one content root.

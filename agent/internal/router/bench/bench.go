@@ -395,10 +395,9 @@ func (b *Bench) Run(ctx context.Context, id string) (res *Result, err error) {
 	if eerr != nil {
 		return nil, r.fail(StepPrecheck, fmt.Errorf("cannot watch /events: %w", eerr))
 	}
-	w := startWatch(ch)
+	w := startWatch(ch, cancelWatch)
 	stopWatch := func() bool {
-		w.stop()
-		cancelWatch()
+		w.stop() // ends the watch first, then cancels the stream: see watch.stop
 		return w.disturbed(r.own)
 	}
 	defer func() { // the early-return paths; stop is idempotent
@@ -758,6 +757,11 @@ func (b *Bench) write(res *Result) (string, error) {
 }
 
 // watch collects the model events of a run.
+//
+// A closed channel cannot say when it was closed, so the watch never asks the goroutine: the
+// stream is cancelled only by stop, and only after the goroutine has ended. A channel that is
+// closed while the goroutine still runs therefore was closed by the stream (a dropped connection,
+// the caller's own context), never by the engine's cancel, however late the goroutine got to look.
 type watch struct {
 	mu       sync.Mutex
 	seen     []events.Event
@@ -765,10 +769,19 @@ type watch struct {
 	stopCh   chan struct{}
 	stopOnce sync.Once
 	done     chan struct{}
+	cancel   func() // cancels the stream; called by stop once the loop has ended
+	// gate, when not nil, runs once before the loop looks at anything. Tests use it to hold the
+	// goroutine back; it is nil in production.
+	gate func()
 }
 
-func startWatch(ch <-chan events.Event) *watch {
-	w := &watch{stopCh: make(chan struct{}), done: make(chan struct{})}
+// startWatch watches ch. cancel ends the stream behind it and is called only by stop.
+func startWatch(ch <-chan events.Event, cancel func()) *watch {
+	return startWatchGated(ch, cancel, nil)
+}
+
+func startWatchGated(ch <-chan events.Event, cancel, gate func()) *watch {
+	w := &watch{stopCh: make(chan struct{}), done: make(chan struct{}), cancel: cancel, gate: gate}
 	go w.loop(ch)
 	return w
 }
@@ -787,25 +800,23 @@ func (w *watch) record(ev events.Event) {
 
 func (w *watch) loop(ch <-chan events.Event) {
 	defer close(w.done)
+	if w.gate != nil {
+		w.gate()
+	}
 	for {
 		select {
 		case ev, ok := <-ch:
 			if !ok {
-				select {
-				case <-w.stopCh:
-				default:
-					w.mu.Lock()
-					w.lost = true // the stream broke while the run was going on
-					w.mu.Unlock()
-				}
+				w.markLost() // the stream broke while the run was going on: nothing cancelled it
 				return
 			}
 			w.record(ev)
 		case <-w.stopCh:
-			for { // whatever was already delivered counts
+			for { // whatever was already delivered counts, and so does a close that already happened
 				select {
 				case ev, ok := <-ch:
 					if !ok {
+						w.markLost()
 						return
 					}
 					w.record(ev)
@@ -817,10 +828,20 @@ func (w *watch) loop(ch <-chan events.Event) {
 	}
 }
 
-// stop ends the watch and waits until every event already delivered was looked at. It is idempotent.
+func (w *watch) markLost() {
+	w.mu.Lock()
+	w.lost = true
+	w.mu.Unlock()
+}
+
+// stop ends the watch, waits until every event already delivered (and a close that already
+// happened) was looked at, and only then cancels the stream. It is idempotent.
 func (w *watch) stop() {
 	w.stopOnce.Do(func() { close(w.stopCh) })
 	<-w.done
+	if w.cancel != nil {
+		w.cancel()
+	}
 }
 
 // disturbed reports whether a model event that does not belong to one of the run's own operations

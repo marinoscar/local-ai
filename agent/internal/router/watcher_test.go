@@ -12,14 +12,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/marinoscar/local-ai/agent/internal/app"
 	confake "github.com/marinoscar/local-ai/agent/internal/config/fake"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/router/fake"
 )
 
-var _ app.Worker = (*Watcher)(nil)
+// The watcher is an app.Worker. internal/app imports this package (it wires the daemon), so the
+// interface is spelled out here instead of imported.
+var _ interface {
+	Name() string
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+} = (*Watcher)(nil)
 
 // pubRec records the events the watcher publishes.
 type pubRec struct {

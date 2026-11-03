@@ -53,7 +53,7 @@ Non-goals:
 | Path | Written by | Purpose |
 |---|---|---|
 | `<root>/ROOT.json` | sync (on root init) | Root identity (§3.2) |
-| `<root>/READY.json` | sync (end of every run, and on every verify/import) | Readiness report (§4.12) |
+| `<root>/READY.json` | the readiness service (at mount, at the end of every run, on every verify/import, and every 6 h; never on a read-only root) | Readiness report (§4.12) |
 | `<root>/<item-dir>/MANIFEST.json` | sync (the commit point of a swap) | Per-item manifest (§4.11) |
 | `<root>/.staging/<item-id>/<version>/<file>.part` | downloader | Partial download, same filesystem as the target |
 | `<root>/.staging/<item-id>/<version>/<file>` | downloader | Fully downloaded, verified, waiting for swap |
@@ -182,7 +182,7 @@ Validation errors in this block are `LAI-AGT` config errors (agent.md). Unknown 
 
 **`DELETE /api/v1/ark/sync`** → `202 {"run_id": "...", "state": "cancelling"}`. Every active transfer stops at the next 1 MiB boundary, checkpoints and exits, leaving its `.part` and checkpoint for the next run; the run ends `cancelled`. Idempotent: with no run active the answer is still `202`, with `state: "idle"` and the id of the last run (empty when there never was one).
 
-**`GET /api/v1/ark`** → `{"roots": [<READY.json of each mounted root>]}` (§4.12).
+**`GET /api/v1/ark`** → `{"roots": [<READY.json of each mounted root>]}` (§4.12), internal root first, then drives in mount order; `{"roots": []}` when none is mounted. The titles of `problems[]` are in the language of the request (`Accept-Language`, else `ui.language`); the file on the root and the document the cloud receives are English. A read-only root is served from memory (§4.12.3).
 
 **`GET /api/v1/ark/drives`**:
 ```json
@@ -717,6 +717,11 @@ type Resolved struct {
 ```
 Resolvers are pure network readers; they never write into a root. Producers that are not simple HTTP downloads (pmtiles, git, apt, render) run inside `downloading` and write only into `.staging`.
 
+**Code for the kit and docs resolvers** (`agent/internal/sync/resolve`: `git_mirror`, `apt_closure`, `repo_docs`). Each type is one Go type with two halves:
+- `Resolve(ctx, plan.CatalogItem) (plan.Resolved, error)`, registered per source type with `resolve.Register(plan.Resolvers, ...)`. It reduces the answer to `{Version, SortKey, SizeBytes}`. An error leaves the item unresolved, which is the planner's offline behaviour.
+- `Produce(ctx, resolve.Request) (resolve.Product, error)`, called by the engine while the item is `downloading`. The `Request` carries the root, the target version (the staging directory is `.staging/<item>/<version>/`), the present copy (`PresentDir`, `PresentVersion`), the other roots, the checkpointer and `MinFreeBytes`. The `Product` carries the version actually produced (it can be newer than the planned one for a git mirror), `Keep` (nothing to do), the `Parts` to install, the manifest `Trust`, extra `source` fields and `Notices` (codes that make READY yellow without failing the item). A `Part` is one of: `tree` (swap `<staging>/<From>` into `<root>/<To>`; its `SHA256SUMS` is already written inside it, `Sums` and `TreeSHA256` are what its manifest records), `files` (rename each listed file from `<staging>/<From>/` into `<root>/<To>/`), or `in_place` (already updated where it lives; write the manifest after it, that is the commit point).
+- `Produce` never swaps, never writes a MANIFEST and never deletes (a leftover in staging is overwritten by the next try or is retention's). Every subprocess goes through `execx` (fixed argv, minimal environment, bounded runtime and output). A producer refuses to touch the network unless `Env.Online()` says so (the planner and engine gate survival and offline mode; this is the second lock), and the three resolvers fail closed when it is not set.
+
 #### 4.9.1 `huggingface` (models.yaml `source.type: huggingface`)
 - URL per file: `https://huggingface.co/<repo>/resolve/<revision>/<path>` where `revision` is the pinned 40-hex commit (catalog.md requires it). Path segments are URL-escaped, slashes kept.
 - Metadata: `HEAD` the resolve URL **without following redirects**. Huggingface answers `302` with:
@@ -771,17 +776,17 @@ Resolvers are pure network readers; they never write into a root. Producers that
 
 #### 4.9.6 `git_mirror` (ark.yaml `source.type: git_mirror`)
 - Target: `kit/git/<name>.git` where `<name>` is the URL basename without `.git` (e.g. `kit/git/llama.cpp.git`). Producer: `/usr/bin/git` (missing → `LAI-SYN-061`).
-- Environment: `GIT_TERMINAL_PROMPT=0`, `GIT_CONFIG_NOSYSTEM=1`, `HOME=/var/lib/localai/sync` and `-c protocol.file.allow=never -c core.hooksPath=/dev/null`.
-- First time: `git clone --mirror --no-tags <url> <staging>/<name>.git`, then `git -C … fetch --tags`. Then directory-swap into `kit/git/`.
-- Update: mirrors are append-mostly and big (llama.cpp ≈ 1 GB), so an update copies nothing. It fetches **in place**: `git -C kit/git/<name>.git remote update --prune`. Git's own ref updates are atomic per ref, and objects are written before refs, so a crash leaves a valid repository. The item's MANIFEST is updated after the fetch (commit point).
-- Verify: `git -C … fsck --connectivity-only --no-dangling` exit 0, and for `also_tarball_of: pinned`, `git cat-file -e <commit>^{commit}` for the commit in `node.yaml: llama.commit` (and, on drive roots, for every `llama.commit` recorded in `kit/catalog/pins.json`, see [rebuild-kit.md](rebuild-kit.md) §Pins). Failure → `LAI-SYN-024`.
-- Tarball: `git -C … archive --format=tar --prefix=<name>-<commit>/ <commit> | gzip -n -9 > <staging>/src/<name>-<commit>.tar.gz.part`. `gzip -n` keeps it reproducible. The sha256 is computed and recorded (`computed_after_verify`). The tarball is its own file in `kit/src/` and swapped like a file.
-- Version: the commit of the mirror's `HEAD` after fetch, `[:12]`.
+- Environment: `GIT_TERMINAL_PROMPT=0`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_ALLOW_PROTOCOL=https`, `HOME=/var/lib/localai/sync` (and nothing else but `PATH` and `LC_ALL=C`) and `-c protocol.file.allow=never -c core.hooksPath=/dev/null` (plus `-c http.proxy=http://<proxy>` when the bandwidth limit applies, with the proxy allowing only the URL's host). The URL must be `https` with a host, no credentials, query or fragment, and `<name>` must be a plain name; the URL follows `--` on the command line. Calls on an existing mirror add `-c safe.directory=<mirror>`.
+- First time: `git clone --mirror --no-tags -- <url> <staging>/<name>.git`, then `git -C … fetch --tags`. Then directory-swap into `kit/git/` (part `mirror`, kind `tree`, no hashing of the mirror). A valid leftover clone in staging is finished with a fetch; anything else there is renamed aside to `<name>.git.unusable-<unix time>`, never deleted.
+- Update: mirrors are append-mostly and big (llama.cpp ≈ 1 GB), so an update copies nothing. It fetches **in place**: `git -C kit/git/<name>.git remote update --prune` (part `mirror`, kind `in_place`). Git's own ref updates are atomic per ref, and objects are written before refs, so a crash leaves a valid repository. The item's MANIFEST is updated after the fetch (commit point). A failed update is followed by an fsck: a damaged mirror is `LAI-SYN-024` (prune it), a healthy one is `LAI-SYN-031` (network).
+- Verify: `git -C … fsck --connectivity-only --no-dangling` exit 0, and for `also_tarball_of: pinned`, `git cat-file -e <commit>^{commit}` for the commit in `node.yaml: llama.commit` (and, on drive roots, for every `llama.commit` recorded in `kit/catalog/pins.json`, see [rebuild-kit.md](rebuild-kit.md) §Pins). Every pinned value must be 40 lower-case hex digits or the item fails before git sees it. Failure → `LAI-SYN-024`. The commits come from `GitMirror.NodeCommits` (node.yaml, supplied by the wiring) and, on a drive, from `pins.json` (`llama_cpp[].commit`, `whisper_cpp[].commit`, chosen by mirror name); a damaged `pins.json` fails the item rather than silently dropping sources.
+- Tarball: `git -C … archive --format=tar --prefix=<name>-<commit>/ -o <staging>/src/<name>-<commit>.tar <commit>`, then `gzip -n -9 -f` on that file (no shell, no pipe: the runner buffers stdout, and a pipe would hold the archive in memory). `gzip -n` keeps it reproducible: two runs give one sha256. The sha256 is computed and recorded (`computed_after_verify`). The tarballs are staged under `<staging>/src/` (part `tarballs`, kind `files`, to `kit/src/`) and are rebuilt on every run, so a damaged one heals.
+- Version: the commit of the mirror's `HEAD` after fetch, `[:12]`. The planner half reads the remote `HEAD` with `git ls-remote -- <url> HEAD` (metadata only, no proxy, `LAI-SYN-033` when it cannot).
 
 #### 4.9.7 `apt_closure` (ark.yaml `source.type: apt_closure`)
 Goal: the full set of `.deb` files needed to install `packages` on a freshly installed Ubuntu `<codename>`/`<arch>`, without root, without touching the system's apt state, and without a chroot.
 
-1. **Private apt tree** `A=/var/lib/localai/sync/apt/<codename>-<arch>`:
+1. **Private apt tree** `A=/var/lib/localai/sync/apt/<item-id>` (one tree per item, not per codename and arch: the `kit-nvidia-…` items of one codename would otherwise share a tree and make apt discard each other's lists):
    ```
    A/etc/apt/sources.list.d/ubuntu.sources     deb822; generated
    A/etc/apt/sources.list.d/extra.sources      third-party repos the item lists (tailscale, NVIDIA CUDA), generated
@@ -790,6 +795,7 @@ Goal: the full set of `.deb` files needed to install `packages` on a freshly ins
    A/var/lib/apt/lists/                        downloaded indexes
    A/var/cache/apt/archives/partial/           unused (we download ourselves)
    A/var/lib/dpkg/status                       EMPTY file (pretend nothing is installed)
+   A/etc/apt/apt.conf                          one line: Dir "A/";  (named by APT_CONFIG, see below)
    ```
    `ubuntu.sources` for `amd64`:
    ```
@@ -809,24 +815,26 @@ Goal: the full set of `.deb` files needed to install `packages` on a freshly ins
    -o APT::Architecture=<arch> -o APT::Architectures=<arch>
    -o Debug::NoLocking=1 -o APT::Sandbox::User=<invoking user>
    -o Acquire::Languages=none -o APT::Install-Recommends=false
+   -o Acquire::ForceHash=SHA256 -o APT::Update::Error-Mode=any
    ```
-   These run as an unprivileged user (the agent drops to `localai` for these subprocesses), which proves the "no root" property.
-3. `apt-get O update` (timeout 15 min; throttled through the proxy with `-o Acquire::http::Proxy=…`). Failure → `LAI-SYN-060`.
-4. `apt-get O --print-uris --yes install <packages…>`. Because the status file is empty, apt computes the **complete** closure from nothing, including base libraries. That's a superset of what a fresh install needs, which is what we want: it installs on any base system of that codename. Unsatisfiable → `LAI-SYN-060` with apt's message.
-5. Parse each line `'<uri>' <filename> <size> SHA256:<hex>` (apt prints the strongest hash; only `SHA256:` is accepted, else `LAI-SYN-060`). These hashes come from the signed indexes, so they are trustworthy (`sha256_source: "apt_signed_index"`).
-6. Version = the first 12 hex of the sha256 of the sorted `name=version` list. If it equals the present version, the item is `keep`.
-7. Download each `.deb` with the normal downloader into `<staging>/pool/`. Unchanged debs (same filename and sha256 as in the present version) are hard-linked from the present tree instead of downloaded (same filesystem, so a hard link is safe and atomic).
-8. Generate the local repository index without `dpkg-dev`: for each package, `apt-cache O show <name>=<version>` prints the full control stanza from the signed index. Rewrite `Filename:` to `pool/<filename>`, drop `Description-md5`, and concatenate into `Packages`; also write `Packages.gz` (gzip -n). Write `PACKAGES.lock` (sorted `name=version sha256`) and `README.txt` (how to use it, see [rebuild-kit.md](rebuild-kit.md) §Offline apt).
-9. Directory-swap the tree into `kit/debs/<codename>-<arch>/`.
+   `Dir=A` has no trailing slash on the command line. The last two options are additions to the list this spec first had: without `Acquire::ForceHash=SHA256` apt prints `MD5Sum:` for a record that has several hashes, and without `Error-Mode=any` a source that cannot be fetched is only a warning. `APT::Sandbox::User` is left out when no user is configured. The environment is `PATH`, `LC_ALL=C`, `HOME=A/home` and **`APT_CONFIG=A/etc/apt/apt.conf`**: apt reads `/etc/apt/apt.conf.d` before it applies `-o`, and the hooks there (`rm -f /var/cache/apt/*`, a PackageKit call) would run as the apt user against the system, so the config file that sets `Dir "A/"` is read first and the system configuration is never read. These run as an unprivileged user (the agent drops to `localai` for these subprocesses, `execx.Cmd.Credential`, and `A` is chowned to it), which proves the "no root" property. A root agent with no unprivileged user configured refuses to run apt at all (`LAI-SYN-060`).
+3. `apt-get O update` (timeout 15 min). Failure, an `E:` line, or output over the cap → `LAI-SYN-060` with apt's message. When a bandwidth limit applies, the proxy (CONNECT only, so https only) is used: the tree's sources are then written with `https://` URIs and `-o Acquire::https::Proxy=http://<addr>` is added, and the allowed hosts are the archive and the `extra_repos` hosts. `Acquire::http::Proxy` is not used: the proxy refuses plain http by design.
+4. `apt-get O --print-uris --yes install <packages…>` (the package list de-duplicated and sorted; every name must be a Debian package name). Because the status file is empty, apt computes the **complete** closure from nothing, including base libraries. That's a superset of what a fresh install needs, which is what we want: it installs on any base system of that codename. Unsatisfiable → `LAI-SYN-060` with apt's message (the `E:` lines and the lines that say which package wants what).
+5. Parse each line `'<uri>' <filename> <size> SHA256:<hex>` (only `SHA256:` is accepted, else `LAI-SYN-060`; so are a deb of another architecture than the item's and `all`, a URI whose host is not the archive or an `extra_repos` host, credentials in the URI, an unsafe name, and the same package twice with different content; the same package twice with the same content is listed once). These hashes come from the signed indexes, so they are trustworthy (`sha256_source: "apt_signed_index"`). The pool file name is the last element of the URI's path (a Debian pool name has no epoch; a `:` would become `_`).
+6. Version = the first 12 hex of the sha256 of the sorted `name=version` list (one per line, a trailing newline). If it equals the present version, the item is `keep`. The planner half computes the closure too (steps 3 to 6), so the planner's default 5 s resolve timeout leaves the item unresolved: the engine's run, which passes a longer timeout, resolves it. The closure is cached for 6 h so `Produce` of the same run does not repeat it; if `Produce` computes another version than the plan was made for (an update landed in between) it stages nothing and fails with `LAI-SYN-060` (`ErrVersionMoved`), and the next run picks the new set up.
+7. Download each `.deb` with the normal downloader into `<staging>/tree/pool/` (size and sha256 from the signed index are enforced; a mismatch is the downloader's `LAI-SYN-020` quarantine, a truncated body `LAI-SYN-027`, a 404 `LAI-SYN-030`). A deb already committed in staging by an earlier attempt, with the right sha256, is not fetched again. Unchanged debs (same filename and sha256 as in the present version's `SHA256SUMS`, same size on disk) are hard-linked from the present tree instead of downloaded (same filesystem, so a hard link is safe and atomic); a link that fails falls back to the download.
+8. Generate the local repository index without `dpkg-dev`: for each package, `apt-cache O show <name>=<version>` prints the full control stanza from the signed index. Rewrite `Filename:` to `pool/<filename>`, drop `Description-md5`, set `Size` and `SHA256` to the values apt downloaded (a record that disagrees is `LAI-SYN-060`), and concatenate into `Packages` in name order; also write `Packages.gz` (gzip -n equivalent: no name, no time). Write `PACKAGES.lock` (sorted `name=version sha256`) and `README.txt` (how to use it, see [rebuild-kit.md](rebuild-kit.md) §Offline apt), then `SHA256SUMS` (the debs' sha256 from the index, the four generated files hashed) and the tree hash.
+9. Directory-swap the tree (`<staging>/tree`) into the item's directory: `kit/debs/<codename>-<arch>/` for `kit-debs-<codename>-<arch>`, `kit/nvidia/<codename>-<arch>-<branch>/` for `kit-nvidia-…` (the engine passes `Request.ItemDir`; the producer derives it from the id when it is empty).
 
 Third-party packages (tailscale, NVIDIA) come from the `extra.sources` entries. Each item lists them in its `extra_repos` field ([catalog.md](catalog.md) §3). Recommended packages are excluded to keep size down; the kit item's `packages` list must name what's needed.
 
 #### 4.9.8 `repo_docs` (ark.yaml `source.type: repo_docs`)
-- Source: the repo tree at tag `catalog-<CATALOG_VERSION>`, as `https://codeload.github.com/marinoscar/local-ai/tar.gz/refs/tags/catalog-<CATALOG_VERSION>`; if `kit/git/local-ai.git` exists on any root, `git archive` from the mirror instead (works offline).
+- Source: the repo tree at tag `catalog-<CATALOG_VERSION>`, as `https://codeload.github.com/marinoscar/local-ai/tar.gz/refs/tags/catalog-<CATALOG_VERSION>`; if `kit/git/local-ai.git` exists on any root, `git archive` from the mirror instead (works offline). A mirror that lacks the tag is not an error while online: the tarball is downloaded instead; offline it is `LAI-SYN-024`. `CATALOG_VERSION` (and the repository name) must be plain names, since they become part of a URL and an argv. The tarball is unpacked by the safe extractor of `resolve` (below, "Archive extraction" in §6), which keeps only `docs/`, `inventory.example.yaml` and `catalog/{models.yaml,ark.yaml,CATALOG_VERSION,pins.json,profiles/*.yaml}`; the tarball itself is capped at 256 MiB.
 - Checksum: `computed` (the tarball is not published with a hash). The trust anchor is HTTPS to GitHub plus the tag name. The tarball sha256 is recorded.
 - Produce: extract `docs/` and `inventory.example.yaml` into staging, then run `aictl docs render --src <staging>/src/docs --out <staging>/tree --inventory <path>` ([aictl.md](aictl.md) §docs). `<path>` is `/etc/localai/inventory.local.yaml` if present, else `<mount>/inventory.local.yaml` of a mounted drive, else none (placeholders stay, and READY marks docs `yellow` with `LAI-SYN-062`).
-- Also produce **`kit/catalog/`** from the same tarball, in the same item install: `catalog/models.yaml`, `catalog/ark.yaml`, `catalog/profiles/`, `CATALOG_VERSION`, plus `pins.json` (rebuild-kit.md §3.2). It is staged next to the docs tree and swapped together with it (one MANIFEST lists both); lint must pass on it first (`LAI-CAT-002` otherwise, and the old `kit/catalog/` is kept). This is the copy the agent falls back to at startup (`source: kit`, [catalog.md](catalog.md) §1).
-- Verify: `tree/index.html` exists, and every runbook listed in `docs/README.md` has an HTML file, including the survival card HTML rendered from `docs/runbooks/00-survival-card.md` ([survival-portal.md](survival-portal.md) §4.12). A missing **HTML** file fails verification. A missing survival-card **PDF** does not: `aictl docs render` makes PDFs only where Chromium is installed (`LAI-CLI-014`), so the item verifies and READY shows docs `yellow` with `LAI-CLI-014`.
+- Also produce **`kit/catalog/`** from the same tarball, in the same item install: `catalog/models.yaml`, `catalog/ark.yaml`, `catalog/profiles/`, `CATALOG_VERSION`, plus `pins.json` (rebuild-kit.md §3.2). It is staged next to the docs tree and swapped together with it (one MANIFEST lists both); lint must pass on it first (`LAI-CAT-002` otherwise, and the old `kit/catalog/` is kept: the item fails before the manuals are rendered, since the two travel together; the same code when the tarball's `CATALOG_VERSION` file is not the tag's version). This is the copy the agent falls back to at startup (`source: kit`, [catalog.md](catalog.md) §1). `pins.json` is the release's when it has one; otherwise a skeleton (`schema_version` 1, empty lists) is written for the pins merge of [rebuild-kit.md](rebuild-kit.md) §Pins.
+- Verify: `tree/index.html` exists, and every runbook listed in `docs/README.md` (a link `runbooks/<name>.md`) has `<name>.html`, and the survival card HTML rendered from `docs/runbooks/00-survival-card.md` ([survival-portal.md](survival-portal.md) §4.12) exists (it is `survival-card-<node-id>.html`, so the card template itself is not looked for as a page). A missing **HTML** file fails verification (`LAI-SYN-052`, the item is incomplete and is fetched again; the same code for a tarball the extractor refused). A missing survival-card **PDF** does not: `aictl docs render` makes PDFs only where Chromium is installed (`LAI-CLI-014`), so the item verifies and READY shows docs `yellow` with `LAI-CLI-014`. Rendering without the real inventory is the notice `LAI-SYN-062`. Renderer failures keep the renderer's codes: a card that overflows one page `LAI-CLI-015`, a card that would show a secret `LAI-CLI-016`, an unwritable file `LAI-CLI-012`.
+- Staging layout and parts: `<staging>/tree` (the rendered manuals, to `docs/`), `<staging>/catalog` (to `kit/catalog/`); both are sealed with a `SHA256SUMS` and the engine writes both manifests. The renderer runs in-process (`docsrender.Run`) with the staged `catalog/` first in its catalog search path; nothing from the tarball is ever executed.
 - Directory swap into `<root>/docs/` (and `<root>/kit/catalog/`).
 - Version: `catalog-<CATALOG_VERSION>` plus `+inv` if real values were rendered.
 - **Privacy:** rendered docs with real values are written only to local roots. They are never uploaded anywhere, and the cloud report includes only the version string.
@@ -910,7 +918,7 @@ Field rules:
 
 ### 4.12 Readiness report
 
-`<root>/READY.json`, regenerated at the end of every run that touches the root, after verify and import, at mount, and at least every 6 h by the agent (ages change even when nothing else does).
+`<root>/READY.json`, regenerated at the end of every run that touches the root, after verify and import, at mount, and at least every 6 h by the agent (ages change even when nothing else does). How the code computes, stores and serves it: §4.12.3.
 
 #### 4.12.1 Schema and example
 ```json
@@ -933,6 +941,7 @@ Field rules:
   },
   "overall": "yellow",
   "survival_capable": true,
+  "clock_wrong": false,
   "last_sync": {"run_id": "run-20261102T031500Z-a1f3", "trigger": "scheduled", "finished_at": "2026-11-02T04:02:09Z", "state": "done", "age_days": 0},
   "last_full_reverify_at": "2026-10-20T04:10:00Z",
   "counts": {"verified": 24, "stale": 1, "missing": 0, "skipped": 3, "failed": 0, "quarantined": 0, "orphan": 1},
@@ -942,7 +951,7 @@ Field rules:
      "checked_current_at": "2026-11-02T03:20:00Z", "age_days": 0, "freshness": "green", "bytes": 5870000000, "trust": "pinned"},
     {"id": "wikipedia-en-nopic", "kind": "kiwix", "tier": 1, "status": "stale", "version": "2026-07",
      "reason": "update failed: retries exhausted", "code": "LAI-SYN-031", "age_days": 124, "freshness": "green", "bytes": 47800000000},
-    {"id": "stackexchange-electronics", "kind": "kiwix", "tier": 2, "status": "skipped", "reason": "budget", "freshness": "yellow"}
+    {"id": "stackexchange-electronics", "kind": "kiwix", "tier": 2, "status": "skipped", "reason": "budget", "code": "LAI-SYN-041"}
   ],
   "problems": [
     {"code": "LAI-SYN-031", "severity": "warning", "item": "wikipedia-en-nopic", "title": "An update couldn't be downloaded. The older copy is still here and works."}
@@ -957,9 +966,17 @@ Item `status` ∈ `verified | stale | missing | skipped | failed | quarantined |
 - `failed` / `quarantined`: no verified copy; the last attempt failed.
 - `orphan`: present but not in the profile.
 
-**Clock wrong.** When the agent's clock check fails (`now` is earlier than the newest `verified_at` on any root, `LAI-AGT-012`), every item's `freshness` is **omitted**, root-level age rules are not applied, and the report carries `"clock_wrong": true` at the top level (it is `false` or absent otherwise; cloud `ReadyReportV1` has the same optional field). UIs show the age columns grey with "clock wrong". `overall` is then computed from status and non-age rules only.
+**Clock wrong.** When the agent's clock check fails (`now` is earlier than the newest `verified_at` on any root, `LAI-AGT-012`), every item's `freshness` is **omitted**, root-level age rules are not applied, and the report carries `"clock_wrong": true` at the top level (the agent writes `false` otherwise; a reader treats absent as `false`; cloud `ReadyReportV1` has the same optional field). UIs show the age columns grey with "clock wrong". `overall` is then computed from status and non-age rules only.
 
-`checked_current_at` is the last time a run resolved the item and confirmed the present version is the one wanted. `age_days` is days since `checked_current_at` (or since `verified_at` if never checked).
+`checked_current_at` is the last time a run resolved the item and confirmed the present version is the one wanted (the engine records it in the item's `items.json` extras, key `checked_current_at`, as an RFC 3339 string). `age_days` is days since `checked_current_at` (or since `verified_at` if never checked).
+
+Field rules of the agent's writer (`agent/internal/ark/ready`):
+- `freshness` is the colour of the age column alone, not of the status: a stale tier-1 item 124 days old shows `green` and is yellow through its status. It is omitted for an item with no copy, for an orphan and, when the clock is wrong, for every item. For the docs item it is the verdict of the docs row (§4.12.2).
+- `tier` is always 1 to 3: the declared tier, else 1 for kit and docs, else 2 (the planner's default, §4.4.2). `survival: true` appears only on a model of `profile.survival.models`.
+- `bytes` is the size of the copy on the root; an item that is wanted and has no copy (`missing`, `failed`, `quarantined`) shows the size it should have when the plan knows it. `version` is the version that is present.
+- `reason` is one of a short English vocabulary (`budget`, `disk`, `read_only`, `update failed`, `update pending`, `download failed`, `checksum mismatch`, `not downloaded yet`), never a path, a URL or an error text, because the file goes to the cloud. `code` is the doctor code that explains the status or a yellow or red verdict of the item.
+- `problems[]` holds, worst first and in discovery order inside a colour, one entry per item whose colour is yellow or red and that has a code, then the root rules that fired. `severity` is the code's own, except `LAI-ARK-008` after 90 days, which is `error`. `title` is the English title of the code; the fix is in the code table in both languages and UIs look it up by code. At most 100 entries.
+- `root.used_bytes` is the size of the verified copies on the root (orphans included); `root.trash_bytes` is everything in `.trash/`; `root.budget_bytes` is the planner's budget (§4.4.3); `last_full_reverify_at` is the oldest `last_reverified_at` of any copy on the root, `null` for an empty root.
 
 #### 4.12.2 Colour rules
 
@@ -998,6 +1015,31 @@ Root-level rules (in addition):
 `overall` = red if any item or root rule is red, else yellow if any is yellow, else green.
 
 `survival_capable` = true iff, on this root **or across all mounted roots for the node-level view**, every model in `profile.survival.models` that is loadable on this node has a verified copy, at least one whisper model and one piper voice per Portal UI language (`en` and `es`, the languages of [survival-portal.md](survival-portal.md) §4.9) are verified, at least one tier-1 kiwix item is verified, and the tier-1 map plus `map-assets` are verified. The node-level value is reported by `GET /api/v1/status` and `/portal/status`.
+
+#### 4.12.3 How the report is computed, stored and served
+
+`agent/internal/ark/ready` splits the work. `Build(Input) Report` is a pure function (no clock, filesystem, network or catalog lookup that is not in the value), so every colour row is a table test and the JSON is a golden test (`testdata/golden/*.json`, English and Spanish). The `Service` around it gathers the input, writes the file and serves it.
+
+**Input.** The planner's input for the root (`plan.Gatherer.Gather`, made without resolvers) run through `plan.Plan` supplies the desired set, what the planner would do with each item, the budget and `min_free_bytes`; the best-copy index supplies the verified copies and their manifests (trust, `verified_at`, `last_reverified_at`, the catalog version they were made with); the journal supplies failures and `checked_current_at`; statfs supplies the free space. The report is judged **as if online** and from what the catalog pins: whether a pinned newer version is installed does not depend on the cable, so the same disks always give the same report. An item that follows "latest" with no resolver answer is judged by its present copy.
+
+**Item status.** A copy is present and is the one wanted (the planner keeps it: same version, nothing newer known, or `refresh_days` not due) is `verified`. A copy is present and a newer one is planned but not installed (pending, left out for budget or disk, a read-only root, or a failure of the newer version in the journal) is `stale`, with its reason and code (`LAI-SYN-041`, or `LAI-SYN-042` for kit and docs, for budget; `LAI-SYN-040`, or `LAI-SYN-042` for kit and docs, for disk; the journal's code for a failure). No copy: `quarantined` or `failed` when the journal says so; `skipped` when the planner left it out for budget or disk; otherwise `missing` (a read-only root with no copy is `missing`, reason `read_only`). A copy of an id the profile does not list is an `orphan`.
+
+**Judgement calls.**
+- A `stale` copy does not count for `survival_capable`, and neither does anything but status `verified`.
+- The root's age rules (`LAI-ARK-008`, `LAI-SYN-004`) count from the last run that ended `done` (`last_sync` itself shows the last run of any state): a run skipped for lack of internet did not bring the root up to date. With no run record, the newest `verified_at` or `checked_current_at` on the root stands in; an empty root has no age and only the status rules speak.
+- "Mostly online" for `LAI-SYN-004` is online mode for more than half of the time since that run, from the mode history; with no history the node counts as online.
+- `LAI-SYN-025` is one problem naming the most overdue copy (ties by id), judged on every copy on the root.
+- "The tier-1 map" is a tier-1 `maps` item whose source is `pmtiles_extract`; the fixed id `map-assets` is the map styles. A piper voice matches a Portal language by its `languages` entry, ignoring case and a region suffix (`es_MX` is `es`); `multi` names no voice. Whisper is any `engine: whisper` model. A survival model that is not loadable on this node is left out of the requirement only when the caller says so (the router's static fit); with no answer every survival model is required.
+- The docs row (§4.12.2): "older catalog" compares the catalog version of the docs manifest with the catalog in use; the presence of the pages and the card's PDF are read from the docs index (`docs/index.json`); whether the manuals were rendered with the real lab values is known only to the render (SYNC-11 supplies it through the `DocsProbe`), so until then placeholders raise nothing.
+- The kit rows use the kit verify report through the `KitSource` interface (KIT-03). `LAI-KIT-040` and `LAI-KIT-042` are red on the internal root and yellow on a drive; `LAI-KIT-041` and `043` are yellow. Without a source the kit rows use age alone.
+- A root whose profile is not in the catalog is red with `LAI-CAT-003` and lists no item; a mounted root that cannot be assessed at all keeps its previous report, or gets a red one with `LAI-ARK-014` (drive) or `LAI-AGT-099` (internal root).
+- Free space is not an age rule and applies even when the clock is wrong, like `LAI-ARK-004`.
+
+**Storage and serving.** The report is encoded once (two-space indent, trailing newline) and written with `config.WriteFileAtomicFS` to `<root>/READY.json`; those exact bytes are what the cloud link sends (after it strips `root.path` and `generated_by.node_id`). A read-only root (a read-only mount, an unclean drive, a network filesystem) is never written: its report is computed and kept in memory, and `GET /ark` and the cloud snapshot serve it from there. A root that is not mounted (pulled, ejecting, not mounted, unusable, not set up) has no report. A damaged `READY.json` is never an input; the next regeneration replaces it.
+
+**Triggers.** `Service.Mounted(root)` at `drive.mounted`, `Service.RunFinished(roots...)` at the end of every sync, verify and import run, `Service.Unmounted(root)` at `drive.unmounted`, and `Service.Start` for a first report at startup and then one every 6 h. The wiring (AGENT-20) calls them; the `Regenerated` hook tells it when a snapshot should be pushed.
+
+**Node level.** `ready.NodeSurvivalCapable(needs, reports)` is the survival check over the union of the verified items of every mounted root, and `Service.NodeSurvivalCapable()` is what `/status` and `/portal/status` show.
 
 ### 4.13 Re-verification (bit rot)
 
@@ -1160,7 +1202,7 @@ Don't use exFAT, NTFS or FAT32: they can't store Unix permissions, so the rebuil
 - **Kiwix sidecar from origin only.** The `.sha256` is fetched from `download.kiwix.org` with redirects refused, so a malicious mirror can't serve both a bad file and a matching hash.
 - **Tokens.** The HF token is sent only to `huggingface.co` and never logged. The journal never stores headers.
 - **Subprocess safety.** `git`, `apt-get` and `pmtiles` run with a fixed argv (no shell), a scrubbed environment, `HOME` set to the sync dir, and (apt, pmtiles) dropped to the `localai` user. Git hooks and file-protocol submodules are disabled.
-- **Archive extraction** rejects path traversal, absolute paths, symlinks out of the tree, hard links and device nodes.
+- **Archive extraction** rejects path traversal, absolute paths, symlinks out of the tree, hard links and device nodes. `resolve`'s extractor (repo_docs) applies it to every entry of the archive: a `..` element, an absolute or backslash name, a control character or a second top-level directory refuses the whole archive; a link, device or fifo inside a wanted path refuses it and outside one is ignored; only listed paths are written (mode 0644, O_TRUNC, never through a symlink); at most 50 000 entries, 32 MiB per file, 256 MiB extracted and 1 GiB read (a gzip bomb stops there).
 - **Drive trust.** A drive may come from anywhere. Content on a drive is used only through its MANIFEST and only if its sha256 matches the **catalog** pin where one exists. For `computed`/`tofu` items, a drive copy is trusted as much as the drive itself; the UI says "from drive (not checked against the catalog)". Executables in `kit/` are never executed by the agent automatically; the rebuild commands verify them first ([rebuild-kit.md](rebuild-kit.md) §Verification).
 - **inventory.local.yaml** is 0600 on the drive. The drive is unencrypted by design (T9), which the formatting section warns about.
 - **Deletion** is centralised in `retention.CanDelete`, which enforces R1 and is unit-tested exhaustively.
@@ -1188,6 +1230,8 @@ Hashes are logged as `first4…last2`. URLs are logged without query strings.
 | `localai_ark_root_overall` | gauge 0/1/2 (green/yellow/red) | `root` |
 | `localai_ark_root_free_bytes` | gauge | `root` |
 | `localai_ark_reverify_age_days_max` | gauge | `root` |
+
+The three `localai_ark_*` gauges are computed from the reports (`ready.MetricsOf`) and appear in `GET /api/v1/status` as `ark.metrics`, a list of `{"name", "labels": {"root": "<id>"}, "value"}`, one of each per mounted root; the key is absent while nothing supplies them. The age is whole days since the oldest `last_reverified_at` of any item of the root, 0 for an empty root.
 
 ## 8. Doctor codes
 
@@ -1258,11 +1302,11 @@ User-visible fixes are shown in the desktop and, for `LAI-ARK` codes, in the Por
 | state machine | every transition; crash at each state → resume correct; cancel at each state |
 | downloader (with `httptest`) | 206 resume; 200 on Range → restart; 416 at full size; If-Range mismatch; stall timeout; 429 with Retry-After; 404 permanent; redirect drops Authorization cross-host; checkpoint restore of sha256 state equals uninterrupted hash; `.part` longer and shorter than checkpoint; truncated body; 5xx then success; retries exhausted (7 attempts); progress resets the backoff; checksum and size mismatch; redirect to http refused; no secret in logs or errors; local copy; throttle (virtual clock: two downloads within ±10 % of the limit over 10 s) and proxy refusals |
 | ENOSPC | fake filesystem returns ENOSPC at byte N → checkpoint at last good offset, item skipped, `.part` kept |
-| resolvers | HF headers (match, oid mismatch, size mismatch, commit mismatch, missing headers → tree API); kiwix listing parse (multiple dates, torrents ignored, none); sidecar malformed; sidecar redirect refused; pmtiles newest-date probe; GitHub digest mismatch; apt `--print-uris` parsing (MD5-only line rejected); Packages stanza rewrite |
+| resolvers | HF headers (match, oid mismatch, size mismatch, commit mismatch, missing headers → tree API); kiwix listing parse (multiple dates, torrents ignored, none); sidecar malformed; sidecar redirect refused; pmtiles newest-date probe; GitHub digest mismatch; apt `--print-uris` parsing (MD5-only line rejected); Packages stanza rewrite; `git_mirror` (local bare repositories made at run time: clone, in-place update, fsck, missing pinned commit, bad pin refused, resume of a staged clone, reproducible tarball); `apt_closure` against the real `apt-get` and a signed archive built at run time (cycle, epoch, duplicate package, wrong suite or architecture, unsatisfiable dependency, MD5-only index, 404, truncated and tampered debs, hard-link reuse, staged-file resume, nothing written outside the private tree and staging, as the unprivileged user); `repo_docs` (mirror and codeload sources, inventory present and absent, missing PDF yellow, missing runbook HTML fails, bad catalog keeps the old `kit/catalog/`, unsafe tarballs) |
 | swap | per-file renames; directory RENAME_EXCHANGE; crash between each rename → replay; MANIFEST is the last write |
 | manifest and journal | round trip with unknown keys; history cap; every invalid manifest (§4.11); a fault at each step of the atomic writes (open, write, chmod, fsync, close, rename, directory sync, killed process, disk full, read-only); damaged, missing and foreign-schema `items.json`; restore from `.bak`; rebuild from manifests; reconcile; crash between journal append and side effect; torn run-log line; BestCopy preference matrix and unclean gating; concurrent rebuild under `-race` |
 | retention | `CanDelete` matrix: last copy, copy on unmounted drive, copy not re-verified in 24 h, trash with unverified replacement, orphan only copy, quarantine |
-| READY colours | every row of §4.12.2; clock-wrong suppression; survival_capable |
+| READY colours | every row of §4.12.2 in every column; both sides of every freshness boundary; drive age 30/31/90/91 d; internal 14/15 d online and mostly offline; a skipped run does not reset the age; re-verify overdue at 60/61 d; free space below, at and above the minimum; unclean; every kit finding on both root kinds; every docs row; `overall` aggregation and problem order; clock-wrong suppression (every freshness omitted, no age rule, status-only overall, negative age clamps to 0); `survival_capable` for each requirement, stale and failed copies, loadable and not, languages, root and node level across two roots; unknown profile; golden READY.json (fresh internal root, stale drive, unclean drive) in en and es, checked against the OpenAPI `ReadyReport` and the cloud `ReadyReportV1`; atomic write with a fault at every step; read-only roots never written; a damaged file replaced; regeneration at mount, after a run and every 6 h on a manual clock |
 | inventory copy | equal; drive missing; one side changed; both changed → conflict |
 | START-HERE | template renders with no `http` URLs except `127.0.0.1` text; relative links |
 

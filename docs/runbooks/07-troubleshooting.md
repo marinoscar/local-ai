@@ -73,6 +73,8 @@ Do this first, for every problem.
    - `LAI-DSK-015`: the app's security sandbox couldn't start. Reinstall it from the `.deb` (same command as `LAI-DSK-006`).
 3. **Nothing at `http://127.0.0.1:7070` either:** the agent is down. `sudo systemctl start localai-agent`, wait 10 seconds, try again. `LAI-AGT-006` means another program uses port 7070: `sudo ss -ltnp 'sport = :7070'` shows which.
    - **What you should see:** the Portal or the login page.
+   - The agent starts even when its settings are broken, so the Portal still opens. `aictl doctor` then names the problem: `LAI-AGT-001` (the settings file `/etc/localai/node.yaml` is missing: `sudo cp /etc/localai/node.yaml.bak /etc/localai/node.yaml`), `LAI-AGT-002` (a value in it is wrong: fix the line the details name), `LAI-AGT-003` (the saved state was damaged: the node starts in offline mode, check it with `aictl status`), `LAI-AGT-005` (the `aictl` socket could not be created: `sudo systemctl restart localai-agent`) and `LAI-AGT-014` (the agent restarted more than 3 times in the last hour: `aictl logs --unit agent` shows the last error). If both the socket and port 7070 fail, the agent exits and systemd starts it again after 2 seconds; `sudo journalctl -u localai-agent -n 30` shows why.
+   - `LAI-AGT-024` ("the agent is starting"): wait 5 to 30 seconds and try again. Only changes are refused during start-up; reading and the survival button work from the first second.
 4. **Still broken:** repair the installation (keeps your key, PIN and content):
 
    ```

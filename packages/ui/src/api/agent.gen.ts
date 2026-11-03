@@ -452,7 +452,12 @@ export interface paths {
         };
         /**
          * The readiness report of every mounted root
-         * @description Shape owned by ark-sync.md section 3.5 and 4.12.1. agent.md section 3.8.17.
+         * @description Shape owned by ark-sync.md section 3.5 and 4.12.1. agent.md section 3.8.17. One report per mounted
+         *     content root, internal first: the `READY.json` of the root, with the title of every problem in the
+         *     language of the request (Accept-Language, else `ui.language`). The report of a read-only root is
+         *     computed and kept in memory, never written to the drive. A node with no mounted root answers an
+         *     empty list.
+         *
          */
         get: operations["getArk"];
         put?: never;
@@ -853,8 +858,12 @@ export interface paths {
         put?: never;
         /**
          * Synthesize speech
-         * @description Owned by companion-services.md section 3.4. Produces `audio/wav` by exec'ing piper with a fixed argv.
-         *     agent.md section 3.8.25.
+         * @description Owned by companion-services.md section 3.4. Produces `audio/wav` by exec'ing piper with a fixed argv; the
+         *     text goes to its stdin, never to its argv. The answer is chunked and starts before synthesis ends: the
+         *     44-byte WAV header carries 0xFFFFFFFF as the RIFF and data sizes (length unknown), followed by 16-bit
+         *     mono PCM at the voice's sample rate. A failure before the first audio is an ordinary error response; one
+         *     after it aborts the connection, so the client sees a truncated stream. Voice rules: companion-services.md
+         *     section 4.3.4; the caller sends its language in `X-LocalAI-UI-Language`. agent.md section 3.8.25.
          *
          */
         post: operations["textToSpeech"];
@@ -1323,6 +1332,14 @@ export interface components {
                 } & {
                     [key: string]: unknown;
                 };
+                /** @description The readiness gauges of ark-sync.md section 7: localai_ark_root_overall (0 green, 1 yellow, 2 red), localai_ark_root_free_bytes and localai_ark_reverify_age_days_max, one of each per mounted root (label root). */
+                metrics?: {
+                    name: string;
+                    labels?: {
+                        [key: string]: string;
+                    };
+                    value: number;
+                }[];
             } & {
                 [key: string]: unknown;
             };
@@ -1696,20 +1713,101 @@ export interface components {
             /** @enum {boolean} */
             already: true;
         };
-        /** @description Owned by ark-sync.md section 4.12.1 (READY.json). */
+        /** @description Owned by ark-sync.md section 3.5 (GET /ark) and 4.12.1 (READY.json). */
         ArkRoots: {
-            roots: ({
-                schema_version: number;
-                /** Format: date-time */
-                generated_at: string;
-                root: {
-                    [key: string]: unknown;
-                };
+            roots: components["schemas"]["ReadyReport"][];
+        };
+        /** @description READY.json, schema v1 (ark-sync.md section 4.12.1): the readiness of one content root. `generated_by.node_id` and `root.path` are dropped before the report goes to the cloud (cloud ReadyReportV1). */
+        ReadyReport: {
+            /** @constant */
+            schema_version: 1;
+            /** Format: date-time */
+            generated_at: string;
+            generated_by: {
+                node_id: string;
+                agent_version: string;
+            } & {
+                [key: string]: unknown;
+            };
+            root: {
+                id: string;
                 /** @enum {string} */
-                overall: "green" | "yellow" | "red";
+                kind: "internal" | "ark_drive";
+                path: string;
+                profile: string;
+                catalog_version: string | null;
+                fs_total_bytes: number;
+                fs_free_bytes: number;
+                budget_bytes: number;
+                used_bytes: number;
+                trash_bytes: number;
+                read_only: boolean;
+            } & {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            overall: "green" | "yellow" | "red";
+            /** @description This root alone holds everything survival needs. The node-level value, over every mounted root, is in GET /status. */
+            survival_capable: boolean;
+            /** @description True when the clock is earlier than a time the node has already seen: every item's freshness is then omitted and no age rule is applied. */
+            clock_wrong: boolean;
+            last_sync: ({
+                run_id: string;
+                trigger: string;
+                /** Format: date-time */
+                finished_at: string;
+                state: string;
+                age_days: number;
+            } & {
+                [key: string]: unknown;
+            }) | null;
+            /** Format: date-time */
+            last_full_reverify_at: string | null;
+            counts: {
+                verified: number;
+                stale: number;
+                missing: number;
+                skipped: number;
+                failed: number;
+                quarantined: number;
+                orphan: number;
+            };
+            items: ({
+                id: string;
+                kind: string;
+                tier: number;
+                survival?: boolean;
+                /** @enum {string} */
+                status: "verified" | "stale" | "missing" | "skipped" | "failed" | "quarantined" | "orphan";
+                version?: string;
+                reason?: string;
+                code?: string;
+                /** Format: date-time */
+                verified_at?: string;
+                /** Format: date-time */
+                last_reverified_at?: string;
+                /** Format: date-time */
+                checked_current_at?: string;
+                age_days?: number;
+                /** @enum {string} */
+                freshness?: "green" | "yellow" | "red";
+                bytes?: number;
+                /** @enum {string} */
+                trust?: "pinned" | "sidecar" | "signed_index" | "computed" | "tofu";
             } & {
                 [key: string]: unknown;
             })[];
+            problems: ({
+                code: string;
+                /** @enum {string} */
+                severity: "info" | "warning" | "error" | "critical";
+                item?: string;
+                title: string;
+            } & {
+                [key: string]: unknown;
+            })[];
+        } & {
+            [key: string]: unknown;
         };
         /** @description A drive of GET /ark/drives (ark-sync.md section 3.5). `root_id` is null only when there is no usable filesystem UUID. */
         ArkDrive: {
@@ -2002,6 +2100,7 @@ export interface components {
             [key: string]: unknown;
         };
         TtsRequest: {
+            /** @description 1 to 2000 characters after cleanup (Markdown, URLs, code blocks and emoji are removed or replaced); longer is 413 LAI-SVC-024. */
             text: string;
             /** @description A catalog piper model id. */
             voice?: string | null;
@@ -3809,17 +3908,18 @@ export interface operations {
                     "audio/wav": string;
                 };
             };
+            /** @description LAI-AGT-020: malformed body, an unknown voice (details.field voice, details.reason unknown_voice), a language other than auto, en or es, a speed outside 0.7 to 1.5, or no text left after cleanup (details.reason empty_after_cleanup). */
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            /** @description LAI-SVC-024: the text is over 2000 characters after cleanup; LAI-AGT-025 the body is over the limit. */
+            /** @description LAI-SVC-024: the text is over 2000 characters after cleanup (details.chars, details.max), or over 64 KiB before it; LAI-AGT-025 the body is over the limit. */
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
-            /** @description LAI-SVC-015: more than 2 concurrent syntheses and 4 queued. */
+            /** @description LAI-SVC-015: more than 2 concurrent syntheses and 4 queued (Retry-After is set). */
             429: components["responses"]["RateLimited"];
-            /** @description LAI-SVC-023: piper failed; LAI-AGT-099 a bug. */
+            /** @description LAI-SVC-023: piper failed (details.reason is exit_status, timeout, empty_audio, start_failed or bad_voice_config; details.exit_code and details.stderr, the first 4 KiB, when it ran); LAI-AGT-099 a bug. */
             500: components["responses"]["Internal"];
-            /** @description LAI-AGT-024 the agent is starting or stopping; LAI-SVC-022 no voice. */
+            /** @description LAI-AGT-024 the agent is starting or stopping; LAI-SVC-020 the voice program is not installed; LAI-SVC-022 no voice is installed (or piper.enabled is false). */
             503: components["responses"]["Starting"];
         };
     };
