@@ -915,8 +915,9 @@ export interface paths {
         /**
          * Enroll in the cloud
          * @description Writes the credential (0600), sets `cloud.url` in node.yaml and registers synchronously (10 s). A
-         *     network failure answers `200` with `state: backoff` (credential kept, the link retries). In offline
-         *     and survival modes the credential is stored and the state is `stopped`. Audit `cloud.enroll`.
+         *     network failure, or a registration the cloud refused (LAI-CLD-054), answers `200` with `state: backoff`
+         *     (credential kept, the link retries). In offline and survival modes the credential is stored and the
+         *     state is `stopped`. Audit `cloud.enroll`.
          *     agent.md section 3.8.26.
          *
          */
@@ -1955,7 +1956,8 @@ export interface components {
         Cloud: {
             enrolled: boolean;
             url?: string | null;
-            state?: string;
+            /** @enum {string} */
+            state?: "unenrolled" | "registering" | "linked" | "backoff" | "disabled" | "revoked" | "stopped";
             server_node_id?: string | null;
             name?: string | null;
             /** Format: date-time */
@@ -3786,6 +3788,8 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            /** @description LAI-AGT-022: another cloud link change is running. */
+            409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             500: components["responses"]["Internal"];
@@ -3819,9 +3823,11 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            /** @description LAI-AGT-022: another cloud link change is running. */
+            409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
-            /** @description LAI-CLD-051: the cloud answered 401; the credential is not kept. */
+            /** @description LAI-CLD-051: the cloud answered 401, the credential is not kept. LAI-CLD-062: the address is not https. */
             422: components["responses"]["Unprocessable"];
             500: components["responses"]["Internal"];
             503: components["responses"]["Starting"];

@@ -1675,8 +1675,6 @@ paths:
       description: When not enrolled only `enrolled` is guaranteed. agent.md section 3.8.26.
       x-localai-auth: op
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-17
       responses:
         "200":
           description: The link.
@@ -1712,8 +1710,6 @@ paths:
       description: Deregisters (3 s, errors ignored), deletes the credential and `cloud/link.json`. Audit `cloud.unenroll`. agent.md section 3.8.26.
       x-localai-auth: admin
       x-localai-timeout: "15 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-17
       responses:
         "200":
           description: Unenrolled.
@@ -1728,6 +1724,9 @@ paths:
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-022: another cloud link change is running."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "500": {$ref: "#/components/responses/Internal"}
@@ -1740,13 +1739,12 @@ paths:
       summary: Enroll in the cloud
       description: |
         Writes the credential (0600), sets `cloud.url` in node.yaml and registers synchronously (10 s). A
-        network failure answers `200` with `state: backoff` (credential kept, the link retries). In offline
-        and survival modes the credential is stored and the state is `stopped`. Audit `cloud.enroll`.
+        network failure, or a registration the cloud refused (LAI-CLD-054), answers `200` with `state: backoff`
+        (credential kept, the link retries). In offline and survival modes the credential is stored and the
+        state is `stopped`. Audit `cloud.enroll`.
         agent.md section 3.8.26.
       x-localai-auth: admin
       x-localai-timeout: "30 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-17
       requestBody:
         required: true
         content:
@@ -1769,11 +1767,14 @@ paths:
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-022: another cloud link change is running."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "422":
           $ref: "#/components/responses/Unprocessable"
-          description: "LAI-CLD-051: the cloud answered 401; the credential is not kept."
+          description: "LAI-CLD-051: the cloud answered 401, the credential is not kept. LAI-CLD-062: the address is not https."
         "500": {$ref: "#/components/responses/Internal"}
         "503": {$ref: "#/components/responses/Starting"}
 
@@ -1785,8 +1786,6 @@ paths:
       description: agent.md section 3.8.26 (an expansion of the brief's table, needed by cloud-app.md section 3.6).
       x-localai-auth: admin
       x-localai-timeout: "15 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-17
       requestBody:
         required: true
         content:
@@ -3309,7 +3308,7 @@ components:
       properties:
         enrolled: {type: boolean}
         url: {type: [string, "null"]}
-        state: {type: string}
+        state: {type: string, enum: [unenrolled, registering, linked, backoff, disabled, revoked, stopped]}
         server_node_id: {type: [string, "null"]}
         name: {type: [string, "null"]}
         since: {type: [string, "null"], format: date-time}
