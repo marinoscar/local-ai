@@ -68,6 +68,15 @@ func (s *Service) Abort(context.Context) (string, error) {
 	return id, nil
 }
 
+// Manual implements api.DrillService.
+func (s *Service) Manual(ctx context.Context, req api.DrillManualRequest) (api.DrillManualResult, error) {
+	rec, err := s.E.RecordManual(ctx, ManualRequest{Result: req.Result, Notes: req.Notes, At: req.At})
+	if err != nil {
+		return api.DrillManualResult{}, mapError(err)
+	}
+	return api.DrillManualResult{RunID: rec.RunID}, nil
+}
+
 // mapError turns an engine error into the API error of the route.
 func mapError(err error) error {
 	var refused *RefusedError

@@ -6,6 +6,11 @@ import "github.com/marinoscar/local-ai/agent/internal/doctor"
 // internal/doctor/codes.go, the one file allowed to spell a "LAI-..." literal
 // (scripts/check-doctor-codes.sh).
 const (
+	// CodeProblems: the last drill found problems (an error when it failed, a warning when it warned).
+	CodeProblems = doctor.DRL001
+	// CodeStale: no drill finished in 45 days.
+	CodeStale = doctor.DRL006
+
 	// CodeSyncActive: the drill waited because an ark sync, verify or import run is active (or because
 	// another drill is running).
 	CodeSyncActive = doctor.DRL002

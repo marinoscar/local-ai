@@ -1011,8 +1011,9 @@ export interface paths {
         put?: never;
         /**
          * Record the quarterly pull-the-plug drill
-         * @description Stores a results document with `trigger: manual_plug` and no `checks`. Audit `drill.record_manual`.
-         *     Owned by drill.md sections 4.6 and 11. agent.md section 3.8.28.
+         * @description Stores a results document with `trigger: manual_plug` and no `checks` in the drill directory; it
+         *     never moves `latest.json`. The run id is `drl-<at>-<4 hex>-manual`. `at` defaults to now. Audit
+         *     `drill.record_manual`. Owned by drill.md sections 4.6 and 11. agent.md section 3.8.28.
          *
          */
         post: operations["recordManualDrill"];
@@ -2071,7 +2072,8 @@ export interface components {
         DrillResults: {
             schema_version: number;
             run_id: string;
-            trigger: string;
+            /** @enum {string} */
+            trigger: "scheduled" | "manual" | "cloud" | "manual_plug";
             /** Format: date-time */
             started_at: string;
             /** Format: date-time */
@@ -2092,6 +2094,8 @@ export interface components {
             reason?: string;
             /** Format: date-time */
             retry_at?: string;
+            /** @description A manual_plug entry only: the text the person recorded. It stays on the node. */
+            notes?: string;
         } & {
             [key: string]: unknown;
         };
@@ -4069,8 +4073,10 @@ export interface operations {
                     "application/json": components["schemas"]["DrillAccepted"];
                 };
             };
+            /** @description LAI-AGT-020: `result` is not pass or fail, `notes` is over 2000 characters or has control characters, `at` is not RFC 3339, is in the future or is older than a year. */
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
+            /** @description LAI-SEC-002: an operator without the PIN grant. */
             403: components["responses"]["Forbidden"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];

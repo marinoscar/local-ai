@@ -362,3 +362,36 @@ func TestResultsRealFilesystem(t *testing.T) {
 		t.Fatalf("Latest = %v, %v", d.RunID, err)
 	}
 }
+
+func TestAllReturnsEveryDocumentNewestFirst(t *testing.T) {
+	r := newRig(t)
+	fin := func(h int) time.Time { return t0.Add(time.Duration(h) * time.Hour) }
+	for _, d := range []*Document{
+		finishedDoc("drl-20261101T010000Z-0001", TriggerScheduled, OverallPass, fin(1)),
+		manualAt("drl-20261101T050000Z-0002-manual", "pass", fin(5), "late manual"),
+		finishedDoc("drl-20261101T030000Z-0003", TriggerManual, OverallFail, fin(3)),
+		abortedAt("drl-20261101T040000Z-0004", fin(4)),
+	} {
+		if err := r.results.Save(d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r.fs.seed(testDir+"/drl-20261101T060000Z-0005.json", "not json")
+	r.fs.seed(testDir+"/drl-20261101T070000Z-0006.json", `{"run_id":"drl-20261101T070000Z-0099"}`) // id does not match its file
+	docs, err := r.results.All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, d := range docs {
+		ids = append(ids, d.RunID)
+	}
+	want := "drl-20261101T050000Z-0002-manual,drl-20261101T040000Z-0004,drl-20261101T030000Z-0003,drl-20261101T010000Z-0001"
+	if strings.Join(ids, ",") != want {
+		t.Fatalf("ids = %v", ids)
+	}
+	empty := NewResults(ResultsOptions{FS: newMemFS(), Dir: testDir})
+	if docs, err := empty.All(); err != nil || len(docs) != 0 {
+		t.Fatalf("empty directory: %v %v", docs, err)
+	}
+}

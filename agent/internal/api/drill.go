@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+	"unicode/utf8"
 
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 )
@@ -14,12 +15,21 @@ import (
 // Handlers of POST /drill, GET /drill and DELETE /drill (agent.md section 3.8.28, drill.md section
 // 3.1, DRILL-01). They decode, authorize and audit, and call the drill engine through the DrillService
 // interface: internal/drill implements it (drill.NewService over *drill.Engine), so this package
-// imports nothing of the drill. DRILL-06 adds POST /drill/manual to the same routes.
+// imports nothing of the drill. POST /drill/manual (DRILL-06) records the manual "pull the plug" drill
+// through the same interface; it is the only admin route of the four.
 
 const (
 	// drillTimeout is the deadline of the three routes (agent.md section 3.8): the start answers
 	// 202 and the run goes on in the background.
 	drillTimeout = 10 * time.Second
+	// drillManualTimeout is the deadline of POST /drill/manual: one small file is written.
+	drillManualTimeout = 5 * time.Second
+
+	// MaxDrillNotes is the longest notes text of a manual record, in characters.
+	MaxDrillNotes = 2000
+	// Results of a manual record.
+	DrillManualPass = "pass"
+	DrillManualFail = "fail"
 
 	// Drill trigger values a request may carry; cloud and manual_plug are not requested over this route.
 	drillTriggerManual    = "manual"
@@ -42,6 +52,25 @@ type DrillService interface {
 	// Abort stops the running drill and returns its run id; with none running it is a 404
 	// LAI-AGT-021.
 	Abort(ctx context.Context) (runID string, err error)
+	// Manual stores a manual_plug record (drill.md section 4.6). It re-checks what the route cannot
+	// (an at in the future, notes with control characters), as 400 LAI-AGT-020.
+	Manual(ctx context.Context, req DrillManualRequest) (DrillManualResult, error)
+}
+
+// DrillManualRequest is a manual record as the route decoded it. At is the zero time when the body
+// had none (the engine then uses its own clock).
+type DrillManualRequest struct {
+	Result string
+	Notes  string
+	At     time.Time
+	// OpID stamps the audit record.
+	OpID  string
+	Actor audit.Actor
+}
+
+// DrillManualResult is the outcome of a manual record: the id of the document it stored.
+type DrillManualResult struct {
+	RunID string
 }
 
 // DrillStartRequest is a drill start as the route decoded it.
@@ -76,12 +105,14 @@ type DrillDeps struct {
 	Logger *slog.Logger
 }
 
-// DrillRoutes returns POST /drill, GET /drill and DELETE /drill (op, 10 s each).
+// DrillRoutes returns POST /drill, GET /drill and DELETE /drill (op, 10 s each) and POST /drill/manual
+// (admin, 5 s).
 func DrillRoutes(d DrillDeps) []Route {
 	return []Route{
 		{Method: http.MethodPost, Pattern: "/drill", Auth: []Level{AuthOp}, Timeout: drillTimeout, Handler: HandlerFunc(d.start)},
 		{Method: http.MethodGet, Pattern: "/drill", Auth: []Level{AuthOp}, Timeout: drillTimeout, Handler: HandlerFunc(d.get)},
 		{Method: http.MethodDelete, Pattern: "/drill", Auth: []Level{AuthOp}, Timeout: drillTimeout, Handler: HandlerFunc(d.abort)},
+		{Method: http.MethodPost, Pattern: "/drill/manual", Auth: []Level{AuthAdmin}, Timeout: drillManualTimeout, Handler: HandlerFunc(d.manual)},
 	}
 }
 
@@ -194,6 +225,61 @@ func (d DrillDeps) abort(w http.ResponseWriter, r *http.Request) error {
 	rec.target["run_id"] = runID
 	rec.write(audit.ResultOK, "")
 	WriteJSON(w, r, http.StatusAccepted, drillAccepted{RunID: runID})
+	return nil
+}
+
+// drillManualBody is the body of POST /drill/manual. Notes is optional; at is an RFC 3339 time.
+type drillManualBody struct {
+	Result string  `json:"result"`
+	Notes  string  `json:"notes"`
+	At     *string `json:"at"`
+}
+
+// manual records the quarterly "pull the plug" drill (drill.md section 4.6) as a manual_plug document
+// and answers 201 with its run id. The body is validated here (the result enum, the notes length, the
+// shape of at) before the engine sees it; the engine rejects what needs its clock.
+func (d DrillDeps) manual(w http.ResponseWriter, r *http.Request) error {
+	var body drillManualBody
+	if err := DecodeJSON(w, r, &body); err != nil {
+		return err
+	}
+	switch body.Result {
+	case DrillManualPass, DrillManualFail:
+	default:
+		return NewError(CodeInvalidRequest, http.StatusBadRequest, map[string]any{
+			"field": "result", "reason": "invalid_result", "allowed": []string{DrillManualPass, DrillManualFail},
+		})
+	}
+	if utf8.RuneCountInString(body.Notes) > MaxDrillNotes {
+		return NewError(CodeInvalidRequest, http.StatusBadRequest, map[string]any{
+			"field": "notes", "reason": "notes_too_long", "max": MaxDrillNotes,
+		})
+	}
+	var at time.Time
+	if body.At != nil {
+		t, err := time.Parse(time.RFC3339, *body.At)
+		if err != nil {
+			return NewError(CodeInvalidRequest, http.StatusBadRequest, map[string]any{
+				"field": "at", "reason": "invalid_at", "expected": "RFC 3339, for example 2026-11-02T15:00:00Z",
+			})
+		}
+		at = t
+	}
+	info := InfoFrom(r.Context())
+	opID := d.opID()
+	SetOpID(w, opID)
+	rec := drillAudit{deps: d, action: "drill.record_manual", opID: opID, info: info,
+		target: map[string]string{"result": body.Result}}
+	res, err := d.Service.Manual(r.Context(), DrillManualRequest{
+		Result: body.Result, Notes: body.Notes, At: at, OpID: opID, Actor: AuditActor(info),
+	})
+	if err != nil {
+		rec.writeErr(err)
+		return err
+	}
+	rec.target["run_id"] = res.RunID
+	rec.write(audit.ResultOK, "")
+	WriteJSON(w, r, http.StatusCreated, drillAccepted{RunID: res.RunID})
 	return nil
 }
 
