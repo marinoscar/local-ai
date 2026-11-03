@@ -499,8 +499,9 @@ export interface paths {
         /**
          * Start a sync run
          * @description `roots` empty or absent means every writable mounted root; `items` empty means the whole plan. With
-         *     `dry_run: true` the answer is `200` with the plan and nothing is written. The agent only routes; schemas
-         *     and errors are owned by ark-sync.md section 3.5. agent.md section 3.8.18.
+         *     `dry_run: true` the answer is `200` with one plan per root and nothing is written (the dry run needs no
+         *     run slot and is allowed in every mode). Until the run engine is wired a real start answers `503`. The agent
+         *     only routes; schemas and errors are owned by ark-sync.md section 3.5. agent.md section 3.8.18.
          *
          */
         post: operations["startArkSync"];
@@ -1758,19 +1759,34 @@ export interface components {
             state: "running";
             events: string;
         };
-        /** @description The dry-run plan, owned by ark-sync.md section 4.4.4 (JSON form). */
+        /** @description The dry-run plan of one root, owned by ark-sync.md section 4.4.4 (JSON form). */
         SyncPlan: {
             root?: string;
+            path?: string;
             profile?: string;
             catalog_version?: string;
+            mode?: string;
+            offline?: boolean;
+            read_only?: boolean;
             budget_bytes?: number;
             planned_bytes?: number;
+            fs_free_bytes?: number;
+            min_free_bytes?: number;
+            peak_bytes?: number;
+            free_floor_bytes?: number;
+            trash_bytes?: number;
             items?: {
+                [key: string]: unknown;
+            }[];
+            not_for_node?: string[];
+            findings?: {
                 [key: string]: unknown;
             }[];
         } & {
             [key: string]: unknown;
         };
+        /** @description One plan per requested root, in the order of the request (internal first). */
+        SyncPlans: components["schemas"]["SyncPlan"][];
         /** @description The active or last run (ark-sync.md section 3.5). */
         SyncRun: {
             run_id: string;
@@ -3154,7 +3170,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The plan (`dry_run: true`). */
+            /** @description One plan per root (`dry_run: true`). */
             200: {
                 headers: {
                     "X-Request-Id": components["headers"]["XRequestId"];
@@ -3162,7 +3178,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SyncPlan"];
+                    "application/json": components["schemas"]["SyncPlans"];
                 };
             };
             /** @description The run started. */
@@ -3179,10 +3195,12 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            /** @description LAI-SYN-010 survival mode; LAI-SYN-011 offline mode without allow_offline_mode; LAI-SYN-005 a run is already active (details.run_id). */
+            /** @description LAI-SYN-010 survival mode; LAI-SYN-011 offline mode without allow_offline_mode; LAI-SYN-005 a run is already active (details.run_id); LAI-ARK-001 no writable content root. */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            /** @description LAI-CAT-003 the profile of a root is not in the catalog (dry run). */
+            422: components["responses"]["Unprocessable"];
             500: components["responses"]["Internal"];
             503: components["responses"]["Starting"];
         };
