@@ -260,4 +260,66 @@ The exact procedure is [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting-
     ```
 
     Plug it in again; it gets a new `ark-…` root id. Run `aictl ark init` again if it shows `uninitialized`.
-30. **Inventory conflict** (`LAI-ARK-012`): the lab inventory changed both on the drive and on this node. Both copies are kept (the node's as `inventory.local.yaml.<node-id>.<time>.conflict` on the drive). Compare them, keep the right one, delete the other.
+30. **Inventory conflict** (`LAI-ARK-012`): the lab inventory changed both on the drive and on this node. Both copies are kept (the node's as `inventory.local.yaml.<node-id>.<time>.conflict` on the drive). Compare them, keep the right one, delete the other. The exact steps are in [Part 9](#part-9-start-herehtml-and-the-lab-inventory-copy).
+
+---
+
+## Part 9. START-HERE.html and the lab inventory copy
+
+Every time a sync finishes on a plugged-in AI-ARK drive, the node rewrites two things at the top of the drive: **START-HERE.html** (the page anyone can open to learn what the drive is and how to use it) and a copy of the lab's **inventory** (`inventory.local.yaml`, the real addresses of the lab, so a node rebuilt from the drive alone can still print its manuals with the real values).
+
+31. **Open the START-HERE page.** It needs no internet and no Local AI software, so you can do it on any computer. In the **Files** app open the drive and double-click **START-HERE.html**, or type (change `AI-ARK` if the drive has another name):
+
+    ```
+    xdg-open /media/$USER/AI-ARK/START-HERE.html
+    ```
+
+    - **What you should see:** a page titled **AI-ARK drive. Start here.** with the Spanish text under every English paragraph, a coloured status (**READY**, **USABLE, NEEDS ATTENTION** or **NOT READY**), the date of the last sync, and the list of manuals. Click **Open the rebuild guide**: the guide opens in the same browser.
+    - **If it doesn't work:**
+      - A line says **not on this drive yet** instead of a link (for example the rebuild guide or a survival card): the manuals were not rendered into the drive. Plug the drive into a node with internet and run `aictl ark sync --root <root-id> --item docs-bundle --wait`, then open the page again (it is rewritten at the end of the run).
+      - The status says **UNKNOWN** and there is no table: the drive has no readiness report yet. Run `aictl ark sync --root <root-id> --wait` once.
+      - There is no **START-HERE.html** at all: the drive was never synced, or it was plugged in read-only. Run `aictl ark status`; a drive with filesystem errors shows `LAI-ARK-004`, see Part 8.
+      - Links do nothing in your browser: open the file from the **Files** app instead of from inside another program; the page uses only plain links between files on the drive.
+32. **Is the page up to date?** At the bottom it says `this copy: <date> UTC`. If that date is old, plug the drive in and run `aictl ark sync --root <root-id> --wait`.
+33. **Check the inventory copy.** It is only there if the node has its own inventory (`/etc/localai/inventory.local.yaml`) and `sync.ark_drive.copy_inventory` is `true` (the default; [08 → Part 4](08-scheduled-sync.md#part-4-run-a-sync-now-and-limit-bandwidth) shows how to change a sync setting). Look at it:
+
+    ```
+    ls -l /media/$USER/AI-ARK/inventory.local.yaml
+    ```
+
+    - **What you should see:** one line starting with `-rw-------` and `root`. Only the administrator can read it. **Never email, paste or photograph it**: it holds the lab's real addresses.
+    - **If it doesn't work:** `No such file`: the node has no inventory file, or `copy_inventory` is `false`, or the drive has not been synced since. A file that anyone can read (`-rw-r--r--`) is wrong: `sudo chmod 600 /media/$USER/AI-ARK/inventory.local.yaml`.
+34. **Fix an inventory conflict (`LAI-ARK-012`).** It happens when the inventory was edited on the drive **and** on the node since the last copy, or when the drive already had a different inventory the node never copied. Nothing was overwritten. Look for the saved copy:
+
+    ```
+    ls /media/$USER/AI-ARK/ | grep conflict
+    ```
+
+    - **What you should see:** a file like `inventory.local.yaml.ai-n3.20261102T031500Z.conflict` (it is the **node's** version; the file next to it, without `.conflict`, is the drive's).
+    - **Compare the two** (`sudo` is needed; the output is secret, so don't share it):
+
+      ```
+      sudo diff /etc/localai/inventory.local.yaml /media/$USER/AI-ARK/inventory.local.yaml
+      ```
+
+    - **Keep the node's version on both sides:**
+
+      ```
+      sudo cp /etc/localai/inventory.local.yaml /media/$USER/AI-ARK/inventory.local.yaml
+      ```
+
+      **or keep the drive's version on both sides:**
+
+      ```
+      sudo cp /media/$USER/AI-ARK/inventory.local.yaml /etc/localai/inventory.local.yaml
+      ```
+
+    - Then delete the saved copies and sync once so the node notices the files agree:
+
+      ```
+      sudo rm /media/$USER/AI-ARK/inventory.local.yaml.*.conflict
+      aictl ark sync --root <root-id> --wait
+      ```
+
+    - **What you should see:** `aictl doctor` no longer lists `LAI-ARK-012`.
+    - **If it doesn't work:** `LAI-ARK-012` is still listed: the two files still differ (run the `diff` again; it must print nothing), or another drive has its own conflict (look in each drive). Unplugging the drive also clears the warning until the next sync of that drive.
