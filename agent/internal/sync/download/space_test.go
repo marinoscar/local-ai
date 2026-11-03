@@ -379,3 +379,33 @@ func TestTheDownloaderCannotDelete(t *testing.T) {
 		}
 	}
 }
+
+func TestFetchSyncFailures(t *testing.T) {
+	data := genData(testSize, 28)
+	t.Run("EIO from fdatasync is a root fault", func(t *testing.T) {
+		e := newEnv(t, nil)
+		srv := newTestServer(t, data)
+		e.fs.syncErr = syscall.EIO
+		res, err := e.dl.Fetch(context.Background(), e.job(srv.URL+"/f", data), e.cp)
+		var fe *Error
+		if !errors.As(err, &fe) || fe.Kind != KindRootFault || fe.Code != CodeIO || res.Code != CodeIO {
+			t.Fatalf("err = %v, Result %+v", err, res)
+		}
+	})
+	t.Run("ENOSPC from fdatasync: no checkpoint, and the file is not trusted as complete", func(t *testing.T) {
+		e := newEnv(t, nil)
+		srv := newTestServer(t, data)
+		e.fs.syncErr = syscall.ENOSPC
+		res, err := e.dl.Fetch(context.Background(), e.job(srv.URL+"/f", data), e.cp)
+		if !errors.Is(err, ErrDisk) || res.Skipped != "disk" {
+			t.Fatalf("err = %v, Result %+v", err, res)
+		}
+		if e.cp.Saves != 0 {
+			t.Errorf("%d checkpoints were saved although the data never became durable", e.cp.Saves)
+		}
+		e.fs.syncErr = nil
+		if res := mustFetch(t, e, e.job(srv.URL+"/f", data)); res.ResumedFrom != 0 || string(e.readPart()) != string(data) {
+			t.Errorf("without a checkpoint the next run starts over: %+v", res)
+		}
+	})
+}
