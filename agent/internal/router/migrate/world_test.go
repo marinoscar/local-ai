@@ -361,11 +361,18 @@ func (x *fakeExec) Run(_ context.Context, c execx.Cmd) (execx.Result, error) {
 		if w.noTailscale {
 			return exit(1)
 		}
+		if w.serveAfter != "" && w.portOwner() == "new" {
+			return ok(w.serveAfter)
+		}
 		return ok(w.serveJSON)
 	case base == "ss":
 		switch w.portOwner() {
 		case "legacy":
-			return ok(fmt.Sprintf("LISTEN 0 4096 127.0.0.1:8080 0.0.0.0:* users:((\"llama-server\",pid=%d,fd=3))\n", w.sd.unit(LegacyUnitName).mainPID))
+			pid := w.sd.unit(LegacyUnitName).mainPID
+			if w.ssPID != 0 {
+				pid = w.ssPID
+			}
+			return ok(fmt.Sprintf("LISTEN 0 4096 127.0.0.1:8080 0.0.0.0:* users:((\"llama-server\",pid=%d,fd=3))\n", pid))
 		case "new":
 			return ok(fmt.Sprintf("LISTEN 0 4096 127.0.0.1:8080 0.0.0.0:* users:((\"llama-server\",pid=%d,fd=3))\n", w.sd.unit(NewUnitName).mainPID))
 		}
@@ -631,6 +638,7 @@ type world struct {
 	legacyText       string
 	legacyVersionOut string
 	serveJSON        string
+	serveAfter       string
 	model            []byte
 	draft            []byte
 
@@ -654,6 +662,7 @@ type world struct {
 	noGPU           bool
 	catErr          string
 	execCalls       []string
+	ssPID           int
 }
 
 type lockedBuf struct {
@@ -812,6 +821,12 @@ func (w *world) engine(mod ...func(*Options)) *Engine {
 		f(&o)
 	}
 	return New(o)
+}
+
+// setUnit changes the text of the legacy unit (as systemctl cat shows it and as the file holds it).
+func (w *world) setUnit(f func(string) string) {
+	w.legacyText = f(w.legacyText)
+	w.fs.put("/etc/systemd/system/llama-qwen.service", []byte(w.legacyText), 0o644)
 }
 
 // currentCommitOnDisk reads the commit of the build current points at, "" when there is none.

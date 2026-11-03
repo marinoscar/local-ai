@@ -115,6 +115,9 @@ type Engine struct {
 	version      string
 
 	prog Progress
+	// afterSave, when set, is called after every progress.json write (tests use it to find the points
+	// where a run can be killed).
+	afterSave func(Progress)
 }
 
 // New returns an Engine.

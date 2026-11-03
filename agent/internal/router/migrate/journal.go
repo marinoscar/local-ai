@@ -118,6 +118,9 @@ func (e *Engine) saveProgress(p Progress) error {
 	}
 	e.prog = p
 	e.mirrorState(p)
+	if e.afterSave != nil {
+		e.afterSave(p)
+	}
 	return nil
 }
 

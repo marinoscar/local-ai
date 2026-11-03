@@ -100,6 +100,8 @@ func (e *Engine) Prepare(ctx context.Context) (*Plan, error) {
 // to M10 and starts the agent again; M6 to M8 failing rolls back by itself. It returns the Result of the
 // run, or an *Error.
 func (e *Engine) Run(ctx context.Context, p *Plan) (*Result, error) {
+	// Whatever happens below, an agent that a killed run left stopped is started again at the end.
+	defer func() { e.startAgent(context.WithoutCancel(ctx)) }()
 	switch p.Mode {
 	case ModeDone:
 		return e.repairDone(ctx, p)
@@ -123,7 +125,6 @@ func (e *Engine) Run(ctx context.Context, p *Plan) (*Result, error) {
 	if err := e.stopAgent(ctx); err != nil {
 		return nil, err
 	}
-	defer e.startAgent(context.WithoutCancel(ctx))
 	if p.Mode == ModeRollback {
 		return e.finishRollback(ctx, p)
 	}
@@ -152,7 +153,7 @@ func (e *Engine) Rollback(ctx context.Context) (*Result, error) {
 	if err := e.stopAgent(ctx); err != nil {
 		return nil, err
 	}
-	defer e.startAgent(context.WithoutCancel(ctx))
+	defer func() { e.startAgent(context.WithoutCancel(ctx)) }()
 	cause := "requested"
 	if prog.Rollback != "" {
 		cause = orStr(prog.Cause, cause)

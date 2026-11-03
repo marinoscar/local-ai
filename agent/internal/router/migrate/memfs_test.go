@@ -21,8 +21,7 @@ import (
 var errKilled = errors.New("simulated kill")
 
 // killer kills the "process" at the n-th mutating operation: that operation (and every later one, on
-// every fake) fails with errKilled. With after set the n-th operation takes effect first, as when the
-// process dies right after a system call returned.
+// every fake) fails with errKilled.
 type killer struct {
 	mu    sync.Mutex
 	n     int
@@ -31,8 +30,9 @@ type killer struct {
 	dead  bool
 }
 
-// tick is called before a mutating operation; it returns errKilled when the operation must not happen.
-// afterTick is called when it has happened.
+// tick is called before every mutating operation; it returns errKilled when the operation must not
+// happen. With after set the process dies when the operation AFTER the n-th begins, which is the same as
+// dying right after the n-th returned (nothing in between mutates anything).
 func (k *killer) tick() error {
 	if k == nil {
 		return nil
@@ -43,26 +43,15 @@ func (k *killer) tick() error {
 		return errKilled
 	}
 	k.n++
-	if k.at > 0 && k.n == k.at && !k.after {
+	if k.at > 0 && ((!k.after && k.n == k.at) || (k.after && k.n == k.at+1)) {
 		k.dead = true
 		return errKilled
 	}
 	return nil
 }
 
-// done is called after a mutating operation succeeded: a kill "after" lands here.
-func (k *killer) done() error {
-	if k == nil {
-		return nil
-	}
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if k.at > 0 && k.n == k.at && k.after && !k.dead {
-		k.dead = true
-		return errKilled
-	}
-	return nil
-}
+// done is called after a mutating operation succeeded; kills never land here (see tick).
+func (k *killer) done() error { return nil }
 
 func (k *killer) count() int {
 	k.mu.Lock()
@@ -95,7 +84,7 @@ type memFS struct {
 	mounts map[string]uint64 // path prefix -> st_dev; "/" is 1
 	free   map[uint64]uint64 // free bytes per device
 	k      *killer
-	// failWrite makes a write to a path with this suffix fail (a full disk).
+	// failWrite makes a write to a path containing this text fail (a full disk).
 	failWrite string
 }
 
@@ -147,11 +136,12 @@ func (m *memFS) put(p string, data []byte, mode os.FileMode) {
 	m.nodes[p] = &mnode{kind: kFile, data: append([]byte(nil), data...), mode: mode, dev: m.devOf(p)}
 }
 
+// content returns the bytes of a file, following symbolic links.
 func (m *memFS) content(p string) ([]byte, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	n, ok := m.nodes[clean(p)]
-	if !ok || n.kind != kFile {
+	_, n, err := m.resolve(p)
+	if err != nil || n.kind != kFile {
 		return nil, false
 	}
 	return append([]byte(nil), n.data...), true
@@ -535,7 +525,7 @@ func (f *mfile) Write(b []byte) (int, error) {
 		f.m.mu.Unlock()
 		return 0, fs.ErrNotExist
 	}
-	if f.m.failWrite != "" && strings.HasSuffix(f.path, f.m.failWrite) {
+	if f.m.failWrite != "" && strings.Contains(f.path, f.m.failWrite) {
 		f.m.mu.Unlock()
 		return 0, syscall.ENOSPC
 	}

@@ -198,10 +198,12 @@ func (e *Engine) Preflight(ctx context.Context) (*Plan, error) {
 	e.planBuild(ctx, p, u, flags)
 
 	// The public URL as it is now (only when the internet may be asked).
-	if host := cfg.Node.PublicHost; host != nil && *host != "" && e.online() {
+	if host := cfg.Node.PublicHost; host != nil && *host != "" {
 		p.PublicHost = *host
-		if st, err := e.probe.Public(ctx, *host); err == nil {
-			p.PublicBefore = st
+		if e.online() {
+			if st, err := e.probe.Public(ctx, *host); err == nil {
+				p.PublicBefore = st
+			}
 		}
 	}
 	return p, nil
