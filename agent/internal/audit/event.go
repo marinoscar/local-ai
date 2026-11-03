@@ -73,6 +73,8 @@ const (
 	ActionAgentBuildSwitch = "agent.build.switch"
 	// ActionKitExportBuild is an export of the current builds into kit/prebuilt (aictl kit export-build).
 	ActionKitExportBuild = "kit.export_build"
+	// ActionArkPrune is a prune of orphans and trash (aictl ark prune, POST /ark/prune).
+	ActionArkPrune = "ark.prune"
 )
 
 // Actor is the "actor" object of an audit line.

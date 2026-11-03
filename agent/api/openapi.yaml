@@ -1313,11 +1313,16 @@ paths:
       tags: [ark]
       operationId: pruneArk
       summary: Delete orphans and trash
-      description: Never the last verified copy (it is listed in `refused`). ark-sync.md section 3.5. agent.md section 3.8.20a.
+      description: |
+        Deletes the verified copies the profile no longer wants (`orphans`) and the superseded versions in
+        `.trash` (`trash`), on the writable mounted roots (or the named ones). At least one of the two is
+        required. It never deletes the last verified copy of an item, however it is asked: that entry is
+        listed in `refused` with `reason: last_verified_copy`, and there is no field that overrides it.
+        A read-only root is never modified (`read_only`); a trash entry whose replacement is not verified
+        yet stays (`replacement_unverified`). With `dry_run` nothing is deleted and `deleted` lists what a
+        real run would delete. ark-sync.md sections 3.5 and 4.10. agent.md section 3.8.20a.
       x-localai-auth: admin
       x-localai-timeout: "60 s"
-      x-localai-status: planned
-      x-localai-issue: SYNC-08
       requestBody:
         required: true
         content:
@@ -1338,14 +1343,14 @@ paths:
                 pruned:
                   value:
                     deleted: [{root: internal, item: osm-north-america, version: "20260501", bytes: 11200000000, kind: orphan}]
-                    refused: [{root: internal, item: gutenberg-en, reason: last_verified_copy}]
+                    refused: [{root: internal, item: gutenberg-en, version: "20260501", reason: last_verified_copy, kind: orphan}]
                     freed_bytes: 11200000000
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "409":
           $ref: "#/components/responses/Conflict"
-          description: "LAI-SYN-005: a run is active."
+          description: "LAI-SYN-005: a sync run is active (wait for it, or cancel it); LAI-ARK-001: no writable root."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "500": {$ref: "#/components/responses/Internal"}
@@ -3318,7 +3323,9 @@ components:
             properties:
               root: {type: string}
               item: {type: string}
-              reason: {type: string}
+              version: {type: string}
+              reason: {type: string, enum: [last_verified_copy, read_only, replacement_unverified]}
+              kind: {type: string, enum: [orphan, trash]}
         freed_bytes: {type: integer, minimum: 0}
 
     Catalog:
