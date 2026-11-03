@@ -25,7 +25,8 @@ import (
 // comes from and its files (item.Resolution). It is the engine-facing half of a source resolver; the
 // planner's half (plan.Resolver, version and size only) is registered separately in plan.Resolvers.
 // SYNC-09 to SYNC-11 implement one per source type (huggingface, kiwix, pmtiles_extract,
-// github_release, url, git_mirror, apt_closure, repo_docs) and register it with ItemResolvers.Register.
+// github_release, url) and register it with ItemResolvers.Register. git_mirror, apt_closure and repo_docs
+// are made by the producers of internal/sync/resolve: RegisterProducer (product.go) registers them.
 // An error should be an *item.ResolveError carrying the doctor code (LAI-SYN-021, -022, -030, -033,
 // -034, -061); a plain error is a transient failure.
 type ItemResolver interface {
@@ -44,12 +45,15 @@ func (f ItemResolverFunc) Resolve(ctx context.Context, it plan.CatalogItem, targ
 
 // ItemResolvers is the registry of ItemResolvers by catalog source type. Safe for concurrent use.
 type ItemResolvers struct {
-	mu sync.RWMutex
-	m  map[string]ItemResolver
+	mu    sync.RWMutex
+	m     map[string]ItemResolver
+	tasks map[string]TaskResolver
 }
 
 // NewItemResolvers returns an empty registry.
-func NewItemResolvers() *ItemResolvers { return &ItemResolvers{m: map[string]ItemResolver{}} }
+func NewItemResolvers() *ItemResolvers {
+	return &ItemResolvers{m: map[string]ItemResolver{}, tasks: map[string]TaskResolver{}}
+}
 
 // Register adds the resolver of a source type; a second one for the same type is an error.
 func (r *ItemResolvers) Register(sourceType string, res ItemResolver) error {
@@ -61,8 +65,40 @@ func (r *ItemResolvers) Register(sourceType string, res ItemResolver) error {
 	if _, dup := r.m[sourceType]; dup {
 		return fmt.Errorf("run: a resolver for source type %q is already registered", sourceType)
 	}
+	if _, dup := r.tasks[sourceType]; dup {
+		return fmt.Errorf("run: a resolver for source type %q is already registered", sourceType)
+	}
 	r.m[sourceType] = res
 	return nil
+}
+
+// RegisterTask adds the TaskResolver of a source type (the resolvers made with a producer, see
+// RegisterProducer); a second resolver of either kind for the same type is an error.
+func (r *ItemResolvers) RegisterTask(sourceType string, res TaskResolver) error {
+	if sourceType == "" || res == nil {
+		return errors.New("run: a resolver needs a source type and an implementation")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, dup := r.m[sourceType]; dup {
+		return fmt.Errorf("run: a resolver for source type %q is already registered", sourceType)
+	}
+	if _, dup := r.tasks[sourceType]; dup {
+		return fmt.Errorf("run: a resolver for source type %q is already registered", sourceType)
+	}
+	r.tasks[sourceType] = res
+	return nil
+}
+
+// TaskFor returns the TaskResolver of a source type.
+func (r *ItemResolvers) TaskFor(sourceType string) (TaskResolver, bool) {
+	if r == nil {
+		return nil, false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	res, ok := r.tasks[sourceType]
+	return res, ok
 }
 
 // For returns the resolver of a source type.

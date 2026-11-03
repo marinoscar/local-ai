@@ -95,6 +95,11 @@ type runner struct {
 	version string
 	cp      *download.JournalCheckpointer
 
+	// produced is what Resolution.Produce made (or an earlier attempt left in staging); keep says the
+	// producer found the present version current.
+	produced *Produced
+	keep     bool
+
 	// digests holds the sha256 of each file as the downloader streamed it; resumed and restarted are
 	// the per-file facts the re-read rule needs.
 	digests   map[string]string
@@ -165,8 +170,16 @@ func (r *runner) do() Result {
 		if !r.download() {
 			return r.res
 		}
+		if r.keep {
+			return r.finishKeep()
+		}
 		if !r.verify() {
 			return r.res
+		}
+	}
+	if r.produced != nil {
+		for _, n := range r.produced.Notices {
+			r.res.Notices = appendNotice(r.res.Notices, n)
 		}
 	}
 	return r.swap()
@@ -264,8 +277,11 @@ func validateResolution(rsl Resolution) error {
 	if !rsl.Dir && len(rsl.Files) == 0 {
 		return errors.New("item: a file item has no files")
 	}
-	if rsl.Dir && len(rsl.Files) == 0 && rsl.Build == nil {
-		return errors.New("item: a directory item has neither files nor a build")
+	if rsl.Dir && len(rsl.Files) == 0 && rsl.Build == nil && rsl.Produce == nil {
+		return errors.New("item: a directory item has neither files, a build nor a producer")
+	}
+	if rsl.Produce != nil && (!rsl.Dir || rsl.Build != nil || len(rsl.Files) > 0) {
+		return errors.New("item: a producer makes a whole directory item, with no files or build of its own")
 	}
 	if rsl.Trust != "" && !rsl.Trust.Valid() {
 		return fmt.Errorf("item: trust %q is not valid", rsl.Trust)
@@ -345,6 +361,13 @@ func (r *runner) complete(f File) bool {
 // stagedComplete: every file of a staged item is in staging under its final name (a tree item: the
 // tree with its SHA256SUMS).
 func (r *runner) stagedComplete() bool {
+	if r.rsl.Produce != nil {
+		if !r.producedReady() || r.keep {
+			return false
+		}
+		_, err := manifest.ReadSums(r.m.d.FS, r.sumsDir())
+		return err == nil
+	}
 	if r.rsl.Dir {
 		_, err := manifest.ReadSums(r.m.d.FS, filepath.Join(r.stagingDir(), TreeDir))
 		return err == nil
@@ -420,6 +443,11 @@ func (r *runner) download() bool {
 		}
 		if r.rsl.Build != nil {
 			if !r.build() {
+				return false
+			}
+		}
+		if r.rsl.Produce != nil {
+			if !r.produce() {
 				return false
 			}
 		}
@@ -588,6 +616,9 @@ func (r *runner) verify() bool {
 		if len(r.rsl.Files) > 0 && !r.verifyFiles(false) {
 			return false
 		}
+		if r.inPlace() {
+			return r.verifyInPlace()
+		}
 		return r.verifyTree()
 	}
 	if !r.verifyFiles(true) {
@@ -737,7 +768,14 @@ func (r *runner) verifyTree() bool {
 		_ = r.finish(journal.StateFailed, CodeInternal, "internal", err, true)
 		return false
 	}
-	files, err := hashTree(r.ctx, fsys, tree, func(n int64) { r.report(journal.StateVerifying, n, r.rsl.TotalBytes()) })
+	r.setAsideTemps(tree)
+	var files []TreeFile
+	var err error
+	if r.recorded() {
+		files, err = r.hashRecord(tree)
+	} else {
+		files, err = hashTree(r.ctx, fsys, tree, func(n int64) { r.report(journal.StateVerifying, n, r.rsl.TotalBytes()) })
+	}
 	if err != nil {
 		if errors.Is(err, ErrNotRegular) {
 			r.quarantineTree(download.CodeChecksum, "not_regular", err, nil)
@@ -768,8 +806,12 @@ func (r *runner) verifyTree() bool {
 		_ = r.finish(journal.StateFailed, CodeInternal, "internal", err, false)
 		return false
 	}
-	if len(bad) == 0 && r.rsl.ExpectedTree != "" && r.rsl.ExpectedTree != treeHash {
-		bad = append(bad, ReasonFileEntry{Path: TreeDir, ExpectedSHA256: r.rsl.ExpectedTree, ActualSHA256: treeHash})
+	expectedTree := r.rsl.ExpectedTree
+	if r.produced != nil && r.produced.TreeSHA256 != "" {
+		expectedTree = r.produced.TreeSHA256
+	}
+	if len(bad) == 0 && expectedTree != "" && expectedTree != treeHash {
+		bad = append(bad, ReasonFileEntry{Path: TreeDir, ExpectedSHA256: expectedTree, ActualSHA256: treeHash})
 	}
 	if len(bad) > 0 {
 		r.quarantineTree(download.CodeChecksum, "mismatch", errors.New("the staged tree does not match what the source says"), bad)
@@ -781,6 +823,9 @@ func (r *runner) verifyTree() bool {
 	}
 	if err := manifest.WriteSums(fsys, tree, sums); err != nil && !isNotDurable(err) {
 		_ = r.finish(journal.StateFailed, CodeInternal, "internal", err, true)
+		return false
+	}
+	if !r.verifyCompanions() {
 		return false
 	}
 	if !r.validate() {
@@ -892,7 +937,7 @@ func (r *runner) buildManifest(old *manifest.Manifest) (manifest.Manifest, error
 		m.History = old.SupersededBy(now)
 	}
 	if rsl.Dir {
-		sums, err := manifest.ReadSums(r.m.d.FS, filepath.Join(r.stagingDir(), TreeDir))
+		sums, err := manifest.ReadSums(r.m.d.FS, r.sumsDir())
 		if err != nil {
 			return manifest.Manifest{}, err
 		}
@@ -906,6 +951,9 @@ func (r *runner) buildManifest(old *manifest.Manifest) (manifest.Manifest, error
 		}
 		if m.TotalBytes == 0 {
 			m.TotalBytes = r.treeBytes()
+		}
+		if err := r.applyProduced(&m); err != nil {
+			return manifest.Manifest{}, err
 		}
 		return m, nil
 	}
@@ -934,6 +982,16 @@ func (r *runner) buildManifest(old *manifest.Manifest) (manifest.Manifest, error
 }
 
 func (r *runner) treeBytes() int64 {
+	if r.inPlace() {
+		d, err := r.job.Root.Join(filepath.FromSlash(r.job.RelDir))
+		if err != nil {
+			return 0
+		}
+		return dirBytes(r.m.d.FS, d)
+	}
+	if r.recorded() {
+		return dirBytes(r.m.d.FS, filepath.Join(r.stagingDir(), TreeDir))
+	}
 	var n int64
 	paths, err := walkTree(r.m.d.FS, filepath.Join(r.stagingDir(), TreeDir))
 	if err != nil {
@@ -978,7 +1036,8 @@ func (r *runner) swap() Result {
 		_ = r.finish(journal.StateFailed, CodeInternal, "internal", err, true)
 		return r.res
 	}
-	sp, _, err := r.m.planSwap(swapInput{root: r.job.Root, relDir: r.job.RelDir, itemID: r.job.Ref.ID, version: r.version, newM: newM})
+	moves := r.companionMoves()
+	sp, _, err := r.m.planSwap(swapInput{root: r.job.Root, relDir: r.job.RelDir, itemID: r.job.Ref.ID, version: r.version, newM: newM, inPlace: r.inPlace(), companions: moves})
 	if err != nil {
 		code := CodeSwapFailed
 		_ = r.finish(journal.StateFailed, code, "swap", err, false)
@@ -990,6 +1049,11 @@ func (r *runner) swap() Result {
 			if info, err := fsys.Stat(filepath.Join(sp.S, filepath.FromSlash(f.Path))); err == nil {
 				staged[f.Path] = info
 			}
+		}
+	}
+	for _, mv := range moves {
+		if info, err := fsys.Stat(mv.src); err == nil {
+			staged[mv.dst] = info
 		}
 	}
 	// Write-ahead: the plan is on disk before the first move.

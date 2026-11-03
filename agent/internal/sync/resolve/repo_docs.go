@@ -123,8 +123,19 @@ func (r *RepoDocs) Resolve(_ context.Context, it plan.CatalogItem) (plan.Resolve
 	if !catalogVersionRe.MatchString(v) {
 		return plan.Resolved{}, fail(CodeRefused, nil, "the catalog has no usable version")
 	}
-	return plan.Resolved{Version: docsVersion(v, r.inventory() != ""), SortKey: v}, nil
+	// The kit catalog is copied from the tarball as it is: the inventory has no part in it, so it keeps
+	// the plain catalog version and is not made again when the inventory appears.
+	return plan.Resolved{Version: docsVersion(v, r.inventory() != "" && !isCatalogItem(it)), SortKey: v}, nil
 }
+
+// isCatalogItem reports whether the item installs the kit catalog (a kit item) rather than the manuals.
+func isCatalogItem(it plan.CatalogItem) bool { return it.Kind == manifest.KindKit }
+
+// The parts of the product (Part.Name, Request.Want).
+const (
+	PartNameDocs    = "docs"
+	PartNameCatalog = "catalog"
+)
 
 // Produce implements Producer. It stages two directories: <staging>/tree (the rendered manuals, to
 // docs/) and <staging>/catalog (to kit/catalog/); the engine swaps both and writes both manifests.
@@ -177,6 +188,15 @@ func (r *RepoDocs) Produce(ctx context.Context, req Request) (Product, error) {
 	if err := r.checkCatalog(catDir, v, tag); err != nil {
 		return Product{}, err
 	}
+	source := map[string]any{"repo": r.repo(), "tag": tag, "origin": origin, "tarball_sha256": tarSHA}
+	if req.Want == PartNameCatalog {
+		// Only the kit catalog is wanted: nothing is rendered, and the inventory has no part in it.
+		catPart, err := sealTree(PartNameCatalog, catDir, "catalog", "kit/catalog")
+		if err != nil {
+			return Product{}, fail(CodeVerifyDocs, err, "cannot seal the kit catalog")
+		}
+		return Product{Version: docsVersion(v, false), SortKey: v, Trust: manifest.TrustComputed, Parts: []Part{catPart}, Source: source}, nil
+	}
 
 	rep, err := r.render(ctx, docsSrc, srcDir, filepath.Join(staging, "tree"), catDir, staging)
 	if err != nil {
@@ -187,19 +207,21 @@ func (r *RepoDocs) Produce(ctx context.Context, req Request) (Product, error) {
 		return Product{}, err
 	}
 
-	docsPart, err := sealTree("docs", filepath.Join(staging, "tree"), "tree", "docs")
+	docsPart, err := sealTree(PartNameDocs, filepath.Join(staging, "tree"), "tree", "docs")
 	if err != nil {
 		return Product{}, fail(CodeVerifyDocs, err, "cannot seal the rendered manuals")
 	}
-	catPart, err := sealTree("catalog", catDir, "catalog", "kit/catalog")
-	if err != nil {
-		return Product{}, fail(CodeVerifyDocs, err, "cannot seal the kit catalog")
+	parts := []Part{docsPart}
+	if req.Want != PartNameDocs {
+		catPart, err := sealTree(PartNameCatalog, catDir, "catalog", "kit/catalog")
+		if err != nil {
+			return Product{}, fail(CodeVerifyDocs, err, "cannot seal the kit catalog")
+		}
+		parts = append(parts, catPart)
 	}
 	return Product{
 		Version: docsVersion(v, rep.Inventory), SortKey: v, Trust: manifest.TrustComputed,
-		Parts:   []Part{docsPart, catPart},
-		Notices: notices,
-		Source:  map[string]any{"repo": r.repo(), "tag": tag, "origin": origin, "tarball_sha256": tarSHA},
+		Parts: parts, Notices: notices, Source: source,
 	}, nil
 }
 

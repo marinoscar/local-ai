@@ -126,7 +126,7 @@ func walkTree(fsys FS, dir string) ([]string, error) {
 					return err
 				}
 			case info.Mode().IsRegular():
-				if r == "SHA256SUMS" || (strings.HasPrefix(name, ".") && strings.Contains(name, ".tmp-")) {
+				if r == "SHA256SUMS" || strings.HasPrefix(name, "SHA256SUMS.tmp-") || (strings.HasPrefix(name, ".") && strings.Contains(name, ".tmp-")) {
 					continue
 				}
 				out = append(out, r)

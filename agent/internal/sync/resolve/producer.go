@@ -56,6 +56,12 @@ type Request struct {
 	Checkpoints download.Checkpointer
 	// MinFreeBytes is the root's min_free_bytes, passed to the downloader.
 	MinFreeBytes int64
+	// Want names the part the engine installs from this call (Part.Name: "docs", "catalog"), "" for
+	// all of them. A product that has several items (repo_docs: the docs tree and the kit catalog) is
+	// produced once per item, and a producer may skip the work of the parts nobody wants; it must still
+	// return the wanted one. The producers whose parts are installed together (a git mirror with its
+	// tarballs) ignore it.
+	Want string
 	// Progress, when set, is told after each file of a multi-file item (debs): the file name, the
 	// number done and the total.
 	Progress func(file string, done, total int)
@@ -96,6 +102,11 @@ type Part struct {
 	// Sums and TreeSHA256 describe a PartTree (see manifest.TreeSHA256).
 	Sums       []manifest.Sum
 	TreeSHA256 string
+	// Record lists the files of a PartTree or PartInPlace that the item's SHA256SUMS records instead of
+	// every file: a git mirror records its HEAD only, because git changes the rest of the repository
+	// itself and it is never hashed whole (ark-sync.md section 4.9.6). Sums and TreeSHA256 are then
+	// empty.
+	Record []string
 	// Bytes is the total size of the part.
 	Bytes int64
 }

@@ -124,6 +124,12 @@ type Resolution struct {
 	Local bool
 	// Exclusive names a resource of which only one build may run at a time ("pmtiles"); "" for none.
 	Exclusive string
+	// Produce makes a directory item in one call (a git mirror with its tarballs, the rendered docs, the
+	// kit catalog, an apt closure) instead of Files or Build: it runs while the item is downloading,
+	// under the network slot, and says what it made (Produced). The machine keeps that answer in the
+	// staging directory (PRODUCED.json), so a run that finds the item staged swaps it without calling
+	// Produce again. Requires Dir.
+	Produce func(ctx context.Context, env ProduceEnv) (Produced, error)
 }
 
 // TotalBytes is the sum of the files' expected sizes.

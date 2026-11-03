@@ -297,7 +297,7 @@ func (g *GitMirror) Produce(ctx context.Context, req Request) (Product, error) {
 	mirrorRel := "kit/git/" + name + ".git"
 	present := filepath.Join(req.Root, filepath.FromSlash(mirrorRel))
 	var mirror string
-	part := Part{Name: "mirror"}
+	part := Part{Name: "mirror", Record: []string{"HEAD"}}
 	if isDir(present) {
 		mirror = present
 		part.Kind, part.To = PartInPlace, mirrorRel

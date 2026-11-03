@@ -303,6 +303,67 @@ func TestRepoDocsRendersRealValuesWithAnInventory(t *testing.T) {
 	}
 }
 
+// TestRepoDocsWantMakesOnlyThePartOfTheItem: the engine produces repo_docs once per item and says which
+// part it installs. The catalog item gets the catalog and nothing is rendered; the docs item gets the
+// docs tree; with no Want both parts come back, as before.
+func TestRepoDocsWantMakesOnlyThePartOfTheItem(t *testing.T) {
+	files, version := repoTree(t)
+	srv, _ := codeload(t, version, makeTar(t, "local-ai-catalog-"+version, files))
+	for _, tc := range []struct {
+		want      string
+		parts     []string
+		rendered  bool
+		catalogOn bool
+	}{
+		{"", []string{"docs", "catalog"}, true, true},
+		{PartNameDocs, []string{"docs"}, true, false},
+		{PartNameCatalog, []string{"catalog"}, false, true},
+	} {
+		t.Run("want "+tc.want, func(t *testing.T) {
+			r := newRepoDocs(t, version, true, srv)
+			root := t.TempDir()
+			req := docsRequest(root, version)
+			req.Want = tc.want
+			prod, err := r.Produce(context.Background(), req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, p := range prod.Parts {
+				got = append(got, p.Name)
+			}
+			if strings.Join(got, ",") != strings.Join(tc.parts, ",") {
+				t.Fatalf("parts = %v, want %v", got, tc.parts)
+			}
+			if _, err := os.Stat(filepath.Join(req.StagingDir(), "tree", "index.html")); (err == nil) != tc.rendered {
+				t.Fatalf("manuals rendered = %v, want %v", err == nil, tc.rendered)
+			}
+			if _, err := os.Stat(filepath.Join(req.StagingDir(), "catalog", "SHA256SUMS")); (err == nil) != tc.catalogOn {
+				t.Fatalf("catalog sealed = %v, want %v", err == nil, tc.catalogOn)
+			}
+			if tc.want == PartNameCatalog && (prod.Version != "catalog-"+version || len(prod.Notices) != 0) {
+				t.Fatalf("catalog product = %+v", prod)
+			}
+		})
+	}
+}
+
+// TestRepoDocsCatalogItemHasNoInventoryInItsVersion: the kit catalog is copied from the tarball as it is,
+// so an inventory that appears does not make it a new version; the docs item does get "+inv".
+func TestRepoDocsCatalogItemHasNoInventoryInItsVersion(t *testing.T) {
+	r := newRepoDocs(t, "2026.11.02-1", false, nil)
+	r.Inventory = func() string { return "/etc/localai/inventory.local.yaml" }
+	cat := contentItem("kit-catalog", "kit", catalog.ContentSource{Type: "repo_docs"})
+	got, err := r.Resolve(context.Background(), cat)
+	if err != nil || got.Version != "catalog-2026.11.02-1" {
+		t.Fatalf("catalog item: (%+v, %v)", got, err)
+	}
+	got, err = r.Resolve(context.Background(), docsItem())
+	if err != nil || got.Version != "catalog-2026.11.02-1+inv" {
+		t.Fatalf("docs item: (%+v, %v)", got, err)
+	}
+}
+
 func TestRepoDocsResolveWithoutInventoryOrVersion(t *testing.T) {
 	r := newRepoDocs(t, "2026.11.02-1", false, nil)
 	got, err := r.Resolve(context.Background(), docsItem())
