@@ -492,10 +492,14 @@ func (c ctxReader) Read(p []byte) (int, error) {
 
 // hashFile streams a file through sha256, stopping at limit bytes and when ctx ends.
 func hashFile(ctx context.Context, fsys FS, name string, limit int64) (string, error) {
-	f, err := fsys.Open(name)
+	// A FS that can (OSFS) forgets the cached pages first, so what is hashed is what is on the disk,
+	// and again afterwards, so a check of gigabytes does not push a loaded model out of the cache.
+	dropCache(fsys, name)
+	f, err := openForHash(fsys, name)
 	if err != nil {
 		return "", err
 	}
+	defer dropCache(fsys, name)
 	defer f.Close()
 	h := sha256.New()
 	n, err := io.Copy(h, io.LimitReader(ctxReader{ctx, f}, limit+1))
