@@ -53,7 +53,12 @@ func (s CredentialStore) Read() (string, error) {
 		return "", ErrNoCredential
 	}
 	if len(f.Issues) > 0 {
-		_, _ = config.EnforceSecret(s.fs(), s.Path, config.PolicyCloudCredential)
+		// EnforceSecret fixes the owner first and stops there when it cannot (an agent that does not
+		// run as root cannot chown), which would leave a loose mode behind. The mode is tightened
+		// regardless: a credential must never stay group or world readable because the owner is wrong.
+		if _, err := config.EnforceSecret(s.fs(), s.Path, config.PolicyCloudCredential); err != nil {
+			_ = s.fs().Chmod(s.Path, config.PolicyCloudCredential.Mode)
+		}
 	}
 	return cred, nil
 }
