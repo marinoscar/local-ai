@@ -1,0 +1,39 @@
+# /etc/systemd/system/llama-qwen.service
+[Unit]
+Description=Qwen3-Coder-Next llama.cpp Vulkan Server
+After=network.target
+
+[Service]
+Type=simple
+User=labuser
+Group=labuser
+SupplementaryGroups=video render
+WorkingDirectory=/home/labuser/llama.cpp
+LoadCredential=llama-api-key:/etc/llama-qwen/api-key
+
+ExecStart=/home/labuser/llama.cpp/build-vulkan/bin/llama-server \
+  -m "/home/labuser/models/qwen3-coder-next/Qwen3-Coder-Next-Q4_K_M-00001-of-00002.gguf" \
+  -md /home/labuser/models/qwen3-coder-next/mtp-draft-Q4_0.gguf \
+  -ngl 99 \
+  --spec-draft-ngl all \
+  --spec-type draft-mtp \
+  --spec-draft-n-max 2 \
+  -c 131072 \
+  --parallel 1 \
+  --flash-attn auto \
+  --alias qwen3-coder-next \
+  --host 127.0.0.1 \
+  --port 8080 \
+  --api-key-file %d/llama-api-key
+
+Restart=on-failure
+RestartSec=5
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target
+
+# /etc/systemd/system/llama-qwen.service.d/vulkan.conf
+[Service]
+Environment=GGML_VK_SUBALLOCATION_BLOCK_SIZE=4294967296
+Environment="LLAMA_NOTE=two words" CUDA_VISIBLE_DEVICES=0
