@@ -1,0 +1,21 @@
+name: catalog-release-tooling
+# Tests the catalog release scripts (scripts/catalog-version-guard.sh, scripts/catalog-tag.sh) against
+# throwaway git repositories, and checks the release workflow's shell. No secrets, no network.
+# The workflow itself only runs on a CATALOG_VERSION bump on main: docs/specs/catalog.md section 1. Owner: CAT-04.
+on:
+  pull_request:
+    paths: ['scripts/catalog-version-guard.sh', 'scripts/catalog-tag.sh', 'scripts/tests/test-catalog-version-guard.sh', '.github/workflows/catalog-release.yml', '.github/workflows/catalog-release-tooling.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/catalog-version-guard.sh', 'scripts/catalog-tag.sh', 'scripts/tests/test-catalog-version-guard.sh', '.github/workflows/catalog-release.yml', '.github/workflows/catalog-release-tooling.yml']
+permissions:
+  contents: read
+jobs:
+  script-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: shellcheck the release scripts
+        run: shellcheck -S warning scripts/catalog-version-guard.sh scripts/catalog-tag.sh scripts/tests/test-catalog-version-guard.sh
+      - name: Version guard and tag script tests
+        run: scripts/tests/test-catalog-version-guard.sh
