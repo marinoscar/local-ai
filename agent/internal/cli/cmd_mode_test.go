@@ -288,14 +288,18 @@ func TestModeSurvival(t *testing.T) {
 // Ctrl-C stops the waiting, not the change: exit 130 and no request but the one that started it.
 func TestModeSurvivalCtrlC(t *testing.T) {
 	r := newSurvivalRig(t)
-	r.published = nil // the transition never reports
+	// The transition starts and never ends. Its first event is held until aictl knows the op id, so the
+	// line it draws proves that the request was answered and the wait began: pressing Ctrl-C before
+	// that would end the request itself (still exit 130, but not the line this test is about).
+	r.published = func() {
+		r.ev.Publish(events.TypeModeStep, "op_1", events.ModeStep{Target: "survival", Step: "link_stop", State: "started"})
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	o := mgArgs("mode", "survival")
 	o.ctx = ctx
-	ch, _ := r.runAsync(o)
-	untilTrue(t, "the request", func() bool { return r.agent().Count("/mode/survival") == 1 })
-	r.events().WaitActive(1)
+	ch, stderr := r.runAsync(o)
+	untilTrue(t, "the first step", func() bool { return strings.Contains(stderr.String(), "… Stopping cloud connection") })
 	cancel()
 	got := finish(t, ch)
 	if got.code != ExitInterrupted || !strings.Contains(got.errOut, "Still running in the background") {
