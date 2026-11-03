@@ -411,8 +411,13 @@ func TestURLPlannerHalf(t *testing.T) {
 
 	o.put("/r/a.iso", []byte("iso!"), "", "")
 	side := urlContent("iso", "kit", catalog.ContentSource{Type: "url", URL: o.srv.URL + "/r/a.iso", Checksum: "sidecar", SidecarURL: o.srv.URL + "/r/SHA256SUMS"})
+	side.Content.ExpectedSizeBytes = 4
 	if res, err = u.Resolve(context.Background(), side); err != nil || res.Version != "a.iso" || res.SizeBytes != 4 {
 		t.Errorf("sidecar = %+v, %v", res, err)
+	}
+	// Neither of those made a request: the planner's answer for a pinned or sidecar item is the catalog's.
+	if o.count() != 0 {
+		t.Errorf("%d requests for a pinned and a sidecar item", o.count())
 	}
 
 	o.put("/export/CR.zip", []byte("12345"), `"e1"`, "lm")

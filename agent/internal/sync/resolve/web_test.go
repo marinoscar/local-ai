@@ -152,11 +152,14 @@ func TestWebResolversFailClosedOffline(t *testing.T) {
 		Files: []catalog.ModelFile{{Kind: "weights", Name: "a.gguf", SHA256: strings.Repeat("b", 64), SizeBytes: 3}}})
 	gh := urlContent("assets", "maps", catalog.ContentSource{Type: "github_release", Repo: "org-alpha/assets", Tag: "v1", Asset: "a.tgz", SHA256: strings.Repeat("c", 64)})
 	u := urlContent("tool", "kit", catalog.ContentSource{Type: "url", URL: "https://data.example.test/t.tgz", SHA256: strings.Repeat("d", 64)})
+	tofu := urlContent("places", "maps", catalog.ContentSource{
+		Type: "url", Files: []catalog.URLFile{{URL: "https://data.example.test/CR.zip"}}, VersionPolicy: "latest", Checksum: "computed", Trust: "tofu",
+	})
 	for name, call := range map[string]func() error{
 		"hf":       func() error { _, err := (&HuggingFace{W: r.w}).Lookup(context.Background(), model); return err },
 		"github":   func() error { _, err := (&GitHubRelease{W: r.w}).Lookup(context.Background(), gh); return err },
 		"url":      func() error { _, err := (&URLSource{W: r.w}).Lookup(context.Background(), u); return err },
-		"url-plan": func() error { _, err := (&URLSource{W: r.w}).Resolve(context.Background(), u); return err },
+		"url-plan": func() error { _, err := (&URLSource{W: r.w}).Resolve(context.Background(), tofu); return err },
 	} {
 		if err := call(); CodeOf(err) != doctor.SYN002 || !errors.Is(err, ErrOffline) {
 			t.Errorf("%s offline: %v", name, err)

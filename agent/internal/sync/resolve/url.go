@@ -318,29 +318,32 @@ func ParseSums(b []byte) (map[string]string, error) {
 }
 
 // Resolve is the planner half: version and size, metadata only. A pinned item is what the catalog
-// says; a sidecar item's version is its file name; a computed item needs the HEAD rule above.
+// says and a sidecar item's version is its file name (both from the catalog alone: the dry run makes no
+// request for them, and the exact size comes with the engine half's HEAD); only a computed item needs
+// the network, for the HEAD rule above.
 func (u *URLSource) Resolve(ctx context.Context, it plan.CatalogItem) (plan.Resolved, error) {
 	ui, err := readURLItem(it)
 	if err != nil {
 		return plan.Resolved{}, err
 	}
+	switch ui.checksum {
+	case checksumPinned:
+		return plan.Resolved{Version: short12(ui.files[0].sha), SizeBytes: it.CatalogBytes()}, nil
+	case checksumSidecar:
+		return plan.Resolved{Version: ui.files[0].name, SizeBytes: it.CatalogBytes()}, nil
+	}
 	w := u.W
 	if err := w.requireOnline(); err != nil {
 		return plan.Resolved{}, err
 	}
-	catalogSize := it.CatalogBytes()
 	var total int64
 	heads := make([]head, len(ui.files))
-	strict := ui.checksum == checksumComputed
 	for i, f := range ui.files {
 		h, err := u.head(ctx, f.url)
 		if err != nil {
-			if strict {
-				return plan.Resolved{}, err
-			}
-			continue // a size is best effort when the catalog already pins the version
+			return plan.Resolved{}, err
 		}
-		if !h.ok && strict {
+		if !h.ok {
 			return plan.Resolved{}, fail(CodeNoNewest, nil, "the server answered HTTP %d for %s", h.status, redactURL(f.url))
 		}
 		heads[i] = h
@@ -348,15 +351,8 @@ func (u *URLSource) Resolve(ctx context.Context, it plan.CatalogItem) (plan.Reso
 			total += h.size
 		}
 	}
-	size := total
-	if size == 0 || (!strict && catalogSize > 0) {
-		size = catalogSize
+	if total == 0 {
+		total = it.CatalogBytes()
 	}
-	switch ui.checksum {
-	case checksumPinned:
-		return plan.Resolved{Version: short12(ui.files[0].sha), SizeBytes: size}, nil
-	case checksumSidecar:
-		return plan.Resolved{Version: ui.files[0].name, SizeBytes: size}, nil
-	}
-	return plan.Resolved{Version: computedVersion(ui, heads), SortKey: w.syncTime(), SizeBytes: size}, nil
+	return plan.Resolved{Version: computedVersion(ui, heads), SortKey: w.syncTime(), SizeBytes: total}, nil
 }

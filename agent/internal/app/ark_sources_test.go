@@ -295,6 +295,7 @@ type srcNet struct {
 	mu    sync.Mutex
 	state run.NetState
 	dial  atomic.Int32
+	addrs map[string]int
 }
 
 func (n *srcNet) set(mode string, online bool) {
@@ -313,12 +314,35 @@ func (n *srcNet) client() *download.HTTPClient {
 	return download.NewHTTPClient(download.ClientConfig{
 		DialContext: func(_ context.Context, network, addr string) (net.Conn, error) {
 			n.dial.Add(1)
+			n.mu.Lock()
+			if n.addrs == nil {
+				n.addrs = map[string]int{}
+			}
+			n.addrs[addr]++
+			n.mu.Unlock()
 			return nil, errors.New("the test has no network: " + network + " " + addr)
 		},
 	})
 }
 
 func (n *srcNet) dials() int { return int(n.dial.Load()) }
+
+// dialsOutside counts the attempts to any address but the given ones.
+func (n *srcNet) dialsOutside(allowed ...string) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	out := 0
+	for addr, c := range n.addrs {
+		ok := false
+		for _, a := range allowed {
+			ok = ok || a == addr
+		}
+		if !ok {
+			out += c
+		}
+	}
+	return out
+}
 
 // srcRig is a node that has the kit and docs source types wired.
 type srcRig struct {
@@ -704,8 +728,11 @@ func TestSourceItemsAreResolvedAndSyncedOnline(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(sr.root(), "kit", "catalog", "index.html")); err == nil {
 		t.Error("the manuals were installed into the catalog")
 	}
-	if n := sr.net.dials(); n != 0 {
-		t.Errorf("the sync dialled out %d times", n)
+	// The kit and docs sources use no network of their own here (git and apt go through the runner). The
+	// only dials are the planner's HEAD of the places item, a trust-on-first-use url item that has no pin
+	// to plan from; the catalog's other url items are planned from what it pins.
+	if n := sr.net.dialsOutside("data.example.test:443"); n != 0 {
+		t.Errorf("the sync dialled out %d times to hosts other than the url item's", n)
 	}
 
 	// A second run finds everything current: no clone, no new archive.

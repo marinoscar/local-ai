@@ -102,6 +102,8 @@ type arkStack struct {
 	resolvers     *plan.Resolvers
 	itemResolvers *run.ItemResolvers
 	sources       *arkSources
+	// webSources are the huggingface, github_release and url resolvers (ark_web_sources.go).
+	webSources *arkWebSources
 
 	facts *nodeFacts
 }
@@ -192,6 +194,9 @@ func (d *Daemon) buildArk(ctx context.Context, idx *ark.Index) (*arkStack, error
 
 	if err := s.registerSources(dl); err != nil {
 		return nil, fmt.Errorf("source resolvers: %w", err)
+	}
+	if err := s.registerWebSources(dl, httpc); err != nil {
+		return nil, fmt.Errorf("web source resolvers: %w", err)
 	}
 
 	s.plans, err = plan.NewGatherer(plan.Deps{
