@@ -269,6 +269,34 @@ func TestRebuildLlamaFlagsMapToTheEngineRequest(t *testing.T) {
 	}
 }
 
+// --yes and --json change the output and the questions, never what the engine is asked to build.
+func TestRebuildLlamaYesAndJSONDoNotChangeTheRequest(t *testing.T) {
+	flags := []string{"--commit", "abcdef1", "--backend", "cuda", "--cuda-arch", "75;86", "--jobs", "2", "--keep", "3"}
+	var reqs []build.Request
+	for _, pre := range [][]string{nil, {"--json"}, {"-y"}, {"--json", "--yes"}} {
+		f := newLlamaFix(t)
+		args := append(append([]string{}, pre...), "rebuild-llama")
+		if !contains(pre, "--yes") && !contains(pre, "-y") {
+			args = append(args, "--yes")
+		}
+		r := f.run(t, append(args, flags...)...)
+		if r.code != 0 {
+			t.Fatalf("%v: exit %d\n%s\n%s", pre, r.code, r.out, r.errOut)
+		}
+		req := f.lastReq(t)
+		req.Progress = nil
+		reqs = append(reqs, req)
+	}
+	for i := 1; i < len(reqs); i++ {
+		if !reflect.DeepEqual(reqs[0], reqs[i]) {
+			t.Errorf("request %d = %+v, want %+v", i, reqs[i], reqs[0])
+		}
+	}
+	if reqs[0].CudaArch != "75;86" || reqs[0].Commit != "abcdef1" || reqs[0].Jobs != 2 || reqs[0].Keep != 3 {
+		t.Errorf("request = %+v", reqs[0])
+	}
+}
+
 func TestRebuildLlamaDefaultsComeFromNodeYAML(t *testing.T) {
 	f := newLlamaFix(t)
 	f.nodeYAML(t, "schema_version: 1\nllama:\n  commit: \""+lCommit+"\"\n  backend: vulkan\n  cuda_arch: \"89\"\nports:\n  llama: 8123\n")
