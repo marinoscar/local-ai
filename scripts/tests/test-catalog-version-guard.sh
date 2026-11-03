@@ -56,7 +56,9 @@ t "an older tag already exists" 1 "already exists" "$GUARD" --repo "$r4" --versi
 t "lower than the latest tag, and says which" 1 "not greater than the latest tag catalog-2026.11.03-2" "$GUARD" --repo "$r4" --version 2026.11.02-5
 t "lower N the same day" 1 "not greater" "$GUARD" --repo "$r4" --version 2026.11.03-1
 t "an older year" 1 "not greater" "$GUARD" --repo "$r4" --version 2025.12.31-9
-t "the error goes to stderr, nothing to stdout" 0 "" bash -c "[ -z \"\$('$GUARD' --repo '$r4' --version 2026.11.03-2 2>/dev/null)\" ]"
+# GITHUB_ACTIONS is cleared: under Actions the guard also prints a ::error:: annotation on stdout
+# (the next case), and the CI runner sets it for this script.
+t "the error goes to stderr, nothing to stdout" 0 "" env -u GITHUB_ACTIONS bash -c "[ -z \"\$('$GUARD' --repo '$r4' --version 2026.11.03-2 2>/dev/null)\" ]"
 t "a workflow annotation in Actions" 1 "::error title=catalog version guard::" env GITHUB_ACTIONS=true "$GUARD" --repo "$r4" --version 2026.11.03-2
 r5="$w/r5"; newrepo "$r5"; tagsfor "$r5" catalog-2026.11.02-9
 t "9 is not greater than 9 (equal: the tag exists)" 1 "already exists" "$GUARD" --repo "$r5" --version 2026.11.02-9
