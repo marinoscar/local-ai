@@ -123,7 +123,7 @@ ReadOnlyPaths=/
 [Install]
 WantedBy=multi-user.target
 ```
-The agent rewrites `--threads` from `kiwix.threads` when it writes the unit (the installer and `aiagent setup units` use the same template). Drive content under `/media/…` is readable because `ProtectHome` covers only `/home`, `/root` and `/run/user`.
+The agent rewrites `--threads` from `kiwix.threads` when it writes the unit (the installer and `aiagent setup units` use the same template: `kiwix.RenderUnit` and `kiwix.WriteUnit` in `agent/internal/svc/kiwix`; `threads: 4` is the golden file `testdata/localai-kiwix.service.golden`, which is this text byte for byte, and a test fails if the two drift). `kiwix.threads` of 0 or absent means 4; the accepted range is 1 to 64 (outside it is `LAI-AGT-002`). The unit is written atomically (root 0644) and followed by `daemon-reload`; the writer never starts, stops, restarts or enables it. Drive content under `/media/…` is readable because `ProtectHome` covers only `/home`, `/root` and `/run/user`.
 
 `/etc/systemd/system/localai-whisper.service`:
 ```ini
@@ -223,8 +223,16 @@ These live outside `/api/v1`. They are in the unauthenticated survival set (secu
 
 #### 4.1.1 Binary
 - Source: the official static release tarball `kiwix-tools_linux-x86_64-<ver>.tar.gz` (or `linux-aarch64`) from `https://download.kiwix.org/release/kiwix-tools/`. It is a catalog `kit` item (`kit-kiwix-tools`, source `url`, pinned sha256), so the same tarball is in `kit/tools/kiwix-tools/` ([rebuild-kit.md](rebuild-kit.md) §Contents).
-- Install (installer, and `aictl kit install kiwix-tools`): verify the tarball sha256 against the kit MANIFEST, extract to `/opt/localai/kiwix-tools/<ver>/` (files `kiwix-serve`, `kiwix-manage`, `kiwix-search`), `chmod 0755`, then atomically repoint `current` (`ln -sfn <ver> current.tmp && mv -T current.tmp current`). Keep the previous version directory.
-- Check: `kiwix-serve --version` must print the expected version. The flags used in §3.3 must be checked against `kiwix-serve --help` of the pinned version in the issue that pins it.
+- Install (installer, and `aictl kit install kiwix-tools`; code: `agent/internal/svc/kiwix`, `kiwix.Install(ctx, tarball, expectSHA256, version)`): works offline on the kit tarball, in this order.
+  1. Refuse a `version` that is not a release number (`3.7.0-2`), a pin that is not 64 hex characters (an unverified tarball is never installed), and a release file of the other architecture (`runtime.GOARCH` `amd64` is `x86_64`, `arm64` is `aarch64`; helpers `kiwix.TarballName` and `kiwix.KitPath` build the kit file name and path).
+  2. Verify the tarball sha256 against the pin from the kit MANIFEST (catalog `kit-kiwix-tools`). A mismatch changes nothing on disk.
+  3. Extract to `/opt/localai/kiwix-tools/<ver>.tmp/` (a leftover from a killed run is removed first), dropping the one top directory the release unpacks into, so the files are `<ver>/kiwix-serve`, `kiwix-manage`, `kiwix-search`. Every entry is checked before it is written: no absolute path, no `..`, no backslash, no hard link, device or other special file, no duplicate, and a symlink only when its target is a plain sibling name in the same directory (anything with a `/`, `.` or `..` could be chained out of the target); nothing is written through a symlink; at most 1000 entries and 512 MiB. The three programs get `chmod 0755` whatever the archive says. The last file written is `.tarball.sha256` (the pin), which marks the directory complete.
+  4. Smoke test the new directory in place (`<ver>.tmp/kiwix-serve --version`, through `execx`) before it is moved to `/opt/localai/kiwix-tools/<ver>/`, so a binary that cannot run never replaces a working one. A `<ver>/` that already holds this very tarball (same `.tarball.sha256`, three executable files) is reused and only smoke tested; a different or damaged `<ver>/` is replaced.
+  5. Atomically repoint `current` (`ln -sfn <ver> current.tmp && mv -T current.tmp current`, in Go a symlink `current.tmp` and a rename). Other version directories are kept; a `current` that is not a symlink is never replaced.
+  Any failure removes the temporary directory and leaves `current` as it was. Every failure carries `LAI-SVC-003` (the library program is not (properly) installed; fix: `sudo install-node.sh --repair`).
+- Check (`kiwix.Check(ctx, version)`): `/opt/localai/kiwix-tools/current/kiwix-serve --version` must print the expected version. The release prints `kiwix-tools <upstream version>` as its first line (no packaging revision), so `3.7.0-2` in the file name is satisfied by `3.7.0` or `3.7.0-2`. A missing program, a program that does not run or exits non-zero, and a different version all fail with `LAI-SVC-003`.
+- Doctor: the fast check `svc.kiwix_installed` (`Installer.DoctorCheck`, registered by the agent only while `kiwix.enabled` is true) raises `LAI-SVC-003` when `/opt/localai/kiwix-tools/current/kiwix-serve` is missing.
+- The flags used in §3.3 are checked against the usage text of the pinned release: for kiwix-tools 3.8.2 (`src/server/kiwix-serve.cpp`, docopt) `--address`, `--port`, `--urlRootLocation`, `--monitorLibrary`, `--skipInvalid`, `--blockexternal` and `--threads` are all long options, and the library is the positional argument of `(-l | --library) LIBRARYPATH` (written `--library <path>`, never `--library=<path>`). The issue that pins a new version repeats the check with `kiwix-serve --help` on a node (manual test of SVC-02).
 
 #### 4.1.2 Library regeneration
 Triggered on agent start, on `sync.item_done` for a kiwix item, on `drive.mounted` / `drive.unmounted`, and on `aictl services restart kiwix`. Debounced: at most once per 10 s.
@@ -465,6 +473,13 @@ State values: `ok`, `degraded` (works with a problem), `down` (should run but do
 - A unit in systemd `failed` state is restarted under the same budget.
 - In survival mode, `require_services` from the profile (modes.md §3) that are `down` or `missing_content` are shown in the Portal status strip.
 
+**How the supervisor applies them** (SVC-01, `internal/svc/health`):
+- *State.* Per service, in this order: not enabled in `node.yaml` → `disabled` (never probed, never restarted); `Content` says nothing to serve → `missing_content` (never probed, never restarted, with the code the probe names: `LAI-SVC-001`, `010`, `022`, `030`); a unit that is `activating` → `starting`; a unit that is not active (stopped by the operator, or `failed`) → `down` with `LAI-SVC-002` / `011`; active but not probed yet → `starting`; probe passes → `ok`, or `degraded` when the readiness reports a problem of warning or worse; probe fails within 60 s of the unit's start → `starting` and the failure does not count; fails after that → `degraded` for failures 1 and 2, and at the 3rd the unit is restarted (state `starting` again). `down` also is the state of an active unit that fails while the restart budget is spent. A service without a unit (piper, maps) has no restart: its liveness failure is `down` at once, with the code the probe names (`LAI-SVC-020`, `034`).
+- *Probes.* Liveness every 30 s, and on every 10 s tick while the service is `starting` and has not answered, so it is `ok` within one tick of answering; each probe call is bounded to 3 s. A unit that just became active (seen through `Manager.Subscribe`) is probed at once. A unit stopped on purpose is never restarted: only `failed` and an active-but-unresponsive unit are.
+- *Budget.* A sliding 1-hour window per service, in memory; a restart that fails to run counts too. When it is spent the supervisor does not restart, raises `LAI-SVC-051` (first in `problems`, then the `down` code) and waits: the window frees by itself an hour after the oldest restart, and the supervisor then tries again. `LAI-SVC-050` (info) stays in `problems` while the service has a restart inside the window, and never makes it `degraded`.
+- *Events.* `service.state` is published once per change of the health state (a change of the systemd `active`/`sub` alone is not a transition); the first observation after agent start is the baseline and publishes nothing. `code` is the first problem of the new state, only when the new state is not `ok`; `unit` is `null` for piper and maps.
+- *Where the Go seams are.* A service plugs in with `health.Spec{Name, Unit, Enabled, Probe, DownCode, Interval}` and a `health.Probe` of four methods (`Liveness`, `Content`, `Readiness`, `Deep`; `health.FuncProbe` fills the ones a service does not need). `health.KiwixSpec` and `health.WhisperSpec` carry the unit and the HTTP liveness of this table; the readiness, content and deep checks of kiwix, whisper, piper and maps are plugged in by SVC-03, SVC-06, SVC-08, SVC-09 and SVC-11. `Supervisor` (an `app.Worker` named `svc-health`) serves `Records` (the rows of `GET /services`, via `api.ServicesDeps.Health`), `Snapshot` (`services.Status` rows for `/status`; `health.Combine(watcher, supervisor)` merges them with llama's), `Reduced` (the cloud heartbeat form), `Flagged` (the survival `require_services` that are `down` or `missing_content`, for the Portal), `Deep`, and the doctor checks `svc.health` (fast, cached) and `svc.deep` (slow, on demand). When the supervisor is wired, `services.Watcher` is limited to llama (`WatcherOptions.Only`) so only one component publishes `service.state` per service.
+
 **Surfaced in:**
 - `GET /api/v1/services`:
   ```json
@@ -477,7 +492,7 @@ State values: `ok`, `degraded` (works with a problem), `down` (should run but do
   ]}
   ```
   `POST /services/{name}/{start|stop|restart}` stays limited to `llama`, `kiwix`, `whisper` (agent.md). `piper` and `maps` have no process to control.
-- `GET /api/v1/status` → `services` summary (`name`, `state`).
+- `GET /api/v1/status` → `services` summary (`name`, `state`, with the unit fields of every row; `unit` is `null` for piper and maps).
 - `/events` → `service.state` on every state change, payload `{"name","unit","from","to","active","sub","healthy","code?"}` (the same union is in [agent.md](agent.md) §3.10; `from`/`to` are the state values above, `active`/`sub` the systemd states, `healthy` = `to == "ok"`; `unit` is `null` for piper and maps).
 - `GET /api/v1/doctor` → the problems above with fixes.
 - `/portal/status` → reduced form (`capabilities.library|talk|maps|photo`) ([survival-portal.md](survival-portal.md) §3.5).
@@ -533,7 +548,7 @@ Logs (slog, `component` ∈ `kiwix`, `whisper`, `piper`, `maps`, `health`). Keys
 {"level":"INFO","msg":"stt done","component":"whisper","audio_s":3.2,"language":"en","elapsed_ms":1840,"model":"whisper-small"}
 {"level":"WARN","msg":"service restarted","component":"health","service":"kiwix","code":"LAI-SVC-050","failures":3}
 ```
-Events: `service.state`. Metrics (in `/api/v1/status` → `services.metrics`): `localai_stt_requests_total{result}`, `localai_stt_seconds` (histogram buckets 1, 2, 5, 10, 30, 60), `localai_tts_requests_total{voice,result}`, `localai_tts_seconds`, `localai_maps_tile_bytes_total`, `localai_service_restarts_total{service}`.
+Events: `service.state`. Metrics (in `GET /api/v1/status?counters=1` → `node.counters`, where agent.md §7 puts every counter; `/status` `services` is an array, so it has no `metrics` key): `localai_stt_requests_total{result}`, `localai_stt_seconds` (histogram buckets 1, 2, 5, 10, 30, 60), `localai_tts_requests_total{voice,result}`, `localai_tts_seconds` (buckets 0.5, 1, 2, 5, 10, 30), `localai_maps_tile_bytes_total`, `localai_service_restarts_total{service}`. They live in `health.Metrics`; its `Counters()` is the map a `CounterView` merges into `node.counters`: a counter is a number under its name with the labels in braces, a histogram is `{count, sum, buckets}` with cumulative buckets and `+Inf`.
 
 ## 8. Doctor codes
 

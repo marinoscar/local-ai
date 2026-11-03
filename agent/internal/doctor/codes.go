@@ -1733,7 +1733,7 @@ var table = []Code{
 		ID:       ARK010,
 		Severity: Info,
 		Title:    Msg{EN: "A new AI-ARK drive needs to be set up", ES: "Hay que preparar una unidad AI-ARK nueva"},
-		Fix:      Msg{EN: "Press **Set up this drive**, or run `aictl ark init`.", ES: "Pulse **Preparar esta unidad**, o ejecute `aictl ark init`."},
+		Fix:      Msg{EN: "Press **Set up this drive**, or run `aictl ark init`.", ES: "Presione **Preparar este disco**, o ejecute `aictl ark init`."},
 	},
 	{
 		ID:       ARK011,
@@ -1763,7 +1763,7 @@ var table = []Code{
 		ID:       ARK020,
 		Severity: Warning,
 		Title:    Msg{EN: "The internal content folder was missing and was recreated empty", ES: "Faltaba la carpeta de contenido interna y se volvió a crear vacía"},
-		Fix:      Msg{EN: "Run `aictl ark sync`, or `aictl ark import` from a drive.", ES: "Ejecute `aictl ark sync`, o `aictl ark import` desde una unidad."},
+		Fix:      Msg{EN: "Run `aictl ark sync`, or `aictl ark import` from a drive.", ES: "Ejecute `aictl ark sync`, o `aictl ark import` desde un disco."},
 	},
 	{
 		ID:       ARK021,

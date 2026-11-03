@@ -1,0 +1,12 @@
+{
+  "zeta_future": {"b": 2, "a": [1, 2, 3]},
+  "notes": "kept",
+  "kind": "ark_drive",
+  "root_id": "ark-3f9c0a12",
+  "schema_version": 1,
+  "created_by": {"agent_version": "0.9.0", "node_id": "ai-n3", "host_hint": "placeholder-host"},
+  "created_at": "2026-11-02T18:04:11Z",
+  "alpha_future": "x",
+  "profile": "ark-drive-full",
+  "label": "AI-ARK"
+}

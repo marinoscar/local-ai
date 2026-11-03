@@ -6,10 +6,12 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 	"github.com/marinoscar/local-ai/agent/internal/services"
+	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 )
 
 // Handlers of GET /services and POST /services/{name}/{action} (agent.md section 3.8.22). Nothing here
@@ -22,6 +24,14 @@ const servicesSurvivalMode = "survival"
 // ServiceStatusSource is where GET /services reads the services from; *services.Watcher implements it.
 type ServiceStatusSource interface {
 	Snapshot(ctx context.Context) []services.Status
+}
+
+// ServiceHealthSource is where GET /services reads the companion services' health from;
+// *health.Supervisor implements it (companion-services.md section 4.6). Its records replace the rows of
+// the same name from the status source and add the services the status source does not list (piper,
+// maps), so the daemon may wire the supervisor next to a watcher that still lists kiwix and whisper.
+type ServiceHealthSource interface {
+	Records(ctx context.Context) []health.Record
 }
 
 // ServiceActions runs start, stop and restart and waits for the unit's final state;
@@ -57,6 +67,8 @@ type AuditWriter interface {
 type ServicesDeps struct {
 	Status  ServiceStatusSource
 	Actions ServiceActions
+	// Health is optional: without it GET /services lists what Status reports.
+	Health ServiceHealthSource
 	// Llama is optional (see LlamaRestarter).
 	Llama LlamaRestarter
 	// Mode returns the current mode name; nil means never survival.
@@ -122,8 +134,66 @@ type lastExitJSON struct {
 
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
+// companionRow is the row of a service the health supervisor reports, as the map the JSON is built
+// from: kiwix and whisper carry the unit fields of agent.md section 3.8.22 as every row does, piper and
+// maps (no unit) only name, unit (null), state and what the supervisor knows (companion-services.md
+// section 4.6). problems is always an array; books, voices and maps appear when they apply to the
+// service, even when empty.
+func companionRow(rec health.Record) map[string]any {
+	row := map[string]any{
+		"name": rec.Name, "unit": nil, "state": string(rec.State), "healthy": rec.Healthy,
+		"problems": append([]health.Problem{}, rec.Problems...),
+	}
+	if rec.HasUnit() {
+		row["unit"] = rec.Unit
+		row["active"], row["sub"], row["restarts"], row["enabled"] = rec.Active, rec.Sub, rec.Restarts, rec.Enabled
+		row["since"], row["last_exit"] = nil, nil
+		if !rec.Since.IsZero() {
+			row["since"] = rfc3339(rec.Since)
+		}
+		if rec.LastExit != nil {
+			row["last_exit"] = lastExitJSON{Code: rec.LastExit.Code, At: rfc3339(rec.LastExit.At)}
+		}
+	}
+	if !rec.LastCheck.IsZero() {
+		row["last_check"] = rfc3339(rec.LastCheck)
+	}
+	if rec.Detail != "" {
+		row["detail"] = rec.Detail
+	}
+	if rec.Model != "" {
+		row["model"] = rec.Model
+	}
+	if rec.Device != "" {
+		row["device"] = rec.Device
+	}
+	if rec.Books != nil {
+		row["books"] = rec.Books
+	}
+	if rec.Voices != nil {
+		row["voices"] = rec.Voices
+	}
+	if rec.Maps != nil {
+		row["maps"] = rec.Maps
+	}
+	return row
+}
+
 func (d ServicesDeps) list(w http.ResponseWriter, r *http.Request) error {
-	rows := []serviceJSON{}
+	type namedRow struct {
+		name string
+		row  any
+	}
+	var rows []namedRow
+	put := func(name string, row any) {
+		for i := range rows {
+			if rows[i].name == name {
+				rows[i].row = row
+				return
+			}
+		}
+		rows = append(rows, namedRow{name, row})
+	}
 	for _, s := range d.Status.Snapshot(r.Context()) {
 		row := serviceJSON{
 			Name: s.Name, Unit: s.Unit, Active: s.Active, Sub: s.Sub, Restarts: s.Restarts,
@@ -136,9 +206,20 @@ func (d ServicesDeps) list(w http.ResponseWriter, r *http.Request) error {
 		if s.LastExit != nil {
 			row.LastExit = &lastExitJSON{Code: s.LastExit.Code, At: rfc3339(s.LastExit.At)}
 		}
-		rows = append(rows, row)
+		put(s.Name, row)
 	}
-	WriteJSON(w, r, http.StatusOK, map[string]any{"services": rows})
+	if d.Health != nil {
+		for _, rec := range d.Health.Records(r.Context()) {
+			put(rec.Name, companionRow(rec))
+		}
+	}
+	// llama, kiwix, whisper, piper, maps whichever source a row came from.
+	sort.SliceStable(rows, func(i, j int) bool { return health.Order(rows[i].name) < health.Order(rows[j].name) })
+	out := make([]any, 0, len(rows))
+	for _, nr := range rows {
+		out = append(out, nr.row)
+	}
+	WriteJSON(w, r, http.StatusOK, map[string]any{"services": out})
 	return nil
 }
 
