@@ -266,6 +266,11 @@ func ParseLock(data []byte) ([]LockEntry, error) {
 	return out, nil
 }
 
+var (
+	// repoNameRe is a repository folder name: "<codename>-<arch>[-<branch>]".
+	repoNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._+-]{0,100}$`)
+)
+
 // versionRe is a Debian version as it appears in a lock line: epoch, upstream, revision.
 var versionRe = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z.+~:_-]{0,127}$`)
 
@@ -661,7 +666,7 @@ func MachineRelease(fsys config.FS, osRelease, goarch string) (codename, arch st
 	for _, line := range strings.Split(string(data), "\n") {
 		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "VERSION_CODENAME="); ok {
 			v = strings.Trim(v, `"'`)
-			if manifest.SafeName(v) && !strings.Contains(v, "-") {
+			if codenameRe.MatchString(v) {
 				return v, arch, nil
 			}
 		}
@@ -683,7 +688,7 @@ func ListRepos(fsys config.FS, kitDir string) ([]Repo, error) {
 			return nil, aptErr(ErrIO, "cannot list "+filepath.Join(kitDir, part), err)
 		}
 		for _, e := range entries {
-			if !e.IsDir() || !manifest.SafeName(e.Name()) {
+			if !e.IsDir() || !repoNameRe.MatchString(e.Name()) {
 				continue
 			}
 			out = append(out, Repo{Part: part, Name: e.Name(), Dir: filepath.Join(kitDir, part, e.Name())})

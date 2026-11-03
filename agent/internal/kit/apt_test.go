@@ -258,8 +258,14 @@ func TestReposForAndErrors(t *testing.T) {
 	}
 	// A folder that is not a plain name is never a repository.
 	os.MkdirAll(filepath.Join(kitDir, "debs", "noble amd64"), 0o755)
-	if repos2, _ := kit.ListRepos(config.OSFS{}, kitDir); len(repos2) != len(repos)+3+1-3 && false {
-		t.Error("unreachable")
+	again, err := kit.ListRepos(config.OSFS{}, kitDir)
+	if err != nil || len(again) != 6 { // three debs and three nvidia folders; the one with a space is no repository
+		t.Errorf("repos %d %v", len(again), err)
+	}
+	for _, r := range again {
+		if strings.Contains(r.Name, " ") {
+			t.Errorf("%q is not a plain name", r.Name)
+		}
 	}
 }
 
@@ -274,17 +280,8 @@ func TestRunInstallsOnlyFromAVerifiedRepository(t *testing.T) {
 	kitDir := fixtureKit(t)
 	f := newAptFake(t)
 	f.plan = cmakePlan
-	a, _ := newApt(t, f.runner())
-	r := f.runner()
-	_ = r
-	var steps []string
-	a.Progress = func(s kit.Step, d string) {
-		if s != kit.StepVerify || !strings.Contains(d, "/") || strings.HasPrefix(d, "debs/") {
-			steps = append(steps, string(s))
-		}
-	}
-	rn := &fnRunner{fn: f.runner().fn}
-	a.Runner = rn
+	rn := f.runner()
+	a, _ := newApt(t, rn)
 	res, err := a.Run(context.Background(), kitDir, kit.Request{Packages: []string{"cmake"}})
 	if err != nil {
 		t.Fatal(err)
@@ -325,7 +322,6 @@ func TestRunInstallsOnlyFromAVerifiedRepository(t *testing.T) {
 			t.Errorf("env %v", c.Env)
 		}
 	}
-	_ = steps
 }
 
 func TestRunDryRunChangesNothing(t *testing.T) {
