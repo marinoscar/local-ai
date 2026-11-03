@@ -23,6 +23,9 @@ const usage = `usage:
   aiagent update-rollback-check      internal: run by the rollback timer (agent.md section 4.10)
 `
 
+// serve is `aiagent serve`; a test replaces it so that no test starts the real daemon on the machine.
+var serve = app.RunServe
+
 func main() {
 	ctx, stop := app.SignalContext(context.Background())
 	defer stop()
@@ -47,11 +50,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	switch args[1] {
 	case "serve":
-		if err := app.Run(ctx); err != nil {
-			fmt.Fprintf(stderr, "aiagent: %v\n", err)
-			return 1
-		}
-		return 0
+		return serve(ctx, stderr)
 	case "ctl":
 		return cli.Main(args[2:], stdout, stderr)
 	case "version":
