@@ -50,6 +50,8 @@ type world struct {
 	// offline plans without the network.
 	offline  bool
 	readOnly bool
+	// profile is the profile id; "test-profile" (internal) or "ark-drive-full" (drive) when empty.
+	profile string
 }
 
 func newWorld() *world {
@@ -207,14 +209,17 @@ func (w *world) synced(ago time.Duration) *world {
 	return w
 }
 
-// input builds the ready.Input: it resolves every desired item that has no answer yet to "v1" at the
-// catalog size (so a case states only what is special about it), then plans.
-func (w *world) input() ready.Input {
+// planInput builds the planner's input: it resolves every desired item that has no answer yet to "v1"
+// at the catalog size (so a case states only what is special about it).
+func (w *world) planInput() plan.PlanInput {
 	prof := catalog.Profile{
 		ID: "test-profile", Storage: catalog.Storage{Target: "internal", BudgetBytes: w.budget, MinFreeBytes: w.minFree},
 	}
 	if w.kind == ark.KindArkDrive {
 		prof.ID = "ark-drive-full"
+	}
+	if w.profile != "" {
+		prof.ID = w.profile
 	}
 	for _, m := range w.models {
 		prof.Include.Models = append(prof.Include.Models, m.ID)
@@ -247,10 +252,17 @@ func (w *world) input() ready.Input {
 	if w.kind == ark.KindInternal {
 		pin.Overrides = &plan.ProfileOverrides{}
 	}
+	return pin
+}
+
+// input builds the ready.Input: the planner's input, planned, and the facts of the root.
+func (w *world) input() ready.Input {
+	pin := w.planInput()
+	root, prof := pin.Root, pin.Profile
 	in := w.in
 	in.Root = ready.RootFacts{ID: root.ID, Kind: w.kind, Path: root.Path, Profile: prof.ID, TotalBytes: w.total, FreeBytes: w.free, ReadOnly: w.readOnly}
 	in.Plan = plan.Plan(pin)
-	in.Catalog, in.Profile = cat, &prof
+	in.Catalog, in.Profile = pin.Catalog, prof
 	in.Present, in.Journal = w.present, w.journal
 	return in
 }

@@ -57,6 +57,9 @@ type Deps struct {
 	ReverifyDays func() int
 	// SyncState returns the engine's state for status.ark.sync ("" means idle); optional.
 	SyncState func() string
+	// Regenerated is called after every regeneration with its trigger and the roots it handled, after
+	// the regeneration is complete (it may call the service): the seam for pushing a fresh cloud snapshot or for a test to wait on. Optional.
+	Regenerated func(trigger string, rootIDs []string)
 	// NodeID and AgentVersion go into generated_by.
 	NodeID, AgentVersion string
 	// Logger defaults to slog.Default.
@@ -210,6 +213,16 @@ func (s *Service) Stop(ctx context.Context) error {
 // gets a red one saying so. The error is the context's, or the first write failure after every root
 // was handled.
 func (s *Service) Regenerate(ctx context.Context, trigger string, rootIDs ...string) error {
+	handled, err := s.regenerate(ctx, trigger, rootIDs)
+	if s.d.Regenerated != nil && handled != nil {
+		s.d.Regenerated(trigger, handled)
+	}
+	return err
+}
+
+// regenerate is Regenerate under the regeneration lock. It returns the roots it handled, nil when it
+// was cut short before handling any.
+func (s *Service) regenerate(ctx context.Context, trigger string, rootIDs []string) ([]string, error) {
 	s.regen.Lock()
 	defer s.regen.Unlock()
 
@@ -248,7 +261,7 @@ func (s *Service) Regenerate(ctx context.Context, trigger string, rootIDs ...str
 	var firstErr error
 	for _, id := range want {
 		if err := ctx.Err(); err != nil {
-			return err
+			return nil, err
 		}
 		if err := s.regenerateOne(ctx, trigger, mounted[id]); err != nil && firstErr == nil {
 			firstErr = err
@@ -257,7 +270,7 @@ func (s *Service) Regenerate(ctx context.Context, trigger string, rootIDs ...str
 	s.mu.Lock()
 	s.warm = true
 	s.mu.Unlock()
-	return firstErr
+	return append([]string{}, want...), firstErr
 }
 
 // orderRoots sorts ids internal first, then drives in mount order, like the planner and the index.
