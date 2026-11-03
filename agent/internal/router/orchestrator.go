@@ -93,6 +93,13 @@ type LlamaRestarter interface {
 	RestartLlama(ctx context.Context) error
 }
 
+// LlamaStopper stops localai-llama.service and waits for the job to finish; a forced unload in
+// single mode uses it (llama-router.md section 4.8). internal/services.Manager.Stop with
+// services.UnitLlama implements it.
+type LlamaStopper interface {
+	StopLlama(ctx context.Context) error
+}
+
 // Regenerator renders models.ini and applies it to the router; *Generator implements it. SetDefault
 // uses it to write the new load-on-startup flag.
 type Regenerator interface {
@@ -132,7 +139,15 @@ type OrchestratorOptions struct {
 	// Builds tells which llama.cpp build is installed (current/BUILD.json); RestartAndRestore
 	// records it in state.llama.build. nil skips that.
 	Builds BuildSource
-	Timing Timing
+	// Units, UnitBase and Stopper are single mode's (llama-router.md section 4.8). Units renders
+	// the unit (*UnitGenerator); UnitBase supplies what the node fixes for the unit (Port, Binary;
+	// Mode, Router and Single are filled in by the orchestrator), default the generator's defaults;
+	// Stopper stops the unit for a forced unload. Without Units or Restarter a load in single mode
+	// is refused (LAI-LLM-007) and ApplyMode does nothing.
+	Units    SingleUnits
+	UnitBase func() UnitInputs
+	Stopper  LlamaStopper
+	Timing   Timing
 	// Clock measures every wait; Sleep waits between polls (tests advance a manual clock in it).
 	// The default Sleep returns early when the orchestrator shuts down.
 	Clock  config.Clock

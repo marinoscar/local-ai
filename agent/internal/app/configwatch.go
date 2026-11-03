@@ -6,6 +6,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
+	"github.com/marinoscar/local-ai/agent/internal/router"
 	"github.com/marinoscar/local-ai/agent/internal/svc/kiwix"
 )
 
@@ -46,11 +47,36 @@ func (d *Daemon) applyConfigChange(ctx context.Context, c config.Change) {
 	if hasPrefix(c.Changed, "sync") {
 		d.ark.applySettings() // the bandwidth limit moves the shared bucket at once; the rest is read per run
 	}
+	if hasPath(c.Changed, "llama.mode") {
+		d.applyLlamaMode(ctx)
+	}
 	if c.Source == config.SourceReload && (hasPrefix(c.Changed, "profile") || hasPath(c.Changed, "llama.legacy_aliases") || hasPrefix(c.Changed, "catalog")) {
 		if _, err := d.sdeps.Regenerator.Regenerate(ctx); err != nil {
 			d.log.Warn("models.ini was not regenerated after node.yaml changed", "error", err.Error())
 		}
 	}
+}
+
+// applyLlamaMode switches llama between router and single-model mode when node.yaml llama.mode
+// changed (llama-router.md section 4.8): the orchestrator regenerates the unit, daemon-reloads,
+// restarts llama and restores the default, under modelOpsMu. It runs in the background: it can take as
+// long as a model load, and a refused or failed switch is reported by its log line and the doctor.
+//
+// The returned channel is closed when the switch has ended (tests wait on it).
+func (d *Daemon) applyLlamaMode(ctx context.Context) <-chan struct{} {
+	done := make(chan struct{})
+	d.bg.Add(1)
+	go func() {
+		defer d.bg.Done()
+		defer close(done)
+		res, err := d.c.Orchestrator.ApplyMode(ctx, router.ModeRequest{LockWait: router.DefaultLockWait})
+		if err != nil {
+			d.log.Warn("llama.mode changed but the AI service was not switched", "error", err.Error())
+			return
+		}
+		d.log.Info("llama.mode applied", "mode", res.Mode, "restarted", res.Changed)
+	}()
+	return done
 }
 
 // writeKiwixUnit rewrites localai-kiwix.service for threads and reloads systemd. The writer never

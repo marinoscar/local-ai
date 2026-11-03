@@ -75,6 +75,9 @@ type loadOp struct {
 	waitOnly bool
 	warn     *Reason
 	started  time.Time
+	// sg is set for a load in single mode (llama-router.md section 4.8): the load is a restart of
+	// the AI service and runs through single.go instead of the router's states.
+	sg *singleRun
 }
 
 func (op *loadOp) release() {
@@ -151,8 +154,13 @@ func (o *Orchestrator) prepareLoad(ctx context.Context, req LoadRequest) (*loadO
 	if fits, why := in.Fit.StaticFit(Candidate{ID: m.ID, Requirements: m.Requirements, Present: present}); !fits {
 		return nil, nil, errNotLoadable(req.ID, why)
 	}
-	if err := o.opt.Router.Health(ctx); err != nil {
-		return nil, nil, errRouter(err)
+	single := in.Llama.Mode == LlamaModeSingle
+	// In single mode a server that does not answer is no reason to refuse: loading a model is how
+	// it is started again.
+	if !single {
+		if err := o.opt.Router.Health(ctx); err != nil {
+			return nil, nil, errRouter(err)
+		}
 	}
 
 	hold, err := o.lock.AcquireWait(ctx, HolderLoad, req.LockWait)
@@ -170,6 +178,15 @@ func (o *Orchestrator) prepareLoad(ctx context.Context, req LoadRequest) (*loadO
 			op.release()
 		}
 	}()
+
+	if single {
+		early, err := o.prepareSingle(ctx, op)
+		if err != nil || early != nil {
+			return nil, early, err
+		}
+		keep = true
+		return op, nil, nil
+	}
 
 	statuses, err := o.opt.Router.Models(ctx)
 	if err != nil {
@@ -222,6 +239,9 @@ func (o *Orchestrator) touch(id string) {
 
 // run is steps 5 to 8.
 func (op *loadOp) run(ctx context.Context) (LoadResult, error) {
+	if op.sg != nil {
+		return op.runSingle(ctx)
+	}
 	o, id := op.o, op.model.ID
 	res := LoadResult{ID: id, Status: "loaded", OpID: op.opID, Unloaded: []string{}, Warning: op.warn}
 
@@ -287,7 +307,12 @@ func (op *loadOp) fail(ctx context.Context, f *loadFailure, evicted []string) (L
 		o.setLastLoad(id, op.opID, state.LoadInterrupted, 0)
 		return res, ErrInterrupted
 	}
-	rb := o.rollback(ctx, op, evicted)
+	var rb rollbackResult
+	if op.sg != nil {
+		rb = o.singleRollback(ctx, op)
+	} else {
+		rb = o.rollback(ctx, op, evicted)
+	}
 	if rb.interrupted {
 		o.setLastLoad(id, op.opID, state.LoadInterrupted, 0)
 		return res, ErrInterrupted

@@ -79,7 +79,10 @@ func (o *Orchestrator) SetDefault(ctx context.Context, id string, actor audit.Ac
 	if serr := set(id); serr != nil {
 		return res, opErr(CodePresetFailed, http.StatusInternalServerError, "The default model could not be saved.", map[string]any{"model": id}, serr)
 	}
-	if o.opt.Generator != nil {
+	if in.Llama.Mode == LlamaModeSingle {
+		// Single mode never writes models.ini (llama-router.md section 4.8); the unit follows.
+		o.singleSetDefault(ctx, in, m)
+	} else if o.opt.Generator != nil {
 		in.StateDefault = id
 		gr, gerr := o.opt.Generator.Generate(ctx, in)
 		if gerr != nil {
