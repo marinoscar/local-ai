@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -296,8 +297,10 @@ func TestPMTilesRefusesWhenOfflineOrWithAnUnusableEntry(t *testing.T) {
 		"two dates": mod(func(s *catalog.ContentSource) {
 			s.PlanetURLPattern = "https://planet.example.test/{date}/{date}.pmtiles"
 		}),
-		"http":        mod(func(s *catalog.ContentSource) { s.PlanetURLPattern = "http://planet.example.test/{date}.pmtiles" }),
-		"credentials": mod(func(s *catalog.ContentSource) { s.PlanetURLPattern = "https://u:p@planet.example.test/{date}.pmtiles" }),
+		"http": mod(func(s *catalog.ContentSource) { s.PlanetURLPattern = "http://planet.example.test/{date}.pmtiles" }),
+		"credentials": mod(func(s *catalog.ContentSource) {
+			s.PlanetURLPattern = "https://" + url.UserPassword("a", "b").String() + "@planet.example.test/{date}.pmtiles"
+		}),
 		"query":       mod(func(s *catalog.ContentSource) { s.PlanetURLPattern = "https://planet.example.test/{date}.pmtiles?x=1" }),
 		"short bbox":  mod(func(s *catalog.ContentSource) { s.BBox = []float64{1, 2, 3} }),
 		"inverted":    mod(func(s *catalog.ContentSource) { s.BBox = []float64{10, 0, -10, 5} }),
@@ -388,6 +391,29 @@ func TestPMTilesBuildExtractsAndNamesTheFileOnlyWhenDone(t *testing.T) {
 		"] [--bbox=-92.5,7,-77,18.6] [--maxzoom=15] [--download-threads=4] [--overfetch=0.05]"
 	if !strings.HasPrefix(calls[0], wantArgs) || !strings.Contains(calls[0], "home=["+pm.Env.SyncHome+"]") || !strings.Contains(calls[0], "proxy=[]") {
 		t.Fatalf("call %q\nwant prefix %q", calls[0], wantArgs)
+	}
+}
+
+func TestPMTilesBuildCannotPassAnEarlierTrysBytesOff(t *testing.T) {
+	p := newFakePlanet(t, "20261030")
+	pm := newPM(t, newPMEnv(t, "no_output"), p) // exits 0 and writes nothing
+	res, err := pm.ResolveItem(context.Background(), pmCatalog(p.pattern()), plan.ItemPlan{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := t.TempDir()
+	stale := filepath.Join(tree, "osm-central-america.pmtiles.part")
+	if err := os.WriteFile(stale, []byte("bytes of a killed earlier try"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := res.Build(context.Background(), tree); asResolveErr(t, err).Code != doctor.SYN031 {
+		t.Fatalf("a stale .part must not be taken for this try's output: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tree, "osm-central-america.pmtiles")); err == nil {
+		t.Fatal("the stale bytes were named as the map")
+	}
+	if st, err := os.Stat(stale); err != nil || st.Size() != 0 {
+		t.Fatalf("the stale .part is emptied, not deleted: %v %v", st, err)
 	}
 }
 

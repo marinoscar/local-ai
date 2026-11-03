@@ -411,8 +411,8 @@ func (p *PMTiles) sleep(ctx context.Context, d time.Duration) error {
 }
 
 // build runs `pmtiles extract` into treeDir/<id>.pmtiles.part and renames it to <id>.pmtiles when the
-// tool exits 0 (so a partial file never has the final name). The CLI cannot resume, so a leftover of an
-// earlier run is removed and the extract starts from scratch (the journal item is not resumable). Two
+// tool exits 0 (so a partial file never has the final name). The CLI cannot resume, so a leftover .part
+// of an earlier run is emptied and the extract starts from scratch (the item is not resumable). Two
 // attempts per run, a pause between them. The tool is throttled through the shared bandwidth bucket
 // when a limit is set: HTTPS_PROXY points at the loopback proxy, which allows the planet host only.
 func (p *PMTiles) build(ctx context.Context, e pmtilesExpect, treeDir string) error {
@@ -425,11 +425,6 @@ func (p *PMTiles) build(ctx context.Context, e pmtilesExpect, treeDir string) er
 	}
 	out := filepath.Join(treeDir, e.fileName)
 	part := out + ".part"
-	for _, f := range []string{part, out} {
-		if err := os.Remove(f); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return fail(CodeFetch, err, "cannot clear an earlier extract")
-		}
-	}
 	restore, err := p.lend(treeDir)
 	if err != nil {
 		return fail(CodeFetch, err, "cannot hand the staging folder to the service user")
@@ -460,9 +455,12 @@ func (p *PMTiles) build(ctx context.Context, e pmtilesExpect, treeDir string) er
 			if err := p.sleep(ctx, delay); err != nil {
 				return err
 			}
-			if err := os.Remove(part); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return fail(CodeFetch, err, "cannot clear the failed extract")
-			}
+		}
+		// Nothing in sync deletes outside internal/sync/retention, so a leftover of an earlier try is
+		// emptied, not removed: the tool overwrites it, and a try that wrote nothing cannot pass for
+		// the earlier one's bytes. A finished <id>.pmtiles of an earlier try is replaced by the rename.
+		if err := os.Truncate(part, 0); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fail(CodeFetch, err, "cannot clear an earlier extract")
 		}
 		res, err := subproc.Run(ctx, p.Env.runner(), subproc.Spec{
 			Bin: bin, Home: p.Env.SyncHome, Env: env, Credential: p.Credential, Timeout: timeout, MaxOut: smallOut,

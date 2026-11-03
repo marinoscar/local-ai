@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -400,9 +401,11 @@ func TestKiwixRefusesAnUnusableCatalogEntry(t *testing.T) {
 		return it
 	}
 	cases := map[string]plan.CatalogItem{
-		"http base":         mod(func(s *catalog.ContentSource) { s.BaseURL = "http://download.example.test/zim/" }),
-		"no host":           mod(func(s *catalog.ContentSource) { s.BaseURL = "https:///zim/" }),
-		"credentials":       mod(func(s *catalog.ContentSource) { s.BaseURL = "https://user:pw@download.example.test/zim/" }),
+		"http base": mod(func(s *catalog.ContentSource) { s.BaseURL = "http://download.example.test/zim/" }),
+		"no host":   mod(func(s *catalog.ContentSource) { s.BaseURL = "https:///zim/" }),
+		"credentials": mod(func(s *catalog.ContentSource) {
+			s.BaseURL = (&url.URL{Scheme: "https", User: url.UserPassword("a", "b"), Host: "download.example.test", Path: "/zim/"}).String()
+		}),
 		"query":             mod(func(s *catalog.ContentSource) { s.BaseURL = "https://download.example.test/zim/?x=1" }),
 		"book with slash":   mod(func(s *catalog.ContentSource) { s.Book = "a/b" }),
 		"book with space":   mod(func(s *catalog.ContentSource) { s.Book = "a b" }),
