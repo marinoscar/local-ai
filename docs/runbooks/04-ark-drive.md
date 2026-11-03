@@ -105,8 +105,9 @@ The exact procedure is [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting-
     ```
 
     Replace `<you>` with your user name (the path printed in step 11). The desktop app does the same with the **Set up this drive** button.
+    - **What it does:** it makes a folder called `localai` on the drive, with the empty sub-folders the drive needs, and one small file inside it called `ROOT.json` (the drive's name card). Then the computer writes `START-HERE.html` at the top of the drive (Part 9). It never erases, formats or deletes anything, and it only works on a drive that is still empty (`uninitialized`).
     - **What you should see:** `aictl ark drives` first shows the drive as `uninitialized` (`LAI-ARK-010`). After `init` (it asks to confirm), run `aictl ark drives` again: `AI-ARK  ark-3f9c0a12  /media/<you>/AI-ARK  ext4  … free  ✓ ready`. The `ark-…` value is the drive's **root id**. Write it on the drive's label.
-    - **If it doesn't work:** `unusable` with `LAI-ARK-002`: it isn't ext4, repeat from step 5. `LAI-ARK-006`: two drives have the same id (a cloned drive); see [07 → The ark drive is not found](07-troubleshooting.md#the-ark-drive-is-not-found).
+    - **If it doesn't work:** `unusable` with `LAI-ARK-002`: it isn't ext4, repeat from step 5. `LAI-ARK-006`: two drives have the same id (a cloned drive); see [07 → The ark drive is not found](07-troubleshooting.md#the-ark-drive-is-not-found). The command refuses (and changes nothing) if the drive is already `ready` or the `localai` folder already has files in it: that drive was set up before, so use it as it is (Part 4). `LAI-ARK-003` (the drive is read-only), `LAI-ARK-014` (a read/write error) or `LAI-SYN-040` (no space): fix that first (Part 8), then press **Set up this drive** again; it is safe to repeat.
 
 ---
 
@@ -180,7 +181,7 @@ The exact procedure is [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting-
 
 **Drive states you may see in `aictl ark drives`:**
 - `ready`: in use.
-- `not_mounted` (`LAI-ARK-005`): press **Mount** in the app, or open it in the **Files** app, or `aictl ark mount <root-id>`.
+- `not_mounted` (`LAI-ARK-005`): press **Mount** in the app, or open it in the **Files** app, or `aictl ark mount <root-id>` (Part 11). The computer never mounts a drive by itself.
 - `uninitialized` (`LAI-ARK-010`): a new, empty AI-ARK drive. Part 2, step 12.
 - `read_only` (`LAI-ARK-003`): it can be read and imported, not updated. Eject, plug in again.
 - `unclean` (`LAI-ARK-004`): the drive has filesystem errors. Used read-only, files are re-checked before use. Fix: Part 8.
@@ -196,8 +197,14 @@ The exact procedure is [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting-
     aictl ark eject <root-id>
     ```
 
-    - **What you should see:** "You can unplug the drive now." Now pull it out.
-    - **If it doesn't work:** `LAI-ARK-009`: a brain or a program is using files on it; the message lists them. Switch to a brain stored inside the computer (`aictl load <model-id>`) or close the program, then eject again.
+    Find the root id with `aictl ark drives` (the `ark-…` value). A new drive that you have not set up can be ejected too.
+    - **What you should see:** the drive shows `ejecting`, and after a few seconds "You can unplug the drive now." (in Spanish: "Ya puede desconectar el disco."). Only now pull it out. If you see `ejecting` and no message yet, wait: the computer is still saving the last data to the drive. It can take a minute.
+    - **If it doesn't work:** the answer is "The drive can't be ejected: files are in use" (`LAI-ARK-009`), with a list of what is using the drive. Nothing was unmounted and the drive works as before. For each line of the list:
+      - **A brain** (for example "The brain *Brain X* is running from this drive"): switch to a brain stored inside the computer (`aictl load <model-id>`), then eject again. Or press **Eject anyway** in the app, which stops that brain.
+      - **A program** (a name and a number, for example `bash (4242)`): it has a file of the drive open, or its terminal window is inside the drive's folder. Close the program, or in that terminal type `cd ~` and press Enter. Then eject again.
+      - **sync** (the computer is still copying to the drive): wait a minute and try again, or stop it with `aictl ark sync --cancel`.
+
+      If the app first says "ejecting" and a moment later shows `LAI-ARK-009` as a warning, the drive could not be unmounted at the last moment because something opened it: the drive is back in use, so close the listed program and press **Eject** again. **Never pull the drive while it shows `ejecting` or after this warning.**
 21. **If you pulled it out without ejecting** (`LAI-ARK-007`): nothing is lost. Plug it in again once so sync can check it; next time eject first.
 
 ---
@@ -398,3 +405,51 @@ Use this when a content folder (the internal disk or the drive) is getting full,
     - **What you should see:** the item now listed under `Would delete` for `internal`, and after you type `DELETE`, `Freed …`. A drive that is unplugged does **not** count as a copy: keep it plugged in while you prune.
     - **If it doesn't work:** the item is still listed as the only copy: the drive does not hold a checked copy yet (`aictl ark status` shows what the drive is missing), or it was checked more than a day ago; run `aictl ark verify --root <root-id> --item <item-id> --wait` and prune again.
     - To delete a model on purpose even though it is the last copy, use `aictl delete <model-id>` instead (it asks twice and needs the PIN); that is a different command with its own warnings, see [03 Part 3](03-swap-a-model.md#part-3-from-the-terminal).
+
+---
+
+## Part 11. Mount a drive, set it up, eject it and change its profile
+
+Use this when the app shows **Mount**, **Set up this drive** or **Eject** next to the drive, or when you want a drive to follow a different plan than the default `ark-drive-full`. The three buttons do what the commands below do; each command asks the agent on this computer, so none of them needs the internet.
+
+> **Before you start**
+> - You need: a terminal (**Ctrl + Alt + T**) and the drive plugged in.
+> - **Mount** and **Set up this drive** never erase or format anything. The computer never mounts a drive by itself: you press **Mount**.
+> - Changing the profile needs the admin PIN.
+
+> 🛠 Verify when implemented (E3 for the agent; the `aictl ark mount|init|eject` commands arrive with the CLI work; E8 for the desktop buttons).
+
+36. **See what state the drive is in:**
+
+    ```
+    aictl ark drives
+    ```
+
+    - **What you should see:** one line per drive with its root id (`ark-…`) and its state: `ready`, `uninitialized`, `not_mounted`, `read_only`, `unclean`, `unusable` or `ejecting`.
+    - **If it doesn't work:** no drive listed although it is plugged in: wait 30 seconds and look again, try another USB port, then see [07 → The ark drive is not found](07-troubleshooting.md#the-ark-drive-is-not-found).
+
+37. **Mount it** (only if the state is `not_mounted`, `LAI-ARK-005`):
+
+    ```
+    aictl ark mount <root-id>
+    ```
+
+    - **What you should see:** a moment later the drive is listed with a folder (for example `/media/root/AI-ARK`) and the state `ready`, or `uninitialized` if it is a new drive. Any folder is fine.
+    - **If it doesn't work:** if the drive is already `ready`, `read_only` or anything other than `not_mounted`, the command refuses and tells you its state: it does not need mounting. If it says it could not mount the drive (`LAI-ARK-005`) and gives a reason: `wrong fs type` means the drive is not ext4 (go back to Part 2); a message about errors or `fsck` means Part 8. Otherwise unplug the drive, wait 10 seconds, plug it in again, or open it once in the **Files** app.
+
+38. **Set it up** (only if the state is `uninitialized`): follow Part 2, step 12 (`aictl ark init <root-id>`, or the **Set up this drive** button).
+
+    - **What you should see:** the state changes to `ready` and a file `START-HERE.html` appears at the top of the drive.
+
+39. **Eject it** before you unplug it: Part 5, step 20.
+
+40. **Change the plan the drive follows** (admin PIN). The default is `ark-drive-full`, which wants everything in the catalog:
+
+    ```
+    aictl ark drives set-profile <root-id> <profile>
+    ```
+
+    Type the PIN when it asks (nothing shows on the screen).
+
+    - **What you should see:** the root id and the new profile name. The next `aictl ark sync` fills the drive according to the new profile. Nothing is deleted when you change it; content the new plan no longer wants stays until you free space with Part 10.
+    - **If it doesn't work:** "unknown profile" (`LAI-CAT-003`): the name is misspelled or this computer's catalog does not have it; check the spelling, or run `aictl catalog refresh` on a computer with internet and try again. "No catalog" (`LAI-CAT-001`): run `aictl catalog restore`. The drive must be plugged in and writable: if it is `read_only` (`LAI-ARK-003`), eject it, plug it in again and repeat. A wrong PIN is asked again; too many wrong PINs lock the command for a few minutes (`LAI-SEC-004`).

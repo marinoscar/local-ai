@@ -141,3 +141,47 @@ func TestDriveDetectorStaysOffWithoutFakesInATestDaemon(t *testing.T) {
 		t.Errorf("GET /ark/drives = %d %s", got.status, got.body)
 	}
 }
+
+// The four drive action routes (SYNC-03) are wired over the detector: an unknown drive is 404, a drive in
+// the wrong state is 409 with its state, and the profile route needs the admin PIN, which the agent token
+// (an operator) does not carry. Nothing here unmounts or mounts: the drive is a plain directory, so only the
+// refusals are exercised.
+func TestDriveActionRoutesAreWired(t *testing.T) {
+	_, hook := pluggedDrive(t)
+	handled := make(chan string, 4)
+	r := newRig(t, withEnv(func(e *Env) {
+		e.ArkDrives = hook
+		e.OnDriveEvent = func(typ, root string) { handled <- typ + " " + root }
+	}))
+	r.start()
+	r.waitStarted()
+	select {
+	case <-handled:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("the drive was never announced\n%s", r.logText())
+	}
+	if r.d.ark.driveActions == nil {
+		t.Fatal("the drive actions were not built")
+	}
+
+	if got := r.do("POST", "/ark/drives/ark-deadbeef/eject", map[string]any{}); got.status != http.StatusNotFound || errCode(got) != "LAI-AGT-021" {
+		t.Errorf("eject of an unknown drive = %d %s", got.status, got.body)
+	}
+	for _, action := range []string{"init", "mount"} {
+		got := r.do("POST", "/ark/drives/ark-3f9c0a12/"+action, map[string]any{})
+		if got.status != http.StatusConflict || errCode(got) != "LAI-AGT-020" {
+			t.Errorf("%s of a ready drive = %d %s", action, got.status, got.body)
+			continue
+		}
+		details, _ := got.json()["error"].(map[string]any)["details"].(map[string]any)
+		if details["state"] != "ready" {
+			t.Errorf("%s details = %v", action, details)
+		}
+	}
+	if got := r.do("PUT", "/ark/drives/ark-3f9c0a12/profile", map[string]any{"profile": "ark-drive-full"}); got.status != http.StatusForbidden {
+		t.Errorf("profile without the PIN = %d %s", got.status, got.body)
+	}
+	if got := r.doAuth("POST", "/ark/drives/ark-3f9c0a12/mount", map[string]any{}, false); got.status != http.StatusUnauthorized {
+		t.Errorf("mount with no credentials = %d", got.status)
+	}
+}
