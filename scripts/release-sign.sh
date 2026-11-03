@@ -10,7 +10,7 @@
 # sign reads the secret key from $MINISIGN_SECRET_KEY (file contents) and the password from
 # $MINISIGN_PASSWORD. The key goes to a mode-0600 temp file removed on exit; the password goes over
 # stdin, never argv. Neither is ever printed. RELEASE_TAG fills the signed trusted comment.
-# verify defaults to agent/internal/update/minisign.pub.
+# verify defaults to agent/internal/kit/keys/minisign.pub (rebuild-kit.md section 3.4).
 #
 # Exit: 0 ok, 1 verification or signing failed, 2 usage or environment error.
 set -euo pipefail
@@ -60,7 +60,7 @@ case "$cmd" in
 
   verify)
     need minisign; need sha256sum
-    pub="${1:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)/agent/internal/update/minisign.pub}"
+    pub="${1:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)/agent/internal/kit/keys/minisign.pub}"
     [[ -f "$pub" ]] || { echo "release-sign: public key $pub not found. Owner action pending: generate the key pair (docs/architecture/release-signing.md)" >&2; exit 2; }
     [[ -f "$dir/SHA256SUMS" && -f "$dir/SHA256SUMS.minisig" ]] || { echo "release-sign: SHA256SUMS or SHA256SUMS.minisig missing in $dir" >&2; exit 1; }
     if ! minisign -V -p "$pub" -m "$dir/SHA256SUMS" -x "$dir/SHA256SUMS.minisig" >/dev/null 2>&1; then
