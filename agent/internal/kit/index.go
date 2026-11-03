@@ -242,11 +242,11 @@ func (ix Index) Encode() ([]byte, error) {
 	}
 	parts := make([]wirePart, 0, len(ix.Parts))
 	for _, p := range ix.Parts {
-		parts = append(parts, wirePart{p.Part, p.Items, p.TotalBytes})
+		parts = append(parts, wirePart(p))
 	}
 	invalid := make([]wireInvalid, 0, len(ix.Invalid))
 	for _, p := range ix.Invalid {
-		invalid = append(invalid, wireInvalid{p.Dir, p.Code})
+		invalid = append(invalid, wireInvalid(p))
 	}
 	missing := ix.Missing
 	if missing == nil {
