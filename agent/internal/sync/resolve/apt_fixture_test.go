@@ -52,6 +52,10 @@ type aptFixture struct {
 	// "not valid yet" check (which reads the real clock) passes.
 	now time.Time
 
+	// gen counts the publishes; each one stamps its files a minute later than the last, so apt's
+	// If-Modified-Since never takes a second publish within the same second for "not modified".
+	gen int
+
 	mu       sync.Mutex
 	hits     map[string]int
 	override map[string]http.HandlerFunc
@@ -165,6 +169,7 @@ func (f *aptFixture) FileName(p fxPkg) string {
 // publish rebuilds the archive from f.Pkgs and signs it.
 func (f *aptFixture) publish() {
 	f.t.Helper()
+	f.gen++
 	pool := filepath.Join(f.root, "pool")
 	if err := os.MkdirAll(pool, 0o755); err != nil {
 		f.t.Fatal(err)
@@ -236,6 +241,12 @@ func (f *aptFixture) publish() {
 			f.t.Fatal(err)
 		}
 		f.gpg("--batch", "--yes", "--clearsign", "--output", filepath.Join(distDir, "InRelease"), relPath)
+		stamp := f.now.Add(-10*time.Hour + time.Duration(f.gen)*time.Minute)
+		for _, n := range append([]string{"Release", "InRelease"}, names...) {
+			if err := os.Chtimes(filepath.Join(distDir, n), stamp, stamp); err != nil {
+				f.t.Fatal(err)
+			}
+		}
 	}
 }
 
