@@ -1619,6 +1619,7 @@ aiagent-linux-arm64
 SHA256SUMS                 "<sha256>  aiagent-linux-amd64\n<sha256>  aiagent-linux-arm64\n"
 SHA256SUMS.minisig         minisign signature of SHA256SUMS
 ```
+The same release also carries `install-node.sh` (version and public key stamped in) and `local-ai-node-v<semver>-src.tar.gz` (agent source for the rebuild kit); `SHA256SUMS` lists them too, one line each, so every consumer can run `sha256sum -c --ignore-missing`. Self-update reads only the lines it needs ([rebuild-kit.md](rebuild-kit.md) §3.2, [release-signing.md](../architecture/release-signing.md)).
 
 Steps:
 1. **Resolve.** `GET https://api.github.com/repos/<repo>/releases/tags/node-v<version>` or, without a version, `GET …/releases?per_page=30` and pick the highest semver tag `node-v*` (`prerelease: false` unless `update.channel: prerelease`). Refuse a version ≤ current unless `allow_downgrade` (`LAI-AGT-015` info "already up to date"). 30 s timeout. Offline/survival mode, or no internet → refused with `LAI-AGT-023`. There is no HTTP route for update: `aictl update` prints the code and exits **6** ([aictl.md](aictl.md) §3.4, §4.27); a cloud `agent.update` job fails with `LAI-AGT-023`.

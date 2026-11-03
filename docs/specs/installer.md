@@ -98,6 +98,18 @@ Everything in overview.md §3.2, plus `/var/lib/localai/install/state.json`, `/v
 | `verify` | post-install checks (all `LAI-INS` doctor checks) |
 | `summary` | prints the summary and the VPS checklist |
 
+### 3.6 Release stamping
+
+`installers/install-node.sh` in the repository is a **template**. The node release workflow ([rebuild-kit.md](rebuild-kit.md) §3.2, [`scripts/release/stamp-installer.sh`](../../scripts/release/stamp-installer.sh)) replaces three tokens, everywhere they occur, and ships the result as the release asset `install-node.sh`:
+
+| Token | Replaced by | Used for |
+|---|---|---|
+| `@@LAI_RELEASE_TAG@@` | the release tag, `node-v0.1.0` | the download URL of the release assets (P2) |
+| `@@LAI_RELEASE_VERSION@@` | the tag without `node-v`, `0.1.0` | the version `install-node.sh --version` prints; the agent version it installs |
+| `@@LAI_MINISIGN_PUBKEY@@` | line 2 of `agent/internal/kit/keys/minisign.pub` (starts with `RW`) | `minisign -Vm SHA256SUMS -P <key>` (P2) |
+
+The release fails if the template lacks any of the three, if a token the stamper does not know is left, or if the stamped script does not pass `bash -n`; the key in the stamped script is compared with the committed file again after stamping. A script that must detect "this copy was never stamped" writes the token split in two (`"@@LAI_RELEASE_VERSION""@@"`), which the stamper leaves alone. Run from a checkout the template is unstamped and must say so and stop, not guess a version.
+
 ## 4. Behaviour
 
 ### 4.1 Driver skeleton
