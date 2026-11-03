@@ -107,7 +107,7 @@ type IndexOptions struct {
 func BuildIndex(ctx context.Context, fsys config.FS, root ark.Root, opts IndexOptions) (Index, error) {
 	scanned, problems, err := ark.ScanRoot(ctx, fsys, root)
 	if err != nil {
-		return Index{}, fmt.Errorf("%w: %v", ErrIndex, err)
+		return Index{}, fmt.Errorf("%w: %w", ErrIndex, err)
 	}
 	ix := Index{GeneratedAt: stamp(opts.Now), RootID: root.ID, CatalogVersion: opts.CatalogVersion}
 	present := map[string]bool{}
@@ -300,13 +300,14 @@ func (ix Index) Readme() []byte {
 	line("LOCAL AI REBUILD KIT")
 	line("====================")
 	line("")
-	line("This folder lets you rebuild a Local AI computer with NO internet. It holds the")
-	line("programs, the source code, the Ubuntu packages, the graphics driver packages and")
-	line("the catalog that a rebuild needs. An Ubuntu install USB stick is the only other")
-	line("thing you need.")
+	line("This folder lets you rebuild a Local AI computer with NO internet.")
+	line("It holds the programs, the source code, the Ubuntu packages, the graphics")
+	line("driver packages and the catalog that a rebuild needs. An Ubuntu install")
+	line("USB stick is the only other thing you need.")
 	line("")
-	line("Do not edit, rename or delete anything in this folder by hand. The Local AI agent")
-	line("keeps it up to date and checks it. This file is rewritten after every change.")
+	line("Do not edit, rename or delete anything in this folder by hand. The Local")
+	line("AI agent keeps it up to date and checks it. This file is rewritten after")
+	line("every change.")
 	line("")
 	line("Written (UTC):  %s", ix.GeneratedAt.UTC().Format("2006-01-02 15:04"))
 	if ix.CatalogVersion != "" {
@@ -369,7 +370,7 @@ func (ix Index) Readme() []byte {
 		line("NEEDS ATTENTION")
 		line("---------------")
 		if len(ix.Missing) > 0 {
-			line("Missing: %s", strings.Join(ix.Missing, ", "))
+			b.WriteString(wrapList("Missing: ", ix.Missing))
 			line("   Connect to the internet and run: aictl ark sync")
 		}
 		for _, p := range ix.Invalid {
@@ -390,19 +391,46 @@ type partDesc struct {
 }
 
 var partText = map[string]partDesc{
-	PartCatalog:    {what: "The catalog this kit was planned with, and pins.json (versions in use)."},
+	PartCatalog:    {what: "The catalog this kit was planned with, and pins.json."},
 	PartInstallers: {what: "install-node.sh, the installer that starts an offline rebuild."},
 	PartBin:        {what: "The Local AI agent program for both CPU types, with signatures."},
-	PartSrc:        {what: "Source code packages (llama.cpp, whisper.cpp, the agent), ready to build."},
-	PartGit:        {what: "Full copies of the source repositories, to move to another version."},
+	PartSrc:        {what: "Source code (llama.cpp, whisper.cpp, agent), ready to build."},
+	PartGit:        {what: "Full copies of the source repositories, to change version."},
 	PartToolchains: {what: "The Go compiler, to rebuild the agent with no internet."},
 	PartTools:      {what: "kiwix-tools (Wikipedia reader), pmtiles (maps), piper (voice)."},
 	PartDesktop:    {what: "The ai-desktop app installers."},
-	PartDebs:       {what: "Ubuntu packages (compilers, Vulkan, tools), one folder per Ubuntu release."},
+	PartDebs:       {what: "Ubuntu packages (compilers, Vulkan, tools), per Ubuntu release."},
 	PartNvidia:     {what: "NVIDIA graphics driver packages, one folder per driver version."},
 	PartCuda:       {what: "Optional smaller CUDA compiler files."},
-	PartPrebuilt:   {what: "Ready-made llama.cpp and whisper.cpp builds exported by the computers."},
+	PartPrebuilt:   {what: "Ready-made llama.cpp and whisper.cpp builds from the computers."},
 	PartISO:        {what: "The Ubuntu install image, to make a new install USB stick.", driveOnly: true},
+}
+
+// wrapList writes "<label>a, b, c" wrapped at 78 characters, continuation lines indented by three.
+func wrapList(label string, items []string) string {
+	var b strings.Builder
+	col := 0
+	b.WriteString(label)
+	col = len(label)
+	for i, it := range items {
+		word := it
+		if i < len(items)-1 {
+			word += ","
+		}
+		if i > 0 {
+			if col+1+len(word) > 78 {
+				b.WriteString("\n   ")
+				col = 3
+			} else {
+				b.WriteByte(' ')
+				col++
+			}
+		}
+		b.WriteString(word)
+		col += len(word)
+	}
+	b.WriteByte('\n')
+	return b.String()
 }
 
 func plural(n int, one, many string) string {
@@ -437,7 +465,7 @@ func HumanBytes(n int64) string {
 func WriteIndex(fsys config.FS, root ark.Root, ix Index) error {
 	dir, err := root.Join(DirName)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrIndex, err)
+		return fmt.Errorf("%w: %w", ErrIndex, err)
 	}
 	info, err := fsys.Stat(dir)
 	if err != nil || !info.IsDir() {
@@ -445,13 +473,13 @@ func WriteIndex(fsys config.FS, root ark.Root, ix Index) error {
 	}
 	data, err := ix.Encode()
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrIndex, err)
+		return fmt.Errorf("%w: %w", ErrIndex, err)
 	}
 	if err := config.WriteFileAtomicFS(fsys, filepath.Join(dir, IndexFileName), data, 0o644, -1, -1); err != nil {
-		return fmt.Errorf("%w: %v", ErrIndex, err)
+		return fmt.Errorf("%w: %w", ErrIndex, err)
 	}
 	if err := config.WriteFileAtomicFS(fsys, filepath.Join(dir, ReadmeFileName), ix.Readme(), 0o644, -1, -1); err != nil {
-		return fmt.Errorf("%w: %v", ErrIndex, err)
+		return fmt.Errorf("%w: %w", ErrIndex, err)
 	}
 	return nil
 }

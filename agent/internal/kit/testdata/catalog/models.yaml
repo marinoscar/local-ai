@@ -1,0 +1,128 @@
+schema_version: 1
+models:
+  - id: model-alpha-9b-q4
+    display_name: "Model Alpha 9B"
+    summary: "Fast general assistant. Good for chat, writing and simple code."
+    summary_es: "Asistente general rapido. Bueno para conversar, escribir y codigo simple."
+    engine: llama
+    roles: [chat, reasoning, coder]
+    languages: [en, es, multi]
+    license: apache-2.0
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: org-alpha/model-alpha-gguf
+      revision: 0123456789abcdef0123456789abcdef01234567
+    files:
+      - kind: weights
+        name: Model-Alpha-9B-Q4_K_M.gguf
+        url: null
+        size_bytes: 5870000000
+        sha256: "@sha:1@"
+    requirements: {backends: [cuda, vulkan, cpu], min_vram_mib: 6400, min_ram_mib: 8192, min_disk_bytes: 5900000000}
+    llama:
+      ctx: 32768
+      n_gpu_layers: 99
+      flash_attn: "on"
+      parallel: 1
+      speculative: {type: draft-mtp, n_max: 3, draft_file_kind: null, draft_ngl: all}
+      mmproj_file_kind: null
+      chat_template: null
+      extra_args: ["--jinja", "--cache-type-k=q8_0"]
+      env: {GGML_VK_SUBALLOCATION_BLOCK_SIZE: "4294967296"}
+    client_hints: {max_output_tokens: 8192, reasoning: true}
+
+  - id: model-beta-27b-q4
+    display_name: "Model Beta 27B"
+    summary: "Slower, stronger reasoning model with a draft model for speed."
+    engine: llama
+    roles: [reasoning]
+    languages: [en]
+    license: "custom:https://example.test/licenses/beta"
+    survival_tier: 2
+    source:
+      type: huggingface
+      repo: org-beta/model-beta-gguf
+      revision: fedcba9876543210fedcba9876543210fedcba98
+    files:
+      - {kind: weights, name: "main/Model-Beta-27B-Q4_K_M.gguf", size_bytes: 16000000000, sha256: "@sha:2@"}
+      - {kind: draft, name: "Model-Beta-1B-Q4_K_M.gguf", size_bytes: 700000000, sha256: "@sha:3@"}
+      - {kind: chat_template, name: "chat_template.jinja", size_bytes: 4096, sha256: "@sha:4@"}
+    requirements: {backends: [cuda, vulkan], min_vram_mib: 20000, min_ram_mib: 32768, min_disk_bytes: 16800000000}
+    llama:
+      ctx: 65536
+      n_gpu_layers: all
+      flash_attn: auto
+      parallel: 2
+      speculative: {type: draft, n_max: 8, draft_file_kind: draft, draft_ngl: 99}
+      chat_template: chat_template
+
+  - id: model-gamma-vl-q4
+    display_name: "Model Gamma Vision"
+    summary: "Looks at photos and answers questions about them."
+    engine: llama
+    roles: [vision, chat]
+    languages: [en, es]
+    license: mit
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: org-alpha/model-gamma-vl-gguf
+      revision: 0123456789abcdef0123456789abcdef01234567
+    files:
+      - {kind: weights, name: Model-Gamma-VL-Q4_K_M.gguf, size_bytes: 4200000000, sha256: "@sha:5@"}
+      - {kind: mmproj, name: mmproj-Model-Gamma-VL-f16.gguf, size_bytes: 900000000, sha256: "@sha:6@"}
+    requirements: {backends: [cuda, vulkan, cpu], min_vram_mib: 5600, min_ram_mib: 8192, min_disk_bytes: 5100000000}
+    llama: {ctx: 8192, n_gpu_layers: 99, flash_attn: "off", mmproj_file_kind: mmproj}
+
+  - id: model-delta-embed
+    display_name: "Model Delta Embeddings"
+    summary: "Small embedding model for offline search."
+    engine: llama
+    roles: [embedding]
+    languages: [multi]
+    license: "Apache-2.0 OR MIT"
+    survival_tier: 3
+    source:
+      type: url
+    files:
+      - kind: weights
+        name: model-delta-embed-q8.gguf
+        url: "https://example.test/models/model-delta-embed-q8.gguf"
+        size_bytes: 140000000
+        sha256: "@sha:7@"
+    requirements: {backends: [cpu, cuda, vulkan], min_vram_mib: 0, min_ram_mib: 1024, min_disk_bytes: 140000000}
+    llama: {ctx: 2048, n_gpu_layers: 0}
+
+  - id: whisper-small
+    display_name: "Whisper Small"
+    summary: "Speech to text in English and Spanish."
+    engine: whisper
+    roles: [stt]
+    languages: [multi]
+    license: mit
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: org-alpha/whisper-small-ggml
+      revision: 0123456789abcdef0123456789abcdef01234567
+    files:
+      - {kind: whisper, name: ggml-small.bin, size_bytes: 487000000, sha256: "@sha:8@"}
+    requirements: {backends: [cuda, cpu], min_vram_mib: 0, min_ram_mib: 2048, min_disk_bytes: 487000000}
+
+  - id: piper-en-medium
+    display_name: "Piper English voice"
+    summary: "English text to speech voice."
+    engine: piper
+    roles: [tts]
+    languages: [en]
+    license: cc0-1.0
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: org-alpha/piper-voices
+      revision: 0123456789abcdef0123456789abcdef01234567
+    files:
+      - {kind: piper_onnx, name: "en/voice-medium.onnx", size_bytes: 63000000, sha256: "@sha:9@"}
+      - {kind: piper_config, name: "en/voice-medium.onnx.json", size_bytes: 5000, sha256: "@sha:a@"}
+    requirements: {backends: [cpu], min_vram_mib: 0, min_ram_mib: 512, min_disk_bytes: 63005000}

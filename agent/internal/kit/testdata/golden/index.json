@@ -1,0 +1,119 @@
+{
+  "schema": "localai.kit-index",
+  "index_version": 1,
+  "generated_at": "2026-11-02T18:04:11Z",
+  "root_id": "internal",
+  "catalog_version": "2026.11.02-1",
+  "total_bytes": 115,
+  "parts": [
+    {
+      "part": "catalog",
+      "items": 1,
+      "total_bytes": 22
+    },
+    {
+      "part": "bin",
+      "items": 1,
+      "total_bytes": 33
+    },
+    {
+      "part": "src",
+      "items": 1,
+      "total_bytes": 14
+    },
+    {
+      "part": "git",
+      "items": 1,
+      "total_bytes": 27
+    },
+    {
+      "part": "toolchains",
+      "items": 1,
+      "total_bytes": 8
+    },
+    {
+      "part": "debs",
+      "items": 1,
+      "total_bytes": 11
+    }
+  ],
+  "items": [
+    {
+      "id": "kit-agent-binaries",
+      "dir": "bin",
+      "part": "bin",
+      "version": "node-v0.4.0",
+      "catalog_version": "2026.11.02-1",
+      "total_bytes": 33,
+      "files": 3,
+      "trust": "pinned",
+      "verified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-catalog",
+      "dir": "catalog",
+      "part": "catalog",
+      "version": "catalog-2026.11.02-1",
+      "catalog_version": "2026.11.02-1",
+      "total_bytes": 22,
+      "files": 3,
+      "trust": "pinned",
+      "verified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-debs-resolute-amd64",
+      "dir": "debs/resolute-amd64",
+      "part": "debs",
+      "version": "a1b2c3d4e5f6",
+      "catalog_version": "2026.11.02-1",
+      "total_bytes": 11,
+      "files": 3,
+      "tree_sha256": "sha256-d7a48dea",
+      "trust": "pinned",
+      "verified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-llama-cpp",
+      "dir": "git/llama.cpp.git",
+      "part": "git",
+      "version": "0123456789ab",
+      "catalog_version": "2026.11.02-1",
+      "total_bytes": 27,
+      "files": 2,
+      "tree_sha256": "sha256-8e7ef911",
+      "trust": "pinned",
+      "verified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-agent-source",
+      "dir": "src",
+      "part": "src",
+      "version": "node-v0.4.0",
+      "catalog_version": "2026.11.02-1",
+      "total_bytes": 14,
+      "files": 1,
+      "trust": "pinned",
+      "verified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-go-toolchain",
+      "dir": "toolchains",
+      "part": "toolchains",
+      "version": "e3b0c44298fc",
+      "catalog_version": "2026.11.02-1",
+      "total_bytes": 8,
+      "files": 1,
+      "trust": "pinned",
+      "verified_at": "2026-11-02T18:04:11Z"
+    }
+  ],
+  "missing": [
+    "kit-desktop",
+    "kit-kiwix-tools",
+    "kit-nvidia-resolute-amd64-595-open",
+    "kit-piper",
+    "kit-pmtiles",
+    "kit-whisper-cpp"
+  ],
+  "invalid": []
+}

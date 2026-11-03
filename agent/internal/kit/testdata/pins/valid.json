@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-11-02T00:00:00Z",
+  "llama_cpp": [
+    {
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "nodes": [
+        "ai-n1",
+        "ai-n2",
+        "ai-n3"
+      ],
+      "reported_at": "2026-11-02T00:00:00Z"
+    }
+  ],
+  "whisper_cpp": [
+    {
+      "commit": "89abcdef0123456789abcdef0123456789abcdef",
+      "nodes": [
+        "ai-n3"
+      ]
+    }
+  ],
+  "agent": [
+    {
+      "tag": "node-v0.4.0",
+      "nodes": [
+        "ai-n3"
+      ]
+    }
+  ],
+  "codenames": [
+    {
+      "codename": "resolute",
+      "arch": "amd64",
+      "nodes": [
+        "ai-n1",
+        "ai-n2",
+        "ai-n3"
+      ]
+    }
+  ],
+  "nvidia_branches": [
+    {
+      "branch": "595-open",
+      "codename": "resolute",
+      "arch": "amd64",
+      "nodes": [
+        "ai-n2",
+        "ai-n3"
+      ]
+    }
+  ]
+}

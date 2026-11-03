@@ -398,6 +398,7 @@ func TestLintAllowed(t *testing.T) {
 			writeFile(t, dir, FileTestMarker, "")
 			writeFile(t, dir, "pins.json", "{}")
 		}},
+		{name: "kit-catalog is a kit item with a repo_docs source", setup: appendTo(fA, "  - id: kit-catalog\n    kind: kit\n    source: {type: repo_docs}\n")},
 		{name: "CATALOG_VERSION without trailing newline", setup: put(fV, "2026.11.02-1")},
 		{name: "CATALOG_VERSION with CRLF", setup: put(fV, "2026.11.02-1\r\n")},
 		{name: "dotfile in profiles is ignored", setup: put("profiles/.keep", "")},

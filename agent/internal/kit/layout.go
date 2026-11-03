@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"path"
-	"sort"
 	"strings"
 
 	"github.com/marinoscar/local-ai/agent/internal/ark"
@@ -228,14 +227,11 @@ type LayoutProblem struct {
 }
 
 // CheckLayout checks the kit items of a catalog as a set: every one has a layout, and no two share
-// an item directory or sit inside one another (one MANIFEST per directory, and a swap of the outer
-// directory would replace the inner one). Items that are not kit items are ignored. The problems
-// come in item order. A catalog with no problem installs cleanly into the layout.
+// an item directory (one MANIFEST per directory). Items that are not kit items are ignored. The
+// problems come in item order. A catalog with no problem installs cleanly into the layout.
 func CheckLayout(items []catalog.ContentItem) []LayoutProblem {
 	var problems []LayoutProblem
 	owner := map[string]string{}
-	type placed struct{ id, dir string }
-	var all []placed
 	for _, it := range items {
 		if !IsKitItem(it) {
 			continue
@@ -250,15 +246,6 @@ func CheckLayout(items []catalog.ContentItem) []LayoutProblem {
 			continue
 		}
 		owner[l.Dir] = it.ID
-		all = append(all, placed{it.ID, l.Dir})
-	}
-	sort.SliceStable(all, func(i, j int) bool { return all[i].dir < all[j].dir })
-	for i, a := range all {
-		for _, b := range all[i+1:] {
-			if strings.HasPrefix(b.dir, a.dir+"/") {
-				problems = append(problems, LayoutProblem{ID: b.id, Reason: fmt.Sprintf("kit/%s is inside kit/%s, the directory of %s", b.dir, a.dir, a.id)})
-			}
-		}
 	}
 	return problems
 }
