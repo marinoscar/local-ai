@@ -3,7 +3,6 @@ package drill
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"sync"
@@ -306,9 +305,6 @@ type rigOpt func(*rig, *Deps)
 
 func withoutFence() rigOpt    { return func(_ *rig, d *Deps) { d.Fence = nil } }
 func withoutRestorer() rigOpt { return func(_ *rig, d *Deps) { d.Restorer = nil } }
-func withKeep(n int) rigOpt {
-	return func(r *rig, _ *Deps) { r.results = NewResults(ResultsOptions{FS: r.fs, Dir: testDir, Keep: n}) }
-}
 
 const testDir = "/var/lib/localai/drill"
 
@@ -395,5 +391,3 @@ func (r *rig) doc(runID string) *Document {
 	}
 	return &d
 }
-
-func isErr(err error, target error) bool { return errors.Is(err, target) }

@@ -84,16 +84,6 @@ func (m *memFS) listing(dir string) []string {
 	return m.names(dir)
 }
 
-func (m *memFS) content(path string) (string, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	n, _, ok := m.resolve(path)
-	if !ok {
-		return "", false
-	}
-	return string(n.data), true
-}
-
 func (m *memFS) ReadFile(name string) ([]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

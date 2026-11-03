@@ -251,10 +251,7 @@ func TestResultsPruneSweepsTempFilesAndOrphanCheckpoints(t *testing.T) {
 	if err := s.Save(done); err != nil {
 		t.Fatal(err)
 	}
-	var left []string
-	for _, n := range m.listing(testDir) {
-		left = append(left, n)
-	}
+	left := m.listing(testDir)
 	want := []string{done.RunID + ".json", live.RunID + ".partial", "latest.json"}
 	if strings.Join(sortedCopy(left), ",") != strings.Join(sortedCopy(want), ",") {
 		t.Fatalf("left %v, want %v (the checkpoint of a run still without a document stays)", left, want)
