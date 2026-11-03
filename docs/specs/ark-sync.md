@@ -159,7 +159,7 @@ Validation errors in this block are `LAI-AGT` config errors (agent.md). Unknown 
 ```
 - `409` with `LAI-SYN-005` if a run is already active (body includes the active `run_id`).
 - `409` with `LAI-SYN-010` in survival mode; `409` with `LAI-SYN-011` in offline mode unless `allow_offline_mode: true`.
-- With `dry_run: true`, the response is `200` with the plan (§4.4.4) and nothing is written.
+- With `dry_run: true`, the response is `200` with the plan (§4.4.4) and nothing is written. The body is a **JSON array with one plan per root**, in the order of the request (every writable root, internal first, when `roots` is empty; a read-only root can be named and is planned with every non-keep action `skip (read_only)`). `items` limits the rows shown (an id that is in no plan is `400 LAI-AGT-020`, `details.field: "items"`); the budget, planned and peak figures still describe the whole plan. A dry run takes no run slot and is allowed in every mode: in offline and survival mode it plans without the network and says so (`offline: true`) instead of refusing with `LAI-SYN-010/011`. A root that is not mounted is `400 LAI-AGT-020` (`details.field: "roots"`), no writable root is `409 LAI-ARK-001`, and a profile the catalog lacks is `422 LAI-CAT-003`. Until the run engine (SYNC-07) is wired a request without `dry_run` answers `503 LAI-AGT-024` (`details.reason: "sync_engine_not_ready"`).
 
 **`GET /api/v1/ark/sync`** → the active or last run:
 ```json
@@ -418,29 +418,33 @@ A **scheduled** run that is still active after `max_run_hours` is cancelled grac
 
 ### 4.4 Planner
 
-The planner is a pure function, `Plan(in PlanInput) Plan`, with no I/O. Everything it needs is gathered first, which keeps it table-testable.
+The planner is a pure function, `plan.Plan(in PlanInput) RootPlan`, with no I/O and no clock (it reads `in.Now`). Everything it needs is gathered first (`plan.Gatherer`, the only part that touches the disk, behind interfaces), which keeps it table-testable. Code: `agent/internal/sync/plan/` (`plan.go` and `types.go` pure, `gather.go`, `dryrun.go`, `render.go`).
 
 ```go
 type PlanInput struct {
-    Root        RootInfo          // id, kind, profile id, fs total/free bytes, read_only
-    Catalog     *catalog.Catalog
-    Profile     *catalog.Profile
-    Overrides   *ProfileOverrides // internal root: node.yaml profile_overrides; drive root: none
-    Node        NodeInfo          // backend, vram, ram, arch, codename (for kit item filtering)
-    Present     map[string]Manifest   // verified copies on this root
-    Partial     map[string]PartState  // journal: .part bytes, staged files
-    Trash       []TrashEntry          // per version, size, eligibility
-    Resolved    map[string]Resolved   // resolver output (version, files, sizes); absent = not resolved (offline/dry-run without network)
-    OtherRoots  map[string]Manifest   // verified copies elsewhere (for local-copy sourcing)
-    Now         time.Time
+    Root       RootInfo                    // id, kind, path, profile id, fs total/free bytes, read_only
+    Catalog    *catalog.Catalog
+    Profile    *catalog.Profile
+    Overrides  *ProfileOverrides           // = catalog.Overrides; internal root: node.yaml profile_overrides; drive root: nil
+    Node       NodeInfo                    // backend, vram, ram, arch, codename (for kit item filtering)
+    Present    map[string]manifest.Manifest // verified copies on this root, by item id
+    Partial    map[string]PartState        // journal: .part bytes and staged files, with the version they are for
+    Trash      []TrashEntry                // per superseded version: size, trashed-at, eligible to purge
+    Resolved   map[string]Resolved         // resolver output (version, sort key, size); absent = not resolved
+    OtherRoots map[string][]RootCopy       // verified copies on the other roots, best first (local-copy sourcing)
+    Mode       string                      // online | offline | survival (informational; offline and survival forbid the network)
+    Offline    bool                        // the network may not be used (no connectivity, or an import)
+    Now        time.Time
 }
 ```
+
+`plan.PlanAll(inputs)` plans several roots of one run and sequences the downloads between them (§4.4.3, "Several roots"). The gatherer fills `Resolved` from the resolvers when the node is online and from `plan.FromCatalog` (what the catalog itself pins) for every item no resolver answered; the resolver registry (`plan.Resolvers`, by catalog source type) is empty until SYNC-09 to SYNC-11 register theirs.
 
 #### 4.4.1 Desired set
 1. `desired = profile.include.models ++ profile.include.content` (in that order, keeping list order). This combined list is the **list position** used for tie-breaks, as catalog.md §4 requires.
 2. Apply overrides: append `add_models` then `add_content` (in their order) if not already present; remove `remove_models` and `remove_content`. `budget_bytes` from overrides, if not null, replaces the profile budget.
-3. **Kit filtering.** A `kit` item that is specific to a codename or arch (for example `kit-debs-resolute-amd64`) is kept on an internal root only if it matches this node's codename and arch ([rebuild-kit.md](rebuild-kit.md) §3.2). Drive roots keep all of them.
-4. Unknown ids (not in the catalog) are dropped with `LAI-CAT-004`.
+3. **Kit filtering.** A `kit` item that is specific to a codename or arch (an `apt_closure` source, for example `kit-debs-resolute-amd64`) is kept on an internal root only if it matches this node's codename and arch ([rebuild-kit.md](rebuild-kit.md) §3.2); an unknown node value filters nothing. Drive roots keep all of them. A filtered item has no row: its id is listed in the plan's `not_for_node`, and a verified copy of it that is present becomes an orphan.
+4. Unknown ids (not in the catalog, in the profile or in `add_*`) are dropped with `LAI-CAT-004` (a removal of an unknown id is a no-op).
 5. Models that can't run on this node (`requirements` vs `Node`) are **kept** (catalog.md §5: stored, marked `loadable: false`).
 
 #### 4.4.2 Priority order
@@ -450,7 +454,7 @@ Sort the desired set by:
 3. Items in `profile.survival.models` before other models of the same tier.
 4. List position ascending.
 
-Dropping for budget happens in **reverse** of this order: the last item is dropped first.
+Dropping for budget happens in **reverse** of this order: the last item is dropped first. (`catalog.EffectivePlan` of catalog.md §4, the estimate behind `GET /profile`, drops from the end until the total fits and counts a missing tier as 3; this planner decides item by item, first fit, as §4.4.3 says, and counts a missing tier as 2.)
 
 #### 4.4.3 Sizing and budget
 For each item, in priority order, compute:
@@ -462,69 +466,92 @@ Two separate limits apply:
 - **Budget** (`budget_bytes`): limits the **steady state**, meaning the sum of `final_bytes` over the planned items. Trash, quarantine and staging do not count. Running sum `used`, in priority order.
 - **Free space** (`min_free_bytes`): limits the **transient** state. A download may start only if `fs_free − need_bytes ≥ min_free_bytes` at that moment. It is re-checked while downloading (§4.8).
 
-The per-item decision:
+The per-item decision (`run.decide`), in priority order. `refresh due` and `pinned` are defined below the block:
 ```
 if item is present and verified at the target version:            action = keep
 elif item present at older version and refresh not due:            action = keep (reason refresh_days)
 elif target unresolved (offline, resolver failed):
       present ? keep (reason unresolved) : skip (reason unresolved)
-elif used + final_bytes > budget:
+elif no local copy of the target exists and the network is not allowed:   (same as unresolved)
+elif root is read-only:                                            action = skip (reason read_only)
+elif not kit/docs and used + final_bytes > budget:
       if present: keep the present version (reason budget, update skipped) ; used += present_bytes
       else:       skip (reason budget)
+elif fs_free - need_bytes < min_free even after purging eligible trash:  action = skip (reason disk)
 else:
       action = present ? update : download ; used += final_bytes
       source = local_copy if OtherRoots has a verified copy of the target version, else network
 ```
-"Refresh due" means: the target version differs from the present one, **and** either the item has `refresh_days` and the present copy's `downloaded_at` is older than `refresh_days`, or the item is a model or a pinned item (pinned changes in the catalog are always applied, because a catalog change is a deliberate decision).
+Every `keep` and every `skip` of an item that is present adds `present_bytes` to `used` (the old copy stays and weighs in the steady state). The decision is first fit in priority order: a smaller lower-priority item can still fit after a larger one was skipped, but a higher-priority item is always considered first. A read-only root turns every action that is not `keep` into `skip (read_only)`.
 
-**Orphans.** A verified copy on this root that is not in the desired set gets `action = orphan`. It is kept, counted in READY as `orphan`, and reported with `LAI-SYN-051` if orphans total more than 5 % of the budget. Only `aictl ark prune --orphans` deletes them (§4.10).
+"Refresh due" means: the target version differs from the present one, **and** either the item is a model or **pinned** (reason `catalog_pin`: a catalog change is a deliberate decision, so it is always applied), or it has `refresh_days` and the present copy's `downloaded_at` is older than `refresh_days` (reason `refresh_due`). An item without `refresh_days` that is not pinned is never refreshed. **Pinned** content is content whose source names its version in the catalog: a pinned kiwix file, a `url` that is not `version_policy: latest`, a release tag, a git mirror, the rendered docs. The sources that follow "latest" (kiwix latest, the planet extract, the apt closure) are not pinned and are refreshed by `refresh_days`.
 
-**Survival-model guard.** If a model in `profile.survival.models` ends up `skip: budget`, the plan is still valid, but READY is red for that root and `LAI-SYN-041` is raised as a warning with the item named. This is a profile bug; the profile owner must fix the budget.
+**Free space and trash.** The disk check runs per item against a simulated free space that shrinks by `need_bytes` for every download or update planned so far (old versions stay in `.trash` until the new one verifies). When `fs_free − need_bytes < min_free_bytes`, **eligible** trash (§4.10 R3: the live replacement is verified) is used first, oldest first, and only as much as is needed (`purge_bytes` on the row); if it still does not fit, or the trash is ineligible, the item is `skip (disk)` with `LAI-SYN-040` (a present copy is kept). Smaller items may still fit afterwards. The planner never purges anything; the engine does, through `retention.CanDelete`, which re-checks R1 at that moment.
+
+**Sizing and sources.** `final_bytes` of a keep is the size on disk; of a skip, the target size (0 when nothing knows it). `need_bytes` subtracts the `.part` and staged bytes only when the journal's version is the target version. `Resolved` is taken as given; the gatherer fills it from `plan.FromCatalog` for what the catalog pins (a model's revision `[:12]`, a pinned kiwix file's `YYYY-MM`, a pinned url's sha256 `[:12]`, a release tag, `catalog-<catalog version>` for the docs) and leaves the rest unresolved. A resolver that exists and fails leaves the item unresolved (it is not replaced by the catalog pin). Local copies work in every mode; for an import (§4.14) the caller sets `Offline`, fills `Resolved` from the drive's MANIFESTs and `OtherRoots` with the drive's copies, so every download is a local copy and an item the drive lacks is `skip (unresolved)`.
+
+**Limits of a root.** Internal: `budget_bytes` and `min_free_bytes` of the profile, the budget replaced by a positive `profile_overrides.budget_bytes`. Drive: `min_free` is 2 % of the filesystem size (at least 5 GB) and the budget is the filesystem size less that; the profile's figures are not used.
+
+**Several roots.** `PlanAll` makes the first root (in the order given) that is to fetch a version from the network the only one that does; every later root that would fetch the same version gets `source: local_copy`, `from_root` and `after` set to that root, so nothing is downloaded twice and the copy waits for the first download. Each plan is still valid read on its own.
+
+**Orphans.** A verified copy on this root that is not in the desired set gets `action = orphan` (rows after the desired items, by id, no position). It is kept, counted in READY as `orphan`, and reported with `LAI-SYN-051` if orphans total more than 5 % of the budget (strictly more). Only `aictl ark prune --orphans` deletes them (§4.10). The planner has no delete action at all: nothing in a plan removes a verified copy.
+
+**Survival-model guard.** If a model in `profile.survival.models` ends up `skip: budget`, the plan is still valid, but READY is red for that root and `LAI-SYN-041` is raised as an **error** with the item named (the other items skipped for budget are one `LAI-SYN-041` warning). This is a profile bug; the profile owner must fix the budget. On a drive root the other budget skips raise `LAI-ARK-011` (info) instead of the warning.
+
+**Findings.** The plan carries the doctor codes it raises, in this order: `LAI-CAT-004` (dropped unknown ids), `LAI-SYN-042` (error: a kit or docs item crossed the budget or could not start for disk), `LAI-SYN-041`, `LAI-SYN-040` (items skipped for disk), `LAI-SYN-051`, `LAI-ARK-011`. The human text prints each with its fix.
 
 #### 4.4.4 Dry-run output
-`aictl ark sync --dry-run` (human form):
+`aictl ark sync --dry-run` (human form; golden files in `agent/internal/sync/plan/testdata/golden/`, English and Spanish, produced by `plan.Render(plan, lang)` and reproducible from the JSON alone):
 ```
 Plan for root "internal" (/srv/localai) · profile small-8gb · catalog 2026.11.02-1
-Budget 220.0 GB · planned 186.4 GB · free now 291.7 GB · keep free ≥ 25.0 GB
+Budget 80.0 GB · planned 68.7 GB · free now 290.0 GB · keep free ≥ 25.0 GB
 
   #  ITEM                         TIER  ACTION    VERSION              SIZE      NOTE
-  1  kit-llama-cpp                k     keep      f3586e66b            0.4 GB
-  2  kit-debs-resolute-amd64      k     update    a91c03d2e4f1         3.1 GB    refresh due (31 d)
+  1  kit-llama-cpp                k     keep      tag-kit-llama-cpp    0.5 GB
+  2  kit-debs-resolute-amd64      k     update    closure-b            3.1 GB    refresh due (31 d); was closure-a; old copy kept in .trash
   3  docs-bundle                  k     download  catalog-2026.11.02-1 0.1 GB
-  4  qwen3.5-9b-q4km              1     keep      0123456789ab         5.9 GB
-  5  <small-vlm-id>               1     download  89abcdef0123         5.2 GB    from ark-3f9c0a12 (local copy)
-  6  whisper-small                1     keep      5359861c739e         0.5 GB
-  7  wikipedia-en-nopic           1     update    2026-10              48.7 GB   was 2026-07; old copy kept in .trash
-  ...
- 19  stackexchange-electronics    2     skip      2026-09              3.9 GB    budget
- 20  gutenberg-en                 3     skip      -                    -         unresolved (offline)
+  5  model-beta-vision            1     download  rev-beta-0002        5.0 GB
+  7  model-gamma-tiny             2     download  rev-gamma-0003       1.0 GB    from ark-3f9c0a12 (local copy)
+  9  books-alpha-en               3     skip      -                    30.0 GB   unresolved
+ 10  maps-alpha                   3     skip      20261001             12.0 GB   budget
  --  osm-north-america            -     orphan    20260501             11.2 GB   not in profile; run `aictl ark prune --orphans`
 
-Downloads: 5 items, 57.3 GB from the internet, 5.2 GB local copy.
-Peak disk use during sync: 249.1 GB (free will not drop below 42.6 GB).
+Notes:
+  [warning] LAI-SYN-041  Items skipped because the budget is full (a survival model, if named): maps-alpha
+    Fix: Raise `budget_bytes` or remove other content in `node.yaml`.
+
+Downloads: 6 items, 59.2 GB from the internet, 1.0 GB local copy.
+Peak disk use during sync: 177.9 GB (free will not drop below 229.8 GB).
 Nothing was changed (dry run).
 ```
-`--json` returns:
+(abridged; the golden file lists every row.) Sizes are GB of 10^9 bytes with one decimal, rounded half up. Columns are as wide as their longest cell (minimums 27, 4, 8 and 20 for item, tier, action and version), two spaces apart except one between VERSION and SIZE; a line has no trailing spaces. The `Notes:` block appears only when there is something to say: no network used, read-only root, kit items left out for this node, and every doctor code the plan raises with its fix. A skipped row shows the target version and size when known, `-` otherwise. The note says why: `budget`, `unresolved (offline)`, `not enough free disk space`, `read-only root`, `refresh due (N d)`, `catalog pin changed`, `from <root> (local copy[, after it finishes])`, `frees N GB of old versions in .trash`, and for a keep `newer version available; refresh in N d`, `kept; newest version unknown`, `update skipped: budget`.
+
+`--json` (and the body of `POST /ark/sync` with `dry_run`, an array of these, one per root) returns:
 ```json
 {
   "root": "internal",
+  "path": "/srv/localai",
   "profile": "small-8gb",
   "catalog_version": "2026.11.02-1",
-  "budget_bytes": 220000000000,
-  "planned_bytes": 186400000000,
-  "fs_free_bytes": 291700000000,
+  "mode": "online",
+  "budget_bytes": 80000000000,
+  "planned_bytes": 68700000000,
+  "fs_free_bytes": 290000000000,
   "min_free_bytes": 25000000000,
-  "peak_bytes": 249100000000,
+  "peak_bytes": 177900000000,
+  "free_floor_bytes": 229800000000,
+  "trash_bytes": 47000000000,
   "items": [
     {"pos": 2, "id": "kit-debs-resolute-amd64", "kind": "kit", "tier": "k", "action": "update",
-     "from_version": "77e0b1c2aa90", "to_version": "a91c03d2e4f1", "final_bytes": 3100000000,
-     "need_bytes": 3100000000, "source": "network", "reason": "refresh_due"},
-    {"pos": 19, "id": "stackexchange-electronics", "kind": "kiwix", "tier": 2, "action": "skip",
-     "reason": "budget", "final_bytes": 3900000000}
-  ]
+     "from_version": "closure-a", "to_version": "closure-b", "final_bytes": 3100000000,
+     "need_bytes": 3100000000, "source": "network", "reason": "refresh_due", "age_days": 31, "refresh_days": 30},
+    {"pos": 10, "id": "maps-alpha", "kind": "kiwix", "tier": 3, "action": "skip",
+     "to_version": "20261001", "final_bytes": 12000000000, "reason": "budget"}
+  ],
+  "findings": [{"code": "LAI-SYN-041", "severity": "warning", "items": ["maps-alpha"]}]
 }
 ```
-`tier` is `"k"` for the pinned kit/docs class. `action` ∈ `keep | download | update | skip | orphan`. `reason` ∈ `refresh_days | refresh_due | budget | disk | unresolved | time_limit | read_only | backend | catalog_pin`. A dry run resolves items over the network when connectivity allows (HEAD/metadata only, no body downloads); offline it plans with catalog sizes and marks unresolved items.
+`tier` is `"k"` for the pinned kit/docs class and absent for an orphan. `action` ∈ `keep | download | update | skip | orphan`. `reason` ∈ `refresh_days | refresh_due | budget | disk | unresolved | time_limit | read_only | backend | catalog_pin` (`time_limit` is the run's, `backend` the profile's; the planner produces the rest). `source` ∈ `network | local_copy`, with `from_root` (the root a local copy is taken from) and `after` (set when that root is itself being synced in the same run). Keys added to the first draft of this shape: `path`, `mode`, `offline` and `read_only` (omitted when false), `free_floor_bytes` (the lowest free space the run reaches after an item starts; the free space itself when nothing starts), `trash_bytes` (everything in `.trash`, eligible or not), `not_for_node` (kit ids filtered out), `findings` (always present), and per item `age_days`, `refresh_days` and `purge_bytes`. **Peak** is what the root holds now (verified copies including orphans, the trash, staged bytes) plus every `need_bytes` still to write; old versions stay in `.trash` until the new one verifies, so nothing is subtracted. The JSON is deterministic: the same input gives the same bytes. A dry run resolves items over the network when connectivity allows (HEAD/metadata only, no body downloads, at most 8 at a time, 5 s each); offline it plans with what the catalog pins and marks the rest unresolved.
 
 ### 4.5 Item state machine
 
@@ -944,7 +971,7 @@ Root-level rules (in addition):
 Copies verified items from a drive root to the internal root. No network is used, so it works in every mode (including survival) and with no catalog refresh.
 1. Source root: `--from` or the only mounted drive (several drives and no `--from` → `409 LAI-ARK-015` listing them, §3.5).
 2. Catalog: if `<drive>/localai/kit/catalog/CATALOG_VERSION` is newer than the node's and `--catalog` is given, validate it with the catalog linter and install it into `/etc/localai/catalog/` first (`LAI-CAT-002` if invalid; the import continues with the old catalog).
-3. Plan: the normal planner for the internal root with `Resolved` filled from the **drive's MANIFESTs** (not the network), and `source = local_copy` for every download/update. Items not on the drive are `skip: unresolved`. Budget and `min_free_bytes` apply.
+3. Plan: the normal planner (`plan.Plan`) for the internal root with `Offline` set, `Resolved` filled from the **drive's MANIFESTs** (not the network) and `OtherRoots` holding the drive's copies, so every download/update is `source = local_copy`. Items not on the drive are `skip: unresolved`. Budget and `min_free_bytes` apply.
 4. `--item <id>`: import only those. If an item isn't in the internal profile, `--add-to-profile` appends it to `node.yaml: profile_overrides.add_models|add_content` (PIN in the UI); without it, the import refuses that item with a message.
 5. The copy runs through the state machine (§4.5) with streaming sha256 against the drive MANIFEST sha256, **and** against the catalog sha256 where the catalog pins one. A drive copy that no longer matches its own MANIFEST is reported as `LAI-SYN-070` (and quarantined in memory for that drive).
 6. Copy speed is limited only by disks; `ionice` idle class does not apply to imports (a person is waiting).
@@ -1186,7 +1213,7 @@ User-visible fixes are shown in the desktop and, for `LAI-ARK` codes, in the Por
 |---|---|
 | mountinfo parser | octal escapes; optional fields; bind mounts; `ro` in mount vs super options; overlay/tmpfs ignored |
 | drive classification | ext4+AI-ARK → ready; exfat+AI-ARK → unusable; `AI-ARK2` → not ark; duplicate UUID; `errors_count=3` → unclean; missing ROOT.json with/without content |
-| planner | budget exact fit; budget off by one byte; tier ordering; list-position tie-break; survival models first; kit/docs never dropped; kit codename filtering; overrides add/remove/budget; refresh_days not due; pinned change always applied; unresolved offline with/without present; orphans; peak computation; local_copy sourcing |
+| planner | budget exact fit; budget off by one byte; tier ordering; list-position tie-break; survival models first; kit/docs never dropped; kit codename filtering; overrides add/remove/budget; refresh_days not due; pinned change always applied; unresolved offline with/without present; orphans; peak computation; local_copy sourcing; unknown ids; read-only root; drive limits; staged bytes; never a delete action; determinism; golden human text (en, es) and JSON, and the text rendered from the JSON; `POST /ark/sync` dry run writes nothing under the roots or the state directory |
 | min_free | start blocked → trash purge makes room; trash ineligible (replacement unverified) → skip disk |
 | state machine | every transition; crash at each state → resume correct; cancel at each state |
 | downloader (with `httptest`) | 206 resume; 200 on Range → restart; 416 at full size; If-Range mismatch; stall timeout; 429 with Retry-After; 404 permanent; redirect drops Authorization cross-host; checkpoint restore of sha256 state equals uninterrupted hash; `.part` longer and shorter than checkpoint |

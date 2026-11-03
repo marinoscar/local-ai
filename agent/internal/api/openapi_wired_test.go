@@ -36,7 +36,8 @@ func spec(t *testing.T) *apispec.Spec {
 // wiring (AGENT-20) to add to the server's registry: GET /events (api.EventsRoute), the five routes
 // of the auth service (auth.Service.Routes), GET /doctor (api.DoctorRoute), the three /mode routes
 // (api.ModeRoutes), the five routes of statusapi.Routes, GET /portal/status (portal.Route), the three model
-// operation routes (api.ModelOpsRoutes) and the four /cloud routes (api.CloudRoutes).
+// operation routes (api.ModelOpsRoutes), the four /cloud routes (api.CloudRoutes) and POST /ark/sync
+// (api.ArkSyncRoutes).
 //
 // A later issue whose routes come from a constructor adds it HERE, with fakes for its dependencies, in
 // the PR that deletes the operations' x-localai-status: planned and x-localai-issue from openapi.yaml.
@@ -80,6 +81,8 @@ func implementedRoutes(t *testing.T) []api.Route {
 	// POST, GET and DELETE /drill (DRILL-01) and POST /drill/manual (DRILL-06); the handlers are not
 	// called, so the service stays nil.
 	routes = append(routes, api.DrillRoutes(api.DrillDeps{})...)
+	// POST /ark/sync (SYNC-05: the dry-run branch; the planner is not called, so it stays nil).
+	routes = append(routes, api.ArkSyncRoutes(api.ArkSyncDeps{})...)
 	return routes
 }
 
@@ -119,7 +122,7 @@ func TestPlannedOperations(t *testing.T) {
 		issue, _ := op.Raw["x-localai-issue"].(string)
 		byIssue[issue] = append(byIssue[issue], op.Key())
 	}
-	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs", "GET /doctor", "GET /mode", "POST /mode", "POST /mode/survival", "GET /status", "GET /portal/status", "GET /profile", "PUT /profile", "GET /catalog", "POST /catalog/refresh", "POST /models/{id}/load", "POST /models/{id}/unload", "PUT /models/default", "GET /models", "GET /models/{id}", "DELETE /models/{id}", "POST /models/{id}/download", "GET /key", "POST /key/rotate", "GET /cloud", "DELETE /cloud", "POST /cloud/enroll", "POST /cloud/resend-key", "POST /drill", "GET /drill", "DELETE /drill", "POST /drill/manual"} {
+	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs", "GET /doctor", "GET /mode", "POST /mode", "POST /mode/survival", "GET /status", "GET /portal/status", "GET /profile", "PUT /profile", "GET /catalog", "POST /catalog/refresh", "POST /models/{id}/load", "POST /models/{id}/unload", "PUT /models/default", "GET /models", "GET /models/{id}", "DELETE /models/{id}", "POST /models/{id}/download", "GET /key", "POST /key/rotate", "GET /cloud", "DELETE /cloud", "POST /cloud/enroll", "POST /cloud/resend-key", "POST /drill", "GET /drill", "DELETE /drill", "POST /drill/manual", "POST /ark/sync"} {
 		if !implementedKeys[key] {
 			t.Errorf("%s must be implemented", key)
 		}

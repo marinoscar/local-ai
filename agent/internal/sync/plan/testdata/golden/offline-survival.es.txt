@@ -1,0 +1,24 @@
+Plan para la raíz "internal" (/srv/localai) · perfil small-8gb · catálogo 2026.11.02-1
+Presupuesto 80.0 GB · planificado 58.5 GB · libre ahora 290.0 GB · mantener libre ≥ 25.0 GB
+
+  #  ELEMENTO                     NIVEL  ACCIÓN     VERSIÓN              TAMAÑO    NOTA
+  1  kit-llama-cpp                k      conservar  tag-kit-llama-cpp    0.5 GB
+  2  kit-debs-resolute-amd64      k      conservar  closure-a            3.0 GB    se conserva; versión más reciente desconocida (sin conexión)
+  3  docs-bundle                  k      omitir     catalog-2026.11.02-1 0.1 GB    sin resolver (sin conexión)
+  4  model-alpha-9b               1      conservar  rev-alpha-0001       6.0 GB
+  5  model-beta-vision            1      omitir     rev-beta-0002        5.0 GB    sin resolver (sin conexión)
+  6  wiki-alpha-en                1      conservar  2026-07              48.0 GB   se conserva; versión más reciente desconocida (sin conexión)
+  7  model-gamma-tiny             2      descargar  rev-gamma-0003       1.0 GB    desde ark-3f9c0a12 (copia local)
+  8  stackexchange-alpha          2      omitir     2026-09              4.0 GB    sin resolver (sin conexión)
+  9  books-alpha-en               3      omitir     -                    30.0 GB   sin resolver (sin conexión)
+ 10  maps-alpha                   3      omitir     20261001             12.0 GB   sin resolver (sin conexión)
+ --  osm-north-america            -      huérfano   20260501             11.2 GB   no está en el perfil; ejecute `aictl ark prune --orphans`
+
+Avisos:
+  No se usa la red (modo sin conexión o supervivencia): los elementos que la necesitan aparecen sin resolver.
+  [info] LAI-SYN-051  Contenido que ya no está en el perfil ocupa espacio en disco: osm-north-america
+    Solución: Ejecute `aictl ark prune --orphans` si no lo necesita.
+
+Descargas: 1 elemento, 0.0 GB de internet, 1.0 GB de copia local.
+Uso máximo de disco durante la sincronización: 118.7 GB (el espacio libre no bajará de 289.0 GB).
+No se cambió nada (simulacro).

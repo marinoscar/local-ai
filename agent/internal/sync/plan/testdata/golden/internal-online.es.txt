@@ -1,0 +1,25 @@
+Plan para la raíz "internal" (/srv/localai) · perfil small-8gb · catálogo 2026.11.02-1
+Presupuesto 80.0 GB · planificado 68.7 GB · libre ahora 290.0 GB · mantener libre ≥ 25.0 GB
+
+  #  ELEMENTO                     NIVEL  ACCIÓN      VERSIÓN              TAMAÑO    NOTA
+  1  kit-llama-cpp                k      conservar   tag-kit-llama-cpp    0.5 GB
+  2  kit-debs-resolute-amd64      k      actualizar  closure-b            3.1 GB    toca actualizar (31 d); era closure-a; la copia anterior queda en .trash
+  3  docs-bundle                  k      descargar   catalog-2026.11.02-1 0.1 GB
+  4  model-alpha-9b               1      conservar   rev-alpha-0001       6.0 GB
+  5  model-beta-vision            1      descargar   rev-beta-0002        5.0 GB
+  6  wiki-alpha-en                1      actualizar  2026-10              49.0 GB   toca actualizar (100 d); era 2026-07; la copia anterior queda en .trash
+  7  model-gamma-tiny             2      descargar   rev-gamma-0003       1.0 GB    desde ark-3f9c0a12 (copia local)
+  8  stackexchange-alpha          2      descargar   2026-09              4.0 GB
+  9  books-alpha-en               3      omitir      -                    30.0 GB   sin resolver
+ 10  maps-alpha                   3      omitir      20261001             12.0 GB   presupuesto
+ --  osm-north-america            -      huérfano    20260501             11.2 GB   no está en el perfil; ejecute `aictl ark prune --orphans`
+
+Avisos:
+  [aviso] LAI-SYN-041  Elementos omitidos porque el presupuesto está lleno (un modelo de supervivencia, si se nombra): maps-alpha
+    Solución: Aumente `budget_bytes` o quite otro contenido en `node.yaml`.
+  [info] LAI-SYN-051  Contenido que ya no está en el perfil ocupa espacio en disco: osm-north-america
+    Solución: Ejecute `aictl ark prune --orphans` si no lo necesita.
+
+Descargas: 6 elementos, 59.2 GB de internet, 1.0 GB de copia local.
+Uso máximo de disco durante la sincronización: 177.9 GB (el espacio libre no bajará de 229.8 GB).
+No se cambió nada (simulacro).

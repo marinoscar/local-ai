@@ -1,0 +1,25 @@
+Plan for root "internal" (/srv/localai) · profile small-8gb · catalog 2026.11.02-1
+Budget 80.0 GB · planned 68.7 GB · free now 290.0 GB · keep free ≥ 25.0 GB
+
+  #  ITEM                         TIER  ACTION    VERSION              SIZE      NOTE
+  1  kit-llama-cpp                k     keep      tag-kit-llama-cpp    0.5 GB
+  2  kit-debs-resolute-amd64      k     update    closure-b            3.1 GB    refresh due (31 d); was closure-a; old copy kept in .trash
+  3  docs-bundle                  k     download  catalog-2026.11.02-1 0.1 GB
+  4  model-alpha-9b               1     keep      rev-alpha-0001       6.0 GB
+  5  model-beta-vision            1     download  rev-beta-0002        5.0 GB
+  6  wiki-alpha-en                1     update    2026-10              49.0 GB   refresh due (100 d); was 2026-07; old copy kept in .trash
+  7  model-gamma-tiny             2     download  rev-gamma-0003       1.0 GB    from ark-3f9c0a12 (local copy)
+  8  stackexchange-alpha          2     download  2026-09              4.0 GB
+  9  books-alpha-en               3     skip      -                    30.0 GB   unresolved
+ 10  maps-alpha                   3     skip      20261001             12.0 GB   budget
+ --  osm-north-america            -     orphan    20260501             11.2 GB   not in profile; run `aictl ark prune --orphans`
+
+Notes:
+  [warning] LAI-SYN-041  Items skipped because the budget is full (a survival model, if named): maps-alpha
+    Fix: Raise `budget_bytes` or remove other content in `node.yaml`.
+  [info] LAI-SYN-051  Content no longer in the profile is using disk space: osm-north-america
+    Fix: Run `aictl ark prune --orphans` if you don't need it.
+
+Downloads: 6 items, 59.2 GB from the internet, 1.0 GB local copy.
+Peak disk use during sync: 177.9 GB (free will not drop below 229.8 GB).
+Nothing was changed (dry run).

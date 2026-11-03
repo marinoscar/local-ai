@@ -945,12 +945,11 @@ paths:
       summary: Start a sync run
       description: |
         `roots` empty or absent means every writable mounted root; `items` empty means the whole plan. With
-        `dry_run: true` the answer is `200` with the plan and nothing is written. The agent only routes; schemas
-        and errors are owned by ark-sync.md section 3.5. agent.md section 3.8.18.
+        `dry_run: true` the answer is `200` with one plan per root and nothing is written (the dry run needs no
+        run slot and is allowed in every mode). Until the run engine is wired a real start answers `503`. The agent
+        only routes; schemas and errors are owned by ark-sync.md section 3.5. agent.md section 3.8.18.
       x-localai-auth: op
       x-localai-timeout: "10 s"
-      x-localai-status: planned
-      x-localai-issue: SYNC-05
       requestBody:
         required: true
         content:
@@ -960,13 +959,13 @@ paths:
               manual: {value: {roots: [], items: [], dry_run: false, allow_offline_mode: false, trigger: manual}}
       responses:
         "200":
-          description: "The plan (`dry_run: true`)."
+          description: "One plan per root (`dry_run: true`)."
           headers:
             X-Request-Id: {$ref: "#/components/headers/XRequestId"}
             X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/SyncPlan"}
+              schema: {$ref: "#/components/schemas/SyncPlans"}
         "202":
           description: The run started.
           headers:
@@ -982,9 +981,12 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "409":
           $ref: "#/components/responses/Conflict"
-          description: "LAI-SYN-010 survival mode; LAI-SYN-011 offline mode without allow_offline_mode; LAI-SYN-005 a run is already active (details.run_id)."
+          description: "LAI-SYN-010 survival mode; LAI-SYN-011 offline mode without allow_offline_mode; LAI-SYN-005 a run is already active (details.run_id); LAI-ARK-001 no writable content root."
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+          description: "LAI-CAT-003 the profile of a root is not in the catalog (dry run)."
         "500": {$ref: "#/components/responses/Internal"}
         "503": {$ref: "#/components/responses/Starting"}
     get:
@@ -3068,16 +3070,32 @@ components:
         events: {type: string}
 
     SyncPlan:
-      description: "The dry-run plan, owned by ark-sync.md section 4.4.4 (JSON form)."
+      description: "The dry-run plan of one root, owned by ark-sync.md section 4.4.4 (JSON form)."
       type: object
       additionalProperties: true
       properties:
         root: {type: string}
+        path: {type: string}
         profile: {type: string}
         catalog_version: {type: string}
+        mode: {type: string}
+        offline: {type: boolean}
+        read_only: {type: boolean}
         budget_bytes: {type: integer}
         planned_bytes: {type: integer}
+        fs_free_bytes: {type: integer}
+        min_free_bytes: {type: integer}
+        peak_bytes: {type: integer}
+        free_floor_bytes: {type: integer}
+        trash_bytes: {type: integer}
         items: {type: array, items: {type: object, additionalProperties: true}}
+        not_for_node: {type: array, items: {type: string}}
+        findings: {type: array, items: {type: object, additionalProperties: true}}
+
+    SyncPlans:
+      description: "One plan per requested root, in the order of the request (internal first)."
+      type: array
+      items: {$ref: "#/components/schemas/SyncPlan"}
 
     SyncRun:
       description: "The active or last run (ark-sync.md section 3.5)."
