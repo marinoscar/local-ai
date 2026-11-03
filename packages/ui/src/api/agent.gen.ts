@@ -677,7 +677,14 @@ export interface paths {
         put?: never;
         /**
          * Delete orphans and trash
-         * @description Never the last verified copy (it is listed in `refused`). ark-sync.md section 3.5. agent.md section 3.8.20a.
+         * @description Deletes the verified copies the profile no longer wants (`orphans`) and the superseded versions in
+         *     `.trash` (`trash`), on the writable mounted roots (or the named ones). At least one of the two is
+         *     required. It never deletes the last verified copy of an item, however it is asked: that entry is
+         *     listed in `refused` with `reason: last_verified_copy`, and there is no field that overrides it.
+         *     A read-only root is never modified (`read_only`); a trash entry whose replacement is not verified
+         *     yet stays (`replacement_unverified`). With `dry_run` nothing is deleted and `deleted` lists what a
+         *     real run would delete. ark-sync.md sections 3.5 and 4.10. agent.md section 3.8.20a.
+         *
          */
         post: operations["pruneArk"];
         delete?: never;
@@ -1997,7 +2004,11 @@ export interface components {
             refused: {
                 root: string;
                 item: string;
-                reason: string;
+                version?: string;
+                /** @enum {string} */
+                reason: "last_verified_copy" | "read_only" | "replacement_unverified";
+                /** @enum {string} */
+                kind?: "orphan" | "trash";
             }[];
             freed_bytes: number;
         };
@@ -3630,7 +3641,7 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            /** @description LAI-SYN-005: a run is active. */
+            /** @description LAI-SYN-005: a sync run is active (wait for it, or cancel it). LAI-CAT-001: no catalog is loaded, so orphans cannot be told apart (details.reason no_catalog). */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];

@@ -323,3 +323,78 @@ Every time a sync finishes on a plugged-in AI-ARK drive, the node rewrites two t
 
     - **What you should see:** `aictl doctor` no longer lists `LAI-ARK-012`.
     - **If it doesn't work:** `LAI-ARK-012` is still listed: the two files still differ (run the `diff` again; it must print nothing), or another drive has its own conflict (look in each drive). Unplugging the drive also clears the warning until the next sync of that drive.
+
+30. **Inventory conflict** (`LAI-ARK-012`): the lab inventory changed both on the drive and on this node. Both copies are kept (the node's as `inventory.local.yaml.<node-id>.<time>.conflict` on the drive). Compare them, keep the right one, delete the other.
+
+---
+
+## Part 10. Freeing space (orphans and old versions)
+
+Use this when a content folder (the internal disk or the drive) is getting full, or when `aictl ark sync --dry-run` lists items marked `orphan`. An **orphan** is content that is stored but that this node's profile no longer asks for. An **old version** is what an update leaves behind for 14 days in case the new one is bad.
+
+> **Before you start**
+> - You need: a terminal, and either `sudo` or the admin PIN.
+> - **Safe by design:** the commands below **never delete the last good copy of anything**. If an item exists only in one place, it is kept and you are told so. There is no option to override that. To free that space, first copy the item to another drive (step 35).
+> - Deleting is **permanent**. Look at the list first (step 32); nothing is deleted until you type `DELETE`.
+> - Don't run it while a sync is running (`LAI-SYN-005`).
+
+> 🛠 Verify when implemented (E3 prune and the sync engine; E8 for the desktop button, which asks for the admin PIN).
+
+31. **See how full it is, and what sync calls an orphan:**
+
+    ```
+    aictl ark status
+    aictl ark sync --dry-run
+    ```
+
+    - **What you should see:** the used and free space of each content folder, and in the sync list rows ending in `orphan`.
+    - **If it doesn't work:** `LAI-SYN-010` or `LAI-SYN-011` only stop a real sync, not the list. If the list is empty or the command can't run, see [07 → Disk full](07-troubleshooting.md#disk-full).
+
+32. **Ask what would be deleted. This changes nothing:**
+
+    ```
+    aictl ark prune --orphans --trash --dry-run
+    ```
+
+    Add `--root internal` (or `--root <root-id>` for a drive) to look at one content folder only.
+
+    - **What you should see:** `Would delete 2 item(s) (14.3 GB):`, a table of item, version, where it is, size and why (`not in the profile` or `old version`), and last `Nothing was changed (dry run).`
+    - A line such as `This is the only copy of gutenberg-en on this computer; it was kept.` is the safety rule working. That item is not in the list of things that will go.
+    - **If it doesn't work:** it asks for the PIN: type it (nothing shows on the screen), or run the command with `sudo`. `Nothing to delete.` means there is nothing to free this way; go to step 35 or [07 → Disk full](07-troubleshooting.md#disk-full). `LAI-CAT-001`: the catalog is damaged, so nothing can be called an orphan; run `aictl catalog restore`, then try again (`--trash` alone still works).
+
+33. **Delete them.** Read the list again, then run the same command without `--dry-run`:
+
+    ```
+    aictl ark prune --orphans --trash
+    ```
+
+    - **What you should see:** the same list, then `Delete 2 item(s) (14.3 GB) from this computer? This cannot be undone. Type DELETE to confirm:`. Type `DELETE` (capital letters) and press Enter. Then one `✓ Deleted … (… freed).` line per item and `Freed 14.3 GB.`
+    - Anything else you type, including `delete` or `y`, deletes nothing: `Nothing was deleted.`
+    - **If it doesn't work:** `LAI-SYN-005`: a sync is running; wait for it (`aictl ark status`) or stop it with `aictl ark sync --cancel`, then try again. `LAI-CLI-007`: there is no terminal to type in (for example inside a script); add `--yes` only if you have already read the list from step 32.
+
+34. **Only the old versions** (nothing the profile still wants is touched):
+
+    ```
+    aictl ark prune --trash
+    ```
+
+    Sync already does this for you: old versions are removed after 14 days, and files that failed their checksum (kept in quarantine) after 7 days. When a download needs room, sync removes quarantine first and then the oldest old versions that are safe to remove, and tells you with `LAI-SYN-043` (information only). An old version is kept while its replacement has not been checked yet.
+
+35. **When it says "only copy" and you still need the space.** Copy the item to another place first, then prune again:
+
+    1. Plug in an AI-ARK drive that has room (Part 4) and fill it from this node:
+
+       ```
+       aictl ark sync --root <root-id> --wait
+       ```
+
+       Only items the drive's profile wants are copied (the default `ark-drive-full` wants everything in the catalog); a copy of this node's own file on the drive is made from the disk, not downloaded again.
+    2. When it ends, the copy on the drive has just been checked. Now free the space on the internal disk, within 24 hours (a copy checked longer ago does not count):
+
+       ```
+       aictl ark prune --orphans --root internal
+       ```
+
+    - **What you should see:** the item now listed under `Would delete` for `internal`, and after you type `DELETE`, `Freed …`. A drive that is unplugged does **not** count as a copy: keep it plugged in while you prune.
+    - **If it doesn't work:** the item is still listed as the only copy: the drive does not hold a checked copy yet (`aictl ark status` shows what the drive is missing), or it was checked more than a day ago; run `aictl ark verify --root <root-id> --item <item-id> --wait` and prune again.
+    - To delete a model on purpose even though it is the last copy, use `aictl delete <model-id>` instead (it asks twice and needs the PIN); that is a different command with its own warnings, see [03 Part 3](03-swap-a-model.md#part-3-from-the-terminal).
