@@ -1,0 +1,24 @@
+schema_version: 1
+id: cuda-12gb
+display_name: "CUDA workstation (12 to 24 GB VRAM)"
+match:
+  backends: [cuda]
+  vram_mib: {min: 12000, max: 24999}
+  ram_mib: {min: 12000}
+router:
+  models_max: 2
+  memory_margin_mib: 768
+  autoload: false
+storage:
+  target: internal
+  budget_bytes: 600000000000
+  min_free_bytes: 40000000000
+include:
+  models: [model-alpha-9b-q4, model-beta-27b-q4, model-gamma-vl-q4, whisper-small, piper-en-medium]
+  content: [wiki-alpha-en, map-region-alpha, kit-catalog, kit-llama-cpp, kit-whisper-cpp, kit-agent-binaries, kit-agent-source, kit-go-toolchain, kit-kiwix-tools, kit-pmtiles, kit-piper, kit-debs-resolute-amd64, kit-nvidia-resolute-amd64-595-open, kit-desktop, docs-bundle]
+default_model: model-beta-27b-q4
+survival:
+  models: [model-alpha-9b-q4]
+  default_model: model-alpha-9b-q4
+  require_services: [kiwix]
+  portal_language: auto

@@ -209,6 +209,10 @@ type ItemPlan struct {
 	Pos  int    `json:"pos,omitempty"`
 	ID   string `json:"id"`
 	Kind string `json:"kind"`
+	// Dir is the item directory relative to the root (models/<id>, kit/git/llama.cpp.git, docs), where
+	// the item's MANIFEST.json lives once it is synced. Empty for an orphan (it is not in the
+	// catalog) and for a kit item the layout has no place for.
+	Dir string `json:"dir,omitempty"`
 	// Tier is nil for an orphan.
 	Tier   *Tier  `json:"tier,omitempty"`
 	Action Action `json:"action"`

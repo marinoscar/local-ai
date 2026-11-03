@@ -30,9 +30,9 @@ Non-goals: building Ubuntu itself; replacing the Ubuntu installer; keeping a ful
   README.txt                                   plain-text guide: what is here, where to start (generated)
   MANIFEST.json                                index of kit items present (generated from the per-item manifests)
   catalog/                                     item kit-catalog, written by the repo_docs resolver (ark-sync.md §4.9.8) from the same
-                                               tag tarball as docs/, in the same item install (copy of catalog/ at CATALOG_VERSION)
+                                               tag tarball as docs/ (copy of catalog/ at CATALOG_VERSION)
     models.yaml  ark.yaml  profiles/*.yaml  CATALOG_VERSION
-    pins.json                                  §Pins
+    pins.json                                  §Pins (written by the kit, not part of the item: not in its MANIFEST)
     MANIFEST.json
   installers/                                  item kit-agent-binaries (same GitHub release)
     install-node.sh                            the offline installer entry point; once installed it lives at
@@ -60,7 +60,7 @@ Non-goals: building Ubuntu itself; replacing the Ubuntu installer; keeping a ful
     pool/*.deb  Packages  Packages.gz  PACKAGES.lock  README.txt  MANIFEST.json
   nvidia/<codename>-<arch>-<branch>/           kit-nvidia-<codename>-<arch>-<branch> (apt_closure) §Driver packages
     pool/*.deb  Packages  Packages.gz  PACKAGES.lock  README.txt  MANIFEST.json
-  cuda/<codename>-<arch>/                      optional kit-cuda-redist-… (§CUDA, option B)
+  cuda/<ver>-<arch>/                           optional kit-cuda-redist-<ver>-<arch> (§CUDA, option B; the redistributables do not depend on the Ubuntu release, so no codename)
   prebuilt/
     llama.cpp-<commit9>-<backend>-<codename>-<arch>[-sm<cc>].tar.gz      exported by nodes (§4.2)
     whisper.cpp-<commit9>-<backend>-<codename>-<arch>[-sm<cc>].tar.gz
@@ -70,13 +70,14 @@ Non-goals: building Ubuntu itself; replacing the Ubuntu installer; keeping a ful
   config/<node-id>/                            NOT a sync item (§Config backups): written only by `aictl backup-config --to-ark`
     localai-config-<node-id>-<UTC-ts>.tar.gz   0600 root; contains secrets unless --no-secrets
 ```
+Where each directory's `MANIFEST.json` comes from, and which directories hold more than one item's files, is §3.2.1.
 **Config backups** (§Config backups): `kit/config/` holds the node config backups of [aictl.md](aictl.md) §4.25. It has no MANIFEST, so sync, verify, prune and READY ignore it ([ark-sync.md](ark-sync.md) §4.10 R9); the last 5 backups per node are kept by `aictl backup-config` itself. Because the drive is unencrypted by design ([security-model.md](../architecture/security-model.md) §1 T9), the command warns before writing secrets there.
 The **rendered docs** are not duplicated in the kit: they are `<root>/docs/` (item `docs-bundle`, [ark-sync.md](ark-sync.md) §4.9.8), and `README.txt` points to them.
 
 ### 3.2 Kit items (catalog `ark.yaml`)
 | Item id | Source type | Refresh | Profiles |
 |---|---|---|---|
-| `kit-catalog` | `repo_docs` variant: the `repo_docs` resolver ([ark-sync.md](ark-sync.md) §4.9.8) writes `kit/catalog/` (`models.yaml`, `ark.yaml`, `profiles/`, `CATALOG_VERSION`, `pins.json`, `MANIFEST.json`) from the same `catalog-<V>` tag tarball as `docs/`, in the same item install; `pins.json` from the release is then merged with the node entries of §3.3 | every catalog change | all |
+| `kit-catalog` | `repo_docs` variant: the `repo_docs` resolver ([ark-sync.md](ark-sync.md) §4.9.8) writes `kit/catalog/` (`models.yaml`, `ark.yaml`, `profiles/`, `CATALOG_VERSION`, `MANIFEST.json`) from the same `catalog-<V>` tag tarball as `docs/`, as its own item (§3.2.1); `pins.json` of the release is then merged with the node entries of §3.3 | every catalog change | all |
 | `kit-agent-binaries` | `github_release` (`marinoscar/local-ai`, tag = the agent version in use; assets `aiagent-linux-*`, `SHA256SUMS*`, `install-node.sh`) | when the agent self-updates | all |
 | `kit-agent-source` | `github_release` (asset `local-ai-<tag>-src.tar.gz`, built by the release CI: `git archive` + `go mod vendor` + `npm ci && npm run build` for the UI) | with the agent | all |
 | `kit-llama-cpp` | `git_mirror` + tarball of pinned commits | mirror: every run (cheap fetch); tarball: when a pin changes | all |
@@ -103,6 +104,30 @@ The catalog sizes (`expected_size_bytes`) are approximate and only used for plan
 | prebuilt binaries per node | 0.05–0.5 GB each |
 | Ubuntu ISO | 6 GB |
 
+#### 3.2.1 Item directories and manifests (§Item directories)
+Every kit item has exactly one **item directory** below `kit/`, the directory that holds its `MANIFEST.json` (ark-sync.md §3.1, §4.11); every file the manifest lists is inside it. `agent/internal/kit` (`kit.LayoutOf`) is the one table; the planner puts the result in the `dir` of each plan row (ark-sync.md §4.4.4) and `ark.ItemDir` places it.
+
+| Kit item | Item directory | Also writes files into |
+|---|---|---|
+| `kit-catalog` | `kit/catalog/` | |
+| `kit-agent-binaries` | `kit/bin/` | `kit/installers/` (`install-node.sh`, a copy of the one in `bin/`, §Open questions 3) |
+| `kit-agent-source` | `kit/src/` | |
+| any `git_mirror` item (`kit-llama-cpp`, `kit-whisper-cpp`, `kit-local-ai-repo`) | `kit/git/<name>.git/`, `<name>` the URL basename without `.git` (ark-sync.md §4.9.6) | `kit/src/` when `also_tarball_of` is set (below) |
+| `kit-go-toolchain` | `kit/toolchains/` | |
+| `kit-kiwix-tools`, `kit-pmtiles`, `kit-piper` | `kit/tools/kiwix-tools/`, `kit/tools/pmtiles/`, `kit/tools/piper/` | |
+| `kit-desktop` | `kit/desktop/` | |
+| `kit-debs-<codename>-<arch>` | `kit/debs/<codename>-<arch>/` | |
+| `kit-nvidia-<codename>-<arch>-<branch>` | `kit/nvidia/<codename>-<arch>-<branch>/` | |
+| `kit-cuda-redist-<ver>-<arch>` | `kit/cuda/<ver>-<arch>/` | |
+| `kit-ubuntu-iso-<ver>` | `kit/iso/` (one ISO series at a time) | |
+
+Rules:
+- **No two kit items share an item directory.** `kit.CheckLayout` fails a catalog that does, and a kit id the table cannot place (a fork's extra item) gets no directory: the plan lists it with an empty `dir` and the downloader refuses it.
+- **Companion files.** `kit/src/` is the item directory of `kit-agent-source` and its `MANIFEST.json` lists only the agent source tarball. The source tarball of each pinned commit (`llama.cpp-<commit>.tar.gz`) is written by the git mirror's resolver into `kit/src/` beside it, and recorded (file name, size, sha256) in the mirror item's own MANIFEST under `source.tarballs`; `aictl kit verify --part src` checks them from there (`LAI-KIT-001`). `kit/installers/install-node.sh` is recorded the same way in the manifest of `kit-agent-binaries`. The index (§3.6) and `kit verify` therefore never need a manifest that lists files outside its own directory.
+- **Several assets per release.** The catalog's `github_release` names one `asset`. `kit-agent-source` is one asset and is a `github_release`. `kit-agent-binaries` (two binaries, the signed checksums, the installer), `kit-desktop` (a `.deb`, an AppImage), `kit-go-toolchain`, `kit-kiwix-tools`, `kit-pmtiles` and `kit-piper` (one file per CPU type) are `url` items with a `files` list: one pinned sha256 per file, the release download URL carrying the tag.
+- **`kit-catalog` is a kit item with a `repo_docs` source** (lint accepts that combination for kit items; catalog.md §3). It produces only `kit/catalog/`; the `docs-bundle` item produces only `docs/`; both read the same `catalog-<V>` tarball (ark-sync.md §4.9.8).
+- **`kit/MANIFEST.json` and `kit/README.txt` are not items.** They are generated (§3.6); `kit/config/` and `kit/prebuilt/` have no manifest of this kind and are ignored by the index.
+
 ### 3.3 Pins (§Pins)
 `kit/catalog/pins.json`, written by the cloud into the catalog release (or, unenrolled, by each node into its own roots and merged on the drive):
 ```json
@@ -117,6 +142,13 @@ The catalog sizes (`expected_size_bytes`) are approximate and only used for plan
 }
 ```
 The drive keeps a source tarball for **every** pinned commit; an internal root keeps the one for its own node. Pins are merged on the drive: each node that syncs the drive adds its own entries and never removes others' (entries older than 180 days without a node reporting them are dropped).
+
+**Code:** `kit.Pins`, `kit.ParsePins`, `kit.ReadPins`, `kit.WritePins`, `kit.Report`, `kit.Merge`, `kit.UpdatePins` (`agent/internal/kit/pins.go`).
+- **Location:** `<root>/kit/catalog/pins.json`, next to the catalog copy but **not part of the `kit-catalog` item**: the kit writes it after the item's swap and the item's MANIFEST does not list it, so merging a node's entries never invalidates the item. The catalog release carries a `pins.json` too (cloud-written); the repo_docs resolver installs it and the kit then merges the node entries into it.
+- **Shape:** the example above, plus an optional `reported_at` (RFC 3339 UTC) on every entry: the last time any node reported it. An entry without one ages from the file's `updated_at`. Lists are sorted (commit, tag, codename and arch, branch), node lists are sorted without duplicates, keys are written in the order shown, two-space indent. Valid values: a commit is 40 lowercase hex digits, a codename is a lowercase Ubuntu codename, `arch` is `amd64` or `arm64`, a node id is `[a-z0-9][a-z0-9._-]*`, every entry names at least one node, no entry appears twice. Unknown top-level keys are kept on rewrite; `schema_version` other than 1 is refused and never rewritten.
+- **Merge** (`kit.Merge(a, b, now)`): the union of every entry (one entry per commit, tag, codename and arch, or branch, codename and arch; nodes united, the later `reported_at`), minus entries whose `reported_at` is more than 180 days before `now` (exactly 180 days is kept). It never removes an entry because another node stopped using it: a node that moves to a new commit leaves its old entry to age out. It is commutative, idempotent and associative for a fixed `now` (tested over every list); an entry with no time at all (undated entry in an undated file) never expires.
+- **Node report:** `kit.Report(NodePins, now)` builds a node's own entries (its llama.cpp and whisper.cpp commits, agent tag, codename and arch, NVIDIA branch); `kit.UpdatePins` reads the root's file (missing is empty), merges and writes it atomically.
+- **Damaged file:** a `pins.json` that does not parse, fails validation or is from a newer schema is reported as `LAI-KIT-045` and left exactly as it is (never overwritten by a merge); the next catalog release's copy replaces it.
 
 ### 3.4 Keys (§Keys)
 Embedded in the agent binary (`agent/internal/kit/keys/`) and also copied to `kit/bin/`:
@@ -138,6 +170,15 @@ Rotating a key is a catalog/agent release; old keys stay embedded for 2 years so
 | `aictl rebuild-agent [--from-kit]` | builds the agent from `kit/src/local-ai-<tag>-src.tar.gz` with the kit Go toolchain (§4.3.4) |
 
 All `rebuild-*` and `kit install*` need root (they write `/opt/localai`). They run in-process in `aictl` ([aictl.md](aictl.md) §4.23–§4.23c, which owns the CLI syntax) and use the agent API only to restart the service and take the model lock when the agent runs; when it doesn't they use `systemctl` directly (a rebuild must work even when the agent doesn't).
+
+### 3.6 Generated files: the index and the guide (§Index)
+`<root>/kit/MANIFEST.json` and `<root>/kit/README.txt` are written by `agent/internal/kit` (`kit.BuildIndex`, `kit.WriteIndex`, `kit.Regenerate`) and refreshed by `kit.Refresher.AfterSwap`, the hook the sync engine calls after it swaps a kit item into a root (a no-op for items that are not kit items and for read-only roots). Wiring the hook into the engine is the app's job (STARTUP-WIRING); the package only provides it.
+
+**`kit/MANIFEST.json`** is an index, not an item manifest. It starts with `"schema": "localai.kit-index"` and has **no** `schema_version` key, so `kit.IsIndex(bytes)` tells it from an item MANIFEST, an item-manifest parser refuses it, and the scan that finds items (`ark.ScanRoot`) never looks at it (it only looks inside the directories of `kit/`). Keys, in order: `schema`, `index_version` (1), `generated_at` (UTC to the second), `root_id`, `catalog_version` (when known), `total_bytes`, `parts` (`{part, items, total_bytes}` per top-level part present, in the order of §3.1), `items` (one `{id, dir, part, version, catalog_version, total_bytes, files, tree_sha256 (directory items), trust, verified_at}` per kit item whose MANIFEST is valid, sorted by `dir`), `missing` (the ids of the kit items the caller expected, normally the kit items of the root's plan, that are not present or not valid; always present, possibly empty) and `invalid` (`{dir, code}` of every kit directory whose manifest is damaged, incomplete, not verified, from a newer schema or in the wrong place, `LAI-SYN-052`; always present). The same kit always gives the same bytes.
+
+**`kit/README.txt`** is plain ASCII text, lines of at most 78 characters, built from the index only (no host path, no file name of a config backup): what the kit is, the written time and catalog version, **where to start** (the guide `../docs/06-rebuild-a-node-offline.html`, the manual index `../docs/index.html`, `aictl kit status`, `aictl kit verify`, `installers/install-node.sh`), one entry per part of §3.1 with what it holds and whether it is here, and a **needs attention** block that lists missing items and damaged directories. It says that an absent `iso/` is normal off the drive.
+
+Writing: the index first, then the guide, each atomically (temp file, fsync, rename, fsync of the directory), mode 0644; `kit/` is never created by it. A failure is `LAI-KIT-046` (a warning: the kit itself is untouched and the next sync rewrites both).
 
 ## 4. Behaviour
 
@@ -318,12 +359,16 @@ Plain list, also printed in the rebuild runbook:
 | LAI-KIT-042 | error | The kit is for a different Ubuntu version | Sync the kit after the upgrade, with internet. | Sincronice el kit después de la actualización, con internet. |
 | LAI-KIT-043 | warning | The kit's CUDA version doesn't fit this driver | Sync the kit with internet; meanwhile use the prebuilt or Vulkan. | Sincronice el kit con internet; mientras tanto use el precompilado o Vulkan. |
 | LAI-KIT-044 | critical | The kit's agent files failed their signature check | Don't install them. Use another drive and report it. | No los instale. Use otro disco y repórtelo. |
+| LAI-KIT-045 | warning | The kit's list of pinned versions is damaged or newer than this agent | Nothing breaks. Sync the catalog with internet; it brings a fresh list. | Nada se dañó. Sincronice el catálogo con internet; trae una lista nueva. |
+| LAI-KIT-046 | warning | The kit's index and guide could not be refreshed | The kit itself is fine. Run `aictl ark sync`; it rewrites them. | El kit está bien. Ejecute `aictl ark sync`; los reescribe. |
 
 ## 9. Test plan
 
 ### 9.1 Unit
 - Completeness rules (§4.4 step 3–5) for fixtures of ai-n1 (vulkan), ai-n2/n3 (cuda) and a drive with all pins.
-- Pins merge (add, keep others, drop stale after 180 d).
+- Pins merge (add, keep others, drop stale after 180 d; commutative, idempotent and associative; a damaged or newer file is never overwritten; every write step failing leaves the old file) and the pins file read/write.
+- Kit layout (`kit.LayoutOf`: every §3.1 path, unknown ids, path traversal in a mirror URL, codename, arch or branch, no two items in one directory), the kit items of each profile (small-8gb, cuda-12gb, max-128gb, cpu-only, ark-drive-full), the dry-run plan of each into its directory (golden files in `agent/internal/kit/testdata/golden/plan-*.json`) and the planner's codename/arch filter.
+- Index and guide (golden `index.json`, `README.txt`): items from fixture manifests, missing and invalid ones, regeneration after a swap, determinism, the index is not an item manifest.
 - `rebuild-llama` preflight matrix with fake exec (tools present/missing, nvcc vs driver versions, llvmpipe only).
 - Activation rollback state machine with a fake systemd and a failing health check.
 - Prebuilt naming and MANIFEST fields.
@@ -353,3 +398,5 @@ Plain list, also printed in the rebuild runbook:
 
 1. **CUDA option B by default on drives?** *Default:* no (option A on all roots serving CUDA nodes). Revisit if the drive budget gets tight.
 2. **Who writes `pins.json` when not enrolled?** *Default:* each node adds itself when syncing a drive (§3.3); enrolled labs get it from the cloud catalog release.
+3. **Signed checksums and the installer in an item directory.** `kit/bin/SHA256SUMS` (with its `.minisig`), `kit/desktop/SHA256SUMS` and `kit/iso/SHA256SUMS` are release files, but `manifest.ValidFilePath` reserves the name `SHA256SUMS` (and `MANIFEST.json`) in an item manifest's file list, because directory items keep their own `SHA256SUMS` there. Until this is settled the catalog lists these files in the `url` source and the resolver (SYNC-10) must store them under a name the manifest accepts or make the item a directory item; `aictl kit verify-release` (KIT-03) needs the signed bytes under their release names. *Default:* directory items for `kit-agent-binaries` and `kit-desktop`, with the signed release `SHA256SUMS` kept beside the item's own sums file by the resolver. Needs a decision before SYNC-10 and KIT-03.
+4. **Real pins.** The agent, desktop, pmtiles and CUDA redistributable entries of `catalog/ark.yaml` need the upstream digests, and the repository's redaction check (`scripts/check-redaction.sh`) rejects any 64-hex string outside its fixtures, so a real `sha256` pin needs a path-scoped allowance for `catalog/*.yaml` first. Until then the kit items live in the fixture catalog of `agent/internal/kit/testdata/catalog/` with `@sha:<digit>@` tokens.

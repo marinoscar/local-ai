@@ -399,6 +399,8 @@ const (
 	KIT042 = "LAI-KIT-042"
 	KIT043 = "LAI-KIT-043"
 	KIT044 = "LAI-KIT-044"
+	KIT045 = "LAI-KIT-045"
+	KIT046 = "LAI-KIT-046"
 
 	// LAI-DRL
 	DRL001 = "LAI-DRL-001"
@@ -2532,6 +2534,18 @@ var table = []Code{
 		Severity: Critical,
 		Title:    Msg{EN: "The kit's agent files failed their signature check", ES: "Los archivos del agente del kit no superaron la comprobación de firma"},
 		Fix:      Msg{EN: "Don't install them. Use another drive and report it.", ES: "No los instale. Use otra unidad e infórmelo."},
+	},
+	{
+		ID:       KIT045,
+		Severity: Warning,
+		Title:    Msg{EN: "The kit's list of pinned versions is damaged or newer than this agent", ES: "La lista de versiones fijadas del kit está dañada o es más nueva que este agente"},
+		Fix:      Msg{EN: "Nothing breaks. Sync the catalog with internet; it brings a fresh list.", ES: "Nada se dañó. Sincronice el catálogo con internet; trae una lista nueva."},
+	},
+	{
+		ID:       KIT046,
+		Severity: Warning,
+		Title:    Msg{EN: "The kit's index and guide could not be refreshed", ES: "No se pudo actualizar el índice y la guía del kit"},
+		Fix:      Msg{EN: "The kit itself is fine. Run `aictl ark sync`; it rewrites them.", ES: "El kit está bien. Ejecute `aictl ark sync`; los reescribe."},
 	},
 	{
 		ID:       DRL001,

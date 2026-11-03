@@ -1,0 +1,66 @@
+{
+  "schema": "localai.kit-index",
+  "index_version": 1,
+  "generated_at": "2026-11-02T18:04:11Z",
+  "root_id": "internal",
+  "total_bytes": 2,
+  "parts": [
+    {
+      "part": "toolchains",
+      "items": 1,
+      "total_bytes": 2
+    }
+  ],
+  "items": [
+    {
+      "id": "kit-go-toolchain",
+      "dir": "toolchains",
+      "part": "toolchains",
+      "version": "v1",
+      "catalog_version": "2026.11.02-1",
+      "total_bytes": 2,
+      "files": 1,
+      "trust": "pinned",
+      "verified_at": "2026-11-02T18:04:11Z"
+    }
+  ],
+  "missing": [
+    "kit-agent-binaries",
+    "kit-agent-source",
+    "kit-catalog",
+    "kit-debs-resolute-amd64",
+    "kit-desktop",
+    "kit-kiwix-tools",
+    "kit-llama-cpp",
+    "kit-nvidia-resolute-amd64-595-open",
+    "kit-piper",
+    "kit-pmtiles",
+    "kit-whisper-cpp"
+  ],
+  "invalid": [
+    {
+      "dir": "bin",
+      "code": "LAI-SYN-052"
+    },
+    {
+      "dir": "catalog",
+      "code": "LAI-SYN-052"
+    },
+    {
+      "dir": "desktop",
+      "code": "LAI-SYN-052"
+    },
+    {
+      "dir": "src",
+      "code": "LAI-SYN-052"
+    },
+    {
+      "dir": "tools/piper",
+      "code": "LAI-SYN-052"
+    },
+    {
+      "dir": "x",
+      "code": "LAI-SYN-052"
+    }
+  ]
+}

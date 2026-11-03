@@ -19,7 +19,7 @@ var (
 var kindTypes = map[string][]string{
 	"kiwix": {"kiwix"},
 	"maps":  {"pmtiles_extract", "url", "github_release"},
-	"kit":   {"git_mirror", "apt_closure", "url", "github_release"},
+	"kit":   {"git_mirror", "apt_closure", "url", "github_release", "repo_docs"},
 	"docs":  {"repo_docs"},
 }
 
