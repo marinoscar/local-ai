@@ -378,9 +378,11 @@ func (g *GitMirror) cloneOrResume(ctx context.Context, bin, rawURL, dest, proxy 
 			}
 			return g.fetchTags(ctx, bin, dest, proxy)
 		}
-		if err := os.Rename(dest, fmt.Sprintf("%s.unusable-%d", dest, g.Env.now().Unix())); err != nil {
+		aside := fmt.Sprintf("%s.unusable-%d", dest, g.Env.now().Unix())
+		if err := os.Rename(dest, aside); err != nil {
 			return fail(CodeFetch, err, "cannot move an unusable earlier clone aside")
 		}
+		g.Env.log().Warn("an unusable earlier clone was moved aside", "component", "sync", "path", filepath.Base(aside))
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return fail(CodeFetch, err, "cannot create the staging directory")

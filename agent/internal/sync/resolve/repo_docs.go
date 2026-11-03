@@ -327,6 +327,8 @@ func (r *RepoDocs) render(ctx context.Context, docsSrc, srcDir, out, catDir, sta
 		}
 		return nil, fail(renderCode(err), err, "rendering the manuals failed")
 	}
+	// Warnings can name documents but never carry a value of the inventory; only counts are logged.
+	r.Env.log().Info("manuals rendered", "component", "sync", "pages", rep.Pages, "pdfs", rep.PDFs, "warnings", len(rep.Warnings), "inventory", rep.Inventory)
 	return rep, nil
 }
 

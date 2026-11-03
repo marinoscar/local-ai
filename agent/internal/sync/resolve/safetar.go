@@ -94,7 +94,7 @@ func extractTar(r io.Reader, root string, rules []tarRule) ([]string, error) {
 		switch h.Typeflag {
 		case tar.TypeDir:
 			continue
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg:
 		case tar.TypeSymlink, tar.TypeLink, tar.TypeChar, tar.TypeBlock, tar.TypeFifo:
 			if wanted {
 				return nil, fmt.Errorf("%w: %s is a link or a special file", ErrUnsafeArchive, rel)

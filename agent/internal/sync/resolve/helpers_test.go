@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha1" //nolint:gosec // a git object id, not a security hash
 	"encoding/hex"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,20 +121,4 @@ func testEnv(t *testing.T) *Env {
 // contentItem builds a catalog item around a source.
 func contentItem(id, kind string, src catalog.ContentSource) plan.CatalogItem {
 	return plan.ContentItem(&catalog.ContentItem{ID: id, Kind: kind, Source: src})
-}
-
-// errCode returns the doctor code of an error, failing the test when it has none.
-func errCode(t *testing.T, err error) string {
-	t.Helper()
-	if err == nil {
-		t.Fatal("expected an error")
-	}
-	c := CodeOf(err)
-	if c == "" {
-		var e *Error
-		if !errors.As(err, &e) {
-			t.Fatalf("error %v carries no doctor code", err)
-		}
-	}
-	return c
 }
