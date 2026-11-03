@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI-ARK drive. Start here. / Disco AI-ARK. Empiece aquí.</title>
+<style>
+:root { color-scheme: light; }
+body { margin: 0; padding: 1.5rem; font: 1.1rem/1.5 system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111; background: #fff; max-width: 60rem; margin-inline: auto; }
+h1 { font-size: 2rem; margin: 0 0 .2rem; }
+h2 { font-size: 1.35rem; margin: 2rem 0 .5rem; border-bottom: 2px solid #444; padding-bottom: .2rem; }
+p { margin: .4rem 0; }
+.es { color: #333; font-style: italic; margin-bottom: 1rem; }
+.badge { display: inline-block; padding: .15rem .7rem; border-radius: .4rem; border: 3px solid #111; font-weight: 700; }
+.badge.green { background: #cdeccd; border-color: #1b6b1b; }
+.badge.yellow { background: #fff2b3; border-color: #8a6d00; }
+.badge.red { background: #f7c9c9; border-color: #a11; }
+.badge.unknown { background: #e6e6e6; border-color: #555; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: .2rem 1rem; margin: .5rem 0; }
+dt { font-weight: 700; }
+dd { margin: 0; }
+code, pre { font: .95rem/1.4 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; background: #f1f1f1; border-radius: .25rem; }
+code { padding: 0 .25rem; }
+pre { padding: .7rem 1rem; overflow-x: auto; }
+a { color: #0b3d91; }
+a:visited { color: #4b2a85; }
+.missing { color: #555; }
+table { border-collapse: collapse; width: 100%; margin: .6rem 0; font-size: 1rem; }
+th, td { border: 1px solid #888; padding: .3rem .5rem; text-align: left; vertical-align: top; }
+th { background: #eee; }
+td.num { text-align: right; white-space: nowrap; }
+.st { font-weight: 700; white-space: nowrap; }
+.st.verified { color: #1b6b1b; }
+.st.stale, .st.skipped, .st.orphan { color: #8a6d00; }
+.st.missing, .st.failed, .st.quarantined { color: #a11; }
+footer { margin-top: 2rem; font-size: .9rem; color: #444; }
+@media print { body { font-size: 11pt; } a { color: #000; } }
+</style>
+</head>
+<body>
+
+<header>
+<h1>AI-ARK drive. Start here.</h1>
+<p class="es" lang="es">Disco AI-ARK. Empiece aquí.</p>
+</header>
+
+<h2>1. Drive status <span lang="es">/ Estado del disco</span></h2>
+<p><span class="badge {{.OverallClass}}">{{.OverallEN}} / <span lang="es">{{.OverallES}}</span></span></p>
+<dl>
+<dt>Survival capable<br><span lang="es">Listo para emergencias</span></dt>
+<dd>{{.SurvivalEN}} / <span lang="es">{{.SurvivalES}}</span></dd>
+<dt>Last sync<br><span lang="es">Última sincronización</span></dt>
+<dd>{{if .LastSync}}{{.LastSync}}{{else}}never / <span lang="es">nunca</span>{{end}}</dd>
+<dt>Catalog version<br><span lang="es">Versión del catálogo</span></dt>
+<dd>{{if .Catalog}}{{.Catalog}}{{else}}-{{end}}</dd>
+<dt>Last written by<br><span lang="es">Escrito por última vez por</span></dt>
+<dd>{{if .WrittenBy}}{{.WrittenBy}}{{else}}-{{end}}</dd>
+</dl>
+
+<h2>2. If you have a working AI computer <span lang="es">/ Si tiene un equipo de IA que funciona</span></h2>
+<p><strong>Plug this drive in. The computer finds it by itself.</strong> Open the Local AI app, or a browser at <code>http://127.0.0.1:7070</code>.</p>
+<p class="es" lang="es"><strong>Conecte este disco. El equipo lo encuentra solo.</strong> Abra la aplicación Local AI, o un navegador en <code>http://127.0.0.1:7070</code>.</p>
+
+<h2>3. If the computer has no AI software <span lang="es">/ Si el equipo no tiene programas de IA</span></h2>
+{{if .Links.RebuildGuide}}<p><strong><a href="localai/docs/06-rebuild-a-node-offline.html">Open the rebuild guide.</a></strong> It explains, step by step, how to build a working AI computer from this drive with no internet.</p>
+<p class="es" lang="es"><strong><a href="localai/docs/06-rebuild-a-node-offline.html">Abra la guía de reconstrucción.</a></strong> Explica, paso a paso, cómo construir un equipo de IA que funcione desde este disco, sin internet.</p>
+{{else}}<p><strong>The rebuild guide is not on this drive yet</strong> (<code>localai/docs/06-rebuild-a-node-offline.html</code>). It appears after the next sync of this drive on a computer with Local AI. The same guide is the runbook <code>06-rebuild-a-node-offline</code>.</p>
+<p class="es" lang="es"><strong>La guía de reconstrucción todavía no está en este disco</strong> (<code>localai/docs/06-rebuild-a-node-offline.html</code>). Aparece después de la próxima sincronización de este disco en un equipo con Local AI. Es el mismo manual <code>06-rebuild-a-node-offline</code>.</p>
+{{end}}
+
+<h2>4. Manuals <span lang="es">/ Manuales</span></h2>
+<ul>
+<li>{{if .Links.DocsIndex}}<a href="localai/docs/index.html">All manuals / <span lang="es">Todos los manuales</span></a>{{else}}<span class="missing">All manuals / <span lang="es">Todos los manuales</span>: not on this drive yet / <span lang="es">todavía no está en este disco</span></span>{{end}}</li>
+<li>{{if .Links.Survival}}<a href="localai/docs/01-survival-mode.html">Survival mode guide / <span lang="es">Guía del modo supervivencia</span></a>{{else}}<span class="missing">Survival mode guide / <span lang="es">Guía del modo supervivencia</span>: not on this drive yet / <span lang="es">todavía no está en este disco</span></span>{{end}}</li>
+{{range .Links.Cards}}<li><a href="{{.Href}}">Survival card ({{.NodeID}}) / <span lang="es">Tarjeta de supervivencia ({{.NodeID}})</span></a></li>
+{{else}}<li><span class="missing">Survival card / <span lang="es">Tarjeta de supervivencia</span>: not on this drive yet / <span lang="es">todavía no está en este disco</span></span></li>
+{{end}}<li>{{if .Links.Ready}}<a href="localai/READY.json">Readiness report (READY.json) / <span lang="es">Informe de preparación (READY.json)</span></a>{{else}}<span class="missing">Readiness report (READY.json) / <span lang="es">Informe de preparación (READY.json)</span>: not on this drive yet / <span lang="es">todavía no está en este disco</span></span>{{end}}</li>
+</ul>
+
+<h2>5. Emergency, without the app <span lang="es">/ Emergencia, sin la aplicación</span></h2>
+<p>Any Linux computer can read the offline library from this drive. Open a terminal and type these lines, one at a time. Replace <code>AI-ARK</code> if the drive has another name.</p>
+<p class="es" lang="es">Cualquier equipo con Linux puede leer la biblioteca sin conexión desde este disco. Abra una terminal y escriba estas líneas, una a la vez. Cambie <code>AI-ARK</code> si el disco tiene otro nombre.</p>
+<pre>cd /media/$USER/AI-ARK
+mkdir -p ~/kiwix
+tar -xzf localai/kit/tools/kiwix-tools/kiwix-tools_linux-$(uname -m)-*.tar.gz -C ~/kiwix --strip-components=1
+~/kiwix/kiwix-serve --port 8888 --library localai/kiwix/library.xml</pre>
+<p>Then open <code>http://127.0.0.1:8888</code> in a browser. {{if .Links.KiwixTools}}The kiwix-tools are on this drive.{{else}}<span class="missing">The kiwix-tools are not on this drive yet.</span>{{end}} {{if .Links.KiwixLibrary}}The library list is on this drive.{{else}}<span class="missing">The library list (<code>localai/kiwix/library.xml</code>) is not on this drive yet.</span>{{end}}</p>
+<p class="es" lang="es">Después abra <code>http://127.0.0.1:8888</code> en un navegador. {{if .Links.KiwixTools}}Las herramientas kiwix están en este disco.{{else}}<span class="missing">Las herramientas kiwix todavía no están en este disco.</span>{{end}} {{if .Links.KiwixLibrary}}La lista de la biblioteca está en este disco.{{else}}<span class="missing">La lista de la biblioteca (<code>localai/kiwix/library.xml</code>) todavía no está en este disco.</span>{{end}}</p>
+
+<h2>6. What is on this drive <span lang="es">/ Qué hay en este disco</span></h2>
+{{if .Rows}}<table>
+<thead><tr><th>Item<br><span lang="es">Elemento</span></th><th>Version<br><span lang="es">Versión</span></th><th>Size<br><span lang="es">Tamaño</span></th><th>Status<br><span lang="es">Estado</span></th></tr></thead>
+<tbody>
+{{range .Rows}}<tr><td>{{.Name}}</td><td>{{if .Version}}{{.Version}}{{else}}-{{end}}</td><td class="num">{{if .Size}}{{.Size}}{{else}}-{{end}}</td><td class="st {{.StatusClass}}">{{.StatusEN}} / <span lang="es">{{.StatusES}}</span></td></tr>
+{{end}}</tbody>
+</table>
+{{else}}<p>No readiness report yet. It is written after the first sync of this drive.</p>
+<p class="es" lang="es">Todavía no hay informe de preparación. Se escribe después de la primera sincronización de este disco.</p>
+{{end}}
+<footer>
+<p>This page needs no internet and no software. It is rewritten after every sync of this drive{{if .Generated}} (this copy: {{.Generated}}){{end}}.</p>
+<p class="es" lang="es">Esta página no necesita internet ni programas. Se reescribe después de cada sincronización de este disco{{if .Generated}} (esta copia: {{.Generated}}){{end}}.</p>
+</footer>
+</body>
+</html>
