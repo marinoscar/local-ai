@@ -25,8 +25,9 @@ import (
 // sourceResolveTimeout bounds one planner resolver call. The planner's own default (5 s) is meant for
 // a metadata read; apt_closure computes a whole package closure (apt-get update and --print-uris, up
 // to 25 minutes by its own bounds) and git ls-remote may be slow on a poor link, so a plan made with
-// the default would leave them unresolved and a run would skip them. Offline nothing is called: the
-// planner uses what the catalog pins and a producer refuses before it touches anything (Env.Online).
+// the default would leave them unresolved and a run would skip them. When the run may not use the
+// network no resolver is called: the planner uses what the catalog pins and what a root already
+// holds (plan.LocalResolver), and a producer refuses before it touches anything (Env.Online).
 const sourceResolveTimeout = 30 * time.Minute
 
 // aptSandboxUser is the user apt runs as (APT::Sandbox::User): the service user.
