@@ -292,7 +292,7 @@ func (p *fakeProbe) V1Models(_ context.Context, withKey bool) (int, []V1Model, e
 		return 0, nil, errors.New("connection refused")
 	}
 	if !withKey {
-		if p.w.noAuth && owner == "new" {
+		if (p.w.noAuth && owner == "new") || (p.w.legacyNoAuth && owner == "legacy") {
 			return 200, nil, nil
 		}
 		return 401, nil, nil
@@ -663,6 +663,7 @@ type world struct {
 	catErr          string
 	execCalls       []string
 	ssPID           int
+	legacyNoAuth    bool
 }
 
 type lockedBuf struct {
