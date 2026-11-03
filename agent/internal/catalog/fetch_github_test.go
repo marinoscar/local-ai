@@ -287,26 +287,38 @@ func TestResolveStableFallsBackToTheMovingTag(t *testing.T) {
 		why  string // text in APIErr
 	}{
 		{"rate limited 403", func(f *fakeGH, _ *GitHub) {
-			f.api = func(w http.ResponseWriter, r *http.Request) bool { f.rateLimit(w, 403); return true }
+			f.api = func(w http.ResponseWriter, r *http.Request) bool { f.rateLimit(w, http.StatusForbidden); return true }
 		}, ReasonRateLimited},
 		{"rate limited 429", func(f *fakeGH, _ *GitHub) {
-			f.api = func(w http.ResponseWriter, r *http.Request) bool { http.Error(w, "slow down", 429); return true }
+			f.api = func(w http.ResponseWriter, r *http.Request) bool {
+				http.Error(w, "slow down", http.StatusTooManyRequests)
+				return true
+			}
 		}, ReasonRateLimited},
 		{"403 with a Retry-After (secondary limit)", func(f *fakeGH, _ *GitHub) {
 			f.api = func(w http.ResponseWriter, r *http.Request) bool {
 				w.Header().Set("Retry-After", "60")
-				http.Error(w, "abuse", 403)
+				http.Error(w, "abuse", http.StatusForbidden)
 				return true
 			}
 		}, ReasonRateLimited},
 		{"plain 403", func(f *fakeGH, _ *GitHub) {
-			f.api = func(w http.ResponseWriter, r *http.Request) bool { http.Error(w, "no", 403); return true }
+			f.api = func(w http.ResponseWriter, r *http.Request) bool {
+				http.Error(w, "no", http.StatusForbidden)
+				return true
+			}
 		}, ReasonHTTPStatus},
 		{"500", func(f *fakeGH, _ *GitHub) {
-			f.api = func(w http.ResponseWriter, r *http.Request) bool { http.Error(w, "boom", 500); return true }
+			f.api = func(w http.ResponseWriter, r *http.Request) bool {
+				http.Error(w, "boom", http.StatusInternalServerError)
+				return true
+			}
 		}, ReasonHTTPStatus},
 		{"503", func(f *fakeGH, _ *GitHub) {
-			f.api = func(w http.ResponseWriter, r *http.Request) bool { http.Error(w, "down", 503); return true }
+			f.api = func(w http.ResponseWriter, r *http.Request) bool {
+				http.Error(w, "down", http.StatusServiceUnavailable)
+				return true
+			}
 		}, ReasonHTTPStatus},
 		{"404", func(f *fakeGH, _ *GitHub) {
 			f.api = func(w http.ResponseWriter, r *http.Request) bool { http.NotFound(w, r); return true }
@@ -504,7 +516,7 @@ func TestFetchCatalogPinAndStableFallback(t *testing.T) {
 		}
 	})
 	t.Run("the API rate limited: catalog-stable is read", func(t *testing.T) {
-		f.api = func(w http.ResponseWriter, r *http.Request) bool { f.rateLimit(w, 403); return true }
+		f.api = func(w http.ResponseWriter, r *http.Request) bool { f.rateLimit(w, http.StatusForbidden); return true }
 		defer func() { f.api = nil }()
 		b, err := f.source().FetchCatalog(context.Background(), "stable")
 		if err != nil || b.Version != v2 {
@@ -526,7 +538,10 @@ func TestFetchCatalogPinAndStableFallback(t *testing.T) {
 		if err != nil || b.Version != v2 {
 			t.Fatalf("listing available: %v %v (the highest tag must win over a stale moving tag)", b, err)
 		}
-		f.api = func(w http.ResponseWriter, r *http.Request) bool { f.rateLimit(w, 429); return true }
+		f.api = func(w http.ResponseWriter, r *http.Request) bool {
+			f.rateLimit(w, http.StatusTooManyRequests)
+			return true
+		}
 		defer func() { f.api = nil }()
 		b, err = f.source().FetchCatalog(context.Background(), "stable")
 		if err != nil || b.Version != v1 {
@@ -595,14 +610,20 @@ func TestFetchCatalogFailures(t *testing.T) {
 			delete(f.tags["catalog-"+v1], "profiles/small-8gb.yaml")
 		}, CodeGitHubIncomplete, ReasonNotFound},
 		{"raw is rate limited", "catalog-" + v1, func(f *fakeGH) {
-			f.raw = func(w http.ResponseWriter, r *http.Request, tag, path string) bool { f.rateLimit(w, 429); return true }
+			f.raw = func(w http.ResponseWriter, r *http.Request, tag, path string) bool {
+				f.rateLimit(w, http.StatusTooManyRequests)
+				return true
+			}
 		}, CodeGitHubFetch, ReasonRateLimited},
 		{"raw answers 403 without a quota", "catalog-" + v1, func(f *fakeGH) {
-			f.raw = func(w http.ResponseWriter, r *http.Request, tag, path string) bool { f.rateLimit(w, 403); return true }
+			f.raw = func(w http.ResponseWriter, r *http.Request, tag, path string) bool {
+				f.rateLimit(w, http.StatusForbidden)
+				return true
+			}
 		}, CodeGitHubFetch, ReasonRateLimited},
 		{"raw answers 502", "catalog-" + v1, func(f *fakeGH) {
 			f.raw = func(w http.ResponseWriter, r *http.Request, tag, path string) bool {
-				http.Error(w, "bad", 502)
+				http.Error(w, "bad", http.StatusBadGateway)
 				return true
 			}
 		}, CodeGitHubFetch, ReasonHTTPStatus},
@@ -610,7 +631,7 @@ func TestFetchCatalogFailures(t *testing.T) {
 			f.noProfileListing = true
 			f.raw = func(w http.ResponseWriter, r *http.Request, tag, path string) bool {
 				if path == "profiles/small-8gb.yaml" {
-					http.Error(w, "boom", 500)
+					http.Error(w, "boom", http.StatusInternalServerError)
 					return true
 				}
 				return false
@@ -708,7 +729,7 @@ func TestFetchCatalogCallerCancelIsNotAGitHubFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	f.raw = func(w http.ResponseWriter, r *http.Request, tag, path string) bool {
 		cancel()
-		http.Error(w, "x", 500)
+		http.Error(w, "x", http.StatusInternalServerError)
 		return true
 	}
 	_, err := f.source().FetchCatalog(ctx, "catalog-"+v1)
@@ -826,7 +847,7 @@ func TestRefreshThroughGitHubAPIDownUsesCatalogStable(t *testing.T) {
 	f, gh := refreshFixture(t)
 	gh.publishVersion(v2)
 	gh.tags[StableTag] = gh.tags["catalog-"+v2]
-	gh.api = func(w http.ResponseWriter, r *http.Request) bool { gh.rateLimit(w, 403); return true }
+	gh.api = func(w http.ResponseWriter, r *http.Request) bool { gh.rateLimit(w, http.StatusForbidden); return true }
 	res, err := f.Refresh(context.Background())
 	if err != nil || res.Source != SourceGitHub || res.Catalog.Version != v2 {
 		t.Fatalf("%+v %v", res, err)
@@ -873,7 +894,10 @@ func TestRefreshThroughGitHubFailureKeepsThePreviousCatalog(t *testing.T) {
 		}, CodeGitHubIncomplete},
 		{"version in the file differs from the tag", "catalog-" + v2, func(gh *fakeGH) { gh.tags["catalog-"+v2]["CATALOG_VERSION"] = "2026.11.09-9\n" }, CodeGitHubIncomplete},
 		{"rate limited", "catalog-" + v2, func(gh *fakeGH) {
-			gh.raw = func(w http.ResponseWriter, r *http.Request, tag, path string) bool { gh.rateLimit(w, 429); return true }
+			gh.raw = func(w http.ResponseWriter, r *http.Request, tag, path string) bool {
+				gh.rateLimit(w, http.StatusTooManyRequests)
+				return true
+			}
 		}, CodeGitHubFetch},
 	}
 	for _, c := range cases {
@@ -928,7 +952,7 @@ func TestGitHubDoesNotRetryByItself(t *testing.T) {
 	gh.publishVersion(v2)
 	gh.raw = func(w http.ResponseWriter, r *http.Request, tag, path string) bool {
 		if path == FileVersion {
-			http.Error(w, "boom", 500)
+			http.Error(w, "boom", http.StatusInternalServerError)
 			return true
 		}
 		return false
