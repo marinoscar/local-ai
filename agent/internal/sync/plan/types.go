@@ -336,3 +336,21 @@ func (p RootPlan) MarshalIndented() ([]byte, error) {
 	}
 	return append(b, '\n'), nil
 }
+
+// OnlyItems returns the plan with only the rows of the given item ids (the `items` filter of a dry
+// run). Rows keep their positions. The budget, planned and peak figures are not recomputed: every rule
+// was applied to the whole profile, and they keep describing that plan.
+func (p RootPlan) OnlyItems(ids []string) RootPlan {
+	want := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		want[id] = true
+	}
+	rows := make([]ItemPlan, 0, len(ids))
+	for _, it := range p.Items {
+		if want[it.ID] {
+			rows = append(rows, it)
+		}
+	}
+	p.Items = rows
+	return p
+}
