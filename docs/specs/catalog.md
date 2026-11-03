@@ -255,7 +255,7 @@ content:
 | `github_release` | ark.yaml | ark-sync.md §4.9.4 |
 | `git_mirror` | ark.yaml | ark-sync.md §4.9.6 |
 | `apt_closure` | ark.yaml | ark-sync.md §4.9.7 |
-| `repo_docs` | ark.yaml | ark-sync.md §4.9.8 (also writes `kit/catalog/`: catalog files, `CATALOG_VERSION`, `pins.json`, from the same tag tarball in the same item install; rebuild-kit.md §3.2) |
+| `repo_docs` | ark.yaml | ark-sync.md §4.9.8 (`docs-bundle` renders `docs/`; the kit item `kit-catalog` writes `kit/catalog/`: catalog files and `CATALOG_VERSION`, from the same tag tarball; rebuild-kit.md §3.2.1) |
 
 **Optional fields** (lint-enforced):
 - `extract: true` (`github_release` and `url` only): the verified archive (`.tar.gz`, `.tar.xz` or `.zip`) is unpacked and stored as a directory item. `map-assets` uses it.
