@@ -168,7 +168,7 @@ func (m *Manager) restorePrebuilt(ctx context.Context, req Request, progress fun
 		Activate: !req.NoActivate, Keep: req.Keep,
 	}
 	if in.Keep <= 0 {
-		in.Keep = DefaultKeep
+		in.Keep = m.defaultKeep()
 	}
 	plan := m.plan(in, info.Commit)
 	if req.DryRun {

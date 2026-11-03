@@ -31,6 +31,10 @@ const (
 	// and kit/git/whisper.cpp.git.
 	SourceStemWhisper = "whisper.cpp"
 
+	// WhisperKeep is the number of whisper builds kept besides current: with it the node keeps the
+	// last 2 builds, the active one and the one it replaced.
+	WhisperKeep = 1
+
 	// CodeWhisperBuildFailed: building whisper.cpp failed (LAI-KIT-020).
 	CodeWhisperBuildFailed = doctor.KIT020
 	// CodeWhisperBuildUnusable: the new whisper.cpp build does not work and the previous one is
@@ -60,7 +64,9 @@ var WhisperRecipe = Recipe{
 	BuildFailedCode: CodeWhisperBuildFailed,
 	UnusableCode:    CodeWhisperBuildUnusable,
 	AuditAction:     audit.ActionWhisperBuildSwitch,
-	smoke:           smokeWhisper,
+	// Keep the last 2 builds: the active one and the one it replaced (the rollback target).
+	Keep:  WhisperKeep,
+	smoke: smokeWhisper,
 }
 
 // whisperFlags are the configure flags of whisper.cpp (companion-services.md section 4.2.1): static

@@ -686,7 +686,7 @@ func (m *Manager) auditSwitch(req Request, result audit.Result, code string, tar
 		actor = audit.CLIRoot()
 	}
 	action := m.opt.Recipe.AuditAction
-	if err := m.opt.Audit.Write(audit.Event{Action: action, Result: result, Code: code, Actor: actor, Target: target}); err != nil {
+	if err := m.opt.Audit.Write(audit.Event{Action: action, Result: result, Code: m.code(code), Actor: actor, Target: target}); err != nil {
 		m.log.Warn("could not write the audit line", "action", action, "error", err)
 	}
 }

@@ -47,14 +47,16 @@ type Recipe struct {
 	// KitPreflight runs the offline preflight (Manager.PreflightReport) on every build, not only
 	// with FromKit or DryRun.
 	KitPreflight bool
-	// AllowAuto accepts the backend "auto": it means the llama backend of the node
-	// (Defaults.LlamaBackend).
+	// AllowAuto accepts the backend "auto", which is also what an absent backend means: the llama
+	// backend of the node (Defaults.LlamaBackend).
 	AllowAuto bool
 	// BuildFailedCode and UnusableCode are the doctor codes of a failed build and of a build that
 	// does not work (llama: LAI-LLM-018 and LAI-LLM-019; whisper: LAI-KIT-020 and LAI-KIT-021).
 	BuildFailedCode, UnusableCode string
 	// AuditAction is the audit line of a switch attempt.
 	AuditAction string
+	// Keep is the number of builds kept besides current when Request.Keep is 0 (0: DefaultKeep).
+	Keep int
 
 	// smoke is the recipe's smoke test of the installed programs (nil: llama's).
 	smoke func(r *run, ctx context.Context) (Smoke, *Error)
@@ -74,6 +76,14 @@ var LlamaRecipe = Recipe{
 	BuildFailedCode: CodeBuildFailed,
 	UnusableCode:    CodeBuildUnusable,
 	AuditAction:     audit.ActionLlamaBuildSwitch,
+}
+
+// defaultKeep is the number of builds kept besides current when the request does not say.
+func (m *Manager) defaultKeep() int {
+	if k := m.opt.Recipe.Keep; k > 0 {
+		return k
+	}
+	return DefaultKeep
 }
 
 // llamaFlags are the configure flags of llama.cpp (llama-router.md section 4.10.2).

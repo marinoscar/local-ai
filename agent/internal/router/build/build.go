@@ -596,7 +596,7 @@ func (m *Manager) resolve(ctx context.Context, req Request) (Inputs, error) {
 	if backend == "" {
 		backend = node.Backend
 	}
-	if backend == "auto" && m.opt.Recipe.AllowAuto {
+	if (backend == "auto" || backend == "") && m.opt.Recipe.AllowAuto {
 		backend = strings.TrimSpace(node.LlamaBackend)
 	}
 	switch backend {
@@ -612,7 +612,7 @@ func (m *Manager) resolve(ctx context.Context, req Request) (Inputs, error) {
 	in := Inputs{Commit: commit, ShortCommit: commit[:min(9, len(commit))], Backend: backend, Activate: !req.NoActivate}
 	in.Keep = req.Keep
 	if in.Keep <= 0 {
-		in.Keep = DefaultKeep
+		in.Keep = m.defaultKeep()
 	}
 	if backend == BackendCUDA {
 		arch := strings.TrimSpace(req.CudaArch)
