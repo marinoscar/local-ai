@@ -25,6 +25,17 @@ type fakeDrill struct {
 	abortID  string
 	abortErr error
 	aborts   int
+
+	manuals   []DrillManualRequest
+	manualRes DrillManualResult
+	manualErr error
+}
+
+func (f *fakeDrill) Manual(_ context.Context, req DrillManualRequest) (DrillManualResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.manuals = append(f.manuals, req)
+	return f.manualRes, f.manualErr
 }
 
 func (f *fakeDrill) Start(_ context.Context, req DrillStartRequest) (DrillStartResult, error) {
@@ -81,15 +92,19 @@ func (r *drillRig) del() *httptest.ResponseRecorder {
 
 func TestDrillRoutesMetadata(t *testing.T) {
 	routes := DrillRoutes(DrillDeps{})
-	want := map[string]bool{"POST /drill": true, "GET /drill": true, "DELETE /drill": true}
+	want := map[string]bool{"POST /drill": true, "GET /drill": true, "DELETE /drill": true, "POST /drill/manual": true}
 	for _, rt := range routes {
 		k := rt.Method + " " + rt.Pattern
 		if !want[k] {
 			t.Errorf("unexpected route %s", k)
 		}
 		delete(want, k)
-		if len(rt.Auth) != 1 || rt.Auth[0] != AuthOp || rt.Timeout != 10*time.Second {
-			t.Errorf("%s: auth %v timeout %v, want op and 10 s", k, rt.Auth, rt.Timeout)
+		wantAuth, wantTimeout := AuthOp, 10*time.Second
+		if k == "POST /drill/manual" {
+			wantAuth, wantTimeout = AuthAdmin, 5*time.Second
+		}
+		if len(rt.Auth) != 1 || rt.Auth[0] != wantAuth || rt.Timeout != wantTimeout {
+			t.Errorf("%s: auth %v timeout %v, want %s and %v", k, rt.Auth, rt.Timeout, wantAuth, wantTimeout)
 		}
 	}
 	if len(want) != 0 {

@@ -16,6 +16,9 @@ const (
 	keyLastResult = "last_result"
 	keyInProgress = "in_progress"
 	keyDeferred   = "deferred"
+	// keyWatchSince is when the agent first watched this node's drills (stamped once by the reporter's
+	// Load): the date the 45-day alert LAI-DRL-006 counts from on a node that never ran one.
+	keyWatchSince = "watch_since"
 	ownerName     = "drill.md"
 )
 

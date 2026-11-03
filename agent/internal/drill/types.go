@@ -133,6 +133,10 @@ type Document struct {
 	Code    string     `json:"code,omitempty"`
 	Reason  string     `json:"reason,omitempty"`
 	RetryAt *time.Time `json:"retry_at,omitempty"`
+
+	// Notes is the free text of a manual_plug entry (aictl drill record-manual --notes). It stays on
+	// the node: the cloud mapping drops it, and a manual_plug entry is never sent as results.
+	Notes string `json:"notes,omitempty"`
 }
 
 // Phase says when in the run a check executes.

@@ -272,7 +272,11 @@ func (e *Engine) finalize(rs *runState) {
 		e.d.Metrics.Set(MetricLastOverall, nil, overallMetric(rs.doc.Overall))
 		e.d.Metrics.Set(MetricLastFinished, nil, float64(finished.Unix()))
 	}
-	e.publish(events.TypeDrillDone, ar.opID, events.DrillDone{RunID: ar.id, Overall: rs.doc.Overall, SurvivalReady: rs.doc.SurvivalReady})
+	// The reporter hears of the document before drill.done goes out, so a listener that reacts to the
+	// event (the desktop opening Status, the cloud link pushing a snapshot) already finds the alert and
+	// the snapshot block of this run.
+	e.observe(rs.doc)
+	e.publish(events.TypeDrillDone, ar.opID, doneEvent(rs.doc))
 	rs.log.Info("drill finished", "overall", rs.doc.Overall, "survival_ready", rs.doc.SurvivalReady,
 		"pass", counts.Pass, "warn", counts.Warn, "fail", counts.Fail, "skip", counts.Skip, "code", rs.doc.Code)
 }
