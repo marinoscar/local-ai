@@ -186,8 +186,11 @@ func (d *Daemon) buildArk(ctx context.Context, idx *ark.Index) (*arkStack, error
 			lg.Error("a content root turned out unwritable; writes to it stop", "root", rootID, "code", e.Code, "read_only", readOnly)
 		},
 	})
+	// The content validators of the item machine (the ZIM's internal MD5, pmtiles verify); the library
+	// source types register theirs in registerLibrarySources.
+	validators := item.NewValidators()
 	machine, err := item.New(item.Deps{
-		FS: item.OSFS{}, Journal: jr, Fetcher: dl, Index: idx, Remover: s.ret, Roots: roots,
+		FS: item.OSFS{}, Journal: jr, Fetcher: dl, Index: idx, Remover: s.ret, Roots: roots, Validators: validators,
 		VerifyReread: func() bool { return d.syncSettings().VerifyReread },
 		Now:          clock.Now, NodeID: cfg.Get().Node.ID, AgentVersion: env.Version, Logger: lg,
 	})
@@ -200,6 +203,9 @@ func (d *Daemon) buildArk(ctx context.Context, idx *ark.Index) (*arkStack, error
 	}
 	if err := s.registerWebSources(dl, httpc); err != nil {
 		return nil, fmt.Errorf("web source resolvers: %w", err)
+	}
+	if err := s.registerLibrarySources(validators); err != nil {
+		return nil, fmt.Errorf("library source resolvers: %w", err)
 	}
 
 	s.plans, err = plan.NewGatherer(plan.Deps{

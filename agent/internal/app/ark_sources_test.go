@@ -290,13 +290,19 @@ func srcLookup(inner func(string) (string, error)) func(string) (string, error) 
 
 // srcNet is the node's network for a test: the picture the daemon is told, and a dialer for the sync
 // downloader that counts every attempt and refuses it. A test that expects no network asserts
-// dials() == 0 when it ends.
+// dials() == 0 when it ends. The hosts of the catalog's kiwix and pmtiles_extract items are counted
+// apart (libDial): while the node is online the planner asks every wanted item's resolver, and
+// those two resolvers read metadata from their origin, which is their job and not a producer's.
 type srcNet struct {
-	mu    sync.Mutex
-	state run.NetState
-	dial  atomic.Int32
-	addrs map[string]int
+	mu      sync.Mutex
+	state   run.NetState
+	dial    atomic.Int32
+	libDial atomic.Int32
+	addrs   map[string]int
 }
+
+// srcLibraryHosts are the origins of the kiwix and pmtiles_extract items of the fixture catalog.
+var srcLibraryHosts = []string{"mirror.example.test:", "tiles.example.test:"}
 
 func (n *srcNet) set(mode string, online bool) {
 	n.mu.Lock()
@@ -313,6 +319,12 @@ func (n *srcNet) get() run.NetState {
 func (n *srcNet) client() *download.HTTPClient {
 	return download.NewHTTPClient(download.ClientConfig{
 		DialContext: func(_ context.Context, network, addr string) (net.Conn, error) {
+			for _, h := range srcLibraryHosts {
+				if strings.HasPrefix(addr, h) {
+					n.libDial.Add(1)
+					return nil, errors.New("no network in this test")
+				}
+			}
 			n.dial.Add(1)
 			n.mu.Lock()
 			if n.addrs == nil {
@@ -530,8 +542,23 @@ func TestSourceProducersAreWiredToTheNode(t *testing.T) {
 			t.Errorf("no engine resolver for %s", typ)
 		}
 	}
-	if _, ok := c.SyncResolvers.For("kiwix"); ok {
-		t.Error("kiwix has a planner resolver: it is fetched from what the catalog pins")
+	// The library and maps types (SYNC-10) are plain resolvers: kiwix and pmtiles_extract.
+	if r, ok := c.SyncResolvers.For("kiwix"); !ok {
+		t.Error("no planner resolver for kiwix")
+	} else if _, ok := r.(*resolve.Kiwix); !ok {
+		t.Errorf("the kiwix planner resolver is a %T", r)
+	}
+	if r, ok := c.SyncResolvers.For("pmtiles_extract"); !ok {
+		t.Error("no planner resolver for pmtiles_extract")
+	} else if pm, ok := r.(*resolve.PMTiles); !ok {
+		t.Errorf("the pmtiles_extract planner resolver is a %T", r)
+	} else if want := sr.path("opt/localai/pmtiles/current/pmtiles"); pm.Tool != want {
+		t.Errorf("the pmtiles tool is %s, want %s", pm.Tool, want)
+	}
+	for _, typ := range []string{"kiwix", "pmtiles_extract"} {
+		if _, ok := c.SyncItemResolvers.For(typ); !ok {
+			t.Errorf("no engine resolver for %s", typ)
+		}
 	}
 
 	// The pins come from the BUILD.json of the build in use (40 hex), not from node.yaml's short form.
