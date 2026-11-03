@@ -6,11 +6,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/marinoscar/local-ai/agent/internal/app"
 	"github.com/marinoscar/local-ai/agent/internal/cli"
+	"github.com/marinoscar/local-ai/agent/internal/update"
 )
 
 const usage = `usage:
@@ -18,7 +20,7 @@ const usage = `usage:
   aiagent ctl [args...]              run the CLI (same as aictl)
   aiagent version [--json]           print the build version
   aiagent migrate llama-qwen [...]   legacy migration (not implemented yet)
-  aiagent update-rollback-check      internal (not implemented yet)
+  aiagent update-rollback-check      internal: run by the rollback timer (agent.md section 4.10)
 `
 
 func main() {
@@ -71,10 +73,36 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stderr, usage)
 		return 2
 	case "update-rollback-check":
-		fmt.Fprintln(stderr, "aiagent update-rollback-check: not implemented yet (AGENT-19)")
-		return 1
+		if len(args) != 2 {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		return runRollbackCheck(ctx, stderr)
 	default:
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
+}
+
+// rollbackRunner builds the Runner of update-rollback-check: the real filesystem, systemctl and the canonical
+// paths. Tests replace it.
+var rollbackRunner = func(stderr io.Writer) *update.Runner {
+	return &update.Runner{
+		Paths:   update.DefaultPaths(),
+		Current: app.Version,
+		Log:     slog.New(slog.NewJSONHandler(stderr, nil)),
+	}
+}
+
+// runRollbackCheck is `aiagent update-rollback-check`, started by the transient timer from aiagent.prev when
+// an update was not confirmed in time (agent.md section 4.10 step 10). Exit 0 when there was nothing to do or
+// the rollback was started, 1 when it could not be.
+func runRollbackCheck(ctx context.Context, stderr io.Writer) int {
+	out, err := rollbackRunner(stderr).RollbackCheck(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "aiagent update-rollback-check: %s: %s\n", update.CodeOf(err), update.MessageOf(err))
+		return 1
+	}
+	fmt.Fprintf(stderr, "aiagent update-rollback-check: %s\n", out)
+	return 0
 }
