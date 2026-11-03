@@ -60,6 +60,9 @@ type State struct {
 	ModeChangedAt *time.Time `json:"mode_changed_at"`
 	// ModeTransition is non-nil while a mode change runs; resume logic is AGENT-12's.
 	ModeTransition *ModeTransition `json:"mode_transition"`
+	// ModeHistory is the bounded list of committed mode changes, oldest first; absent until the first
+	// change (modehistory.go).
+	ModeHistory []ModeHistoryEntry `json:"mode_history,omitempty"`
 	// PendingMode is "survival" while a POST /mode/survival received before startup step 12 waits.
 	PendingMode  *Mode        `json:"pending_mode"`
 	Agent        AgentInfo    `json:"agent"`
