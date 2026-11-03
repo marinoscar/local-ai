@@ -43,13 +43,6 @@ Specification: docs/specs/catalog.md section 6, docs/specs/aictl.md section 4.11
 	})
 }
 
-// notImplemented is the Run of a command a later issue owns. It is an untyped error: exit 1.
-func notImplemented(name, item string) func(*Call) error {
-	return func(*Call) error {
-		return fmt.Errorf("aictl %s: not implemented yet (%s)", name, item)
-	}
-}
-
 func catalogLint(c *Call) error {
 	switch len(c.Args) {
 	case 0:

@@ -13,8 +13,8 @@ import (
 // waits up to 60 s for the unit and, for llama, for the router and the models it restores, so the
 // answer (200) says which models are loaded again.
 //
-// restartService is the one implementation: AICTL-10 binds `services restart` to it so the two forms
-// behave identically.
+// serviceAction is the one implementation of `restart` and of `services start|stop|restart` (AICTL-10):
+// the two forms of a restart behave identically because they are the same function.
 
 // restartTimeout is the route deadline of the agent: 60 s for the unit plus the router wait and the
 // model restore (agent.md section 3.8.22).
@@ -66,7 +66,12 @@ func serviceWords(lang Lang, name string) string {
 }
 
 // restartService restarts one service and tells what came back.
-func (c *Call) restartService(name string) error {
+func (c *Call) restartService(name string) error { return c.serviceAction(name, "restart") }
+
+// serviceAction starts, stops or restarts one service (POST /services/{name}/{action}) and tells what
+// came back. The agent waits until the unit is active (inactive for a stop), at most 60 s, and for
+// llama also for the router and the models it restores, so aictl waits for the one answer.
+func (c *Call) serviceAction(name, action string) error {
 	if !contains(serviceNames, name) {
 		return c.usageErr(
 			pick(c.Lang, "Unknown service "+quote(name)+".", "Servicio desconocido "+quote(name)+"."),
@@ -82,17 +87,31 @@ func (c *Call) restartService(name string) error {
 	}
 	words := serviceWords(c.Lang, name)
 	if !c.Global.JSON {
-		c.Out.Progress(pick(c.Lang, "Restarting "+words, "Reiniciando "+words))
+		switch action {
+		case "start":
+			c.Out.Progress(pick(c.Lang, "Starting "+words, "Iniciando "+words))
+		case "stop":
+			c.Out.Progress(pick(c.Lang, "Stopping "+words, "Deteniendo "+words))
+		default:
+			c.Out.Progress(pick(c.Lang, "Restarting "+words, "Reiniciando "+words))
+		}
 	}
 	var a serviceActionAnswer
-	raw, _, err := c.callWith(cl, c.Ctx, http.MethodPost, "/services/"+url.PathEscape(name)+"/restart", body, &a)
+	raw, _, err := c.callWith(cl, c.Ctx, http.MethodPost, "/services/"+url.PathEscape(name)+"/"+action, body, &a)
 	if err != nil {
 		return err
 	}
 	if c.Global.JSON {
 		return c.emitRaw(raw)
 	}
+	if action == "stop" {
+		c.Out.OK(pick(c.Lang, capitalize(words)+" is stopped.", capitalize(words)+" está detenido."))
+		return nil
+	}
 	line := pick(c.Lang, capitalize(words)+" is running again.", capitalize(words)+" está en marcha otra vez.")
+	if action == "start" {
+		line = pick(c.Lang, capitalize(words)+" is running.", capitalize(words)+" está en marcha.")
+	}
 	if name == "llama" {
 		if len(a.RestoredModels) > 0 {
 			names := c.modelNames(cl)

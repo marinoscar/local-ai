@@ -491,17 +491,10 @@ func TestModelsQueryAndFilters(t *testing.T) {
 	}
 }
 
-func TestSetCommandsAreNotImplementedYet(t *testing.T) {
+func TestServicesRejectsAnUnknownSubcommand(t *testing.T) {
 	f := newROFix(t, fake.Options{})
 	f.serve("/models", "models")
 	f.serve("/services", "services")
-	// `default <id>` is AICTL-05 and works; `services restart` waits for AICTL-10.
-	for _, args := range [][]string{{"services", "restart", "llama"}} {
-		r := f.run(args...)
-		if r.code != ExitFailed || !strings.Contains(r.errOut, "not implemented yet") {
-			t.Errorf("%v: exit %d %q", args, r.code, r.errOut)
-		}
-	}
 	if r := f.run("services", "bogus"); r.code != ExitUsage {
 		t.Errorf("services bogus: exit %d", r.code)
 	}

@@ -1,0 +1,5 @@
+== stdout ==
+✓ The speech service is running again.
+== stderr ==
+… Restarting the speech service
+== exit 0 ==

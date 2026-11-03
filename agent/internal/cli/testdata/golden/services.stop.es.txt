@@ -1,0 +1,5 @@
+== stdout ==
+✓ El servicio de biblioteca está detenido.
+== stderr ==
+… Deteniendo el servicio de biblioteca
+== exit 0 ==
