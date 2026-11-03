@@ -103,6 +103,8 @@ func (c *fakeClock) pending() int {
 type recorder struct {
 	mu  sync.Mutex
 	evs []recorded
+	// onProgress, when set, sees every sync.progress as it is published.
+	onProgress func(events.SyncProgress)
 }
 
 type recorded struct {
@@ -112,8 +114,12 @@ type recorded struct {
 
 func (r *recorder) Publish(typ, opID string, data any) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.evs = append(r.evs, recorded{typ, data})
+	hook := r.onProgress
+	r.mu.Unlock()
+	if p, ok := data.(events.SyncProgress); ok && hook != nil {
+		hook(p)
+	}
 	return nil
 }
 

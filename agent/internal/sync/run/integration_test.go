@@ -12,10 +12,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/config"
+	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/sync/download"
 	"github.com/marinoscar/local-ai/agent/internal/sync/item"
 	"github.com/marinoscar/local-ai/agent/internal/sync/journal"
@@ -200,4 +202,172 @@ type readyFunc func(ids []string) map[string]string
 
 func (f readyFunc) Refresh(_ context.Context, ids []string) (map[string]string, error) {
 	return f(ids), nil
+}
+
+// realRig is the real stack (journal, index, retention, downloader, machine, engine) over one root and
+// the given HTTP handler.
+type realRig struct {
+	t    *testing.T
+	base string
+	root ark.Root
+	jr   *journal.Journal
+	idx  *ark.Index
+	evs  *recorder
+	eng  *Engine
+	pl   *fakePlanner
+	clk  *fakeClock
+}
+
+func newRealRig(t *testing.T, handler http.Handler, model *catalog.Model, rows []plan.ItemPlan) *realRig {
+	t.Helper()
+	base := t.TempDir()
+	root := ark.Root{ID: ark.InternalID, Kind: ark.KindInternal, Path: filepath.Join(base, "srv"), State: ark.StateReady}
+	if err := os.MkdirAll(root.Path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r := &realRig{t: t, base: base, root: root, evs: &recorder{}, clk: newFakeClock()}
+	r.pl = &fakePlanner{roots: []ark.Root{root}, items: map[string]plan.CatalogItem{model.ID: plan.ModelItem(model)}, plans: []plan.RootPlan{{Root: ark.InternalID, Items: rows, MinFreeBytes: 1}}}
+	r.open(handler)
+	return r
+}
+
+// open (re)builds the whole stack over the disk as it is: an agent start.
+func (r *realRig) open(_ http.Handler) {
+	r.t.Helper()
+	roots := func() []ark.Root { return []ark.Root{r.root} }
+	jr, rec, err := journal.Open(bg, journal.Options{Dir: filepath.Join(r.base, "var"), Now: r.clk.Now, Logger: quiet})
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	r.jr = jr
+	r.idx = ark.NewIndex(item.OSFS{})
+	if _, err := r.idx.Rebuild(bg, roots()); err != nil {
+		r.t.Fatal(err)
+	}
+	ret, err := retention.New(retention.Deps{FS: retention.OSFS{}, Roots: roots, Copies: r.idx, Journal: jr.Items, Index: r.idx, Items: jr.Items, Now: r.clk.Now, Logger: quiet})
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	dl := download.New(download.Options{HTTP: download.NewHTTPClient(download.ClientConfig{}), Space: ret, Logger: quiet, CheckpointEvery: 1 << 20})
+	machine, err := item.New(item.Deps{FS: item.OSFS{}, Journal: jr, Fetcher: dl, Index: r.idx, Remover: ret, Roots: roots, Now: r.clk.Now, NodeID: "ai-test", AgentVersion: "0.0.0", Logger: quiet})
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	eng, err := New(Deps{
+		Journal: jr, Machine: machine, Planner: r.pl, Copies: r.idx, FS: config.OSFS{}, JournalDir: filepath.Join(r.base, "var"),
+		Settings: DefaultSettings, Events: r.evs, Clock: r.clk, Logger: quiet, Priority: func(bool) error { return nil },
+		Lock: FileLock{Path: filepath.Join(r.base, "lock")}, Retention: ret,
+		Unknown: func(root ark.Root) ([]string, error) { return jr.Items.UnknownStaging(config.OSFS{}, root) },
+	})
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	r.eng = eng
+	eng.Resume(bg, rec)
+}
+
+// TestCancelMidDownloadThenResumeFromTheCheckpoint cancels a run while a big file is half downloaded,
+// checks that the .part and its checkpoint are kept and the item is not present, restarts the agent,
+// and runs again: the server sees a Range request that starts where the first run stopped, and the file
+// ends byte-identical.
+func TestCancelMidDownloadThenResumeFromTheCheckpoint(t *testing.T) {
+	body := data(3<<20+12345, 7)
+	var mu sync.Mutex
+	var ranges []string
+	first := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		ranges = append(ranges, r.Header.Get("Range"))
+		isFirst := first
+		first = false
+		mu.Unlock()
+		if !isFirst {
+			http.ServeContent(w, r, "m1.gguf", time.Time{}, bytes.NewReader(body))
+			return
+		}
+		// The first request: send a little over a block and then hang until the client goes away.
+		w.Header().Set("Content-Length", itoa(len(body)))
+		w.Header().Set("ETag", `"v1"`)
+		_, _ = w.Write(body[:(1<<20)+(1<<19)])
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	model := &catalog.Model{
+		ID: "m1", Engine: "llama", Source: catalog.ModelSource{Type: "huggingface", Repo: "org-alpha/m1", Revision: "0123456789abcdef0123456789abcdef01234567"},
+		Files: []catalog.ModelFile{{Kind: "weights", Name: "m1.gguf", URL: srv.URL + "/m1.gguf", SizeBytes: int64(len(body)), SHA256: sha(body)}},
+	}
+	rw := row("m1", int64(len(body)))
+	rw.ToVersion = "0123456789ab"
+	r := newRealRig(t, nil, model, []plan.ItemPlan{rw})
+
+	// Wait until the client has APPLIED the first block (progress comes after the write to the .part),
+	// not merely until the server has sent it.
+	applied := make(chan struct{})
+	var once sync.Once
+	r.evs.onProgress = func(p events.SyncProgress) {
+		if p.BytesDone >= 1<<20 {
+			once.Do(func() { close(applied) })
+		}
+	}
+	got, err := r.eng.Start(bg, StartRequest{Trigger: TriggerManual})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-applied
+	r.eng.Cancel()
+	if err := r.eng.Wait(bg, got.RunID); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := r.eng.Status()
+	if st.State != StateCancelled || len(r.evs.itemDone()) != 0 {
+		t.Fatalf("status = %+v, item_done = %+v", st, r.evs.itemDone())
+	}
+	if _, err := ark.LoadItem(item.OSFS{}, r.root, "models/m1"); err == nil {
+		t.Fatal("a cancelled item is present")
+	}
+	part := filepath.Join(r.root.Path, ".staging", "m1", "0123456789ab", "m1.gguf.part")
+	info, err := os.Stat(part)
+	if err != nil || info.Size() < 1<<20 {
+		t.Fatalf(".part = %v, %v", info, err)
+	}
+	rec, _ := r.jr.Items.Get("internal", "m1")
+	cp, ok := rec.Checkpoints["m1.gguf"]
+	if rec.State != journal.StateDownloading || !ok || cp.Offset < 1<<20 {
+		t.Fatalf("record = %+v", rec)
+	}
+
+	// The agent restarts and syncs again: it resumes where it stopped.
+	r.open(nil)
+	got2, err := r.eng.Start(bg, StartRequest{Trigger: TriggerManual})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.eng.Wait(bg, got2.RunID); err != nil {
+		t.Fatal(err)
+	}
+	st2, _ := r.eng.Status()
+	if st2.State != StateDone || st2.Totals.Done != 1 {
+		t.Fatalf("second run = %+v", st2)
+	}
+	mu.Lock()
+	resumed := append([]string(nil), ranges...)
+	mu.Unlock()
+	if len(resumed) != 2 || resumed[0] != "" || resumed[1] != "bytes="+itoa(int(cp.Offset))+"-" {
+		t.Fatalf("requests = %v (the second must resume at the checkpoint, offset %d)", resumed, cp.Offset)
+	}
+	it, err := ark.LoadItem(item.OSFS{}, r.root, "models/m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(r.root.Path, "models", "m1", "m1.gguf")); !bytes.Equal(got, body) {
+		t.Fatal("the resumed file differs")
+	}
+	if it.Manifest.Files[0].SHA256 != sha(body) {
+		t.Fatal("the manifest does not carry the digest of the whole file")
+	}
+	if left, _ := os.ReadDir(filepath.Join(r.root.Path, ".staging")); len(left) != 0 {
+		t.Fatalf("staging is not clean: %v", left)
+	}
 }

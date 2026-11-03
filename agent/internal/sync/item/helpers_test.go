@@ -346,8 +346,6 @@ type fakeFetcher struct {
 	// ensureErr and purged drive EnsureSpace.
 	ensureErr error
 	purged    int64
-	// progress is the progress callback, called once with the full size.
-	progress bool
 }
 
 func newFetcher(data map[string][]byte) *fakeFetcher {
@@ -424,23 +422,21 @@ func (f *fakeFetcher) fetchCount() int {
 
 // env is one temp node: a root, a journal, an index, retention, a fetcher and a machine.
 type env struct {
-	t       testing.TB
-	base    string
-	root    ark.Root
-	jdir    string
-	fsys    *crashFS
-	jr      *journal.Journal
-	rec     journal.Recovery
-	run     *journal.Run
-	idx     *ark.Index
-	ret     *retention.Retention
-	fetch   *fakeFetcher
-	m       *Machine
-	clk     *clock
-	vals    *Validators
-	reread  bool
-	gate    Gate
-	cancels []func()
+	t      testing.TB
+	base   string
+	root   ark.Root
+	jdir   string
+	fsys   *crashFS
+	jr     *journal.Journal
+	rec    journal.Recovery
+	run    *journal.Run
+	idx    *ark.Index
+	ret    *retention.Retention
+	fetch  *fakeFetcher
+	m      *Machine
+	clk    *clock
+	vals   *Validators
+	reread bool
 }
 
 var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -656,22 +652,6 @@ func (e *env) install(job Job) Result {
 	return res
 }
 
-// states reads the run log and returns the state transitions of one item, in order.
-func (e *env) states(runID, itemID string) []journal.ItemState {
-	e.t.Helper()
-	log, err := e.jr.Runs.Read(runID)
-	if err != nil {
-		e.t.Fatal(err)
-	}
-	var out []journal.ItemState
-	for _, ev := range log.Events {
-		if ev.Item == itemID && ev.Ev == journal.EvState {
-			out = append(out, ev.To)
-		}
-	}
-	return out
-}
-
 func (e *env) events(runID, itemID string) []string {
 	e.t.Helper()
 	log, err := e.jr.Runs.Read(runID)
@@ -693,7 +673,6 @@ func (e *env) events(runID, itemID string) []string {
 }
 
 func (e *env) itemDir() string { return filepath.Join(e.root.Path, "models", "qwen-x") }
-func (e *env) docsDir() string { return filepath.Join(e.root.Path, "docs") }
 
 // loadItem is what a reader of the root sees in dir: the manifest and its files, as ark.LoadItem does.
 func (e *env) loadItem(rel string) (manifest.Manifest, error) {

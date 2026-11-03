@@ -993,11 +993,11 @@ paths:
       tags: [ark]
       operationId: getArkSync
       summary: The active or last sync run
-      description: Shape owned by ark-sync.md section 3.5. agent.md section 3.8.18.
+      description: |
+        The active run, or the last one (it survives an agent restart). `totals.rate_bps` and `eta_s` are 0
+        once the run has ended. Shape owned by ark-sync.md section 3.5. agent.md section 3.8.18.
       x-localai-auth: op
       x-localai-timeout: "10 s"
-      x-localai-status: planned
-      x-localai-issue: SYNC-07
       responses:
         "200":
           description: The run.
@@ -1022,15 +1022,17 @@ paths:
           $ref: "#/components/responses/NotFound"
           description: "LAI-AGT-021: no run has happened yet."
         "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
     delete:
       tags: [ark]
       operationId: cancelArkSync
       summary: Cancel the active run
-      description: Idempotent. Every active transfer stops at the next 1 MiB boundary and checkpoints. agent.md section 3.8.18.
+      description: |
+        Idempotent. Every active transfer stops at the next 1 MiB boundary and checkpoints, leaving its `.part`
+        files for the next run. With no run active the answer is still `202`, with the state `idle` and the id
+        of the last run (empty when there never was one). agent.md section 3.8.18.
       x-localai-auth: op
       x-localai-timeout: "10 s"
-      x-localai-status: planned
-      x-localai-issue: SYNC-07
       responses:
         "202":
           description: Cancelling.
@@ -1042,6 +1044,7 @@ paths:
               schema: {$ref: "#/components/schemas/SyncCancelling"}
               examples:
                 cancelling: {value: {run_id: "run-20261102T031500Z-a1f3", state: cancelling}}
+                idle: {value: {run_id: "run-20261102T031500Z-a1f3", state: idle}}
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -3066,7 +3069,9 @@ components:
       additionalProperties: false
       properties:
         run_id: {type: string, pattern: "^run-"}
-        state: {type: string, enum: [running]}
+        state: {type: string, enum: [running, skipped], description: "`skipped` for a scheduled run that preflight ended at once (the run is already over)."}
+        reason: {type: string, description: "For state skipped: offline, mode, battery, disabled or no_roots."}
+        code: {type: string, description: "For state skipped: the doctor code (LAI-SYN-001, -002, -003 or LAI-ARK-001), when there is one."}
         events: {type: string}
 
     SyncPlan:
@@ -3106,12 +3111,17 @@ components:
         run_id: {type: string, pattern: "^run-"}
         trigger: {type: string}
         state: {type: string, enum: [running, cancelling, done, cancelled, failed, skipped]}
-        reason: {type: string, description: "For state skipped: offline, mode, battery, disabled or no_roots."}
+        reason: {type: string, description: "For state skipped: offline, mode, battery, disabled or no_roots. For a cancelled run switched out of online mode: mode. For a done run stopped by max_run_hours: time_limit."}
+        code: {type: string, description: "The doctor code of the end of the run (LAI-SYN-002 for a mode switch, the code of a skip or of a failed plan)."}
+        result: {type: string, enum: [ok, partial, failed, cancelled, skipped], description: "Once the run has ended: ok, or partial when an item failed or was left for time, budget or disk."}
         started_at: {type: string, format: date-time}
         finished_at: {type: [string, "null"], format: date-time}
         roots: {type: array, items: {type: string}}
         totals: {type: object, additionalProperties: true}
         active: {type: array, items: {type: object, additionalProperties: true}}
+        items: {type: array, items: {type: object, additionalProperties: true}, description: "What became of each item (the ended run): root, item, result (verified, skipped, failed, quarantined), version, reason, code."}
+        warnings: {type: array, items: {type: string}}
+        ready: {type: object, additionalProperties: {type: string}, description: "The overall READY colour of each root at the end of the run."}
 
     SyncCancelling:
       type: object
@@ -3119,7 +3129,7 @@ components:
       additionalProperties: false
       properties:
         run_id: {type: string}
-        state: {type: string, enum: [cancelling]}
+        state: {type: string, enum: [cancelling, idle], description: "`idle`: no run was active, so nothing was cancelled (run_id is the last run's, or empty)."}
 
     RunAccepted:
       type: object

@@ -296,6 +296,9 @@ func (p GathererPlanner) Plan(ctx context.Context, req run.PlanRequest) (run.Pla
 	}
 	for i := range inputs {
 		inputs[i].Offline = req.Offline
+		if !req.Offline {
+			inputs[i].Mode = plan.ModeOnline // the planner treats the offline and survival modes as no network
+		}
 	}
 	out := run.Plans{Plans: plan.PlanAll(inputs), MinFree: map[string]int64{}}
 	for _, rp := range out.Plans {

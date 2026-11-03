@@ -207,9 +207,6 @@ type runState struct {
 	outcome    map[string]string
 }
 
-func (rs *runState) lock()    { rs.mu.Lock() }
-func (rs *runState) unlock_() { rs.mu.Unlock() }
-
 // snapshot is the RunStatus now. Caller holds rs.mu.
 func (rs *runState) snapshotLocked(now time.Time) RunStatus {
 	st := RunStatus{
@@ -902,14 +899,16 @@ func (e *Engine) runTask(rs *runState, t *task, g *gate) item.Result {
 		Progress: func(p item.Progress) { rs.progress(t, p) },
 		Resolve:  func(ctx context.Context) (item.Resolution, error) { return e.resolve(ctx, t) },
 	}
-	if rec, ok := e.d.Journal.Items.Get(t.root.ID, t.row.ID); ok && rec.State == journal.StateSwapping {
-		job.Swap = e.swapPlanOf(rs, t.root.ID, t.row.ID)
+	if cur, ok := e.d.Journal.Items.Get(t.root.ID, t.row.ID); ok && cur.State == journal.StateSwapping {
+		job.Swap = e.swapPlanOf(t.root.ID, t.row.ID, cur.Version)
 	}
 	return e.d.Machine.Run(rs.ctx, rs.run, job)
 }
 
-// swapPlanOf finds the plan of a swap an earlier run left unfinished in the log of that run.
-func (e *Engine) swapPlanOf(rs *runState, rootID, itemID string) *journal.SwapPlan {
+// swapPlanOf finds the plan of the swap of version an earlier run left unfinished, in the newest run log
+// that has one: an item whose drive was not mounted when the agent restarted is finished when the drive
+// is back, from the plan in the log of the run that crashed.
+func (e *Engine) swapPlanOf(rootID, itemID, version string) *journal.SwapPlan {
 	ids, err := e.d.Journal.Runs.List()
 	if err != nil {
 		return nil
@@ -919,7 +918,7 @@ func (e *Engine) swapPlanOf(rs *runState, rootID, itemID string) *journal.SwapPl
 		if err != nil {
 			continue
 		}
-		if in, ok := journal.Replay(log.Events)[journal.Key(rootID, itemID)]; ok && in.Swap != nil {
+		if in, ok := journal.Replay(log.Events)[journal.Key(rootID, itemID)]; ok && in.Swap != nil && in.Version == version {
 			return in.Swap
 		}
 	}
