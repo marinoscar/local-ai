@@ -95,6 +95,10 @@ func llamaFlags(in Inputs) []string {
 		"-DLLAMA_BUILD_TESTS=OFF",
 		"-DLLAMA_BUILD_EXAMPLES=OFF",
 		"-DGGML_NATIVE=ON",
+		// A tree extracted from a tarball or `git archive` has no .git, so llama.cpp would report
+		// "commit unknown" and the smoke test (llama-server --version must name the commit) would
+		// refuse every build. The commit is given to cmake instead.
+		"-DLLAMA_BUILD_COMMIT=" + in.Commit,
 	}
 	return append(flags, ggmlBackendFlags(in)...)
 }

@@ -614,10 +614,11 @@ cmake -S /opt/localai/llama.cpp/src/<commit> -B $B -G Ninja \
   -DLLAMA_BUILD_TESTS=OFF \
   -DLLAMA_BUILD_EXAMPLES=OFF \
   -DGGML_NATIVE=ON \
+  -DLLAMA_BUILD_COMMIT=<full sha> \
   <backend flags>
 cmake --build $B --config Release --target llama-server llama-cli llama-bench -j <J>
 ```
-`-G Ninja` is always used (`ninja-build` is a build prerequisite on every backend, and is in the kit debs, [rebuild-kit.md](rebuild-kit.md) §4.1.4).
+`-G Ninja` is always used (`ninja-build` is a build prerequisite on every backend, and is in the kit debs, [rebuild-kit.md](rebuild-kit.md) §4.1.4). `-DLLAMA_BUILD_COMMIT=<full sha>` is always passed: the source tree is extracted from a tarball or `git archive` and has no `.git`, so without it llama.cpp reports `commit unknown` in `llama-server --version` and the smoke test of §4.10.3 step 3 would refuse every build (found by the real build of the `llama-build` CI workflow; it also makes the version line name the commit of the pin rather than of whatever checkout was at hand).
 
 | Backend | Backend flags | Build prerequisites (apt) |
 |---|---|---|
