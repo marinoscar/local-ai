@@ -160,7 +160,7 @@ func safeWord(safe bool) string {
 // ---- step 4: state.json -------------------------------------------------------------------------
 
 func (d *Daemon) stepState(context.Context) error {
-	opts := state.Options{AgentVersion: d.env.Version, Now: d.env.Clock.Now, Logger: d.log, Owner: d.owner}
+	opts := state.Options{FS: d.env.StateFS, AgentVersion: d.env.Version, Now: d.env.Clock.Now, Logger: d.log, Owner: d.owner}
 	st, err := state.Open(d.c.Paths.State(), opts)
 	if err != nil {
 		return err
@@ -522,7 +522,11 @@ func (d *Daemon) stepPeriodic(ctx context.Context) error {
 		defer d.bg.Done()
 		c.ArkMonitor.Run(d.rootCtx)
 	}()
-	c.Drill.StartRetries(d.rootCtx, time.Minute)
+	d.bg.Add(1)
+	go func() { // StartRetries is the retry loop itself: it returns when its context ends
+		defer d.bg.Done()
+		c.Drill.StartRetries(d.rootCtx, time.Minute)
+	}()
 	d.watchConfig(d.rootCtx)
 	for _, w := range d.hooks.workers {
 		wk, err := w.build(c)

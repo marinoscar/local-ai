@@ -214,7 +214,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	mv := &modeView{st: c.State}
 	d.mode = mv
 	c.Tailscale, err = modes.NewTailscaleManager(modes.TailscaleOptions{
-		Run: env.Runner, Settings: modes.SettingsFromConfig(cfg.Get), State: c.State, Online: mv.online,
+		Run: env.Runner, Lookup: env.Lookup, Settings: modes.SettingsFromConfig(cfg.Get), State: c.State, Online: mv.online,
 		Clock: clock, HTTP: env.ModesHTTP, Logger: log,
 	})
 	if err != nil {

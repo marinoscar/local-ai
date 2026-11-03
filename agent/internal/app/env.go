@@ -17,6 +17,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/modes"
 	"github.com/marinoscar/local-ai/agent/internal/router"
 	"github.com/marinoscar/local-ai/agent/internal/services"
+	"github.com/marinoscar/local-ai/agent/internal/state"
 )
 
 // Env is everything outside the process that the daemon touches, as seams. The zero value is the
@@ -54,8 +55,13 @@ type Env struct {
 	SocketGroup string
 	SocketHooks api.Hooks
 
-	// Runner runs external programs (tailscale, journalctl, systemctl); default execx.Exec.
+	// Runner runs external programs (tailscale, journalctl, systemctl); default execx.Exec. Lookup
+	// resolves the tailscale binary (default execx.Lookup); a test passes the fake CLI's.
 	Runner execx.Runner
+	Lookup func(name string) (string, error)
+	// StateFS replaces the filesystem of state.json (default the real one): a test of the crash
+	// resume uses the in-memory one with a simulated kill.
+	StateFS state.FS
 	// Systemd replaces the whole systemd seam (a fake). Nil dials the system bus and falls back to
 	// systemctl through Runner (services.NewAuto).
 	Systemd services.Manager
