@@ -82,6 +82,9 @@ var (
 	errArkSkipped = errors.New("ark: the run was skipped")
 )
 
+// reasonNotInProfile is the reason of an item an import refused because the profile does not list it.
+const reasonNotInProfile = "not_in_profile"
+
 func (k runKind) word(l Lang) string {
 	switch k {
 	case kindVerify:
@@ -435,7 +438,7 @@ func (c *Call) arkFinished(rs arkRunSpec, doc runDoc, outcomes map[string]*itemO
 func (c *Call) itemProblems(outcomes map[string]*itemOutcome) {
 	var ids []string
 	for id, o := range outcomes {
-		if o.result == "failed" || o.result == "quarantined" || o.result == "skipped" && o.code != "" {
+		if o.result == "failed" || o.result == "quarantined" || o.result == "skipped" && (o.code != "" || o.reason == reasonNotInProfile) {
 			ids = append(ids, id)
 		}
 	}
@@ -446,6 +449,13 @@ func (c *Call) itemProblems(outcomes map[string]*itemOutcome) {
 			break
 		}
 		o := outcomes[id]
+		if o.reason == reasonNotInProfile {
+			// An import was asked for an item this computer's profile does not list (ark-sync.md section 4.14).
+			c.Out.Problem(out.Problem{Severity: out.SevWarning, Message: id + ": " + pick(c.Lang,
+				"It is not in this computer's profile, so it was not copied. Run the import again with --add-to-profile to add it.",
+				"No está en el perfil de este equipo, así que no se copió. Ejecute la importación de nuevo con --add-to-profile para añadirlo.")})
+			continue
+		}
 		p := c.codeProblem(o.code, orText(o.reason, o.result))
 		if o.code == "" {
 			p.Code, p.Fix = "", ""

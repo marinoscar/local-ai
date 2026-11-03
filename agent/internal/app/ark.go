@@ -19,7 +19,6 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/ark/ready"
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
-	"github.com/marinoscar/local-ai/agent/internal/cloud"
 	"github.com/marinoscar/local-ai/agent/internal/cloud/jobs"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
@@ -36,6 +35,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
 	"github.com/marinoscar/local-ai/agent/internal/svc/whisper"
 	"github.com/marinoscar/local-ai/agent/internal/sync/download"
+	"github.com/marinoscar/local-ai/agent/internal/sync/importer"
 	"github.com/marinoscar/local-ai/agent/internal/sync/item"
 	"github.com/marinoscar/local-ai/agent/internal/sync/journal"
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
@@ -43,6 +43,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/sync/run"
 	"github.com/marinoscar/local-ai/agent/internal/sync/run/adapt"
 	"github.com/marinoscar/local-ai/agent/internal/sync/throttle"
+	"github.com/marinoscar/local-ai/agent/internal/sync/verify"
 	"github.com/marinoscar/local-ai/agent/internal/update"
 )
 
@@ -90,10 +91,15 @@ type arkStack struct {
 	jr     *journal.Journal
 	ret    *retention.Retention
 	engine *run.Engine
-	ready  *ready.Service
-	kit    *kitready.Source
-	plans  *plan.Gatherer
-	bucket *throttle.TokenBucket
+	// verifier re-hashes stored copies (the scheduled slice and POST /ark/verify), serve is the
+	// serve-time verification of copies on an unclean drive, importer plans POST /ark/import (SYNC-13).
+	verifier *verify.Reverifier
+	serve    *verify.ServeVerifier
+	importer *importer.Planner
+	ready    *ready.Service
+	kit      *kitready.Source
+	plans    *plan.Gatherer
+	bucket   *throttle.TokenBucket
 	// extras writes START-HERE.html and the inventory copy on the ark drives (ark_extras.go); the
 	// drive manager calls its Write for a drive it has just initialised.
 	extras *driveExtras
@@ -186,22 +192,34 @@ func (d *Daemon) buildArk(ctx context.Context, idx *ark.Index) (*arkStack, error
 	if httpc == nil {
 		httpc = download.NewHTTPClient(download.ClientConfig{Version: env.Version, Token: d.hfLogin})
 	}
-	dl := download.New(download.Options{
-		HTTP: httpc, Bucket: s.bucket, Space: s.ret, Logger: lg,
-		OnRootFault: func(rootID string, e *download.Error, readOnly bool) {
-			lg.Error("a content root turned out unwritable; writes to it stop", "root", rootID, "code", e.Code, "read_only", readOnly)
-		},
-	})
-	// The content validators of the item machine (the ZIM's internal MD5, pmtiles verify); the library
-	// source types register theirs in registerLibrarySources.
+	onRootFault := func(rootID string, e *download.Error, readOnly bool) {
+		lg.Error("a content root turned out unwritable; writes to it stop", "root", rootID, "code", e.Code, "read_only", readOnly)
+	}
+	// The content validators of the item machines (the ZIM's internal MD5, pmtiles verify); the library
+	// source types register theirs in registerLibrarySources. A copy made by an import is validated
+	// like any other.
 	validators := item.NewValidators()
-	machine, err := item.New(item.Deps{
-		FS: item.OSFS{}, Journal: jr, Fetcher: dl, Index: idx, Remover: s.ret, Roots: roots, Validators: validators,
-		VerifyReread: func() bool { return d.syncSettings().VerifyReread },
-		Now:          clock.Now, NodeID: cfg.Get().Node.ID, AgentVersion: env.Version, Logger: lg,
-	})
+	newMachine := func(dl item.Fetcher) (*item.Machine, error) {
+		return item.New(item.Deps{
+			FS: item.OSFS{}, Journal: jr, Fetcher: dl, Index: idx, Remover: s.ret, Roots: roots, Validators: validators,
+			VerifyReread: func() bool { return d.syncSettings().VerifyReread },
+			Now:          clock.Now, NodeID: cfg.Get().Node.ID, AgentVersion: env.Version, Logger: lg,
+		})
+	}
+	dl := download.New(download.Options{HTTP: httpc, Bucket: s.bucket, Space: s.ret, Logger: lg, OnRootFault: onRootFault})
+	machine, err := newMachine(dl)
 	if err != nil {
 		return nil, fmt.Errorf("item machine: %w", err)
+	}
+	// The machine of an import is built over a downloader whose HTTP client refuses every dial: an
+	// import copies from a drive and never uses the network, in any mode (ark-sync.md section 4.14).
+	importDL := download.New(download.Options{
+		HTTP:  download.NewHTTPClient(download.ClientConfig{Version: env.Version, DialContext: importer.RefuseDial(false)}),
+		Space: s.ret, Logger: lg, OnRootFault: onRootFault,
+	})
+	importMachine, err := newMachine(importDL)
+	if err != nil {
+		return nil, fmt.Errorf("import machine: %w", err)
 	}
 
 	if err := s.registerSources(dl); err != nil {
@@ -228,6 +246,24 @@ func (d *Daemon) buildArk(ctx context.Context, idx *ark.Index) (*arkStack, error
 		return nil, fmt.Errorf("planner: %w", err)
 	}
 
+	s.importer, err = importer.New(importer.Deps{
+		G: s.plans, Catalog: driveCatalog{d}, Profile: importer.NodeYAML{Store: cfg}, Logger: lg,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("importer: %w", err)
+	}
+	s.verifier, err = verify.New(verify.Deps{
+		FS: verify.OSFS{}, Roots: roots, Index: idx, Restore: s.ret, Journal: jr.Items, Now: clock.Now, Logger: lg,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("re-verification: %w", err)
+	}
+	s.serve, err = verify.NewServeVerifier(verify.ServeDeps{FS: verify.OSFS{}, Roots: roots, Index: idx, Journal: jr.Items, Logger: lg})
+	if err != nil {
+		return nil, fmt.Errorf("serve-time verification: %w", err)
+	}
+	reverify := adapt.Reverification{Reverifier: s.verifier, Settings: d.syncSettings}
+
 	// The readiness service and the engine need each other (READY after a swap; the run record behind
 	// READY): the engine is bound late.
 	late := &lateRuns{}
@@ -249,12 +285,14 @@ func (d *Daemon) buildArk(ctx context.Context, idx *ark.Index) (*arkStack, error
 
 	s.extras = s.newDriveExtras()
 	s.engine, err = run.New(run.Deps{
-		Journal: jr, Machine: machine, Planner: adapt.GathererPlanner{G: s.plans}, Copies: idx, FS: fsys, JournalDir: d.syncDir(),
-		Settings: d.syncSettings, Net: d.netState, Power: run.PowerFunc(d.onBattery), Catalog: catalogRefresh{d},
+		Journal: jr, Machine: machine, ImportMachine: importMachine, Planner: adapt.GathererPlanner{G: s.plans, Importer: s.importer},
+		Copies: idx, FS: fsys, JournalDir: d.syncDir(),
+		SourceFault: idx.Exclude,
+		Settings:    d.syncSettings, Net: d.netState, Power: run.PowerFunc(d.onBattery), Catalog: catalogRefresh{d},
 		Resolvers: s.itemResolvers, Retention: s.ret,
 		Unknown: func(root ark.Root) ([]string, error) { return jr.Items.UnknownStaging(fsys, root) },
 		Events:  c.Bus, Ready: s.readyRefresher(), Lock: run.FileLock{Path: filepath.Join(d.syncDir(), "lock")},
-		Hooks: run.Hooks{Extras: s.extras.Run},
+		Hooks: run.Hooks{Extras: s.extras.Run, Reverify: reverify.Slice, Verify: reverify.Run},
 		Clock: syncClock{clock}, Logger: lg,
 	})
 	if err != nil {
@@ -506,6 +544,8 @@ type arkUnavailable struct{}
 var _ api.ArkSyncPlanner = arkUnavailable{}
 var _ api.ArkReadyView = arkUnavailable{}
 var _ api.ArkPruner = arkUnavailable{}
+var _ api.ArkVerifyStarter = arkUnavailable{}
+var _ api.ArkImporter = arkUnavailable{}
 
 func (arkUnavailable) err() error {
 	return api.NewError(api.CodeStarting, http.StatusServiceUnavailable, map[string]any{"reason": "sync_engine_not_ready"})
@@ -522,13 +562,54 @@ func (u arkUnavailable) Prune(context.Context, api.ArkPruneRequest) (api.ArkPrun
 	return api.ArkPruneResult{}, u.err()
 }
 
-// arkJobs is jobs.Ark over the engine. The cloud's ark.verify waits for the re-verification (SYNC-13): a
-// command of that type is refused with LAI-CLD-057, like one of a type this node does not run.
-type arkJobs struct{ adapt.Jobs }
+// StartVerify implements api.ArkVerifyStarter.
+func (u arkUnavailable) StartVerify(context.Context, api.ArkVerifyRequest) (api.ArkSyncStarted, error) {
+	return api.ArkSyncStarted{}, u.err()
+}
 
-// StartVerify implements jobs.Ark.
-func (arkJobs) StartVerify(context.Context, jobs.ArkRequest) (jobs.ArkVerifyStarted, error) {
-	return jobs.ArkVerifyStarted{}, &cloud.JobError{Code: doctor.CLD057, Message: "This node does not run ark.verify yet."}
+// DryRunImport implements api.ArkImporter.
+func (u arkUnavailable) DryRunImport(context.Context, api.ArkImportRequest) (any, error) {
+	return nil, u.err()
+}
+
+// StartImport implements api.ArkImporter.
+func (u arkUnavailable) StartImport(context.Context, api.ArkImportRequest) (api.ArkSyncStarted, error) {
+	return api.ArkSyncStarted{}, u.err()
+}
+
+// jobsArk is jobs.Ark over the engine: the cloud's ark.sync and ark.verify.
+func (s *arkStack) jobsArk() jobs.Ark {
+	return adapt.Jobs{
+		Engine:   s.engine,
+		Verifier: adapt.CloudVerifier{Engine: s.engine, Reverifier: s.verifier, Settings: s.d.syncSettings},
+	}
+}
+
+// driveCatalog is importer.CatalogInstaller over the daemon's catalog: it installs the catalog of a drive
+// as /etc/localai/catalog (catalog.Install lints it first, atomically, keeping the previous one in
+// catalog.prev) and puts the result into the store every reader looks at, so the plan that follows sees
+// it. A rejected catalog is a *catalog.RejectedError (LAI-CAT-002) and nothing changes.
+type driveCatalog struct{ d *Daemon }
+
+// Version implements importer.CatalogInstaller.
+func (c driveCatalog) Version() string { return c.d.c.Catalog.Get().Catalog.Version }
+
+// Install implements importer.CatalogInstaller.
+func (c driveCatalog) Install(_ context.Context, dir string) (string, error) {
+	live := c.d.c.Paths.Catalog()
+	res, err := catalog.Install(live, dir, catalog.InstallOptions{})
+	if err != nil && res == nil {
+		return "", err
+	}
+	cat, lerr := catalog.Load(live)
+	if lerr != nil {
+		return "", lerr
+	}
+	c.d.c.Catalog.Set(catalog.Loaded{Catalog: cat, Source: catalog.SourceOffline, Dir: live}, c.d.env.Clock.Now())
+	if err != nil {
+		c.d.log.Warn("the catalog of the drive was installed, with a warning", "component", "sync", "error", err.Error())
+	}
+	return res.Version, nil
 }
 
 // ---- facts of this computer ---------------------------------------------------------------------
@@ -718,6 +799,8 @@ type driveEvents struct {
 	index  driveIndex
 	roots  func() []ark.Root
 	log    *slog.Logger
+	// serve, when set, forgets what the serve-time verification learned about a root that left.
+	serve interface{ Unmounted(rootID string) }
 	// observe, when set, is told after an event has been handled (tests wait on it instead of sleeping).
 	observe func(typ, rootID string)
 }
@@ -728,6 +811,9 @@ func (h driveEvents) handle(ctx context.Context, typ string, rootID string) {
 	case "drive.unmounted":
 		active := h.engine.RootGone(rootID)
 		h.ready.Unmounted(rootID)
+		if h.serve != nil {
+			h.serve.Unmounted(rootID)
+		}
 		if _, err := h.index.Rebuild(ctx, h.roots()); err != nil {
 			h.log.Warn("the best-copy index could not be rebuilt after a drive left", "root", rootID, "error", err.Error())
 		}
@@ -870,6 +956,6 @@ func (w *driveWorker) Stop(ctx context.Context) error {
 func (s *arkStack) driveWorker() *driveWorker {
 	return &driveWorker{bus: s.d.c.Bus, h: driveEvents{
 		engine: s.engine, ready: s.ready, index: s.index, roots: s.roots.List, log: s.d.log.With("component", "ark"),
-		observe: s.d.env.OnDriveEvent,
+		serve: s.serve, observe: s.d.env.OnDriveEvent,
 	}}
 }

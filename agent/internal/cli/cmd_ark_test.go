@@ -215,6 +215,18 @@ func TestArkVerifyAndImportSummaries(t *testing.T) {
 			t.Errorf("body %s", b)
 		}
 	})
+	t.Run("import --wait: an item the profile does not list is refused with a message", func(t *testing.T) {
+		r := newArkRig(t)
+		r.onStart = func() {
+			r.itemDone("whisper-small", "skipped", "not_in_profile", "")
+			r.syncDone("done", `{"items":1,"done":0,"skipped":1,"failed":0}`, map[string]string{"internal": "green"})
+		}
+		got := r.run(mgArgs("ark", "import", "--from", "ark-3f9c0a12", "--wait", "--item", "whisper-small"))
+		flat := strings.Join(strings.Fields(got.errOut), " ")
+		if got.code != ExitWarnings || !strings.Contains(flat, "whisper-small: It is not in this computer's profile, so it was not copied. Run the import again with --add-to-profile") {
+			t.Fatalf("%+v", got)
+		}
+	})
 }
 
 // --- --scheduled ----------------------------------------------------------------------------------------
