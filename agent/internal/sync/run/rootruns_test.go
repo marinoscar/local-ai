@@ -66,6 +66,49 @@ func TestRootRunsAreRecordedPerRootAndSurviveARestart(t *testing.T) {
 	}
 }
 
+// The last sync of the drives is what the cloud shows as drive_last_synced_at: it counts only runs that
+// ended done on an ark drive, never the internal root, and it is on disk, so a drive in a drawer (or a
+// restarted agent) still has it.
+func TestLastDriveSyncSurvivesTheDriveAndTheRestart(t *testing.T) {
+	r := newRig(t)
+	r.addRoot(ark.Root{ID: driveID, Kind: ark.KindArkDrive, Path: r.dir + "/drive", State: ark.StateReady})
+	r.setPlans(map[string][]plan.ItemPlan{"internal": {row("a", 1)}, driveID: {row("a", 1)}})
+	eng := r.start()
+	if got := eng.LastDriveSync(); !got.IsZero() {
+		t.Fatalf("before any run: %v", got)
+	}
+
+	// A run on the internal root alone does not count as a drive sync.
+	r.waitEnd(r.startRun(StartRequest{Trigger: TriggerManual, Roots: []string{"internal"}}))
+	if got := eng.LastDriveSync(); !got.IsZero() {
+		t.Fatalf("an internal-only run counted: %v", got)
+	}
+
+	r.clk.Advance(time.Hour)
+	st := r.waitEnd(r.startRun(StartRequest{Trigger: TriggerManual, Roots: []string{driveID}}))
+	if got := eng.LastDriveSync(); !got.Equal(*st.FinishedAt) {
+		t.Fatalf("after a drive run: %v, want %v", got, st.FinishedAt)
+	}
+
+	// A later run that is skipped is the last thing that happened but does not move it.
+	r.clk.Advance(48 * time.Hour)
+	r.net = NetState{Mode: plan.ModeOnline, Online: false}
+	if got, err := eng.Start(bg, StartRequest{Trigger: TriggerScheduled}); err != nil || got.State != StateSkipped {
+		t.Fatalf("Start = %+v, %v", got, err)
+	}
+	if got := eng.LastDriveSync(); !got.Equal(*st.FinishedAt) {
+		t.Fatalf("a skipped run moved it: %v", got)
+	}
+
+	e2, err := New(r.deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e2.LastDriveSync(); !got.Equal(*st.FinishedAt) {
+		t.Fatalf("after a restart: %v", got)
+	}
+}
+
 func TestRunsMarkWhatTheyConfirmedCurrent(t *testing.T) {
 	r := newRig(t)
 	for _, id := range []string{"kept", "kept-unresolved", "downloaded"} {

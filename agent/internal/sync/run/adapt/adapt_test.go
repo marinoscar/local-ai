@@ -17,6 +17,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
+	"github.com/marinoscar/local-ai/agent/internal/cloud"
 	"github.com/marinoscar/local-ai/agent/internal/cloud/jobs"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
@@ -430,6 +431,31 @@ func TestCloudSyncReport(t *testing.T) {
 	rep = c.Sync()
 	if rep.Last == nil || rep.Last.ID != sk.RunID || rep.Last.State != run.StateSkipped || rep.Last.SkipReason != run.SkipMode {
 		t.Fatalf("skipped: %+v", rep.Last)
+	}
+}
+
+// A run the node cancelled because it left online mode ends cancelled with LAI-SYN-002: the cloud's
+// snapshot shows it as a failed last run with that code (cloud-app.md section 3.6). The job that started
+// the run settled at the start and is not touched.
+func TestCloudSyncReportsAModeCancelWithItsCode(t *testing.T) {
+	r := newRig(t)
+	c := CloudSync{Engine: r.eng}
+	r.mach.block = make(chan struct{})
+	r.mach.started = make(chan struct{}, 1)
+	got, err := Starter{Engine: r.eng}.Start(bg, api.ArkSyncRequest{Trigger: api.ArkTriggerCloud})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-r.mach.started
+	if err := r.eng.CancelGraceful(bg); err != nil {
+		t.Fatal(err)
+	}
+	rep := c.Sync()
+	if rep.Running || rep.Last == nil || rep.Last.ID != got.RunID || rep.Last.State != run.StateCancelled || rep.Last.ErrorCode != doctor.SYN002 {
+		t.Fatalf("after: %+v", rep.Last)
+	}
+	if cloud.SyncResult(*rep.Last) != "failed" {
+		t.Errorf("result = %s, want failed", cloud.SyncResult(*rep.Last))
 	}
 }
 

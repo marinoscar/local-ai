@@ -355,3 +355,7 @@ func (r ReadyRuns) LastRuns(rootID string) (*ready.RunInfo, time.Time) {
 	}
 	return &ready.RunInfo{RunID: rr.RunID, Trigger: rr.Trigger, FinishedAt: rr.FinishedAt, State: rr.State}, rr.LastDone
 }
+
+// LastDriveSync implements ready.DriveSyncSource: the last run that ended done on any ark drive, even
+// one that is unplugged now.
+func (r ReadyRuns) LastDriveSync() time.Time { return r.Engine.LastDriveSync() }

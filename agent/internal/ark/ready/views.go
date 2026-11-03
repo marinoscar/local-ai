@@ -176,6 +176,13 @@ func (c CloudSource) Ark() cloud.ArkReport {
 				row.LastSyncAt = t
 			}
 		}
+		// The engine's record is the better source: it knows the last run that ended done even when a
+		// later run was skipped (last_sync of the report shows the last run of any state).
+		if s.d.Runs != nil {
+			if _, done := s.d.Runs.LastRuns(r.Root.ID); done.After(row.LastSyncAt) {
+				row.LastSyncAt = done
+			}
+		}
 		if r.LastFullReverifyAt != nil {
 			if t, err := time.Parse(time.RFC3339, *r.LastFullReverifyAt); err == nil {
 				row.LastVerifyAt = t
@@ -186,5 +193,19 @@ func (c CloudSource) Ark() cloud.ArkReport {
 		}
 		out.Roots = append(out.Roots, row)
 	}
+	// The drives' last sync survives unplugging when the engine remembers it (DriveSyncSource).
+	if d, ok := s.d.Runs.(DriveSyncSource); ok {
+		if t := d.LastDriveSync(); t.After(out.DriveLastSyncedAt) {
+			out.DriveLastSyncedAt = t
+		}
+	}
 	return out
+}
+
+// DriveSyncSource is implemented by a RunSource that remembers the runs of ark drives that are not
+// mounted now: the last time any ark drive finished a run that ended done (zero when none did). The
+// cloud snapshot's drive_last_synced_at reads it, so a drive in a drawer still counts as synced when it
+// was.
+type DriveSyncSource interface {
+	LastDriveSync() time.Time
 }

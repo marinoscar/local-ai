@@ -337,6 +337,14 @@ func (l *lateRuns) LastRuns(rootID string) (*ready.RunInfo, time.Time) {
 	return nil, time.Time{}
 }
 
+// LastDriveSync implements ready.DriveSyncSource.
+func (l *lateRuns) LastDriveSync() time.Time {
+	if e := l.e.Load(); e != nil {
+		return e.LastDriveSync()
+	}
+	return time.Time{}
+}
+
 // SyncState is the engine's state for status.ark.sync ("" while it is not built).
 func (l *lateRuns) SyncState() string {
 	if e := l.e.Load(); e != nil {

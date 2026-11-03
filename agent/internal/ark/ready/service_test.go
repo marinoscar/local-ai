@@ -15,6 +15,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/ark/ready"
+	"github.com/marinoscar/local-ai/agent/internal/cloud"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	cfgfake "github.com/marinoscar/local-ai/agent/internal/config/fake"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
@@ -737,6 +738,63 @@ func TestCloudSeesTheBytesOfTheFile(t *testing.T) {
 	if d.Kind != "ark_drive" || d.T1 != "ok" || d.T2 != "missing" || d.T3 != "partial" || d.ItemsMissing != 2 {
 		t.Errorf("drive row: kind %s tiers %s %s %s missing %d", d.Kind, d.T1, d.T2, d.T3, d.ItemsMissing)
 	}
+}
+
+// driveRuns is a RunSource that also remembers the drives that are not mounted (DriveSyncSource).
+type driveRuns struct {
+	fakeRuns
+	drives time.Time
+}
+
+func (d driveRuns) LastDriveSync() time.Time { return d.drives }
+
+// TestCloudSyncTimes: last_sync_at is the last run that ended done even when a later run was skipped,
+// and drive_last_synced_at survives the drive being unplugged.
+func TestCloudSyncTimes(t *testing.T) {
+	done := now.Add(-5 * day)
+	gone := now.Add(-2 * day) // a drive that is in a drawer now
+	skipped := &ready.RunInfo{RunID: "run-skip", Trigger: "scheduled", FinishedAt: now.Add(-day), State: "skipped"}
+	runs := driveRuns{
+		fakeRuns: fakeRuns{last: map[string]*ready.RunInfo{driveID: skipped}, done: map[string]time.Time{driveID: done}},
+		drives:   gone,
+	}
+	r := newRig(t, func(d *ready.Deps) { d.Runs = runs })
+	if err := r.svc.Regenerate(context.Background(), ready.TriggerManual); err != nil {
+		t.Fatal(err)
+	}
+	got := r.svc.CloudSource().Ark()
+	var drive cloud.ArkRootReport
+	for _, row := range got.Roots {
+		if row.ID == driveID {
+			drive = row
+		}
+	}
+	if !drive.LastSyncAt.Equal(done) {
+		t.Errorf("last_sync_at = %v, want the last run that ended done (%v)", drive.LastSyncAt, done)
+	}
+	if !got.DriveLastSyncedAt.Equal(gone) {
+		t.Errorf("drive_last_synced_at = %v, want %v", got.DriveLastSyncedAt, gone)
+	}
+
+	t.Run("a source that does not remember unplugged drives falls back on the mounted ones", func(t *testing.T) {
+		r := newRig(t, func(d *ready.Deps) { d.Runs = runs.fakeRuns })
+		if err := r.svc.Regenerate(context.Background(), ready.TriggerManual); err != nil {
+			t.Fatal(err)
+		}
+		if got := r.svc.CloudSource().Ark(); !got.DriveLastSyncedAt.Equal(done) {
+			t.Errorf("drive_last_synced_at = %v, want %v", got.DriveLastSyncedAt, done)
+		}
+	})
+	t.Run("no run source: no sync times", func(t *testing.T) {
+		r := newRig(t)
+		if err := r.svc.Regenerate(context.Background(), ready.TriggerManual); err != nil {
+			t.Fatal(err)
+		}
+		got := r.svc.CloudSource().Ark()
+		if !got.DriveLastSyncedAt.IsZero() {
+			t.Errorf("drive_last_synced_at = %v", got.DriveLastSyncedAt)
+		}
+	})
 }
 
 func TestTiers(t *testing.T) {
