@@ -19,6 +19,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/services"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 	"github.com/marinoscar/local-ai/agent/internal/sync/download"
+	"github.com/marinoscar/local-ai/agent/internal/sync/run"
 	"github.com/marinoscar/local-ai/agent/internal/update"
 )
 
@@ -106,6 +107,11 @@ type Env struct {
 	// agent's User-Agent and the Hugging Face login of sync.hf_token_file). A test points it at a local
 	// server or at a dialer that refuses everything, so a unit test never reaches the internet.
 	SyncHTTP *download.HTTPClient
+	// NetState replaces the node's network picture (the mode and whether the internet is reachable)
+	// that the sync planner, the run engine and the source producers read; nil derives it from the
+	// mode engine and the connectivity prober. A test pins it so a run is deterministic whatever the
+	// prober last saw.
+	NetState func() run.NetState
 	// OnDriveEvent, when set, is told after the daemon has handled a drive.mounted or drive.unmounted
 	// event (the tests wait on it instead of sleeping). It runs on the event goroutine.
 	OnDriveEvent func(typ, rootID string)

@@ -98,8 +98,8 @@ func (f ResolverFunc) Resolve(ctx context.Context, it CatalogItem) (Resolved, er
 	return f(ctx, it)
 }
 
-// Resolvers is the registry of resolvers by catalog source type ("huggingface", "kiwix", ...). It is
-// empty until the resolver issues register theirs; an item with no resolver is planned from what the
+// Resolvers is the registry of resolvers by catalog source type ("git_mirror", "apt_closure",
+// "repo_docs"; the agent's wiring registers those). An item with no resolver is planned from what the
 // catalog pins, and an item the catalog cannot pin is unresolved. Safe for concurrent use.
 type Resolvers struct {
 	mu sync.RWMutex
@@ -157,6 +157,9 @@ type Deps struct {
 	Network func() Network
 	// Resolvers is the optional registry of resolvers.
 	Resolvers *Resolvers
+	// ResolveTimeout bounds one resolver call when GatherOptions.ResolveTimeout is zero;
+	// DefaultResolveTimeout when this is zero too.
+	ResolveTimeout time.Duration
 	// Now is the clock; time.Now when nil.
 	Now func() time.Time
 	// Logger defaults to slog.Default.
@@ -441,6 +444,9 @@ func (g *Gatherer) resolve(ctx context.Context, in *PlanInput, root ark.Root, op
 		return
 	}
 	timeout := opt.ResolveTimeout
+	if timeout <= 0 {
+		timeout = g.d.ResolveTimeout
+	}
 	if timeout <= 0 {
 		timeout = DefaultResolveTimeout
 	}
