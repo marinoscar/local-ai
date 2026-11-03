@@ -17,12 +17,12 @@ import (
 // `aictl load <model-id> [--keep-others] [--no-wait]` (aictl.md section 4.3): POST /models/{id}/load
 // and, unless --no-wait, wait for the model by following the model.* events of that operation.
 //
-// The request always carries "wait": false, also when aictl waits. A load that blocks the HTTP
-// request would be cancelled by the agent when the client goes away (the handler runs under the
-// request's context), so Ctrl-C could stop the load itself; with wait false the agent answers 202 at
-// once and the orchestrator keeps working whatever the client does. aictl then follows /events (and
-// re-reads GET /models/{id} after a lost stream), so Ctrl-C only stops the waiting (exit 130) and
-// nothing ever calls unload.
+// The request always carries "wait": false, also when aictl waits. The orchestrator finishes (and
+// rolls back) an operation whatever its caller does (llama-router.md section 4.4.1), but a request
+// that waits only answers at the end: its op id would be unknown while the model loads and no
+// progress could be drawn, and Follow needs the op id of a quick 202. aictl follows /events for that
+// op id (and re-reads GET /models/{id} after a lost stream), so Ctrl-C only stops the waiting (exit
+// 130) and nothing ever calls unload.
 
 // loadTimeout is the command deadline: the default load timeout (300 s) times three, plus a minute
 // (aictl.md section 4.3).

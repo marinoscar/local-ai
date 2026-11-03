@@ -126,7 +126,10 @@ func TestLoad(t *testing.T) {
 		r.publish = loadsWell
 		checkRun(t, r.run(mgArgs("-q", "load", qwenID)), 0, "", "")
 	})
-	t.Run("a memory warning of the agent is shown", func(t *testing.T) {
+	// The 202 of ModelLoading does not carry `warning` today (agent.md section 3.8.8 only says the
+	// response "may add" it, and the handler adds it to the 200 of a waiting load); aictl shows it when
+	// the agent sends it, so the notice appears as soon as the 202 grows the field.
+	t.Run("a memory warning of the agent is shown when it comes", func(t *testing.T) {
 		r := newLoadRig(t)
 		r.publish = loadsWell
 		r.body = `{"id":"` + qwenID + `","status":"loading","op_id":"` + loadOpID + `","warning":{"code":"LAI-HW-005","message":"Other programs use much of the graphics memory."}}`
