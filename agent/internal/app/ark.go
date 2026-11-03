@@ -210,6 +210,7 @@ func (d *Daemon) buildArk(ctx context.Context, idx *ark.Index) (*arkStack, error
 	s.ready, err = ready.New(ready.Deps{
 		FS: fsys, Clock: clock, Plans: s.plans, Roots: roots, Journal: jr.Items, Runs: late, Kit: s.kit,
 		Loadable:     s.loadable,
+		Modes:        readyModes(c.State),
 		ReverifyDays: func() int { return d.syncSettings().ReverifyDays },
 		SyncState:    late.SyncState,
 		NodeID:       cfg.Get().Node.ID, AgentVersion: env.Version, Logger: lg,
