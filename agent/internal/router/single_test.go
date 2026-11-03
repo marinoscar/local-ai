@@ -210,9 +210,11 @@ func TestSingleLoadFailureRollsBack(t *testing.T) {
 			restarts: 2, reloads: 2, lastLoad: state.LoadTimeout, minWaitPolls: 300,
 		},
 		{
-			name:    "the server comes up with another model",
-			prepare: func(r *singleRig) { r.sys.wrong[0] = srvModel{ID: "some-other-model", Aliases: []string{"some-other-model"}} },
-			code:    CodeModelFailed, status: http.StatusInternalServerError, cause: kindNotListed,
+			name: "the server comes up with another model",
+			prepare: func(r *singleRig) {
+				r.sys.wrong[0] = srvModel{ID: "some-other-model", Aliases: []string{"some-other-model"}}
+			},
+			code: CodeModelFailed, status: http.StatusInternalServerError, cause: kindNotListed,
 			restarts: 2, reloads: 2, lastLoad: state.LoadFailed,
 		},
 		{

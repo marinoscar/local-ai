@@ -17,6 +17,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
+	"github.com/marinoscar/local-ai/agent/internal/router"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
@@ -477,6 +478,11 @@ func (d *Daemon) background() {
 			return
 		}
 		_ = d.runStep(ctx, 14, "restore_models", 0, func(sctx context.Context) error {
+			// A node.yaml edited while the agent was down may have changed llama.mode: bring the running
+			// llama to it first (a no-op when it already runs in that mode).
+			if _, err := c.Orchestrator.ApplyMode(sctx, router.ModeRequest{LockWait: router.DefaultLockWait, Boot: true}); err != nil {
+				d.log.Warn("the AI service was not switched to llama.mode at start", "error", err.Error())
+			}
 			_, err := c.Orchestrator.RestoreModels(sctx)
 			return err
 		})

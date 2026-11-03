@@ -173,7 +173,7 @@ func errSingleNotReady() *OpError {
 func errSingleLast(id string) *OpError {
 	return opErr(CodeRefused, http.StatusConflict,
 		"In single-model mode the AI service always runs exactly one model. Use force to stop it.",
-		map[string]any{"model": id, "mode": LlamaModeSingle}, nil)
+		map[string]any{"model": id, "mode": LlamaModeSingle, "requires": "force"}, nil)
 }
 
 // ---- load ----------------------------------------------------------------------------------

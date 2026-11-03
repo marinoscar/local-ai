@@ -137,6 +137,11 @@ func (u llamaUnit) RestartLlama(ctx context.Context) error {
 	return u.m.Restart(ctx, services.UnitLlama)
 }
 
+// StopLlama implements router.LlamaStopper (a forced unload in single mode).
+func (u llamaUnit) StopLlama(ctx context.Context) error {
+	return u.m.Stop(ctx, services.UnitLlama)
+}
+
 // ---- alerts -------------------------------------------------------------------------------------
 
 // authAlert is auth.AlertFunc over the alert manager (the PIN lockout).
