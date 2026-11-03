@@ -478,10 +478,15 @@ func (e *Engine) portPIDs(ctx context.Context) ([]int, error) {
 	if res.ExitCode != 0 {
 		return nil, fmt.Errorf("ss exited %d", res.ExitCode)
 	}
+	// One process can listen on several addresses (IPv4 and IPv6): each pid is listed once.
 	var pids []int
+	seen := map[int]bool{}
 	for _, m := range pidRe.FindAllStringSubmatch(string(res.Stdout), -1) {
 		n, _ := strconv.Atoi(m[1])
-		pids = append(pids, n)
+		if !seen[n] {
+			seen[n] = true
+			pids = append(pids, n)
+		}
 	}
 	return pids, nil
 }

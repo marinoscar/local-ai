@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/audit"
@@ -317,5 +316,3 @@ func short(s string, n int) string {
 	}
 	return s[:n]
 }
-
-func trimNL(s string) string { return strings.TrimRight(s, "\r\n") }

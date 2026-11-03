@@ -353,3 +353,43 @@ func sameNGLText(unitVal string, cat catalog.IntOrAll) bool {
 	}
 	return uok && un == cat.N
 }
+
+// Summary lists the settings of the old unit that matter to a catalog entry, in a fixed order, as
+// "name value" (a path as its base name). It is printed by the dry run, so that the settings of a node
+// whose model is not in the catalog yet can be copied into its catalog entry.
+func (f *ExecFlags) Summary() []string {
+	var out []string
+	add := func(name, v string) {
+		if v != "" {
+			out = append(out, name+" "+v)
+		}
+	}
+	add("model", pathOrEmpty(f.Model))
+	add("draft", pathOrEmpty(f.Draft))
+	add("mmproj", pathOrEmpty(f.Mmproj))
+	if f.Ctx > 0 {
+		add("ctx", fmt.Sprint(f.Ctx))
+	}
+	add("n_gpu_layers", f.NGL)
+	add("flash_attn", f.FlashAttn)
+	if f.Parallel > 0 {
+		add("parallel", fmt.Sprint(f.Parallel))
+	}
+	add("spec_type", f.SpecType)
+	if f.SpecNMaxSet {
+		add("spec_n_max", fmt.Sprint(f.SpecNMax))
+	}
+	add("spec_draft_ngl", f.SpecDraftNGL)
+	add("alias", strings.Join(f.Aliases, ","))
+	for _, e := range f.Extra {
+		out = append(out, "extra "+e)
+	}
+	return out
+}
+
+func pathOrEmpty(p string) string {
+	if p == "" {
+		return ""
+	}
+	return path.Base(p)
+}

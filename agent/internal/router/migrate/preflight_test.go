@@ -230,6 +230,8 @@ func TestPreflightProblems(t *testing.T) {
 					return strings.Replace(s, "ExecStart=/home/labuser/llama.cpp/build-cuda/bin/llama-server", "ExecStart=/bin/sh -c x", 1)
 				})
 			}},
+		{name: "the legacy unit is not installed", opts: worldOpts{hasCurrent: true}, code: doctor.LLM017, cause: "unit_unreadable",
+			setup: func(w *world) { _ = w.fs.Remove("/etc/systemd/system/llama-qwen.service") }},
 		{name: "systemctl cat fails", opts: worldOpts{hasCurrent: true}, code: doctor.LLM017, cause: "unit_unreadable",
 			setup: func(w *world) { w.catErr = "No files found for llama-qwen.service." }},
 		{name: "a legacy alias that cannot be kept", opts: worldOpts{hasCurrent: true}, code: doctor.LLM017, cause: "alias_invalid",
@@ -420,5 +422,39 @@ func mustJSON(t *testing.T, s string, v any) {
 	t.Helper()
 	if err := json.Unmarshal([]byte(s), v); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestOneProcessOnTwoAddressesIsStillTheOldService(t *testing.T) {
+	w := newWorld(t, worldOpts{hasCurrent: true})
+	w.ssDual = true
+	if _, err := w.run(w.engine()); err != nil {
+		t.Fatalf("%v\n%s", err, w.out.String())
+	}
+	assertMigrated(t, w, "ipv4 and ipv6 listeners")
+}
+
+func TestThePlanShowsTheSettingsOfTheOldUnit(t *testing.T) {
+	// Even when the model is not in the catalog (so there is nothing to compare with), the dry run prints
+	// what the old unit says and the sha256 of the file: what a person needs to write the catalog entry.
+	w := newWorld(t, worldOpts{hasCurrent: true, withDraft: true})
+	w.fs.put("/home/labuser/models/m1/"+w.fileName, []byte("not in the catalog"), 0o644)
+	e, p := prepare(t, w)
+	var out bytes.Buffer
+	e.RenderPlan(&out, p)
+	text := out.String()
+	for _, want := range []string{"Settings of the old unit:", "model Model-One-Q4.gguf", "draft draft.gguf", "ctx 4096", "n_gpu_layers 99", "flash_attn on", "parallel 1", "alias legacy-name", sha256Hex([]byte("not in the catalog"))} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the plan lacks %q:\n%s", want, text)
+		}
+	}
+	// A unit with the speculative flags and extra flags lists them in a fixed order.
+	f, err := ParseExec(strings.Fields("/b/llama-server -m /m/a.gguf --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-ngl all --jinja -c 8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(f.Summary(), "|")
+	if got != "model a.gguf|ctx 8|spec_type draft-mtp|spec_n_max 3|spec_draft_ngl all|extra --jinja" {
+		t.Fatalf("Summary = %s", got)
 	}
 }

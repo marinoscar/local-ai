@@ -372,7 +372,12 @@ func (x *fakeExec) Run(_ context.Context, c execx.Cmd) (execx.Result, error) {
 			if w.ssPID != 0 {
 				pid = w.ssPID
 			}
-			return ok(fmt.Sprintf("LISTEN 0 4096 127.0.0.1:8080 0.0.0.0:* users:((\"llama-server\",pid=%d,fd=3))\n", pid))
+			line := fmt.Sprintf("LISTEN 0 4096 127.0.0.1:8080 0.0.0.0:* users:((\"llama-server\",pid=%d,fd=3))\n", pid)
+			if w.ssDual {
+				// The same process on the IPv6 loopback too: one pid, two lines.
+				line += fmt.Sprintf("LISTEN 0 4096 [::1]:8080 [::]:* users:((\"llama-server\",pid=%d,fd=4))\n", pid)
+			}
+			return ok(line)
 		case "new":
 			return ok(fmt.Sprintf("LISTEN 0 4096 127.0.0.1:8080 0.0.0.0:* users:((\"llama-server\",pid=%d,fd=3))\n", w.sd.unit(NewUnitName).mainPID))
 		}
@@ -664,6 +669,7 @@ type world struct {
 	execCalls       []string
 	ssPID           int
 	legacyNoAuth    bool
+	ssDual          bool
 }
 
 type lockedBuf struct {

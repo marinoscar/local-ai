@@ -60,6 +60,10 @@ type Plan struct {
 	Aliases  []string          `json:"aliases"`
 	ExtraEnv map[string]string `json:"extra_env,omitempty"`
 
+	// UnitSettings is what the old unit says, one setting per entry, for the plan and for whoever writes
+	// the catalog entry of a model that is not there yet (its sha256 is in the problem).
+	UnitSettings []string `json:"unit_settings,omitempty"`
+
 	// Flag differences between the unit and the catalog; AcceptedFlags is true when
 	// --accept-catalog-flags was given, so the catalog's values win.
 	Diffs         []FlagDiff `json:"diffs,omitempty"`
@@ -143,6 +147,10 @@ func (e *Engine) Preflight(ctx context.Context) (*Plan, error) {
 	}
 
 	// 1. The legacy unit.
+	if !exists(e.fs, e.paths.LegacyUnitFile()) {
+		e.add(p, CodeStopped, "unit_unreadable", "%s is not installed on this node (there is no %s), so there is nothing to migrate", LegacyUnitName, e.paths.LegacyUnitFile())
+		return p, nil
+	}
 	text, err := e.catLegacy(ctx)
 	if err != nil {
 		e.add(p, CodeStopped, "unit_unreadable", "cannot read %s: %v", LegacyUnitName, err)
@@ -159,6 +167,7 @@ func (e *Engine) Preflight(ctx context.Context) (*Plan, error) {
 	}
 	p.User, p.Group, p.WorkingDirectory = u.User, u.Group, u.WorkingDirectory
 	p.Binary, p.Ctx = flags.Binary, flags.Ctx
+	p.UnitSettings = flags.Summary()
 	p.Host, p.Port = orStr(flags.Host, LoopbackHost), orInt(flags.Port, LegacyPort)
 
 	// 6. Host and port.
@@ -638,6 +647,9 @@ func (e *Engine) RenderPlan(w io.Writer, p *Plan) {
 	}
 	for _, l := range e.Steps(p) {
 		fmt.Fprintln(w, l)
+	}
+	if len(p.UnitSettings) > 0 {
+		fmt.Fprintf(w, "\nSettings of the old unit: %s\n", strings.Join(p.UnitSettings, ", "))
 	}
 	if p.AcceptedFlags {
 		fmt.Fprintln(w, "\nThe catalog's values replace these settings of the old unit:")
