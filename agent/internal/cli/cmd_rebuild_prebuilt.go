@@ -13,8 +13,8 @@ import (
 )
 
 // The ready-made build half of the rebuild commands (rebuild-kit.md section 4.2, KIT-05), shared by
-// `aictl rebuild-whisper` (cmd_rebuild_whisper.go) and, when its command surface lands, `aictl
-// rebuild-llama` (AICTL-09): reading the record of the file named by --prebuilt, refusing a build that
+// `aictl rebuild-whisper` (cmd_rebuild_whisper.go) and `aictl rebuild-llama` (cmd_rebuild_llama.go,
+// AICTL-09): reading the record of the file named by --prebuilt, refusing a build that
 // does not fit this computer and saying what the kit has instead, the confirmation, and the offer of a
 // file that fits exactly. The restore itself (verification, placement, smoke test, activation and
 // rollback) is the engine's (build.Request.Prebuilt).
