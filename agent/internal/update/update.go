@@ -149,7 +149,8 @@ type AlertSink interface {
 // process (Startup), and the rollback paths (RollbackCheck). The agent job and `aictl update` call the same
 // Runner; every outside dependency is a field with a fake in the tests.
 //
-// A zero Runner is not usable: set at least Paths, Current and Mode (everything else has a default).
+// A zero Runner is not usable: set at least Current and Mode, and Source.Repo unless it is the default (everything
+// else has a default; a nil Mode refuses every update).
 // Do not copy a Runner after its first use.
 type Runner struct {
 	Paths Paths
@@ -272,7 +273,8 @@ type Result struct {
 // mode (LAI-AGT-023).
 func (r *Runner) refuseUnlessOnline() error {
 	if r.Mode == nil {
-		return nil
+		// Fail closed: a caller that cannot say what mode the node is in does not update it.
+		return fail(doctor.AGT099, "mode", "The update cannot tell which mode the node is in, so it was not started.", nil)
 	}
 	if m := r.Mode(); m != "online" {
 		return fail(doctor.AGT023, "mode", "Updating needs the internet and this node is not online. Switch to online mode first (`aictl mode online`).",

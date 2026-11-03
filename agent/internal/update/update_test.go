@@ -551,3 +551,16 @@ func TestReadSmallFileLimits(t *testing.T) {
 		t.Fatal("a file over the limit must be refused")
 	}
 }
+
+// A caller that cannot say what mode the node is in does not update it.
+func TestUpdateWithoutAModeSourceIsRefused(t *testing.T) {
+	r := newRig(t, "0.1.0")
+	r.release("0.2.0")
+	run := r.runner("0.1.0")
+	run.Mode = nil
+	_, err := run.Update(context.Background(), Request{Version: "0.2.0"})
+	errCode(t, err, doctor.AGT099)
+	if r.requests() != 0 || r.exists(r.paths.Pending()) {
+		t.Fatal("nothing may happen without a mode")
+	}
+}
