@@ -256,13 +256,64 @@ func (d ServicesDeps) act(w http.ResponseWriter, r *http.Request) error {
 	info := InfoFrom(r.Context())
 	opID := d.opID()
 	SetOpID(w, opID)
-	rec := serviceAudit{deps: d, svc: svc, action: action, force: body.Force, opID: opID, info: info}
+	res, err := d.run(r.Context(), svc, action, body.Force, opID, serviceActor(info), info.ID)
+	if err != nil {
+		return err
+	}
+	WriteJSON(w, r, http.StatusOK, serviceActionResponse(res))
+	return nil
+}
+
+// ServiceActionRequest is one start, stop or restart as the route decoded it. The cloud executors
+// (AGENT-18) build the same request with the cloud actor.
+type ServiceActionRequest struct {
+	// Name is the service name: llama, kiwix or whisper.
+	Name   string
+	Action services.Action
+	// Force lets a stop of llama through in survival mode.
+	Force bool
+	Actor audit.Actor
+	// ReqID goes to the audit line; empty is fine.
+	ReqID string
+}
+
+// ServiceActionResult is the outcome of RunAction: the body of the 200 answer of the route.
+type ServiceActionResult struct {
+	Name string
+	// Active is the unit's active state when the action ended ("active" after a start or restart).
+	Active         string
+	RestoredModels []string
+	OpID           string
+}
+
+// RunAction is POST /services/{name}/{action} without the HTTP: the same survival rule, the same
+// llama hook, the same typed errors (*Error) and the same service.<action> audit line. Errors:
+// 404 LAI-AGT-021 for an unknown service, 400 LAI-AGT-020 for an unknown action, 409 LAI-AGT-023
+// (stopping llama in survival without Force), 409 LAI-AGT-022 (another model operation holds
+// modelOpsMu), 502 with the service's "not running" code.
+func (d ServicesDeps) RunAction(ctx context.Context, req ServiceActionRequest) (ServiceActionResult, error) {
+	svc, ok := services.ByName(req.Name)
+	if !ok {
+		return ServiceActionResult{}, NewError(CodeNotFound, http.StatusNotFound, map[string]any{"name": req.Name, "kind": "service"})
+	}
+	if !req.Action.Valid() {
+		return ServiceActionResult{}, NewError(CodeInvalidRequest, http.StatusBadRequest, map[string]any{
+			"field": "action", "reason": "unknown_action", "allowed": []string{"start", "stop", "restart"},
+		})
+	}
+	return d.run(ctx, svc, req.Action, req.Force, d.opID(), req.Actor, req.ReqID)
+}
+
+// run is the part of the route that does not depend on the request: the survival rule, the unit
+// action (through the llama hook for llama), the audit line and the error mapping.
+func (d ServicesDeps) run(ctx context.Context, svc services.Service, action services.Action, force bool, opID string, actor audit.Actor, reqID string) (ServiceActionResult, error) {
+	rec := serviceAudit{deps: d, svc: svc, action: action, force: force, opID: opID, actor: actor, reqID: reqID}
 
 	// Stopping llama in survival mode would leave the Portal without a brain: it needs force.
-	if svc.Name == "llama" && action == services.ActionStop && !body.Force && d.Mode != nil && d.Mode() == servicesSurvivalMode {
+	if svc.Name == "llama" && action == services.ActionStop && !force && d.Mode != nil && d.Mode() == servicesSurvivalMode {
 		err := NewError(CodeNotInMode, http.StatusConflict, map[string]any{"mode": servicesSurvivalMode, "requires": "force", "op_id": opID})
 		rec.write(audit.ResultDenied, CodeNotInMode)
-		return err
+		return ServiceActionResult{}, err
 	}
 
 	var final services.UnitState
@@ -274,9 +325,9 @@ func (d ServicesDeps) act(w http.ResponseWriter, r *http.Request) error {
 	var restored []string
 	var err error
 	if svc.Name == "llama" && d.Llama != nil {
-		restored, err = d.Llama.Run(r.Context(), opID, action, op)
+		restored, err = d.Llama.Run(ctx, opID, action, op)
 	} else {
-		err = op(r.Context())
+		err = op(ctx)
 	}
 	if err != nil {
 		apiErr := d.mapActionError(err, svc, action, opID)
@@ -286,14 +337,13 @@ func (d ServicesDeps) act(w http.ResponseWriter, r *http.Request) error {
 			code = ae.Code
 		}
 		rec.write(audit.ResultFail, code)
-		return apiErr
+		return ServiceActionResult{}, apiErr
 	}
 	rec.write(audit.ResultOK, "")
 	if restored == nil {
 		restored = []string{}
 	}
-	WriteJSON(w, r, http.StatusOK, serviceActionResponse{Name: svc.Name, Active: final.ActiveState, RestoredModels: restored, OpID: opID})
-	return nil
+	return ServiceActionResult{Name: svc.Name, Active: final.ActiveState, RestoredModels: restored, OpID: opID}, nil
 }
 
 // mapActionError turns what the action runner or the llama hook returned into an API error.
@@ -356,7 +406,8 @@ type serviceAudit struct {
 	action services.Action
 	force  bool
 	opID   string
-	info   *RequestInfo
+	actor  audit.Actor
+	reqID  string
 }
 
 func (a serviceAudit) write(result audit.Result, code string) {
@@ -371,10 +422,10 @@ func (a serviceAudit) write(result audit.Result, code string) {
 		Action: "service." + string(a.action),
 		Result: result,
 		Code:   code,
-		Actor:  serviceActor(a.info),
+		Actor:  a.actor,
 		Target: target,
 		OpID:   a.opID,
-		ReqID:  a.info.ID,
+		ReqID:  a.reqID,
 	}
 	if err := a.deps.Audit.Write(ev); err != nil {
 		// The record is already in the journal (the audit log mirrors to slog); the action stands.
