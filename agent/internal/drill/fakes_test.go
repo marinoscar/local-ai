@@ -264,11 +264,17 @@ func (f *fakeMetrics) get(key string) (float64, bool) {
 type counterRand struct {
 	mu sync.Mutex
 	n  int
+	// fixed, when set, is what every read returns (two bytes: one 4-hex suffix, always the same).
+	fixed []byte
 }
 
 func (c *counterRand) Read(p []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.fixed != nil {
+		copy(p, c.fixed)
+		return len(p), nil
+	}
 	for i := range p {
 		p[i] = 0
 	}
