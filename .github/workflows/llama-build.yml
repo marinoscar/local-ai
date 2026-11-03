@@ -1,0 +1,74 @@
+name: llama-build
+# Builds llama.cpp for real, the way `aictl rebuild-llama --from-kit` does (KIT-04, rebuild-kit.md
+# section 4.3 and llama-router.md section 4.10): the CPU backend, from a kit-style source tarball
+# (kit/src/llama.cpp-<commit>.tar.gz, one top-level directory), with the build manager of
+# agent/internal/router/build and the NETWORK DISABLED for the whole build: the test binary runs inside
+# `unshare -n` (as root, like the `offline` job of release-tooling.yml; the test brings loopback up, which
+# llama-cli needs, and asserts there is no other interface), so the preflight, the
+# extraction, cmake, the compile, the smoke test and the activation cannot reach the internet. Only the
+# preparation (the source of the pinned release) has network. TestLlamaRealBuild (llama_real_test.go)
+# then proves, on the real programs:
+#   - the smoke test (--version, --list-devices and a completion with a tiny GGUF the test generates
+#     at run time: the repo holds no model) and the activation, with a real post-switch completion;
+#   - the export of the activated build (kit.PrebuiltExporter) and its restore into a second root with
+#     --prebuilt semantics, programs and BUILD.json byte for byte (KIT-05);
+#   - a llama-server that passes the smoke test and fails as a service is rolled back with LAI-LLM-019;
+#   - nothing emits LAI-KIT-022 (retired).
+#
+# The pin: LLAMA_CPP_TAG is a release tag of llama.cpp (they are called bNNNN); the job resolves it to
+# its commit and names it in the tarball, as the git_mirror resolver does, so no commit hash is written
+# in this repository. Move the tag when the pin moves.
+on:
+  pull_request:
+    paths: ['agent/internal/router/build/**', 'agent/internal/kit/prebuilt*.go', '.github/workflows/llama-build.yml']
+  push:
+    branches: [main]
+    paths: ['agent/internal/router/build/**', 'agent/internal/kit/prebuilt*.go', '.github/workflows/llama-build.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  LLAMA_CPP_TAG: b12000
+  LLAMA_CPP_URL: https://github.com/ggml-org/llama.cpp.git
+jobs:
+  cpu-offline-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: Build tools (the kit's debs closure installs these offline on a node)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config
+      - name: Prepare the kit-style source tarball of the pinned release (network)
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch "$LLAMA_CPP_TAG" "$LLAMA_CPP_URL" "$RUNNER_TEMP/llama-src"
+          commit="$(git -C "$RUNNER_TEMP/llama-src" rev-parse HEAD)"
+          echo "llama.cpp $LLAMA_CPP_TAG is commit $commit"
+          mkdir -p "$RUNNER_TEMP/kit"
+          git -C "$RUNNER_TEMP/llama-src" archive --format=tar --prefix="llama.cpp-$commit/" HEAD | gzip -n > "$RUNNER_TEMP/kit/llama.cpp-$commit.tar.gz"
+          echo "LLAMA_TARBALL=$RUNNER_TEMP/kit/llama.cpp-$commit.tar.gz" >> "$GITHUB_ENV"
+          rm -rf "$RUNNER_TEMP/llama-src"
+      - name: Compile the test binary (network)
+        working-directory: agent
+        run: go test -c -o "$RUNNER_TEMP/build.test" ./internal/router/build
+      - name: The network namespace has no network (unshare -n)
+        run: |
+          set -euo pipefail
+          # The negative control of the next step: inside the namespace neither an address nor a name
+          # can be reached. The test checks it again itself (LOCALAI_EXPECT_NO_NETWORK).
+          if sudo unshare -n curl --silent --show-error --max-time 5 --output /dev/null https://github.com; then
+            echo "github.com is reachable inside unshare -n: the build would not be offline" >&2
+            exit 1
+          fi
+          echo "no network inside unshare -n"
+      - name: Build llama.cpp (CPU), smoke test, activate, export, restore and roll back inside a network namespace (unshare -n)
+        run: |
+          set -euo pipefail
+          sudo unshare -n env \
+            LOCALAI_EXPECT_NO_NETWORK=1 \
+            LOCALAI_LLAMA_KIT_TARBALL="$LLAMA_TARBALL" \
+            "$RUNNER_TEMP/build.test" -test.run '^TestLlamaRealBuild$' -test.v -test.timeout 70m
