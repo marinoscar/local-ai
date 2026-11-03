@@ -203,11 +203,15 @@ func (d *Daemon) shutdown() ShutdownReport {
 	if d.cancel != nil {
 		d.cancel()
 	}
-	d.bg.Wait()
 
-	// 6
+	// 6: the background startup steps stop starting work (their context was cancelled at step 1) and
+	// are given the model budget to return; then the orchestrator stops watching what it has in
+	// progress. A restore that is mid-load keeps its router call: the router keeps loading on its own.
 	if st.orch != nil {
 		timed(6, "model_operations", shutdownModelBudget, func(ctx context.Context) error {
+			if err := runWithin(ctx, func() error { d.bg.Wait(); return nil }); err != nil {
+				d.log.Warn("a background startup step is still running; not waiting for it")
+			}
 			return runWithin(ctx, func() error { return st.orch.Shutdown(ctx) })
 		})
 	}

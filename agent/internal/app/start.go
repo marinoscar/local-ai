@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
@@ -417,19 +418,27 @@ func (d *Daemon) stateDrains(ctx context.Context) error {
 // ---- steps 12 to 17 -----------------------------------------------------------------------------
 
 // background runs steps 12 to 17: 12, 13, 15 and 16 concurrently, 14 once 12 has ended (agent.md
-// section 4.1), then step 17.
+// section 4.1), then step 17. It returns when every step goroutine has ended, so Shutdown (which waits
+// for it before it stops the orchestrator) never races a restore that is still loading a model.
 func (d *Daemon) background() {
 	ctx := d.bootCtx
 	c := d.c
-	done := make(chan struct{}, 4)
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	spawn := func(f func()) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			f()
+		}()
+	}
+	s15, s16 := make(chan struct{}), make(chan struct{})
 
 	// 12: reconcile llama; when it ends, success or failure, the gate opens and the mode engine
 	// starts accepting (a queued survival request starts now).
-	go func() {
-		defer func() { done <- struct{}{} }()
+	spawn(func() {
 		_ = d.runStep(ctx, 12, "reconcile_llama", stepTimeoutReconcile, func(sctx context.Context) error {
-			res, err := c.Reconciler.Reconcile(sctx)
-			_ = res
+			_, err := c.Reconciler.Reconcile(sctx)
 			return err
 		})
 		c.API.SetMutationsOpen(true)
@@ -438,20 +447,18 @@ func (d *Daemon) background() {
 		}
 		close(d.gateCh)
 		d.startWorker(c.RouterWatcher)
-	}()
+	})
 
 	// 13: resume the mode transition, or apply the policy of the committed mode.
-	go func() {
-		defer func() { done <- struct{}{} }()
+	spawn(func() {
 		_ = d.runStep(ctx, 13, "resume_mode", 0, func(sctx context.Context) error {
 			_, err := c.Modes.Resume(sctx)
 			return err
 		})
-	}()
+	})
 
 	// 14: restore the models once the reconcile has ended; then, once, the drill's recovery.
-	go func() {
-		defer func() { done <- struct{}{} }()
+	spawn(func() {
 		select {
 		case <-d.gateCh:
 		case <-ctx.Done():
@@ -464,36 +471,26 @@ func (d *Daemon) background() {
 		if err := c.Drill.Recover(ctx); err != nil {
 			d.log.Warn("the drill recovery failed", "error", err.Error())
 		}
-	}()
+	})
 
 	// 15 and 16 do not wait for the others; 17 waits for 12, 15 and 16.
-	var stepsDone = make(chan struct{}, 2)
-	go func() {
-		defer func() { stepsDone <- struct{}{} }()
+	spawn(func() {
+		defer close(s15)
 		_ = d.runStep(ctx, 15, "pending_update", stepTimeoutUpdate, d.stepUpdate)
-	}()
-	go func() {
-		defer func() { stepsDone <- struct{}{} }()
+	})
+	spawn(func() {
+		defer close(s16)
 		_ = d.runStep(ctx, 16, "periodic_checks", 0, d.stepPeriodic)
-	}()
+	})
 
-	<-stepsDone
-	<-stepsDone
+	<-s15
+	<-s16
 	select {
 	case <-d.gateCh:
 	case <-ctx.Done():
 		return
 	}
 	d.step17()
-	// 13 and 14 are background work; the daemon is up without waiting for them. Collect them so
-	// Shutdown's bg.Wait sees them end.
-	for i := 0; i < 3; i++ {
-		select {
-		case <-done:
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 // stepUpdate is step 15: the registered self-update hooks (#37). With none registered it does nothing.
