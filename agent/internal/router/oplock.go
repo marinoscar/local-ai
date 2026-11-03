@@ -19,6 +19,10 @@ const (
 	HolderUnload = "unload"
 	HolderReload = "reload"
 	HolderOther  = "other"
+	// HolderDelete is a model delete (DELETE /models/{id}); HolderRotate a key rotation without a
+	// llama restart (POST /key/rotate with restart false).
+	HolderDelete = "delete"
+	HolderRotate = "rotate"
 )
 
 // BusyError says that another model operation holds modelOpsMu. OpID is that operation's id (the

@@ -234,7 +234,7 @@ func (o *Orchestrator) waitHealth(ctx context.Context, timeout time.Duration) bo
 		if o.opt.Router.Health(ctx) == nil {
 			return true
 		}
-		if o.clock.Now().Sub(start) >= timeout || !o.pause(ctx, o.opt.Timing.LoadPoll) {
+		if ctx.Err() != nil || o.clock.Now().Sub(start) >= timeout || !o.pause(ctx, o.opt.Timing.LoadPoll) {
 			return false
 		}
 	}

@@ -310,6 +310,7 @@ The script reads the `codes.go` layout described in its header: a const block (`
 | LAI-SYN-041 | warning (error when a survival model is skipped) | Items skipped because the budget is full (a survival model, if named) | Raise `budget_bytes` or remove other content in `node.yaml`. |
 | LAI-SYN-042 | error | The rebuild kit or manuals don't fit | Free disk space. Without the kit this computer can't be rebuilt offline. |
 | LAI-SYN-043 | info | Old versions were deleted to make room | Nothing to do. |
+| LAI-SYN-044 | warning | The last verified copy was kept; nothing was deleted | This is the only verified copy on this computer. Copy it to another drive first (`aictl ark sync --root <drive>`), or delete it anyway with `aictl delete <model> --allow-last-copy`. |
 | LAI-SYN-050 | info | Sync journal was damaged and rebuilt | Nothing to do. |
 | LAI-SYN-051 | info | Content no longer in the profile is using disk space | Run `aictl ark prune --orphans` if you don't need it. |
 | LAI-SYN-052 | warning | An item's MANIFEST is missing or damaged | Run `aictl ark verify`; the item will be fetched again. |
