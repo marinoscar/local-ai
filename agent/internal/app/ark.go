@@ -337,7 +337,7 @@ type catalogRefresh struct{ d *Daemon }
 
 // Refresh implements run.CatalogRefresher.
 func (c catalogRefresh) Refresh(ctx context.Context) error {
-	_, err := refresher{c.d}.Refresh(ctx)
+	_, err := refresher(c).Refresh(ctx)
 	return err
 }
 
