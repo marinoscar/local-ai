@@ -382,7 +382,7 @@ func (v Verifier) Verify(ctx context.Context, rootPath string, opts Options) (Ve
 	}
 	r := &run{
 		fs: ro, opts: opts, rootPath: rootPath, kitDir: kitDir,
-		recs: map[string]*fileRec{}, byDir: map[string]*scanItem{},
+		recs: map[string]*fileRec{}, byDir: map[string]*scanItem{}, partDirs: map[string]bool{},
 		node: map[string]bool{},
 	}
 	r.rep = VerifyReport{

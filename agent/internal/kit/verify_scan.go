@@ -283,8 +283,8 @@ func (r *run) readPrebuilt(it *scanItem, mp string) string {
 	}
 	var v struct {
 		Files            []listedFile `json:"files"`
-		LastReverifiedAt time.Time      `json:"last_reverified_at"`
-		VerifiedAt       time.Time      `json:"verified_at"`
+		LastReverifiedAt time.Time    `json:"last_reverified_at"`
+		VerifiedAt       time.Time    `json:"verified_at"`
 	}
 	if json.Unmarshal(data, &v) != nil {
 		return ReasonBadManifest
@@ -719,6 +719,8 @@ func (r *run) index() {
 	if r.opts.Part != "" {
 		return
 	}
+	// kit/prebuilt is not an item of the catalog: the index may or may not list it, so it is left out
+	// of the comparison on both sides.
 	var have []string
 	for _, it := range r.items {
 		if it.valid && it.dir != PartPrebuilt {
@@ -745,7 +747,9 @@ func (r *run) index() {
 	}
 	var listed []string
 	for _, e := range ix.Items {
-		listed = append(listed, e.ID+"@"+e.Dir)
+		if e.Dir != PartPrebuilt {
+			listed = append(listed, e.ID+"@"+e.Dir)
+		}
 	}
 	sort.Strings(have)
 	sort.Strings(listed)
@@ -776,4 +780,3 @@ func (r *run) buildability(ctx context.Context) error {
 	}
 	return nil
 }
-

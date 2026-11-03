@@ -1,0 +1,367 @@
+{
+  "overall": "red",
+  "root": "internal",
+  "path": "<root>",
+  "internal": true,
+  "mode": "full",
+  "checked_at": "2026-11-03T18:04:11Z",
+  "parts": [
+    {
+      "part": "catalog",
+      "status": "ok",
+      "present": true,
+      "items": 1,
+      "oldest_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "part": "installers",
+      "status": "ok",
+      "present": true,
+      "items": 0
+    },
+    {
+      "part": "bin",
+      "status": "ok",
+      "present": true,
+      "items": 1,
+      "oldest_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "part": "src",
+      "status": "ok",
+      "present": true,
+      "items": 1,
+      "oldest_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "part": "git",
+      "status": "ok",
+      "present": true,
+      "items": 2,
+      "oldest_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "part": "toolchains",
+      "status": "ok",
+      "present": true,
+      "items": 1,
+      "oldest_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "part": "tools",
+      "status": "damaged",
+      "code": "LAI-KIT-001",
+      "present": true,
+      "items": 3,
+      "oldest_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "part": "debs",
+      "status": "ok",
+      "present": true,
+      "items": 1,
+      "oldest_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "part": "nvidia",
+      "status": "ok",
+      "present": true,
+      "items": 1,
+      "oldest_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "part": "cuda",
+      "status": "ok",
+      "present": true,
+      "items": 1,
+      "oldest_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "part": "prebuilt",
+      "status": "warning",
+      "code": "LAI-KIT-040",
+      "present": false,
+      "items": 0
+    }
+  ],
+  "items": [
+    {
+      "id": "kit-agent-binaries",
+      "dir": "bin",
+      "part": "bin",
+      "status": "ok",
+      "files": 2,
+      "hashed": 2,
+      "bytes": 19,
+      "last_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-catalog",
+      "dir": "catalog",
+      "part": "catalog",
+      "status": "ok",
+      "files": 2,
+      "hashed": 2,
+      "bytes": 24,
+      "last_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-cuda-redist-12.4-amd64",
+      "dir": "cuda/12.4-amd64",
+      "part": "cuda",
+      "status": "ok",
+      "files": 1,
+      "hashed": 1,
+      "bytes": 16,
+      "last_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-debs-resolute-amd64",
+      "dir": "debs/resolute-amd64",
+      "part": "debs",
+      "status": "ok",
+      "files": 6,
+      "hashed": 6,
+      "bytes": 946,
+      "last_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-llama-cpp",
+      "dir": "git/llama.cpp.git",
+      "part": "git",
+      "status": "ok",
+      "files": 1,
+      "hashed": 1,
+      "bytes": 21,
+      "last_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-whisper-cpp",
+      "dir": "git/whisper.cpp.git",
+      "part": "git",
+      "status": "ok",
+      "files": 1,
+      "hashed": 1,
+      "bytes": 21,
+      "last_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-nvidia-resolute-amd64-595-open",
+      "dir": "nvidia/resolute-amd64-595-open",
+      "part": "nvidia",
+      "status": "ok",
+      "files": 6,
+      "hashed": 6,
+      "bytes": 1002,
+      "last_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-agent-source",
+      "dir": "src",
+      "part": "src",
+      "status": "ok",
+      "files": 1,
+      "hashed": 1,
+      "bytes": 19,
+      "last_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-go-toolchain",
+      "dir": "toolchains",
+      "part": "toolchains",
+      "status": "ok",
+      "files": 1,
+      "hashed": 1,
+      "bytes": 19,
+      "last_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-kiwix-tools",
+      "dir": "tools/kiwix-tools",
+      "part": "tools",
+      "status": "ok",
+      "files": 1,
+      "hashed": 1,
+      "bytes": 12,
+      "last_reverified_at": "2026-11-02T18:04:11Z"
+    },
+    {
+      "id": "kit-piper",
+      "dir": "tools/piper",
+      "part": "tools",
+      "status": "damaged",
+      "files": 1,
+      "hashed": 1,
+      "bytes": 12,
+      "last_reverified_at": "2026-11-02T18:04:11Z",
+      "problems": [
+        {
+          "part": "tools",
+          "path": "tools/piper/piper_linux_x86_64.tar.gz",
+          "reason": "changed"
+        }
+      ]
+    },
+    {
+      "id": "kit-pmtiles",
+      "dir": "tools/pmtiles",
+      "part": "tools",
+      "status": "ok",
+      "files": 1,
+      "hashed": 1,
+      "bytes": 14,
+      "last_reverified_at": "2026-11-02T18:04:11Z"
+    }
+  ],
+  "node": {
+    "node": "ai-n3",
+    "codename": "resolute",
+    "arch": "amd64",
+    "backend": "cuda",
+    "needs": [
+      {
+        "need": "llama_source",
+        "arg": "993868924",
+        "part": "src",
+        "item": "kit-llama-cpp",
+        "status": "ok"
+      },
+      {
+        "need": "whisper_source",
+        "arg": "1a418d8a9",
+        "part": "src",
+        "item": "kit-whisper-cpp",
+        "status": "ok"
+      },
+      {
+        "need": "agent_binary",
+        "arg": "amd64",
+        "part": "bin",
+        "item": "kit-agent-binaries",
+        "status": "ok"
+      },
+      {
+        "need": "agent_source",
+        "arg": "node-v0.4.0",
+        "part": "src",
+        "item": "kit-agent-source",
+        "status": "ok"
+      },
+      {
+        "need": "go_toolchain",
+        "arg": "amd64",
+        "part": "toolchains",
+        "item": "kit-go-toolchain",
+        "status": "ok"
+      },
+      {
+        "need": "debs",
+        "arg": "resolute-amd64",
+        "part": "debs",
+        "item": "kit-debs-resolute-amd64",
+        "status": "ok"
+      },
+      {
+        "need": "nvidia",
+        "arg": "resolute-amd64-595-open",
+        "part": "nvidia",
+        "item": "kit-nvidia-resolute-amd64-595-open",
+        "status": "ok"
+      },
+      {
+        "need": "cuda_toolkit",
+        "arg": "12.4",
+        "part": "cuda",
+        "item": "kit-cuda-redist-12.4-amd64",
+        "status": "ok"
+      },
+      {
+        "need": "kiwix_tools",
+        "arg": "amd64",
+        "part": "tools",
+        "item": "kit-kiwix-tools",
+        "status": "ok"
+      },
+      {
+        "need": "pmtiles",
+        "arg": "amd64",
+        "part": "tools",
+        "item": "kit-pmtiles",
+        "status": "ok"
+      },
+      {
+        "need": "piper",
+        "arg": "amd64",
+        "part": "tools",
+        "item": "kit-piper",
+        "status": "damaged",
+        "code": "LAI-KIT-001"
+      },
+      {
+        "need": "prebuilt",
+        "arg": "993868924-cuda",
+        "part": "prebuilt",
+        "item": "kit-prebuilt",
+        "optional": true,
+        "status": "warning",
+        "code": "LAI-KIT-040"
+      }
+    ]
+  },
+  "signature": {
+    "status": "ok",
+    "key_id": "<key>",
+    "files": 1
+  },
+  "findings": [
+    {
+      "code": "LAI-KIT-001",
+      "severity": "error",
+      "colour": "red",
+      "kind": "damaged",
+      "part": "tools",
+      "item": "kit-piper",
+      "names": [
+        "tools/piper/piper_linux_x86_64.tar.gz (changed)"
+      ]
+    },
+    {
+      "code": "LAI-KIT-040",
+      "severity": "warning",
+      "colour": "yellow",
+      "kind": "prebuilt_missing",
+      "part": "prebuilt",
+      "item": "kit-prebuilt",
+      "nodes": [
+        "ai-n3"
+      ],
+      "need": "prebuilt",
+      "arg": "993868924-cuda",
+      "optional": true
+    }
+  ],
+  "notes": [
+    {
+      "kind": "no_git",
+      "part": "git",
+      "names": [
+        "git/llama.cpp.git"
+      ],
+      "detail": "git was not given to the verifier"
+    },
+    {
+      "kind": "no_git",
+      "part": "git",
+      "names": [
+        "git/whisper.cpp.git"
+      ],
+      "detail": "git was not given to the verifier"
+    }
+  ],
+  "totals": {
+    "items": 12,
+    "files": 24,
+    "files_hashed": 24,
+    "bytes_hashed": 2259
+  }
+}
