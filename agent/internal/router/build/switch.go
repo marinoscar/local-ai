@@ -11,7 +11,6 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 	"github.com/marinoscar/local-ai/agent/internal/execx"
-	"github.com/marinoscar/local-ai/agent/internal/services"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 )
 
@@ -54,6 +53,22 @@ type Agent interface {
 	// an agent that stopped answering is ErrAgentUnavailable.
 	RestartLlama(ctx context.Context) error
 }
+
+// ServiceRestarter is the part of the agent API a recipe other than llama's uses to restart its
+// service (POST /services/<name>/restart): whisper.cpp restarts the speech service through it.
+// AICTL-09 and SVC-05 implement it over the agent's HTTP API.
+type ServiceRestarter interface {
+	// Up reports whether the agent answers.
+	Up(ctx context.Context) bool
+	// RestartService restarts the named service ("whisper") and waits for the unit. A busy agent
+	// is a *BusyError; one that stopped answering is ErrAgentUnavailable.
+	RestartService(ctx context.Context, service string) error
+}
+
+// ErrServiceNotConfigured is what Options.ServiceCheck returns when the restarted service has no
+// configuration to start from yet (whisper without /etc/localai/whisper.env): there is nothing to
+// check, which is a warning and never a reason to undo the switch.
+var ErrServiceNotConfigured = errors.New("build: the service is not configured yet")
 
 // Probe is what the post-switch check asks of the running router (llama-router.md section 4.10.3
 // step 6). AICTL-09 implements it over the router client and the agent API; every call must be
@@ -151,7 +166,7 @@ func (m *Manager) activate(ctx context.Context, a activation, progress func(Stag
 		target["rolled_back"] = fmt.Sprint(rolledBack)
 		target["cause"] = cause
 		m.auditSwitch(a.req, audit.ResultFail, e.Code, target)
-		m.log.Error("the new llama.cpp build was rejected", "build_id", id, "cause", cause, "rolled_back", rolledBack, "error", err)
+		m.log.Error("the new "+m.opt.Recipe.Name+" build was rejected", "build_id", id, "cause", cause, "rolled_back", rolledBack, "error", err)
 		return e
 	}
 
@@ -176,7 +191,7 @@ func (m *Manager) activate(ctx context.Context, a activation, progress func(Stag
 			}
 		}
 		m.auditSwitch(a.req, audit.ResultOK, "", target)
-		m.log.Info("switched to the new llama.cpp build", "build_id", id, "previous", prevName)
+		m.log.Info("switched to the new "+m.opt.Recipe.Name+" build", "build_id", id, "previous", prevName)
 		return res, nil
 	}
 
@@ -203,11 +218,11 @@ func (m *Manager) activate(ctx context.Context, a activation, progress func(Stag
 	rolled := false
 	if prevTarget != "" {
 		if serr := m.setCurrent(prevTarget); serr != nil {
-			m.log.Error("could not put the previous llama.cpp build back", "error", serr)
+			m.log.Error("could not put the previous "+m.opt.Recipe.Name+" build back", "error", serr)
 		} else {
 			rolled = true
 			if _, rerr := m.restartLlama(rctx); rerr != nil {
-				m.log.Error("llama did not restart on the previous build", "error", rerr)
+				m.log.Error(m.opt.Recipe.Service+" did not restart on the previous build", "error", rerr)
 				rolled = false
 			}
 		}
@@ -248,25 +263,38 @@ func (m *Manager) setCurrent(target string) error {
 	return nil
 }
 
-// restartLlama restarts localai-llama so that it runs what current points at. The agent does it
-// (and restores the models) when it is up, retrying while it is busy; otherwise systemctl does. It
-// reports which one ran.
+// agentRestart returns what asks the agent to restart the recipe's service: the Services seam for
+// any recipe, else llama's Agent for llama. up is nil when there is no agent to ask.
+func (m *Manager) agentRestart() (up func(context.Context) bool, restart func(context.Context) error) {
+	if s := m.opt.Services; s != nil {
+		name := m.opt.Recipe.Service
+		return s.Up, func(ctx context.Context) error { return s.RestartService(ctx, name) }
+	}
+	if a := m.opt.Agent; a != nil && m.opt.Recipe.Service == LlamaRecipe.Service {
+		return a.Up, a.RestartLlama
+	}
+	return nil, nil
+}
+
+// restartLlama restarts the recipe's service (localai-llama, localai-whisper) so that it runs what
+// current points at. The agent does it (and, for llama, restores the models) when it is up,
+// retrying while it is busy; otherwise systemctl does. It reports which one ran.
 func (m *Manager) restartLlama(ctx context.Context) (viaAgent bool, err error) {
-	if m.opt.Agent != nil && m.opt.Agent.Up(ctx) {
-		err := m.restartViaAgent(ctx)
+	if up, restart := m.agentRestart(); up != nil && up(ctx) {
+		err := m.restartViaAgent(ctx, restart)
 		if err == nil || !errors.Is(err, ErrAgentUnavailable) {
 			return true, err
 		}
-		m.log.Warn("the agent stopped answering; restarting llama with systemctl", "error", err)
+		m.log.Warn("the agent stopped answering; restarting "+m.opt.Recipe.Service+" with systemctl", "error", err)
 	}
 	return false, m.systemctlRestart(ctx)
 }
 
-func (m *Manager) restartViaAgent(ctx context.Context) error {
+func (m *Manager) restartViaAgent(ctx context.Context, restart func(context.Context) error) error {
 	t := m.opt.Timing
 	first := m.opt.Clock()
 	for {
-		err := m.opt.Agent.RestartLlama(ctx)
+		err := restart(ctx)
 		var busy *BusyError
 		if !errors.As(err, &busy) {
 			return err
@@ -285,17 +313,17 @@ func (m *Manager) systemctlRestart(ctx context.Context) error {
 		return fmt.Errorf("systemctl: %w", err)
 	}
 	res, err := m.opt.Exec.Run(ctx, execx.Cmd{
-		Path: p, Args: []string{"restart", services.UnitLlama}, Timeout: m.opt.Timing.Systemctl, MaxOut: 64 << 10,
+		Path: p, Args: []string{"restart", m.opt.Recipe.Unit}, Timeout: m.opt.Timing.Systemctl, MaxOut: 64 << 10,
 	})
 	if err != nil {
-		return fmt.Errorf("systemctl restart %s: %w", services.UnitLlama, err)
+		return fmt.Errorf("systemctl restart %s: %w", m.opt.Recipe.Unit, err)
 	}
 	if res.ExitCode != 0 {
 		msg := strings.TrimSpace(string(res.Stderr))
 		if len(msg) > 300 {
 			msg = msg[len(msg)-300:]
 		}
-		return fmt.Errorf("systemctl restart %s exited with status %d: %s", services.UnitLlama, res.ExitCode, msg)
+		return fmt.Errorf("systemctl restart %s exited with status %d: %s", m.opt.Recipe.Unit, res.ExitCode, msg)
 	}
 	return nil
 }
@@ -305,6 +333,9 @@ func (m *Manager) systemctlRestart(ctx context.Context) error {
 // all within 180 s of the restart. With no default model only the health check runs, with a warning.
 // It returns the default model it checked.
 func (m *Manager) postCheck(ctx context.Context, start time.Time) (string, []string, *Error) {
+	if m.opt.Recipe.Service != LlamaRecipe.Service {
+		return m.serviceCheck(ctx, start)
+	}
 	probe := m.opt.Probe
 	if probe == nil {
 		return "", []string{"The new build was not checked: nothing was available to ask the router."}, nil

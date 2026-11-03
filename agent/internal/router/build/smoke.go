@@ -18,7 +18,7 @@ import (
 // ProtectHome=yes, and a .tmp directory is renamed (llama-router.md section 4.10.3 step 2). A
 // static program has no dynamic section and passes.
 func (r *run) checkRunpath() *Error {
-	for _, name := range binaries {
+	for _, name := range r.m.opt.Recipe.Programs {
 		path := filepath.Join(r.plan.OutDir, "bin", name)
 		bad, err := RunpathProblems(r.m.opt.FS, path, filepath.Join(r.m.root, buildsDir))
 		if err != nil {
@@ -80,10 +80,19 @@ func badRunpathEntry(entry, buildsRoot string) bool {
 
 // ---- the smoke test ----------------------------------------------------------------------
 
-// smoke runs `llama-server --version` and `--list-devices` of the new build (llama-router.md section
-// 4.10.3 step 3). A failure is LAI-LLM-019: the build is kept as <id>.tmp.failed and nothing is
+// smoke is the smoke test of the recipe (llama's unless the recipe brings its own, WhisperRecipe).
+// A failure is the recipe's UnusableCode: the build is kept as <id>.tmp.failed and nothing is
 // switched.
 func (r *run) smoke(ctx context.Context) (Smoke, *Error) {
+	if fn := r.m.opt.Recipe.smoke; fn != nil {
+		return fn(r, ctx)
+	}
+	return r.smokeLlama(ctx)
+}
+
+// smokeLlama runs `llama-server --version` and `--list-devices` of the new build (llama-router.md
+// section 4.10.3 step 3), then the completion (LAI-LLM-019).
+func (r *run) smokeLlama(ctx context.Context) (Smoke, *Error) {
 	server := filepath.Join(r.plan.OutDir, "bin", "llama-server")
 	fail := func(msg, cause string, kv ...any) (Smoke, *Error) {
 		return Smoke{}, newErr(CodeBuildUnusable, StageSmoke, msg, nil, append([]any{"cause", cause}, kv...)...)

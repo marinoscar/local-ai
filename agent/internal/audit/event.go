@@ -67,6 +67,8 @@ const (
 	ActionProfileSet       = "profile.set"
 	ActionCatalogRefresh   = "catalog.refresh"
 	ActionLlamaBuildSwitch = "llama.build.switch"
+	// ActionWhisperBuildSwitch is the switch of a whisper.cpp build (aictl rebuild-whisper).
+	ActionWhisperBuildSwitch = "whisper.build.switch"
 )
 
 // Actor is the "actor" object of an audit line.

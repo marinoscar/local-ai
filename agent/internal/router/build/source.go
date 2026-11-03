@@ -407,10 +407,32 @@ func (m *Manager) kitRoots() []string {
 	return m.opt.KitRoots()
 }
 
+// srcParent is the directory the source trees of the recipe live in: <root>/src, or the scratch
+// directory for a recipe with ScratchSource.
+func (m *Manager) srcParent() string {
+	if m.opt.Recipe.ScratchSource {
+		return m.opt.ScratchDir
+	}
+	return filepath.Join(m.root, srcDir)
+}
+
+// srcPath is the source tree of the commit sha.
+func (m *Manager) srcPath(sha string) string {
+	return sourcePath(m.opt.Recipe, m.root, m.opt.ScratchDir, sha)
+}
+
+// plan is the plan of a build of the recipe's program at the full commit sha.
+func (m *Manager) plan(in Inputs, sha string) Plan {
+	return newPlan(m.opt.Recipe, m.root, m.opt.ScratchDir, in, sha)
+}
+
 // existingTree returns the full sha of an already-extracted tree for ref: src/<ref> for a full sha,
 // the one tree whose name starts with ref for a short one. "" when there is none (or the short sha
 // is ambiguous).
 func (m *Manager) existingTree(ref string) string {
+	if m.opt.Recipe.ScratchSource {
+		return "" // a scratch tree is always extracted afresh from the kit's tarball
+	}
 	srcRoot := filepath.Join(m.root, srcDir)
 	if fullSHARe.MatchString(ref) {
 		if treeComplete(m.opt.FS, filepath.Join(srcRoot, ref)) {
@@ -443,7 +465,7 @@ func (m *Manager) existingTree(ref string) string {
 func (m *Manager) ensureSource(ctx context.Context, req Request, in Inputs) (string, *Error) {
 	fsys := m.opt.FS
 	ref := in.Commit
-	srcRoot := filepath.Join(m.root, srcDir)
+	srcRoot := m.srcParent()
 	fail := func(code, msg, cause string, err error) (string, *Error) {
 		return "", newErr(code, StageSource, msg, err, "cause", cause, "commit", ref)
 	}
@@ -452,13 +474,13 @@ func (m *Manager) ensureSource(ctx context.Context, req Request, in Inputs) (str
 	}
 
 	explicit := req.SourceDir != ""
-	if explicit && filepath.Clean(req.SourceDir) == filepath.Join(srcRoot, ref) && treeComplete(fsys, req.SourceDir) {
+	if explicit && !m.opt.Recipe.ScratchSource && filepath.Clean(req.SourceDir) == filepath.Join(srcRoot, ref) && treeComplete(fsys, req.SourceDir) {
 		explicit = false // the operator points at the canonical tree: use it as it is
 	}
 	if !explicit {
 		if sha := m.existingTree(ref); sha != "" {
-			m.touch(filepath.Join(srcRoot, sha))
-			m.log.Info("using the extracted llama.cpp source", "commit", sha)
+			m.touch(m.srcPath(sha))
+			m.log.Info("using the extracted "+m.opt.Recipe.Name+" source", "commit", sha)
 			return sha, nil
 		}
 	}
@@ -473,13 +495,13 @@ func (m *Manager) ensureSource(ctx context.Context, req Request, in Inputs) (str
 		if req.Offline && s.Network() {
 			continue
 		}
-		tmp := filepath.Join(srcRoot, ref+suffixTmp)
+		tmp := m.srcPath(ref) + suffixTmp
 		cleanup := func() { _ = fsys.RemoveAll(tmp); _ = fsys.RemoveAll(tmp + ".tar") }
 		cleanup()
 		if err := fsys.MkdirAll(tmp, 0o755); err != nil {
 			return fail(CodeBuildFailed, "The source folder could not be created.", "source_dir", err)
 		}
-		m.log.Info("fetching the llama.cpp source", "source", s.Name(), "commit", ref)
+		m.log.Info("fetching the "+m.opt.Recipe.Name+" source", "source", s.Name(), "commit", ref)
 		sha, err := s.Fetch(ctx, env, ref, tmp)
 		if err == nil {
 			switch {
@@ -505,7 +527,7 @@ func (m *Manager) ensureSource(ctx context.Context, req Request, in Inputs) (str
 			}
 			continue
 		}
-		final := filepath.Join(srcRoot, sha)
+		final := m.srcPath(sha)
 		if err := fsys.RemoveAll(final); err != nil {
 			cleanup()
 			return fail(CodeBuildFailed, "The old source tree could not be replaced.", "source_dir", err)

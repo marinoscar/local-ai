@@ -107,40 +107,38 @@ func BuildIDOf(sha, backend string) string {
 	return sha[:min(9, len(sha))] + "-" + backend
 }
 
-// NewPlan computes the plan of a build of sha (a full sha) under root.
+// NewPlan computes the plan of a build of llama.cpp sha (a full sha) under root.
 func NewPlan(root string, in Inputs, sha string) Plan {
+	return newPlan(LlamaRecipe, root, DefaultScratchDir, in, sha)
+}
+
+// newPlan computes the plan of a build of rec's program at sha under root. The source tree is
+// <root>/src/<sha>, or <scratch>/<name>-<sha> for a recipe with ScratchSource.
+func newPlan(rec Recipe, root, scratch string, in Inputs, sha string) Plan {
 	id := BuildIDOf(sha, in.Backend)
 	builds := filepath.Join(root, buildsDir)
 	p := Plan{
 		Commit: sha, BuildID: id, Backend: in.Backend, CudaArch: in.CudaArch, Jobs: in.Jobs,
-		SourceDir: filepath.Join(root, srcDir, sha),
+		SourceDir: sourcePath(rec, root, scratch, sha),
 		OutDir:    filepath.Join(builds, id+suffixTmp),
 		FinalDir:  filepath.Join(builds, id),
 		FailedDir: filepath.Join(builds, id+suffixFailed),
 	}
 	p.BuildDir = filepath.Join(p.OutDir, "build")
 
-	p.CMakeFlags = []string{
-		"-DCMAKE_BUILD_TYPE=Release",
-		"-DBUILD_SHARED_LIBS=OFF",
-		"-DLLAMA_CURL=OFF",
-		"-DLLAMA_BUILD_TESTS=OFF",
-		"-DLLAMA_BUILD_EXAMPLES=OFF",
-		"-DGGML_NATIVE=ON",
-	}
-	switch in.Backend {
-	case BackendCUDA:
-		p.CMakeFlags = append(p.CMakeFlags, "-DGGML_CUDA=ON", "-DCMAKE_CUDA_ARCHITECTURES="+in.CudaArch)
-	case BackendVulkan:
-		p.CMakeFlags = append(p.CMakeFlags, "-DGGML_VULKAN=ON")
-	}
+	p.CMakeFlags = rec.Flags(in)
 	p.ConfigureArgs = append([]string{"-S", p.SourceDir, "-B", p.BuildDir, "-G", "Ninja"}, p.CMakeFlags...)
-	p.BuildArgs = []string{
-		"--build", p.BuildDir, "--config", "Release",
-		"--target", "llama-server", "llama-cli", "llama-bench",
-		"-j", strconv.Itoa(in.Jobs),
-	}
+	p.BuildArgs = append(append([]string{"--build", p.BuildDir, "--config", "Release", "--target"}, rec.Targets...),
+		"-j", strconv.Itoa(in.Jobs))
 	return p
+}
+
+// sourcePath is where the source tree of sha lives for rec.
+func sourcePath(rec Recipe, root, scratch, sha string) string {
+	if rec.ScratchSource {
+		return filepath.Join(scratch, rec.Name+"-"+sha)
+	}
+	return filepath.Join(root, srcDir, sha)
 }
 
 // hint maps a line of a failed build's log to the apt package that fixes it.
