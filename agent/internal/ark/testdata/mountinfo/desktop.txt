@@ -1,0 +1,14 @@
+22 29 0:21 / /sys rw,nosuid,nodev,noexec,relatime shared:7 - sysfs sysfs rw
+23 29 0:22 / /proc rw,nosuid,nodev,noexec,relatime shared:12 - proc proc rw
+24 29 0:5 / /dev rw,nosuid,relatime shared:2 - devtmpfs udev rw,size=8123456k,nr_inodes=2030864,mode=755
+25 24 0:23 / /dev/pts rw,nosuid,noexec,relatime shared:3 - devpts devpts rw,gid=5,mode=620,ptmxmode=000
+26 29 0:24 / /run rw,nosuid,nodev,noexec,relatime shared:5 - tmpfs tmpfs rw,size=1634212k,mode=755
+29 1 259:2 / / rw,relatime shared:1 - ext4 /dev/nvme0n1p2 rw,errors=remount-ro
+31 29 0:27 / /tmp rw,nosuid,nodev shared:9 - tmpfs tmpfs rw
+42 29 259:1 / /boot/efi rw,relatime shared:40 - vfat /dev/nvme0n1p1 rw,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro
+97 29 7:3 / /snap/core22/1234 ro,nodev,relatime shared:60 - squashfs /dev/loop3 ro,errors=continue
+112 26 0:50 / /run/user/1000 rw,nosuid,nodev,relatime shared:72 - tmpfs tmpfs rw,size=1634208k,nr_inodes=408552,mode=700,uid=1000,gid=1000
+113 112 0:51 / /run/user/1000/gvfs rw,nosuid,nodev,relatime shared:73 - fuse.gvfsd-fuse gvfsd-fuse rw,user_id=1000,group_id=1000
+120 29 8:17 / /media/operator/AI-ARK rw,nosuid,nodev,relatime shared:80 - ext4 /dev/sdb1 rw,errors=remount-ro
+121 29 8:33 / /media/operator/AI-ARK1 rw,nosuid,nodev,relatime shared:85 - exfat /dev/sdc1 rw,fmask=0022,dmask=0022,iocharset=utf8,errors=remount-ro
+130 29 0:60 / /var/lib/docker/overlay2/abc/merged rw,relatime - overlay overlay rw,lowerdir=/l1:/l2,upperdir=/u,workdir=/w

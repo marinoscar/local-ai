@@ -1,0 +1,7 @@
+201 29 8:17 / /media/operator/AI\040ARK\011drive rw,nosuid,nodev,relatime shared:80 - ext4 /dev/sdb1 rw
+202 29 8:33 / /mnt/back\134slash rw,relatime - ext4 /dev/sdc1 rw
+203 29 8:49 / /mnt/line\012feed rw,relatime - ext4 /dev/sdd1 rw
+204 29 8:65 / /mnt/not\04octal rw,relatime - ext4 /dev/sde1 rw
+205 29 8:81 / /mnt/utf8\303\251 rw,relatime - ext4 /dev/sdf1 rw
+206 29 8:97 /sub\040dir /mnt/bind\040mount rw,relatime - ext4 /dev/sdg1 rw
+207 29 8:113 / /mnt/big\477 rw,relatime - ext4 /dev/sdh1 rw

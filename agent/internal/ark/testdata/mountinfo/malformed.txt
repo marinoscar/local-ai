@@ -1,0 +1,8 @@
+601 29 8:17 / /mnt/good rw,relatime - ext4 /dev/sdb1 rw
+
+this is not a mountinfo line
+602 29 8:33 / /mnt/no-separator rw,relatime ext4 /dev/sdc1 rw
+abc 29 8:49 / /mnt/bad-id rw,relatime - ext4 /dev/sdd1 rw
+603 29 8x49 / /mnt/bad-devnum rw,relatime - ext4 /dev/sdd1 rw
+604 29 8:65 / /mnt/short rw,relatime - ext4
+605 29 8:81 / /mnt/also-good rw,relatime - exfat /dev/sdf1 rw
