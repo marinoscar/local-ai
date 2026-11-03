@@ -15,6 +15,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/events"
+	"github.com/marinoscar/local-ai/agent/internal/kit"
 	"github.com/marinoscar/local-ai/agent/internal/sync/item"
 	"github.com/marinoscar/local-ai/agent/internal/sync/journal"
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
@@ -46,8 +47,8 @@ type Deps struct {
 	Catalog CatalogRefresher
 	// Resolvers are the source resolvers; a type with none falls back to what the catalog pins.
 	Resolvers *ItemResolvers
-	// ItemRef places an item (ark.ItemDir); the default handles every kind but kit, whose
-	// subdirectory the kit issue provides.
+	// ItemRef places an item (ark.ItemDir); the default handles every kind, kit items through
+	// internal/kit's layout.
 	ItemRef func(plan.CatalogItem) (ark.ItemRef, error)
 	// Retention runs at the end of a run; Unknown lists a root's unexplained staging for it.
 	Retention Retainer
@@ -138,12 +139,14 @@ func New(d Deps) (*Engine, error) {
 	return e, nil
 }
 
-// DefaultItemRef places a catalog item for ark.ItemDir. Kit items need the subdirectory of
-// rebuild-kit.md section Layout, which only the kit issue knows: without Deps.ItemRef they are an error
-// (the item is then skipped as unresolved).
+// DefaultItemRef places a catalog item for ark.ItemDir: a model by its engine, a content item by its
+// kind, and a kit item by the layout of rebuild-kit.md (internal/kit, which names its subdirectory).
 func DefaultItemRef(it plan.CatalogItem) (ark.ItemRef, error) {
 	if it.Kind == "kit" {
-		return ark.ItemRef{}, fmt.Errorf("run: kit item %s needs Deps.ItemRef to name its subdirectory", it.ID)
+		if it.Content == nil {
+			return ark.ItemRef{}, fmt.Errorf("run: kit item %s has no catalog entry", it.ID)
+		}
+		return kit.ItemRef(*it.Content)
 	}
 	return ark.ItemRef{Kind: it.Kind, Engine: it.Engine, ID: it.ID}, nil
 }
