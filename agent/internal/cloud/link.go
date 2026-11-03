@@ -947,6 +947,8 @@ type Session struct {
 	Features       []string
 	Allow          []string
 	Concurrency    int
+	// ClaimPollSeconds is cloud.poll.claim_seconds: the pause after an empty plain poll.
+	ClaimPollSeconds int
 }
 
 // Session returns the claim loop's view; ok is false unless the node is registered and the link is
@@ -961,6 +963,7 @@ func (l *Link) Session() (Session, bool) {
 	s := Session{
 		Client: l.clientLocked(), ServerNodeID: l.st.rec.ServerNodeID, Plane: PlaneLocalai, ClaimWaitMaxMs: 25000,
 		Features: append([]string(nil), l.st.features...), Allow: append([]string(nil), cfg.Cloud.Allow...), Concurrency: cfg.Cloud.Concurrency,
+		ClaimPollSeconds: cfg.Cloud.Poll.ClaimSeconds,
 	}
 	if l.st.haveHS {
 		s.Plane, s.ClaimWaitMaxMs = l.st.hs.CommandPlane, l.st.hs.ClaimWaitMaxMs
