@@ -765,10 +765,15 @@ type watch struct {
 	stopCh   chan struct{}
 	stopOnce sync.Once
 	done     chan struct{}
+	// gate, when not nil, runs once before the loop looks at anything. Tests use it to hold the
+	// goroutine back; it is nil in production.
+	gate func()
 }
 
-func startWatch(ch <-chan events.Event) *watch {
-	w := &watch{stopCh: make(chan struct{}), done: make(chan struct{})}
+func startWatch(ch <-chan events.Event) *watch { return startWatchGated(ch, nil) }
+
+func startWatchGated(ch <-chan events.Event, gate func()) *watch {
+	w := &watch{stopCh: make(chan struct{}), done: make(chan struct{}), gate: gate}
 	go w.loop(ch)
 	return w
 }
@@ -787,6 +792,9 @@ func (w *watch) record(ev events.Event) {
 
 func (w *watch) loop(ch <-chan events.Event) {
 	defer close(w.done)
+	if w.gate != nil {
+		w.gate()
+	}
 	for {
 		select {
 		case ev, ok := <-ch:
