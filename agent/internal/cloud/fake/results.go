@@ -27,11 +27,9 @@ var (
 type spec struct {
 	kind     string // object, string, int, bool, array, enum, literal-true
 	fields   map[string]spec
-	optional map[string]bool
 	re       *regexp.Regexp
 	maxLen   int
-	min, max int64
-	hasMax   bool
+	min      int64
 	enum     []string
 	elem     *spec
 	maxItems int

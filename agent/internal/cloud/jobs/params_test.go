@@ -186,7 +186,7 @@ func TestDecodeModelDelete(t *testing.T) {
 func TestDecodeArkSyncAndVerify(t *testing.T) {
 	runDecodeCases(t, "ark.sync", []decodeCase{
 		{name: "empty", params: `{}`, want: ArkSyncParams{}},
-		{name: "everything", params: fmt.Sprintf(`{"roots":["internal"],"items":["wikipedia-en-maxi"],"dry_run":true}`),
+		{name: "everything", params: `{"roots":["internal"],"items":["wikipedia-en-maxi"],"dry_run":true}`,
 			want: ArkSyncParams{Roots: []string{"internal"}, Items: []string{"wikipedia-en-maxi"}, DryRun: true}},
 		{name: "dry run wrong type", params: `{"dry_run":1}`, path: "dry_run", why: "true or false"},
 		{name: "empty items", params: `{"items":[]}`, path: "items", why: "at least 1"},

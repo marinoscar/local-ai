@@ -260,7 +260,7 @@ func (d ServicesDeps) act(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	WriteJSON(w, r, http.StatusOK, serviceActionResponse{Name: res.Name, Active: res.Active, RestoredModels: res.RestoredModels, OpID: res.OpID})
+	WriteJSON(w, r, http.StatusOK, serviceActionResponse(res))
 	return nil
 }
 

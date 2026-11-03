@@ -31,12 +31,6 @@ func (a *recAuditSink) Write(ev audit.Event) error {
 	return nil
 }
 
-func (a *recAuditSink) events() []audit.Event {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return append([]audit.Event(nil), a.evs...)
-}
-
 // wait blocks until n lines were written, and returns them.
 func (a *recAuditSink) wait(t *testing.T, ctx context.Context, n int) []audit.Event {
 	t.Helper()

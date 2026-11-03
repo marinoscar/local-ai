@@ -27,7 +27,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
@@ -161,8 +160,7 @@ type Deps struct {
 	AgentUpdate AgentUpdater
 
 	// Clock times the wait for modelOpsMu; nil is the wall clock.
-	Clock  cloud.Clock
-	Logger *slog.Logger
+	Clock cloud.Clock
 }
 
 func (d Deps) clock() cloud.Clock {
@@ -170,13 +168,6 @@ func (d Deps) clock() cloud.Clock {
 		return cloud.RealClock{}
 	}
 	return d.Clock
-}
-
-func (d Deps) logger() *slog.Logger {
-	if d.Logger == nil {
-		return slog.Default().With("component", "cloud")
-	}
-	return d.Logger.With("component", "cloud")
 }
 
 // Handlers returns the executors the dependencies allow, ready for cloud.NewRegistry. The types, in

@@ -45,8 +45,6 @@ const (
 	goingOfflineCall = 3 * time.Second
 	// recoverCall is the timeout of reporting a command an earlier process left behind.
 	recoverCall = 5 * time.Second
-	// maxJobIDLen bounds an id the cloud sends; it is put into a URL path.
-	maxJobIDLen = 128
 )
 
 var jobIDRE = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)

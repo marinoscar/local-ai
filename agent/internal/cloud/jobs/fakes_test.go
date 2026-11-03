@@ -63,7 +63,7 @@ func (f *fakes) deps() Deps {
 	return Deps{
 		Router: f.router, Models: f.models, Ark: f.ark, Modes: f.modes, Services: f.services, Logs: f.logs,
 		Catalog: f.catalog, Link: f.link, Status: f.status, State: f.state, Hardware: f.hw,
-		Clock: fakeClock{f.clock}, Logger: discardLogger(),
+		Clock: fakeClock{f.clock},
 	}
 }
 
@@ -308,15 +308,13 @@ func (c *fakeCatalog) RefreshCatalog(_ context.Context, actor audit.Actor) (stat
 }
 
 type fakeLink struct {
-	mu      sync.Mutex
-	pushes  int
-	keys    int
-	res     cloud.StateRefresh
-	err     error
-	keyErr  error
-	onPush  func()
-	keyHook func()
-	order   *[]string
+	mu     sync.Mutex
+	pushes int
+	keys   int
+	res    cloud.StateRefresh
+	err    error
+	keyErr error
+	order  *[]string
 }
 
 func (l *fakeLink) PushNow(context.Context) (cloud.StateRefresh, error) {
