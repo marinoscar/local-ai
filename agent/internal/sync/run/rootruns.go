@@ -61,7 +61,9 @@ func (e *Engine) noteRootRunsLocked(st RunStatus, rootIDs []string) {
 	for _, id := range rootIDs {
 		rr := e.rootRuns[id]
 		rr.RunID, rr.Trigger, rr.State, rr.FinishedAt = st.RunID, st.Trigger, st.State, *st.FinishedAt
-		if st.State == StateDone {
+		// A verify run checks what is stored; it does not bring the root up to date with the catalog, so
+		// it does not move the clock the age rules of READY run on (ark-sync.md section 4.12.3).
+		if st.State == StateDone && st.Trigger != TriggerVerify {
 			rr.LastDone = *st.FinishedAt
 		}
 		e.rootRuns[id] = rr
