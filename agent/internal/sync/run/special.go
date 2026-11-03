@@ -67,6 +67,12 @@ func (rs *runState) beginChecks(items int, bytes int64) {
 func (rs *runState) recordCheck(r ItemResult, bytes int64) {
 	isVerify := rs.trigger == TriggerVerify
 	if !isVerify && (r.Result == "verified" || r.Result == "skipped") {
+		if r.Result == "verified" && r.Root != "" {
+			// Not listed, but its last_reverified_at moved: READY of that root is regenerated at the end.
+			rs.mu.Lock()
+			rs.touched[r.Root] = true
+			rs.mu.Unlock()
+		}
 		return
 	}
 	rs.mu.Lock()
