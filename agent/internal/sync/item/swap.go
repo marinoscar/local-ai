@@ -87,7 +87,30 @@ func pathsFromPlan(root ark.Root, itemID, version string, plan journal.SwapPlan)
 			}
 		}
 	}
+	if p.T == "" {
+		// no old manifest and no displaced tree: the trash directory is still named by any file that
+		// moves into it (an old SHA256SUMS or a companion file that is replaced)
+		for _, pair := range plan.Trash {
+			if t := trashDirOf(root.Path, itemID, pair[1]); t != "" {
+				p.T = t
+				break
+			}
+		}
+	}
 	return p, nil
+}
+
+// trashDirOf returns <root>/.trash/<item>/<label> when dst is inside it, "" otherwise.
+func trashDirOf(rootPath, itemID, dst string) string {
+	rel, err := filepath.Rel(rootPath, dst)
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) < 4 || parts[0] != ".trash" || parts[1] != itemID {
+		return ""
+	}
+	return filepath.Join(rootPath, ".trash", itemID, parts[2])
 }
 
 // swapInput is what planning a swap needs.
@@ -98,6 +121,11 @@ type swapInput struct {
 	version string
 	// newM is the manifest the swap commits.
 	newM manifest.Manifest
+	// inPlace: the item directory was updated where it lives, so nothing of its content moves: only its
+	// SHA256SUMS and the manifest are replaced.
+	inPlace bool
+	// companions are the files installed beside the item, outside its directory.
+	companions []companionMove
 }
 
 // planSwap builds the swap plan for newM against what is on disk now. It only reads.
@@ -132,7 +160,26 @@ func (m *Machine) planSwap(in swapInput) (swapPaths, *manifest.Manifest, error) 
 			dirExists = true
 		}
 	}
-	needTrash := manifestExists || dirExists
+	if in.inPlace && !dirExists {
+		return swapPaths{}, nil, fmt.Errorf("item: %s was updated in place and is not there", d)
+	}
+	// Companion files: one that is already there with the same bytes stays (the tarball of a commit is
+	// reproducible); one that is there with other bytes (damaged, or an older build) goes to the trash
+	// before the new one moves in. Nothing is overwritten.
+	var moves, replaced []companionMove
+	for _, c := range in.companions {
+		if info, err := fsys.Lstat(c.dst); err == nil {
+			if info.Mode().IsRegular() {
+				if sum, _, herr := hashFile(context.Background(), fsys, c.dst, nil); herr == nil && sum == c.sha {
+					continue
+				}
+			}
+			replaced = append(replaced, c)
+		}
+		moves = append(moves, c)
+	}
+	oldSums := in.inPlace && exists(fsys, filepath.Join(d, manifest.SumsName))
+	needTrash := manifestExists || (dirExists && !in.inPlace) || oldSums || len(replaced) > 0
 	if needTrash {
 		label := "unversioned"
 		if oldM != nil {
@@ -155,7 +202,15 @@ func (m *Machine) planSwap(in swapInput) (swapPaths, *manifest.Manifest, error) 
 			}
 		}
 	}
-	if in.newM.IsDir() {
+	if oldSums {
+		p.Plan.Trash = append(p.Plan.Trash, [2]string{dst(manifest.SumsName), trash(manifest.SumsName)})
+	}
+	for _, c := range replaced {
+		p.Plan.Trash = append(p.Plan.Trash, [2]string{c.dst, trash(c.rel)})
+	}
+	if in.inPlace {
+		p.Plan.Renames = append(p.Plan.Renames, [2]string{src(manifest.SumsName), dst(manifest.SumsName)})
+	} else if in.newM.IsDir() {
 		tree := filepath.Join(p.S, TreeDir)
 		if dirExists {
 			p.Plan.Exchange = append(p.Plan.Exchange, [2]string{tree, d})
@@ -167,6 +222,9 @@ func (m *Machine) planSwap(in swapInput) (swapPaths, *manifest.Manifest, error) 
 		for _, f := range in.newM.Files {
 			p.Plan.Renames = append(p.Plan.Renames, [2]string{src(f.Path), dst(f.Path)})
 		}
+	}
+	for _, c := range moves {
+		p.Plan.Renames = append(p.Plan.Renames, [2]string{c.src, c.dst})
 	}
 	p.Plan.Renames = append(p.Plan.Renames, [2]string{src(PendingManifest), manifest.Path(d)})
 	return p, oldM, nil
@@ -348,6 +406,20 @@ func isUnsupportedSync(err error) bool {
 // A directory item needs its SHA256SUMS.
 func (m *Machine) postCheck(p swapPaths, newM manifest.Manifest, staged map[string]os.FileInfo) error {
 	fsys := m.d.FS
+	// Companion files: each is where the plan put it, a regular file and, when the staged file was seen
+	// in this process, the same inode.
+	for _, dst := range companionDests(p) {
+		info, err := fsys.Stat(dst)
+		switch {
+		case err != nil:
+			return fmt.Errorf("%s is missing after the swap: %w", filepath.Base(dst), err)
+		case !info.Mode().IsRegular():
+			return fmt.Errorf("%s is not a regular file after the swap", filepath.Base(dst))
+		}
+		if before, ok := staged[dst]; ok && !os.SameFile(before, info) {
+			return fmt.Errorf("%s is not the file that was staged (another inode)", filepath.Base(dst))
+		}
+	}
 	if newM.IsDir() {
 		info, err := fsys.Stat(filepath.Join(p.D, manifest.SumsName))
 		if err != nil || !info.Mode().IsRegular() {
