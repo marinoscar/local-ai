@@ -160,6 +160,11 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 // the downloads do. The caller sets its own redirect policy on its own http.Client.
 func (h *HTTPClient) Transport() http.RoundTripper { return h.c.Transport }
 
+// Client returns the underlying *http.Client: the same transport, TLS rules and https-only redirect rule
+// as the downloads, for the metadata requests of the resolvers (a directory listing, a HEAD). The caller
+// must not change it; a request that must not follow redirects clones it first.
+func (h *HTTPClient) Client() *http.Client { return h.c }
+
 // Source returns the Source of one URL. With useAuth the request carries the token, but only when
 // the URL is https and its host is an auth host.
 func (h *HTTPClient) Source(rawURL string, useAuth bool) Source {

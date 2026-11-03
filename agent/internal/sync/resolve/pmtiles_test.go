@@ -259,9 +259,6 @@ func TestPMTilesMissingToolIsLAISYN061(t *testing.T) {
 			}
 		}
 		pm.Tool = tool
-		if _, err := pm.Resolve(context.Background(), pmCatalog(p.pattern())); CodeOf(err) != doctor.SYN061 {
-			t.Errorf("%s (planner): %v", name, err)
-		}
 		_, err := pm.ResolveItem(context.Background(), pmCatalog(p.pattern()), plan.ItemPlan{})
 		if re := asResolveErr(t, err); re.Code != doctor.SYN061 || !re.Permanent {
 			t.Errorf("%s (engine): %+v", name, re)
@@ -269,6 +266,13 @@ func TestPMTilesMissingToolIsLAISYN061(t *testing.T) {
 	}
 	if n := len(p.requests()); n != 0 {
 		t.Fatalf("%d requests with no tool installed", n)
+	}
+	// The planner still lists the item (the date needs no tool, the size is the catalog's), so the run
+	// fails it with the code that says what to do rather than leaving it unresolved.
+	pm.Tool = filepath.Join(t.TempDir(), "no-such-tool")
+	got, err := pm.Resolve(context.Background(), pmCatalog(p.pattern()))
+	if err != nil || got.Version != "20261102" || got.SizeBytes != 123456789 {
+		t.Fatalf("planner: %+v %v", got, err)
 	}
 }
 

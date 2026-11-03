@@ -300,8 +300,10 @@ func (p *PMTiles) dryRun(ctx context.Context, bin string, e pmtilesExpect) (int6
 }
 
 // Resolve implements plan.Resolver: the newest build date as the version, and the size the dry run
-// estimates (the catalog's expected_size_bytes when the tool does not say). A missing tool is LAI-SYN-061
-// and leaves the item unresolved.
+// estimates (the catalog's expected_size_bytes when the tool does not say). A missing tool does not
+// leave the item unresolved: the date is found without it and the size is the catalog's, so the plan lists
+// the item and the run fails it with LAI-SYN-061 (ResolveItem), which says what to do, while the other
+// items go on.
 func (p *PMTiles) Resolve(ctx context.Context, it plan.CatalogItem) (plan.Resolved, error) {
 	s, err := p.source(it)
 	if err != nil {
@@ -310,17 +312,15 @@ func (p *PMTiles) Resolve(ctx context.Context, it plan.CatalogItem) (plan.Resolv
 	if err := p.Env.requireOnline(); err != nil {
 		return plan.Resolved{}, err
 	}
-	bin, err := p.checkTool()
-	if err != nil {
-		return plan.Resolved{}, err
-	}
 	date, err := p.newest(ctx, s)
 	if err != nil {
 		return plan.Resolved{}, err
 	}
-	size, ok := p.dryRun(ctx, bin, s.expect(date))
-	if !ok {
-		size = s.expected
+	size := s.expected
+	if bin, terr := p.checkTool(); terr == nil {
+		if n, ok := p.dryRun(ctx, bin, s.expect(date)); ok {
+			size = n
+		}
 	}
 	return plan.Resolved{Version: date, SortKey: date, SizeBytes: size}, nil
 }
