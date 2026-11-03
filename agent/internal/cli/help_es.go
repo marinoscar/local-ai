@@ -76,7 +76,7 @@ var helpES = map[string]string{
 
 // helpWords are the fixed words of the help screens, in English and Spanish.
 type helpWords struct {
-	intro, usage, commands, run, marksLegend, globalFlags, details, marks, timeout, flags, subcommands, usageHint string
+	intro, usage, commands, run, marksLegend, globalFlags, marks, timeout, flags, subcommands, usageHint string
 }
 
 var helpEN = helpWords{
