@@ -1,0 +1,4 @@
+== stdout ==
+✓ Firma correcta (clave de publicación de Local AI). 4 archivos comprobados:
+  todos coinciden.
+== exit 0 ==

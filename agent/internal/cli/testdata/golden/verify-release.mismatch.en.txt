@@ -1,0 +1,7 @@
+== stdout ==
+== stderr ==
+✗ A downloaded update failed its signature or checksum check and was discarded.
+  The signature is right, but these files do not match their checksum or are
+  missing: ai-desktop.deb.  [LAI-AGT-010]
+  → Fix: Do not install it by hand. Report it to the maintainer.
+== exit 1 ==
