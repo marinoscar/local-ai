@@ -269,7 +269,7 @@ The commit is `node.yaml: llama.commit` if present, else the pinned commit in th
 Failure: `LAI-INS-032` with the CMake log path.
 
 #### P8. Migration
-Runs if `llama-qwen.service` exists (or `--migrate`). The installer only calls `aiagent migrate` (through `aiagent setup migrate`, which adds the installer's logging) and shows its output; all rules (model import into `/srv/localai/models/<id>/` by hash match, key reuse from `/etc/llama-qwen/api-key`, unit swap, `llama-qwen` disable + mask, symlinking the legacy key path, rollback) are in [llama-router.md](llama-router.md) §4.9. Port 8080, the key and the public URL stay the same. If the migration fails, its rollback restores `llama-qwen.service` running as before and the installer stops with `LAI-INS-033`.
+Runs if `llama-qwen.service` exists (or `--migrate`). The installer only calls `aiagent migrate --yes` (through `aiagent setup migrate`, which adds the installer's logging; the installer has already asked the person) and shows its output; all rules (model import into `/srv/localai/models/<id>/` by hash match, key reuse from `/etc/llama-qwen/api-key`, unit swap, `llama-qwen` disable + mask, symlinking the legacy key path, rollback) are in [llama-router.md](llama-router.md) §4.9. Port 8080, the key and the public URL stay the same. If the migration fails, its rollback restores `llama-qwen.service` running as before and the installer stops with `LAI-INS-033`.
 
 #### P9. Agent, node.yaml, units
 1. `aiagent setup node-yaml --node-id … --profile … --backend … --serve-pattern … [--inventory …]`: writes `/etc/localai/node.yaml` (root:localai 0640) if missing; on re-runs only fills missing keys.

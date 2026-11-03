@@ -410,7 +410,7 @@ Today's nodes run a hand-made `llama-qwen.service`. The migration swaps it for `
     sudo bash install-node.sh --node-id ai-n3
     ```
 
-    To look at the migration plan alone first: `sudo aiagent migrate llama-qwen --dry-run`.
+    To look at the migration plan alone first: `sudo aiagent migrate llama-qwen --dry-run`. It lists every step, changes nothing and answers with exit code 0 only if every step would pass. Run by hand (without `--dry-run`) the migration shows the plan and asks you to type `yes`. While it runs it stops `localai-agent.service` and starts it again at the end.
     - **What you should see:** the migration report: downtime (for example 14 s), model id and old alias, the key fingerprint, serve listeners **unchanged**, and **clients to update: none**.
     - **If it doesn't work:**
       - `LAI-LLM-017` "settings differ": the old unit's flags differ from the catalog. Read the diff. If the catalog's values are right, re-run the migration with `sudo aiagent migrate llama-qwen --accept-catalog-flags`; otherwise fix the catalog first. This is expected on **ai-n2**, whose flags were never written down.
@@ -442,8 +442,8 @@ Today's nodes run a hand-made `llama-qwen.service`. The migration swaps it for `
     sudo aiagent migrate llama-qwen --rollback
     ```
 
-    Add `--restore-files` to also move the model files back to their old folders.
-    - **What you should see:** `llama-qwen.service` running again, `401` without and `200` with the key on `http://127.0.0.1:8080/v1/models`, Tailscale Serve unchanged. The agent keeps running and reports `LAI-LLM-016` (old service active) until you migrate again.
+    Add `--restore-files` to also move the model files back to their old folders (only the files that were on the same disk before; the others stay and their links keep working). `sudo aiagent migrate llama-qwen --rollback --dry-run` lists the steps first, and the command asks you to type `yes`.
+    - **What you should see:** `llama-qwen.service` running again, `401` without and `200` with the key on `http://127.0.0.1:8080/v1/models`, Tailscale Serve unchanged. The agent is stopped while the rollback runs and started again at the end; it then reports `LAI-LLM-016` (old service active) until you migrate again. If the rollback is cut short, run the same command again: it finishes.
 44. **Remove Local AI completely and restore the old service:**
 
     ```

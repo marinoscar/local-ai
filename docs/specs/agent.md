@@ -61,7 +61,7 @@ One static Go binary, `CGO_ENABLED=0`, `linux/amd64` and `linux/arm64`, installe
 | `aiagent` | `serve` | Run the daemon (what `localai-agent.service` executes) |
 | `aiagent` | `ctl` | CLI with `os.Args[2:]` (fallback when the symlink is missing, e.g. during recovery) |
 | `aiagent` | `version [--json]` | Print `aiagent <semver> (<git-sha>, <goos>/<goarch>, built <rfc3339>)`. `--json` prints `{"version","commit","os","arch","built_at"}`. Used by self-update verification |
-| `aiagent` | `migrate llama-qwen [--dry-run] [--rollback] [--accept-catalog-flags] [--restore-files]` | Legacy migration ([llama-router.md](llama-router.md) §4.9). Root only. Run by the installer or by hand |
+| `aiagent` | `migrate llama-qwen [--dry-run] [--rollback] [--accept-catalog-flags] [--restore-files] [--yes]` | Legacy migration ([llama-router.md](llama-router.md) §4.9). Root only. Run by the installer (with `--yes`) or by hand (it asks for `yes`) |
 | `aiagent` | `update-rollback-check` | Internal; run by the transient rollback timer (§4.10) |
 | `aiagent` | none / unknown | Print usage, exit 2 |
 
