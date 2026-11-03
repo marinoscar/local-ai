@@ -185,6 +185,10 @@ func kitFindingText(l Lang, f kit.Finding) string {
 			"La lista de versiones fijadas del kit (catalog/pins.json) está dañada o es más nueva que este programa.")
 	case kit.KindBuildCheck:
 		return f.Detail
+	case kit.KindUnverifiedRepos:
+		return fmt.Sprintf(pick(l,
+			"The offline packages for %s include packages from vendor repositories whose signature was not checked: %s.",
+			"Los paquetes sin conexión de %s incluyen paquetes de repositorios de proveedores cuya firma no se comprobó: %s."), f.Item, strings.Join(f.Names, ", "))
 	}
 	return f.Detail
 }

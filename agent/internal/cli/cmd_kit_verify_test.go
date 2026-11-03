@@ -11,10 +11,12 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/cli/local"
+	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/execx"
 	"github.com/marinoscar/local-ai/agent/internal/kit"
 	"github.com/marinoscar/local-ai/agent/internal/kit/kittest"
+	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 )
 
 // Tests of `aictl kit verify` and `aictl kit status` (KIT-03). The kit is built on disk by package
@@ -230,6 +232,56 @@ func TestKitVerifyExitCodes(t *testing.T) {
 				t.Fatalf("exit %d overall %s\n%s", r.code, d.Overall, r.out)
 			}
 		})
+	}
+}
+
+// An apt kit whose manifest names repositories taken without a checked vendor signature
+// (source.unverified_repos, LAI-SYN-063) is never "all good": `kit verify` and `kit status` show a yellow
+// warning with the code, in English and Spanish, and name the repositories.
+func TestKitVerifyShowsAKitBuiltFromUnverifiedRepositories(t *testing.T) {
+	f := newVerifyFix(t, kittest.AiN3())
+	dir := f.k.Abs("debs/resolute-amd64")
+	m, err := manifest.Read(config.OSFS{}, manifest.Path(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Source, err = m.Source.With(manifest.SourceUnverifiedRepos, []string{"nvidia-cuda", "tailscale"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := manifest.Write(config.OSFS{}, manifest.Path(dir), m); err != nil {
+		t.Fatal(err)
+	}
+
+	d, r := f.doc(t, "kit", "verify", "--full")
+	if r.code != ExitWarnings || d.Overall != "yellow" {
+		t.Fatalf("exit %d overall %s\n%s", r.code, d.Overall, r.out)
+	}
+	if st, code := partOf(d, "debs"); st != "warning" || code != doctor.SYN063 {
+		t.Errorf("debs part = %s %s", st, code)
+	}
+	if len(d.Roots[0].Findings) != 1 || d.Roots[0].Findings[0].Code != doctor.SYN063 || d.Roots[0].Findings[0].Kind != kit.KindUnverifiedRepos {
+		t.Errorf("findings = %+v", d.Roots[0].Findings)
+	}
+	en := f.run(t, "kit", "verify", "--full")
+	out := unwrap(en.out)
+	for _, want := range []string{doctor.SYN063, "kit-debs-resolute-amd64", "signature was not checked", "nvidia-cuda, tailscale", "Pin the repository's key and set sync.apt_unverified_repos to refuse"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("English output lacks %q:\n%s", want, out)
+		}
+	}
+	es := unwrap(f.run(t, "--lang", "es", "kit", "verify", "--full").out)
+	for _, want := range []string{doctor.SYN063, "firma no se comprobó", "nvidia-cuda, tailscale", "sync.apt_unverified_repos en refuse"} {
+		if !strings.Contains(es, want) {
+			t.Errorf("Spanish output lacks %q:\n%s", want, es)
+		}
+	}
+	// kit status reads the same report.
+	if st := unwrap(f.run(t, "kit", "status").out); !strings.Contains(st, doctor.SYN063) || strings.Contains(st, "Everything is present") {
+		t.Errorf("kit status does not show the warning:\n%s", st)
+	}
+	// Checking another part leaves the warning out: it is about the debs.
+	if d, _ := f.doc(t, "kit", "verify", "--part", "tools", "--full"); len(d.Roots[0].Findings) != 0 {
+		t.Errorf("--part tools findings = %+v", d.Roots[0].Findings)
 	}
 }
 

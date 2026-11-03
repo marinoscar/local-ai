@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/execx"
 	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 	"github.com/marinoscar/local-ai/agent/internal/update"
@@ -170,6 +171,12 @@ func (r *run) tryItem(dir string) {
 	}
 	if reason == "" {
 		it.valid = true
+		// A kit built from apt repositories whose vendor signature was not checked must not look fully
+		// verified: a yellow finding READY does not read (it reads the manifest itself), so the report is
+		// yellow and `aictl kit verify` and `kit status` say so.
+		if repos := it.m.Source.StringList(manifest.SourceUnverifiedRepos); len(repos) > 0 && r.inScope(it.part) {
+			r.add(Finding{Code: doctor.SYN063, Kind: KindUnverifiedRepos, Part: it.part, Item: it.id, Names: repos, Colour: Yellow, Optional: true})
+		}
 		return
 	}
 	it.status = StatusDamaged

@@ -108,6 +108,9 @@ const (
 	KindBuildCheck      = "build_check"
 	KindPinsDamaged     = "pins_damaged"
 	KindPrebuiltMissing = "prebuilt_missing"
+	// KindUnverifiedRepos: an apt item was built from vendor repositories whose signature was not
+	// checked (LAI-SYN-063; sync.apt_unverified_repos: allow). Names are the repositories.
+	KindUnverifiedRepos = "unverified_repos"
 )
 
 // Kinds of Note (information with no doctor code).
