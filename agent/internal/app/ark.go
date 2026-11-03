@@ -113,6 +113,8 @@ type arkStack struct {
 	// drives is the AI-ARK drive detector (ark_drives.go); watchDrives says whether it is started.
 	drives      *ark.Manager
 	watchDrives bool
+	// driveActions are eject, init, mount and set-profile over the detector (ark_drive_actions.go).
+	driveActions *ark.DriveActions
 }
 
 // arkIndex builds the best-copy index. It cannot fail: an index with no roots is empty, and the

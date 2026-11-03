@@ -42,6 +42,7 @@ func (s *arkStack) buildDrives() {
 		return
 	}
 	s.drives = m
+	s.buildDriveActions(opts)
 	// An unprivileged run is a test or a development machine: it must not read the real mount table
 	// and run blkid unless a test said where the fakes are.
 	s.watchDrives = !env.Unprivileged || env.ArkDrives != nil
@@ -54,6 +55,9 @@ func (s *arkStack) startDrives() {
 		return
 	}
 	s.d.startWorker(s.drives)
+	if s.driveActions != nil {
+		s.d.startWorker(driveActionsWorker{a: s.driveActions, log: s.d.log.With("component", "ark")})
+	}
 }
 
 // driveReady gives GET /ark/drives the readiness summary of a root.

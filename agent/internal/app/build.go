@@ -518,6 +518,15 @@ func (d *Daemon) buildServer() error {
 			}
 			return api.RegisterArkDrives(reg, api.ArkDrivesDeps{Drives: d.ark.drivesView()})
 		}},
+		{"ark drive actions", func() error {
+			deps := api.ArkDriveDeps{Audit: d.audit, Logger: d.log}
+			if d.ark == nil || d.ark.driveActions == nil { // no detector, nothing to act on: 503
+				deps.Ops = noDriveOps{}
+			} else {
+				deps.Ops = d.ark.driveOps()
+			}
+			return api.RegisterArkDrive(reg, deps)
+		}},
 		{"ark sync", func() error {
 			if d.ark == nil { // no Starter and no Control: a real start, GET and DELETE answer 503
 				return api.RegisterArkSync(reg, api.ArkSyncDeps{Planner: arkUnavailable{}})
