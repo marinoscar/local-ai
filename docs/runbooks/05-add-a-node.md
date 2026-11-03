@@ -168,7 +168,7 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
 
     - **What you should see:** `Node credential (nod_…):` (nothing appears while you paste), then `✓ Connected to https://ai.marin.cr as ai-n4. The node shows up on the Nodes page.`
     - **Without a terminal prompt** (for example from a script): put the credential in a private file and feed it on standard input, so it never appears on the command line: `sudo aictl cloud enroll --credential-stdin < <file>`, then delete the file. The credential is never accepted as an argument.
-    - **If it doesn't work:** `LAI-CLD-051`: the credential was rejected (typo, or it was revoked); in the cloud open the node → **Keys** → **Replace credential…** and enroll again. `LAI-CLD-053`: the cloud isn't reachable; it's saved and will connect by itself. `LAI-CLD-004`: the credential was made for another node id.
+    - **If it doesn't work:** `LAI-CLD-051`: the credential was rejected (typo, or it was revoked); in the cloud open the node → **Keys** → **Replace credential…** and enroll again. `LAI-CLD-053` (`Saved. The cloud is not reachable right now; the node will connect by itself.`): the cloud isn't reachable; the credential is saved and the node connects by itself. `LAI-CLD-054`: the cloud refused the registration; `aictl logs --unit agent` shows why, for example `LAI-CLD-004` when the credential was made for another node id (the node retries once an hour). `LAI-CLD-062`: the address must start with `https://`.
 19. **Check:**
 
     ```
