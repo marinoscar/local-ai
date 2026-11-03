@@ -236,19 +236,22 @@ NOTES carries `default`, the roles and, for a model that cannot be loaded, `✗`
 ```
 aictl load <model-id> [--keep-others] [--no-wait]
 ```
-`POST /models/{id}/load` with `{"wait": !no-wait, "unload_others": !keep-others}`; progress from `/events`. Offline: works (local).
+`POST /models/{id}/load` with `{"wait": false, "unload_others": !keep-others}`; progress from `/events`. Offline: works (local).
+
+aictl **always sends `wait: false`**, also when it waits. The operation outlives its caller either way (llama-router.md §4.4.1), but a waiting request only answers at the end: the `op_id` and the events could not be matched while the model loads, so no progress could be shown, and the framework's `Follow` needs the `op_id` of a quick `202` (§3.3.1). aictl then follows `/events` (opened before the request) for the `op_id` of the `202`: `model.loading` with `unloading` names the models stepping aside, `model.loading` with `progress` draws the bar, `model.loaded` of **the requested model** ends the wait (a rollback loads the previous models again under the same `op_id`; those events are ignored), `model.failed` of the requested model ends it with the failure. After a lost stream `GET /models/{id}` decides (`loaded`: done; `loading`: keep waiting; `failed`: `LAI-LLM-009`). Ctrl-C stops the waiting only (exit 130, "Still running in the background") and never calls unload. `--no-wait` prints the `202` result and exits 0. The deadline is 16 min (3 × the default 300 s load timeout + 60 s). An answer that is already `200 loaded` (the model was loaded) ends it at once.
 ```
 … Unloading Small VLM to make room
 … Loading Qwen 3.5 9B  ██████████  100%
 ✓ Qwen 3.5 9B is ready. (7.1 s)
   Use it at http://127.0.0.1:8080/v1 with model "qwen3.5-9b-q4km".
 ```
-Failure:
+Failure (the sentence is built from the event's code, in the user's language; the fix is the doctor table's):
 ```
 ✗ The model Qwen 3.6 35B failed to start. The previous model was started again.  [LAI-LLM-009]
   → Fix: Choose a smaller model (`aictl models --loadable`) or check `aictl logs --unit llama`.
 ```
-`--json`: the `200`/`202` body. Exit: 5 unknown id; 6 busy/doesn't fit/no room (`LAI-LLM-011`); 1 failed (rolled back); 7 timeout.
+`--json`: the `202` body with `--no-wait`; otherwise the final answer in the shape of the `200` body (`id`, `status: "loaded"`, `already_loaded`, `load_ms`, `unloaded`, `op_id`), or the error envelope with `details.rolled_back` and `details.restored`. A `warning` (`LAI-HW-005`, `LAI-HW-006`) is shown when the agent sends it; the `202` body of the agent does not carry it today, so it only appears on a `200`.
+Exit: 5 unknown id; 6 busy (`LAI-AGT-022`), doesn't fit (`LAI-CAT-005`), files missing (`LAI-LLM-008`) or no room (`LAI-LLM-011`); 1 failed (`LAI-LLM-009`, rolled back), nothing could be started (`LAI-LLM-012`) or the router does not answer (`LAI-LLM-004`); 7 the model took too long (`LAI-LLM-010`, rolled back) or the deadline. A model id that is not `^[a-z0-9][a-z0-9.\-]{2,63}$` is exit 2 before the agent is asked (the same check for `unload`, `default`, `download`, `delete` and `bench`).
 
 ### 4.4 `aictl unload <model>`  [120 s]
 ```
@@ -258,7 +261,7 @@ aictl unload <model-id> [--force]
 ```
 ✓ Small VLM was unloaded.
 ```
-`--json`: response body. Exit 6 when refused in survival without `--force`.
+`--json`: response body. Exit 6 when refused in survival without `--force` (`LAI-AGT-023`) or while another model operation runs (`LAI-AGT-022`); 5 unknown id. An unload of a model that was not loaded says `i Small VLM was already unloaded.`; when the model would not stop and the agent restarted llama (`restarted: true`) the result is still `✓`, followed by the `LAI-LLM-031` warning that names the models loaded again.
 
 ### 4.5 `aictl default [<model>]`  [10 s]
 ```
@@ -270,10 +273,9 @@ Show: `GET /models` → `default`. Set: `PUT /models/default`. Offline: works.
 ✓ The default model is now Qwen 3.5 9B. It starts automatically when the computer starts.
   It is not loaded right now. Load it with `aictl load qwen3.5-9b-q4km`.
 ```
-`--json`: `{"default": "…"}` (show; `""` when none is set) or the PUT body. Exit 6 when not present/loadable.
+`--json`: `{"default": "…"}` (show; `""` when none is set) or the PUT body. Exit 6 when not present/loadable (`LAI-CAT-005`, `LAI-LLM-008`), 5 unknown id. The second line comes from `GET /models/{id}` (`It is loaded right now.` when it is loaded) and is left out when that read fails.
 
-Show (AICTL-04): `The default model is Qwen 3.5 9B (qwen3.5-9b-q4km). It is loaded.` (or `It is not loaded right now.`, `It is not stored on this computer.`); with none set, `i No default model is set. Choose one with \`aictl models\`.`. Setting it (AICTL-05) is not available yet: `aictl default <model-id>` is exit 1 `not implemented yet`.
-
+Show (AICTL-04): `The default model is Qwen 3.5 9B (qwen3.5-9b-q4km). It is loaded.` (or `It is not loaded right now.`, `It is not stored on this computer.`); with none set, `i No default model is set. Choose one with \`aictl models\`.`.
 ### 4.6 `aictl download <model>`  [30 s; `--wait`: none]
 ```
 aictl download <model-id> [--root <path>] [--wait] [--allow-offline-mode]
@@ -283,6 +285,8 @@ aictl download <model-id> [--root <path>] [--wait] [--allow-offline-mode]
 ✓ Download of Small VLM (3.2 GB) has started. Follow it with `aictl ark status`.
 ```
 `--json`: `202` body (or the final `sync.done` data with `--wait`).
+
+`--root` is a path or a root id (repeatable; anything else is exit 2); the body is `{"allow_offline_mode": <bool>, "roots": [...]}` (`roots` only when `--root` is given). Without `--wait` the command has a 30 s deadline and ends with the `202`. With `--wait` it has no deadline of its own and follows the `sync.*` events of the returned `sync_run_id` like `aictl ark sync --wait`, drawing `… Downloading Small VLM` with the bar, bytes, rate and time left; it ends with `✓ Small VLM (3.2 GB) was downloaded.` when the model's item was verified (exit 0), and with the item's own problem (code and fix, as `ark sync` prints them) and exit **1** when it was not (failed, quarantined, skipped, or the run stopped). After a lost stream `GET /ark/sync` decides; Ctrl-C stops the waiting only (exit 130) and sends nothing. Exit 6 for the refusals above and for `LAI-SYN-005` (a sync is already running), 5 for an unknown id. The route (`POST /models/{id}/download`) lands with AGENT-15; the command follows the documented contract.
 
 ### 4.7 `aictl delete <model>`  [60 s]  [admin]
 ```
@@ -294,6 +298,8 @@ Delete Qwen 3.6 35B from this computer (19.0 GB)? [y/N] y
 ✓ Deleted Qwen 3.6 35B from /srv/localai (19.0 GB freed).
 ```
 `--json`: response body (requires `--yes`). Exit 6 when loaded or last copy; 2 without `--yes` in non-interactive mode.
+
+Details. The question names the model and its size from `GET /models/{id}` (a model that does not exist ends there with exit 5, before any question); the default answer is No and says `i Nothing was deleted.`. `--root` is a path or a root id; the question then reads `from <root>`. The request always carries `keep_last` (`true`, or `false` with `--allow-last-copy`). `--allow-last-copy` asks the typed question after the first one; `--yes` answers the first question but **never the typed one**, so with `--allow-last-copy` a terminal is needed even with `--yes`, and `--json` cannot be combined with it (exit 2, `LAI-CLI-007`, nothing sent). The admin PIN is asked after the confirmations and only when the agent asks for it (`403 pin_required`: an operator over the socket; root is never asked); a No never asks for it. With `--yes` and no terminal an operator needs `--pin-stdin` (`LAI-CLI-008`, exit 4). One result line per content root in the answer's `deleted` (`✓ Deleted Qwen 3.6 35B from /srv/localai (19.0 GB freed).`); an empty `deleted` is `i … was not stored there. Nothing was deleted.`. The agent's refusals (a loaded model `LAI-AGT-022`, the last verified copy, survival mode) are printed as they come, exit 6. The route (`DELETE /models/{id}`) lands with AGENT-15; the command follows the documented contract (the code of the last-copy refusal is that of ark-sync.md §4.10 and is shown as the agent sends it).
 
 ### 4.8 `aictl key …`
 #### 4.8.1 `aictl key show`  [10 s]
@@ -506,14 +512,15 @@ llama    running   ✓        8 hours ago
 kiwix    running   ✓        8 hours ago
 whisper  stopped   ✗        —   last exit code 1
 ```
-The body is `{"services": [...]}` (agent.md section 3.8.22; aictl also accepts a bare array). STATE is `running`, `stopped`, `failed` or `starting` from the unit's `active` state; HEALTH is `✓` healthy, `…` starting, `!` degraded, `✗` otherwise. A service without a unit (voices, maps) is shown by the supervisor's `state` (`available`, `starting`, `disabled`, `stopped`). The untitled last column holds notes (`last exit code N` for a non-zero exit, `disabled`, `restarted N times`) and exists only when some row has one. Only the list exists so far (AICTL-04): `start|stop|restart` is exit 1 `not implemented yet` until AICTL-10.
+The body is `{"services": [...]}` (agent.md section 3.8.22; aictl also accepts a bare array). STATE is `running`, `stopped`, `failed` or `starting` from the unit's `active` state; HEALTH is `✓` healthy, `…` starting, `!` degraded, `✗` otherwise. A service without a unit (voices, maps) is shown by the supervisor's `state` (`available`, `starting`, `disabled`, `stopped`). The untitled last column holds notes (`last exit code N` for a non-zero exit, `disabled`, `restarted N times`) and exists only when some row has one. Only the list exists in `aictl services` so far (AICTL-04): `start|stop|restart` is exit 1 `not implemented yet` until AICTL-10. `aictl restart <name>` (§4.14) is implemented (AICTL-05) by `restartService`, which AICTL-10 binds `services restart` to, so the two forms behave identically.
 
 ### 4.14 `aictl restart <service>`  [120 s]
-Alias of `aictl services restart <name>` (§4.13). `aictl restart llama|kiwix|whisper [--force]` → `POST /services/{name}/restart`. For llama it waits for the models to come back. `--force` needed for llama in survival mode. Offline: works.
+Alias of `aictl services restart <name>` (§4.13). `aictl restart llama|kiwix|whisper [--force]` → `POST /services/{name}/restart` with `{}` or `{"force": true}`. For llama the agent waits for the router and for the models to come back (`restored_models`), so the request takes up to its 120 s deadline and aictl waits for the answer (there is no event to follow); Ctrl-C ends the waiting with exit 130 and the agent finishes the restart by itself. `--force` is sent as given: the agent needs it only to **stop** llama in survival mode (agent.md §3.8.22: restarting and starting llama are allowed in survival, so a restart never needs it). An unknown service is exit 2 before any request. Offline: works.
 ```
 … Restarting the AI model service
 ✓ The AI model service is running again. Qwen 3.5 9B is loaded.
 ```
+The service is called "the AI model service" (llama), "the library service" (kiwix) and "the speech service" (whisper). Several restored models read `Qwen 3.5 9B and Small VLM are loaded.`; llama with nothing to restore says `No model is loaded yet: load one with `aictl load <model-id>`.`. Exit 6 for `LAI-AGT-022` (another operation) or `LAI-AGT-023`; 1 for the service not coming back (`502`, `LAI-LLM-001`, `LAI-SVC-002`, `LAI-SVC-011`); 7 for the deadline.
 
 ### 4.15 `aictl logs`  [10 s; `-f`: none]
 ```
@@ -687,16 +694,16 @@ The rebuild kit commands. [rebuild-kit.md](rebuild-kit.md) §3.5 is authoritativ
 
 `--json` prints the status / verify report. Exit 2 for an unknown part, 5 for no root with a kit.
 
-### 4.24 `aictl bench <model>`  [30 min]
+### 4.24 `aictl bench <model>`  [root]  [30 min]
 ```
 aictl bench <model-id> [--yes]
 ```
-API + local exec ([llama-router.md](llama-router.md) §4.13). Asks to unload current models (`--yes` skips). Offline: works.
+API + local exec ([llama-router.md](llama-router.md) §4.13). Asks to unload current models (`--yes` skips). Offline: works. Root only (`LAI-CLI-006`, exit 4, checked before anything is asked or changed): the engine samples the GPU in-process, runs `llama-bench` with the node's llama environment and writes `/var/lib/localai/bench`, none of which an operator may do, and failing at the file after twenty minutes of measuring would be the worse way to find out.
 ```
 … Measuring graphics memory at full context (32768 tokens)
 … Measuring speed with llama-bench
 ✓ qwen3.5-9b-q4km on NVIDIA GeForce RTX 2070 with Max-Q Design:
-  graphics memory 6.6 GB at ctx 32768 → suggested min_vram_mib: 7240
+  graphics memory 6.4 GB at ctx 32768 → suggested min_vram_mib: 7240
   prompt 1450 tokens/s · generation 38.4 tokens/s (41.0 with MTP, 71% accepted)
   Saved /var/lib/localai/bench/qwen3.5-9b-q4km-20261102T103000Z.json
   For the catalog PR:
@@ -704,6 +711,8 @@ API + local exec ([llama-router.md](llama-router.md) §4.13). Asks to unload cur
       min_vram_mib: 7240   # measured on RTX 2070 Max-Q 8 GB, build f3586e66b-cuda, 2026-11-02
 ```
 `--json`: the bench JSON. Exit 6 if another model operation runs; 1 `LAI-LLM-025` on failure. The measurement engine is `internal/router/bench` ([llama-router.md](llama-router.md) §4.13.1, ROUTER-10): the command implements its `Agent`, `Chatter` and `Procs` seams over the agent client, confirms the unload, and prints the returned `Result` (`Result.Snippet()` is the catalog YAML; no suggestion is printed when `Result.Disturbed`; a non-empty `Result.RestoreFailed` is printed as a warning with `aictl load <id>`). A `*bench.BusyError` is exit 6, a `*bench.Error` is exit 1 with its code.
+
+Details. **Order:** usage and the root check; `GET /models` (a model that is `loading` is somebody else's operation: exit 6, `LAI-AGT-022`, nothing asked); `GET /key` (the key and `base_urls.local`; an address that is not on this computer is refused with `LAI-LLM-025` before anything is asked or changed, and the key is sent only in the `Authorization` header of the one chat request, never printed or put in an error); the question, **only when a model is loaded** (`The test needs the graphics memory to itself: Small VLM will be unloaded and loaded again afterwards. Continue?`; default No, `i Nothing was changed.`; with `--json` or no terminal and no `--yes` it is exit 2, `LAI-CLI-007`, nothing changed); then the engine. **Seams** (`cmd_bench_seams.go`): `Agent` is `GET /models`, `GET /models/{id}` (with `preset`), `POST /models/{id}/load` with `{"wait": true, "unload_others": false}`, `POST /models/{id}/unload` with `{}` (never forced), and `GET /events?types=model.*` opened by the engine before anything else; a `409 LAI-AGT-022` becomes `*bench.BusyError`. `Chatter` posts the one chat completion (`max_tokens: 64`) to `base_urls.local`. `Procs` is `bench.NewProcFS` and the GPU sampler is the agent's own probes (`hardware.New`). `llama-bench` gets the llama environment of the node: the `Environment=` lines of `/etc/systemd/system/localai-llama.service.d/50-env.conf` with `llama.extra_env` of `node.yaml` winning; the node id and `llama.backend` come from `node.yaml` (an unreadable file only means less detail). **Progress** (stderr, from the engine's own steps, since the engine has no hook): `… Unloading Small VLM so the test has the memory to itself`, `… Measuring graphics memory at full context (32768 tokens)` (`memory` on a CPU-only node), `… Measuring speed with llama-bench`, `… Loading Small VLM again` for each model put back. **Units:** memory is shown with `GBFromMiB` (MiB ÷ 1024, as `models show` and `status` do), so 6581 MiB reads `6.4 GB`; the suggestion is the engine's integer `min_vram_mib`. A CPU-only result says `memory` and `min_ram_mib`. **Warnings** (exit 0): a disturbed result keeps the numbers, prints no suggestion and says `Another model operation ran during the test, …` with the fix `Run aictl bench <id> again …`; models in `RestoreFailed` are named with `Load it with aictl load <id>`. **Exits:** `*bench.Error` with `LAI-AGT-022` is 6, `LAI-AGT-021` is 5, `LAI-LLM-008` is 6, `LAI-LLM-025` is 1 and its message ends with `(<step>: <cause>)`; Ctrl-C is 130 after the engine has loaded the previous models again (`Stopped. The models that were loaded before were started again.`); the deadline is 7. `--json` is the result file's JSON on one line (stderr empty); a failure is the error envelope with `details.step`.
 
 ### 4.25 `aictl backup-config`  [local] [root]
 ```
@@ -838,6 +847,7 @@ Documented here so nobody re-invents them. They may change between versions with
 | Confirmations | default No; `--yes`; non-interactive without `--yes` → exit 2 |
 | Read-only commands (AICTL-04) | golden `en`/`es` for `status` (online, survival, partial), `models`, `models show`, `default`, `services`, `logs`, `doctor` (mixed, warnings, all fine, `--all -v`), `version`, `ark`, `ark drives`, `cloud status`, `profile show/suggest` from fixture bodies that are valid answers of `agent/api/openapi.yaml`; `--json` equals the agent body (or the documented composite); `doctor` exits 0/8/9 with and without `--json`; agent down (exit 3, `version` still 0), 401/403 (exit 4), 503 starting retried, undecodable answer (exit 1 with request id), partial bodies, unknown fields ignored, 2000 long log lines, closed pipe (exit 0, `logs -f` stops), `logs -f` de-duplication and Ctrl-C, `status --watch` redraw on tick, on event and after a failed refresh |
 | Progress | SSE fake over the real event bus: load progress (TTY golden, non-TTY lines, `-q`, `--json`), rollback events, `Last-Event-ID` on reconnect, `gap` and `restart` resync, shutdown, agent down mid-wait (re-read finishes the wait), idle stream, deadline → exit 7, Ctrl-C → exit 130 and no cancel request sent, interrupt hook, SSE parser (multi-line data, comments, missing id, CRLF, oversized line) |
+| Model and service commands (AICTL-05) | request bodies from the flags (`load` `wait:false` and `unload_others`, `unload` `force`, `download` `roots` and `allow_offline_mode`, `delete` `keep_last` and `root`, `restart` `force`); the model id format check (exit 2 before any request) for every command; fixture bodies that are valid answers of `agent/api/openapi.yaml` (download and delete included, though planned); `load` with scripted events in the order the orchestrator publishes them (eviction, progress, a rollback that loads the previous model again under the same `op_id`, `model.failed` with `LAI-LLM-009`/`010`/`012`), exit 0/1/7, human `en`/`es`, `--json`, `--quiet`, `--no-wait` (no event stream), already loaded, a lost stream settled by `GET /models/{id}`, Ctrl-C (exit 130, no unload ever sent); every refusal of §4.3 to §4.7 and §4.14 (404, 409 `LAI-AGT-022`/`023`/`LAI-SYN-010`, 422, 500, 502, 503, agent down) with its exit code; `download --wait` with the item verified, failed, stopped, another run's events, a lost stream, Ctrl-C; `delete` question (name and size), No by default, `--yes`, `--json` needs `--yes`, `--allow-last-copy` typed confirmation (right, wrong, empty, `--yes` does not answer it, no terminal), the PIN flow of an operator (after the confirmation, never after a No, `--pin-stdin`, `LAI-CLI-008`); `restart` for the three services; `bench` with the real engine over a fake machine (agent, chat endpoint, GPU that follows the loaded models, `llama-bench`): the question, `--yes`, nothing loaded, `en`/`es`, `--json` equal to the result file, the node's llama environment, not root, busy, unknown model, files missing, chat failure, `llama-bench` failure, an address that is not this computer, restore failure warning, a disturbed run, Ctrl-C with the models put back, the key in no output |
 | Local commands | `pin set` writes argon2id PHC string with mode 0600; `token rotate` format `lat_` + 43 chars; `catalog restore` atomic swap and lint; `backup-config` manifest and modes; `--restore` round trip; `docs render` refuses `.git` output, fills placeholders from a fixture inventory and follows the inventory lookup order of §4.22; `catalog use --test` refuses a failing lint (exit 2), keeps `catalog.prev/` and `restore` puts it back (also after two `use --test` in a row); every local root command: not root exits 4 before any file is touched, an interrupted write (injected rename failure) keeps the old file and leaves no temp file, a second concurrent run exits 6, an audit line with `actor.kind: cli-root` for success and failure, and no secret in any output; `pin set` round trip with the agent's verifier, bad length / non-digits / mismatch exit 2, `--pin-stdin`; `--restore` refuses path traversal, absolute paths, links, unlisted paths, hash and mode tampering, and keeps `.pre-restore` copies; `catalog lint` output matches `<file>:<yaml-path>  LAI-CAT-0NN  <message>` and the `--json` shape |
 
 ### 9.2 Integration tests
@@ -881,7 +891,7 @@ Run `aictl` against a real `aiagent serve` started by the integration harness (a
 2. **AICTL-02 Output layer** — style guide §3.3 (symbols, colours, ASCII fallback, problem layout, sizes/times formatting, en/es strings), `--json` writer, confirmations, PIN prompt/grant flow. *Accept:* golden tests for the layout; `NO_COLOR`/non-TTY behaviour. *Deps:* AICTL-01.
 3. **AICTL-03 Progress via SSE** — event subscriber, TTY progress line and plain-line mode, Ctrl-C semantics, resync handling. *Accept:* §9.1 progress cases. *Deps:* AICTL-01, AGENT-08.
 4. **AICTL-04 Read-only commands** — `status`, `models`, `services`, `logs` (+`-f`), `doctor` (exit 0/8/9), `version`, `ark status|drives`, `cloud status`, `profile show|suggest`, `default` (show). *Accept:* golden outputs; manual 1, 6, 8, 9. *Deps:* AICTL-02.
-5. **AICTL-05 Model and service commands** — `load`, `unload`, `default <id>`, `download`, `delete`, `restart`, `bench` (command wiring, confirmation, human/`--json` output and exit codes only; the measurement engine is ROUTER-10, [llama-router.md](llama-router.md) §4.13). *Accept:* integration load/rollback; manual 4–5. *Deps:* AICTL-03, ROUTER-05, ROUTER-10.
+5. **AICTL-05 Model and service commands** — `load`, `unload`, `default <id>`, `download`, `delete`, `restart`, `bench` (command wiring, confirmation, human/`--json` output and exit codes only; the measurement engine is ROUTER-10, [llama-router.md](llama-router.md) §4.13). *Accept:* integration load/rollback; manual 4–5. *Deps:* AICTL-03, ROUTER-05, ROUTER-10. *Done in* `internal/cli/cmd_{load,unload,default,download,delete,restart,bench}.go` (+ `cmd_bench_seams.go`, `cmd_model_common.go`). The load/rollback scenario runs against a fake agent that publishes the orchestrator's event sequence; the run against the real `aiagent serve` harness waits for AGENT-20, and `download` and `delete` follow the documented contract until AGENT-15 lands their routes.
 6. **AICTL-06 Key, mode, ark and cloud mutations** — `key show|copy|rotate|snippets`, `mode`, `ark sync|verify|import`, `catalog refresh`, `profile set`, `cloud enroll|unenroll|resend-key`, `ark drives set-profile`, `ui-code`. (`ark eject|init|mount|prune` are SYNC-03/SYNC-08 in [ark-sync.md](ark-sync.md) §10; `drill` is AICTL-10.) *Accept:* golden outputs; manual 7, 10; `ark sync --scheduled` skip semantics (exit 0). *Deps:* AICTL-03.
 7. **AICTL-07 Local root commands** — `pin set`, `token rotate`, `catalog restore`, `catalog use --test` (§4.11.4), `backup-config` (+`--restore`), with audit lines (`actor.kind: cli-root`, one `O_APPEND` write per line; only the agent rotates, agent.md §4.11). `catalog lint` (linter and command) is owned by CAT-01 ([catalog.md](catalog.md) §10); this item only checks its output against §4.11.1. *Accept:* §9.1 local command cases. *Deps:* AICTL-02, AGENT-02, AGENT-04, AGENT-06.
 8. **AICTL-08 Docs render** — goldmark rendering, placeholder fill from inventory, link rewriting, index.json, optional Chromium PDF, `.git` guard. (START-HERE.html is written by sync, SYNC-14.) *Accept:* fixture render; redaction check passes on the repo (no output inside it). *Deps:* AICTL-02.
