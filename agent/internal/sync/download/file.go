@@ -463,7 +463,7 @@ func (f *fetch) do(ctx context.Context) error {
 		if retries >= d.opt.Backoff.Retries() {
 			code := CodeRetries
 			if rt.hf429 {
-				code = CodeHFAuth
+				code = CodeHFLogin
 			}
 			e := &Error{Kind: KindExhausted, Code: code, Err: fmt.Errorf("download failed after %d attempts: %w", f.res.Attempts, rt.err)}
 			f.log(slog.LevelWarn, "download failed after all retries", "code", code, "attempts", f.res.Attempts, "err", rt.err.Error())
@@ -657,7 +657,7 @@ func (f *fetch) statusErr(resp Resp) error {
 	case st == 401 || st == 403:
 		code := CodeRefused
 		if resp.HuggingFace {
-			code = CodeHFAuth
+			code = CodeHFLogin
 		}
 		return &Error{Kind: KindPermanent, Code: code, Permanent: true, Err: cause}
 	case st == 408:

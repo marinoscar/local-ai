@@ -27,8 +27,8 @@ const (
 	CodeRetries = doctor.SYN031
 	// CodeRestart: the server does not support resume; the file restarted from zero (information).
 	CodeRestart = doctor.SYN032
-	// CodeHFAuth: Hugging Face needs a login or is rate-limiting.
-	CodeHFAuth = doctor.SYN034
+	// CodeHFLogin: Hugging Face needs a login or is rate-limiting.
+	CodeHFLogin = doctor.SYN034
 	// CodeDisk: not enough free disk space (the item is skipped, the .part kept).
 	CodeDisk = doctor.SYN040
 	// CodePurged: old versions were deleted to make room (information, raised by the caller).
@@ -110,7 +110,7 @@ type retryable struct {
 	err error
 	// retryAfter is the raw Retry-After header of a 429/503, "" when there was none.
 	retryAfter string
-	// hf429: a Hugging Face rate limit, whose exhausted code is CodeHFAuth.
+	// hf429: a Hugging Face rate limit, whose exhausted code is CodeHFLogin.
 	hf429 bool
 	// restart: the next attempt starts from byte 0 (the server answered inconsistently).
 	restart bool

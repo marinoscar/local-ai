@@ -237,8 +237,8 @@ func TestFetchStatusTable(t *testing.T) {
 		{name: "410 is permanent", codes: []int{410}, wantKind: KindPermanent, wantCode: CodeRefused, wantReqs: 1},
 		{name: "403 elsewhere is permanent", codes: []int{403}, wantKind: KindPermanent, wantCode: CodeRefused, wantReqs: 1},
 		{name: "401 elsewhere is permanent", codes: []int{401}, wantKind: KindPermanent, wantCode: CodeRefused, wantReqs: 1},
-		{name: "401 on Hugging Face needs a token", codes: []int{401}, auth: true, wantKind: KindPermanent, wantCode: CodeHFAuth, wantReqs: 1},
-		{name: "403 on Hugging Face needs a token", codes: []int{403}, auth: true, wantKind: KindPermanent, wantCode: CodeHFAuth, wantReqs: 1},
+		{name: "401 on Hugging Face needs a token", codes: []int{401}, auth: true, wantKind: KindPermanent, wantCode: CodeHFLogin, wantReqs: 1},
+		{name: "403 on Hugging Face needs a token", codes: []int{403}, auth: true, wantKind: KindPermanent, wantCode: CodeHFLogin, wantReqs: 1},
 		{name: "any other 4xx is permanent", codes: []int{418}, wantKind: KindPermanent, wantCode: CodeRefused, wantReqs: 1},
 		{name: "408 then success", codes: []int{408}, wantOK: true, wantReqs: 2, wantSleeps: []time.Duration{5 * time.Second}},
 		{name: "500 then 502 then success", codes: []int{500, 502}, wantOK: true, wantReqs: 3, wantSleeps: []time.Duration{5 * time.Second, 15 * time.Second}},
@@ -268,7 +268,7 @@ func TestFetchStatusTable(t *testing.T) {
 		},
 		{
 			name: "a Hugging Face rate limit that never lifts ends in the Hugging Face code", codes: []int{429, 429, 429, 429, 429, 429, 429},
-			auth: true, wantKind: KindExhausted, wantCode: CodeHFAuth, wantReqs: 7,
+			auth: true, wantKind: KindExhausted, wantCode: CodeHFLogin, wantReqs: 7,
 			wantSleeps: []time.Duration{5 * time.Second, 15 * time.Second, 45 * time.Second, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute},
 		},
 	} {

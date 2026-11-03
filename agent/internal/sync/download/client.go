@@ -65,7 +65,7 @@ type Resp struct {
 	// RetryAfter is the raw Retry-After header, "" when absent.
 	RetryAfter string
 	// HuggingFace: the source is the authenticated host, so 401, 403 and 429 mean "needs a token"
-	// or "rate-limited" (CodeHFAuth).
+	// or "rate-limited" (CodeHFLogin).
 	HuggingFace bool
 }
 
