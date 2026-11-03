@@ -97,34 +97,51 @@ func (h *handlers) refreshCatalog(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	info := api.InfoFrom(r.Context())
+	out, err := h.refresh(r.Context(), api.AuditActor(info), info.ID)
+	if err != nil {
+		return err
+	}
+	api.WriteJSON(w, r, http.StatusOK, out)
+	return nil
+}
+
+// RefreshCatalog is POST /catalog/refresh without the HTTP: the same mode rule, the same refresher,
+// the same typed errors (*api.Error: 409 LAI-AGT-023 outside online mode, 422 LAI-CAT-002 for a
+// rejected catalog, 502 LAI-CLD-013 when no source could deliver) and the same catalog.refresh
+// audit line, for the given actor. The cloud executor of catalog.refresh (AGENT-18) calls it.
+func (d Deps) RefreshCatalog(ctx context.Context, actor audit.Actor) (CatalogRefreshBody, error) {
+	h := &handlers{Deps: d, status: d.Builder()}
+	return h.refresh(ctx, actor, "")
+}
+
+func (h *handlers) refresh(ctx context.Context, actor audit.Actor, reqID string) (CatalogRefreshBody, error) {
 	if mode, ok := h.online(); !ok {
-		return api.NewError(api.CodeNotInMode, http.StatusConflict, map[string]any{"mode": mode, "action": "catalog.refresh"})
+		return CatalogRefreshBody{}, api.NewError(api.CodeNotInMode, http.StatusConflict, map[string]any{"mode": mode, "action": "catalog.refresh"})
 	}
 	if h.Refresher == nil {
-		return api.NewError(api.CodeStarting, http.StatusServiceUnavailable, nil)
+		return CatalogRefreshBody{}, api.NewError(api.CodeStarting, http.StatusServiceUnavailable, nil)
 	}
 
-	res, err := h.Refresher.Refresh(r.Context())
+	res, err := h.Refresher.Refresh(ctx)
 	if err != nil {
-		return h.refreshError(r.Context(), info, err)
+		return CatalogRefreshBody{}, h.refreshError(ctx, actor, reqID, err)
 	}
 	h.Catalog.Set(res.Loaded, h.now())
 
 	out := CatalogRefreshBody{Version: res.Catalog.Version, Previous: strPtr(res.Previous), Changed: res.Changed, Source: sourceOf(res.Source)}
 	if res.Changed {
 		// The router's presets follow the catalog; a problem there never undoes the install.
-		out.Warnings = regenerate(r.Context(), h.Regenerator)
+		out.Warnings = regenerate(ctx, h.Regenerator)
 	}
-	h.auditWrite(info, audit.ActionCatalogRefresh, audit.ResultOK, "", map[string]string{
+	h.auditWriteAs(actor, reqID, audit.ActionCatalogRefresh, audit.ResultOK, "", map[string]string{
 		"version": out.Version, "previous": res.Previous, "source": out.Source,
 	})
-	api.WriteJSON(w, r, http.StatusOK, out)
-	return nil
+	return out, nil
 }
 
 // refreshError maps a failed refresh: a rejected catalog is 422 LAI-CAT-002 (the previous one is
 // kept), anything else that stopped the fetch is 502 LAI-CLD-013 (the node keeps its catalog).
-func (h *handlers) refreshError(ctx context.Context, info *api.RequestInfo, err error) error {
+func (h *handlers) refreshError(ctx context.Context, actor audit.Actor, reqID string, err error) error {
 	var rej *catalog.RejectedError
 	switch {
 	case errors.As(err, &rej):
@@ -135,7 +152,7 @@ func (h *handlers) refreshError(ctx context.Context, info *api.RequestInfo, err 
 			}
 			problems = append(problems, map[string]string{"code": p.Code, "file": p.File, "path": p.Path, "message": p.Message})
 		}
-		h.auditWrite(info, audit.ActionCatalogRefresh, audit.ResultFail, catalog.CodeRejected, nil)
+		h.auditWriteAs(actor, reqID, audit.ActionCatalogRefresh, audit.ResultFail, catalog.CodeRejected, nil)
 		return api.NewError(catalog.CodeRejected, http.StatusUnprocessableEntity, map[string]any{
 			"version": rej.Report.Version, "problem_count": len(rej.Report.Problems), "problems": problems,
 		})
@@ -147,6 +164,6 @@ func (h *handlers) refreshError(ctx context.Context, info *api.RequestInfo, err 
 		reason = "no_source"
 	}
 	h.log().Warn("catalog refresh failed", "reason", reason, "error", err.Error())
-	h.auditWrite(info, audit.ActionCatalogRefresh, audit.ResultFail, doctor.CLD013, nil)
+	h.auditWriteAs(actor, reqID, audit.ActionCatalogRefresh, audit.ResultFail, doctor.CLD013, nil)
 	return api.NewError(doctor.CLD013, http.StatusBadGateway, map[string]any{"reason": reason})
 }
