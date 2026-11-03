@@ -313,8 +313,17 @@ func TestStubsAnswerWhenTheSyncStackIsMissing(t *testing.T) {
 	if dl.status != http.StatusUnprocessableEntity || errCode(dl) != doctor.ARK001 {
 		t.Errorf("POST /models/%s/download without a sync engine = %d %s, want 422 %s", modelGamma, dl.status, dl.body, doctor.ARK001)
 	}
-	if got := r.do("GET", "/ark/sync", nil); got.status != http.StatusNotFound {
-		t.Errorf("GET /ark/sync without the stack = %d, want 404 (not served)", got.status)
+	for _, rt := range []struct{ method, path string }{{"GET", "/ark/sync"}, {"DELETE", "/ark/sync"}, {"POST", "/ark/sync"}, {"GET", "/ark"}} {
+		var body any
+		if rt.method == "POST" {
+			body = map[string]any{"dry_run": rt.path == "/ark/sync"} // a dry run goes to the planner, a real start to the engine
+		}
+		if got := r.do(rt.method, rt.path, body); got.status != http.StatusServiceUnavailable || errCode(got) != doctor.AGT024 {
+			t.Errorf("%s %s without the stack = %d %s, want 503 %s", rt.method, rt.path, got.status, got.body, doctor.AGT024)
+		}
+	}
+	if got := r.do("POST", "/ark/sync", map[string]any{}); got.status != http.StatusServiceUnavailable {
+		t.Errorf("a real POST /ark/sync without the engine = %d, want 503", got.status)
 	}
 	if n, info := r.d.claim.Inflight(); n != 0 || info != nil {
 		t.Errorf("no claim plane: in flight %d %v", n, info)

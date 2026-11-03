@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/marinoscar/local-ai/agent/internal/api"
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/ark/ready"
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
@@ -426,6 +428,23 @@ func (k kitRefreshing) Refresh(ctx context.Context, rootIDs []string) (map[strin
 	}
 	return k.inner.Refresh(ctx, rootIDs)
 }
+
+// arkUnavailable stands in for the planner and the readiness view of a daemon whose sync stack could
+// not be built: every call answers 503 LAI-AGT-024, like the routes did before the engine was wired.
+type arkUnavailable struct{}
+
+var _ api.ArkSyncPlanner = arkUnavailable{}
+var _ api.ArkReadyView = arkUnavailable{}
+
+func (arkUnavailable) err() error {
+	return api.NewError(api.CodeStarting, http.StatusServiceUnavailable, map[string]any{"reason": "sync_engine_not_ready"})
+}
+
+// DryRun implements api.ArkSyncPlanner.
+func (u arkUnavailable) DryRun(context.Context, api.ArkSyncRequest) (any, error) { return nil, u.err() }
+
+// Ready implements api.ArkReadyView.
+func (u arkUnavailable) Ready(context.Context, string) ([]any, error) { return nil, u.err() }
 
 // arkJobs is jobs.Ark over the engine. The cloud's ark.verify waits for the re-verification (SYNC-13): a
 // command of that type is refused with LAI-CLD-057, like one of a type this node does not run.

@@ -495,14 +495,14 @@ func (d *Daemon) buildServer() error {
 			return api.RegisterDrill(reg, api.DrillDeps{Service: drill.NewService(c.Drill), Audit: d.audit, Logger: d.log})
 		}},
 		{"ark", func() error {
-			if d.ark == nil {
-				return nil // the stack did not come up: the routes are not served, the alert says why
+			if d.ark == nil { // the stack did not come up: the routes answer 503, the alert says why
+				return api.RegisterArk(reg, api.ArkDeps{Ready: arkUnavailable{}})
 			}
 			return api.RegisterArk(reg, api.ArkDeps{Ready: d.ark.ready})
 		}},
 		{"ark sync", func() error {
-			if d.ark == nil {
-				return nil
+			if d.ark == nil { // no Starter and no Control: a real start, GET and DELETE answer 503
+				return api.RegisterArkSync(reg, api.ArkSyncDeps{Planner: arkUnavailable{}})
 			}
 			return api.RegisterArkSync(reg, api.ArkSyncDeps{
 				Planner: plan.NewDryRun(d.ark.plans), Starter: adapt.Starter{Engine: d.ark.engine}, Control: adapt.Controller{Engine: d.ark.engine},
