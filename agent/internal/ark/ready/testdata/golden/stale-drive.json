@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-11-02T15:00:00Z",
+  "generated_by": {
+    "node_id": "ai-n3",
+    "agent_version": "0.4.0"
+  },
+  "root": {
+    "id": "ark-3f9c0a12",
+    "kind": "ark_drive",
+    "path": "/media/operator/AI-ARK/localai",
+    "profile": "ark-drive-full",
+    "catalog_version": "2026.11.02-1",
+    "fs_total_bytes": 100000000000,
+    "fs_free_bytes": 20000000000,
+    "budget_bytes": 95000000000,
+    "used_bytes": 62533000000,
+    "trash_bytes": 0,
+    "read_only": false
+  },
+  "overall": "yellow",
+  "survival_capable": true,
+  "clock_wrong": false,
+  "last_sync": {
+    "run_id": "run-20261102T031500Z-a1f3",
+    "trigger": "scheduled",
+    "finished_at": "2026-09-18T15:00:00Z",
+    "state": "done",
+    "age_days": 45
+  },
+  "last_full_reverify_at": "2026-09-18T15:00:00Z",
+  "counts": {
+    "verified": 10,
+    "stale": 1,
+    "missing": 1,
+    "skipped": 0,
+    "failed": 0,
+    "quarantined": 0,
+    "orphan": 0
+  },
+  "items": [
+    {
+      "id": "kit-llama-cpp",
+      "kind": "kit",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-09-18T15:00:00Z",
+      "last_reverified_at": "2026-09-18T15:00:00Z",
+      "age_days": 45,
+      "freshness": "green",
+      "bytes": 500000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "kit-debs-resolute-amd64",
+      "kind": "kit",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-09-18T15:00:00Z",
+      "last_reverified_at": "2026-09-18T15:00:00Z",
+      "age_days": 45,
+      "freshness": "green",
+      "bytes": 3100000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "docs-bundle",
+      "kind": "docs",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-09-18T15:00:00Z",
+      "last_reverified_at": "2026-09-18T15:00:00Z",
+      "age_days": 45,
+      "freshness": "green",
+      "bytes": 100000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "model-alpha-9b-q4",
+      "kind": "model",
+      "tier": 1,
+      "survival": true,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-09-18T15:00:00Z",
+      "last_reverified_at": "2026-10-13T15:00:00Z",
+      "age_days": 45,
+      "freshness": "green",
+      "bytes": 5870000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "whisper-small",
+      "kind": "model",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-09-18T15:00:00Z",
+      "last_reverified_at": "2026-09-18T15:00:00Z",
+      "age_days": 45,
+      "freshness": "green",
+      "bytes": 487000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "piper-en-medium",
+      "kind": "model",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-09-18T15:00:00Z",
+      "last_reverified_at": "2026-09-18T15:00:00Z",
+      "age_days": 45,
+      "freshness": "green",
+      "bytes": 63000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "piper-es-medium",
+      "kind": "model",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-09-18T15:00:00Z",
+      "last_reverified_at": "2026-09-18T15:00:00Z",
+      "age_days": 45,
+      "freshness": "green",
+      "bytes": 63000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "wikipedia-en-nopic",
+      "kind": "kiwix",
+      "tier": 1,
+      "status": "stale",
+      "version": "v0",
+      "reason": "update failed",
+      "code": "LAI-SYN-031",
+      "verified_at": "2026-09-18T15:00:00Z",
+      "last_reverified_at": "2026-09-18T15:00:00Z",
+      "age_days": 45,
+      "freshness": "green",
+      "bytes": 47800000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "medical-alpha-en",
+      "kind": "kiwix",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-09-18T15:00:00Z",
+      "last_reverified_at": "2026-09-18T15:00:00Z",
+      "age_days": 45,
+      "freshness": "green",
+      "bytes": 2000000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "map-region-alpha",
+      "kind": "maps",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-09-18T15:00:00Z",
+      "last_reverified_at": "2026-09-18T15:00:00Z",
+      "age_days": 45,
+      "freshness": "green",
+      "bytes": 2500000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "map-assets",
+      "kind": "maps",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-09-18T15:00:00Z",
+      "last_reverified_at": "2026-09-18T15:00:00Z",
+      "age_days": 45,
+      "freshness": "green",
+      "bytes": 50000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "stackexchange-electronics",
+      "kind": "kiwix",
+      "tier": 2,
+      "status": "missing",
+      "reason": "not downloaded yet",
+      "bytes": 6000000000
+    }
+  ],
+  "problems": [
+    {
+      "code": "LAI-SYN-031",
+      "severity": "warning",
+      "item": "wikipedia-en-nopic",
+      "title": "Download failed after all retries"
+    },
+    {
+      "code": "LAI-ARK-008",
+      "severity": "warning",
+      "title": "The ark drive hasn't been updated for more than 30 days (red after 90)"
+    }
+  ]
+}

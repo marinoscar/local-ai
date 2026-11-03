@@ -1,15 +1,16 @@
 {"roots": [{
-  "schema_version": 1, "generated_at": "{{ago:12h}}",
-  "root": {"id": "internal", "kind": "internal", "path": "/srv/localai", "profile": "small-8gb", "fs_total_bytes": 502000000000,
+  "schema_version": 1, "generated_at": "{{ago:12h}}", "generated_by": {"node_id": "ai-n3", "agent_version": "0.4.0"},
+  "root": {"id": "internal", "kind": "internal", "path": "/srv/localai", "profile": "small-8gb", "catalog_version": "2026.11.02-1", "fs_total_bytes": 502000000000,
            "fs_free_bytes": 273000000000, "budget_bytes": 220000000000, "used_bytes": 180000000000, "trash_bytes": 0, "read_only": false},
-  "overall": "yellow", "survival_capable": true,
+  "overall": "yellow", "survival_capable": true, "clock_wrong": false,
   "last_sync": {"run_id": "run-1", "trigger": "scheduled", "finished_at": "{{ago:12h}}", "state": "done", "age_days": 0},
+  "last_full_reverify_at": null,
   "counts": {"verified": 41, "stale": 0, "missing": 2, "skipped": 7, "failed": 0, "quarantined": 0, "orphan": 3},
   "items": [
-    {"id": "qwen3.5-9b-q4km", "kind": "model", "status": "verified", "bytes": 5870000000},
-    {"id": "wikipedia-es-nopic", "kind": "kiwix", "status": "missing", "bytes": 12000000000},
-    {"id": "osm-central-america", "kind": "maps", "status": "missing", "bytes": 2500000000},
-    {"id": "old-thing", "kind": "kiwix", "status": "orphan", "bytes": 100}
+    {"id": "qwen3.5-9b-q4km", "kind": "model", "tier": 1, "status": "verified", "bytes": 5870000000},
+    {"id": "wikipedia-es-nopic", "kind": "kiwix", "tier": 2, "status": "missing", "bytes": 12000000000},
+    {"id": "osm-central-america", "kind": "maps", "tier": 1, "status": "missing", "bytes": 2500000000},
+    {"id": "old-thing", "kind": "kiwix", "tier": 3, "status": "orphan", "bytes": 100}
   ],
   "problems": [{"code": "LAI-SYN-031", "severity": "warning", "item": "wikipedia-es-nopic", "title": "An update couldn't be downloaded. The older copy is still here and works."}]
 }]}
