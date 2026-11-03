@@ -532,7 +532,7 @@ func (k *Kit) Provision(nodes ...Node) {
 		}
 		name := "llama.cpp-" + n.Llama()[:9] + "-" + n.Backend + "-" + n.Codename + "-" + n.Arch
 		if n.Backend == "cuda" && n.CudaArch != "" {
-			name += "-sm" + n.CudaArch
+			name += "-sm" + strings.ReplaceAll(n.CudaArch, ";", "_")
 		}
 		prebuilt[name+".tar.gz"] = []byte("prebuilt " + name + "\n")
 	}
