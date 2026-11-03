@@ -8,7 +8,6 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
@@ -638,5 +637,3 @@ func reasonFor(err error) string {
 	}
 	return ReasonUnreadable
 }
-
-func trimSlash(s string) string { return strings.Trim(s, "/") }

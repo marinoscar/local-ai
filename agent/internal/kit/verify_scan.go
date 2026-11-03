@@ -111,11 +111,6 @@ func expectedID(dir string) string {
 	return ""
 }
 
-func partOf2(dir string) string {
-	first, _, _ := strings.Cut(dir, "/")
-	return first
-}
-
 // scan finds every MANIFEST.json below kit/ (the same folders as ark.ScanRoot: kit/config and hidden
 // folders are not looked into) and reads it. It hashes nothing.
 func (r *run) scan(ctx context.Context) error {
@@ -164,7 +159,7 @@ func (r *run) tryItem(dir string) {
 	if _, err := r.fs.Lstat(mp); err != nil && errors.Is(err, fs.ErrNotExist) {
 		return
 	}
-	it := &scanItem{dir: dir, part: partOf2(dir), id: expectedID(dir), status: StatusOK}
+	it := &scanItem{dir: dir, part: partOf(dir), id: expectedID(dir), status: StatusOK}
 	r.items = append(r.items, it)
 	r.byDir[dir] = it
 	var reason string
