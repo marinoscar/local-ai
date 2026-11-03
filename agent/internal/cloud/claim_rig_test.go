@@ -63,6 +63,8 @@ type testHandler struct {
 	needsInflight bool
 	run           func(ctx context.Context, job Job, params any) (Outcome, error)
 	started       chan Job
+	// decode replaces the default decoder (one optional field n) when set.
+	decode func(raw json.RawMessage) (any, error)
 }
 
 func newTestHandler(name string, run func(ctx context.Context, job Job, params any) (Outcome, error)) *testHandler {
@@ -79,6 +81,9 @@ func (h *testHandler) NeedsInflight() bool {
 	return h.needsInflight
 }
 func (h *testHandler) Decode(raw json.RawMessage) (any, error) {
+	if h.decode != nil {
+		return h.decode(raw)
+	}
 	var p testParams
 	if err := DecodeParams(raw, &p); err != nil {
 		return nil, err
