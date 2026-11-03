@@ -2,7 +2,7 @@
 
 > **Single source of truth** for the node mode state machine. It is implemented by the agent ([agent.md](../specs/agent.md) §4.2), and surfaced by `aictl mode` ([aictl.md](../specs/aictl.md)), the local UI, the Survival Portal, ai-desktop and the cloud.
 
-Every node is always in exactly one **mode**. The mode is persisted in `/var/lib/localai/state.json` (`mode`), so it **survives reboot**: a node put into survival mode comes back in survival mode.
+Every node is always in exactly one **mode**. The mode is persisted in `/var/lib/localai/state.json` (`mode`), so it **survives reboot**: a node put into survival mode comes back in survival mode. Each committed change is also appended, with its time, to a bounded `mode_history` in the same file (newest 50, 90 days: [agent.md](../specs/agent.md) §3.5), which READY reads to tell a node that was offline on purpose from one that did not sync.
 
 | Mode | One-line meaning | Who uses it |
 |---|---|---|

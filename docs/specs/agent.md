@@ -358,6 +358,7 @@ Unknown top-level keys are a **warning** (logged, `LAI-AGT-002` severity `warnin
 
   "mode": "online",
   "mode_changed_at": "2026-11-01T22:10:00Z",
+  "mode_history": [{"at": "2026-10-28T09:00:00Z", "mode": "offline"}, {"at": "2026-11-01T22:10:00Z", "mode": "online"}],
   "mode_transition": null,
   "pending_mode": null,
 
@@ -402,6 +403,8 @@ Unknown top-level keys are a **warning** (logged, `LAI-AGT-002` severity `warnin
 ```
 
 `mode_transition.skip_models` (additive, written only by a survival transition that resumed) lists the models `survival_models` must not try: the one whose load was `in_progress` at each restart of this transition, accumulated so that a second crash on another model does not bring the first back (§4.2.4). `pending_mode` is `"survival"` while a `POST /mode/survival` received before startup step 12 (or during shutdown), or a survival request that preempts a running transition, waits to run (§4.1 step 10, §3.8.16, §4.2.3); it is cleared when that transition starts. `agent.recent_starts` holds the start times of the last 10 agent starts (newest last), used for `LAI-AGT-014` (§4.1).
+
+`mode_history` (additive; absent until the first mode change after the agent that writes it was installed) is the committed mode changes, oldest first, each `{"at": <rfc3339 UTC>, "mode": <the mode changed to>}`, for the readers that need more than the last change: READY's no-recent-sync rule ([ark-sync.md](ark-sync.md) §4.12.2). The `persist` step appends to it in the same write that sets `mode` (§4.2.1), so the two never disagree after a crash; a request that does not change the mode (already there, or `reapply`) appends nothing, and a change earlier than the last entry (a clock that stepped back) takes the last entry's time so the list stays in order. It is bounded: the newest 50 entries, and nothing older than 90 days except the one entry in force when that period began (the baseline, so the mode at the start of the retained period is known). A file with no history gets a baseline on its first change: the mode the node was in, since `mode_changed_at`, or with an unknown start (`"at": "0001-01-01T00:00:00Z"`) when the node fell back to `offline` after a damaged file; a node that is online and never changed gets none. Readers take `State.ModeTimeline()`: the list, or for a node that is not online and has no list (an older file, a fallback) one entry for its current mode since `mode_changed_at` (unknown start when null). An empty timeline means online for as long as anything is known. It survives the damaged-file rules above like any other field: the backup's copy is used when the backup is.
 
 `tailscale.applied_pattern` is the pattern of **our** listener the last read of the serve configuration showed (`"A"` or `"B"`), or `""` when none of ours is published (after a verified removal, or a read that found none); it is left unchanged when tailscale could not be read. `applied_at` is when that value last changed (`null` with `""`). `connectivity.since` is when the reported value last changed and `none_since` when the outage that made it `none` began (§4.5); `connectivity.checked_at` of `GET /status` is not stored: it is `ConnectivityProber.LastCheckedAt()`.
 
@@ -1182,7 +1185,7 @@ Each transition is an ordered list of **named, idempotent steps**. Each step fun
 | `tailscale_on` | online | Apply the configured pattern (§4.7.2) | 30 s | `LAI-NET-003` (not logged in) / `LAI-NET-004`; continue |
 | `link_start` | online | Start cloud link if the credential exists | 1 s | — |
 | `prober_start` | online | Start connectivity prober | 1 s | — |
-| `persist` | all | `state.mode = target`, `mode_changed_at = now`, `mode_transition = null` | 1 s | if the state store is not writable, keep in memory and raise `LAI-AGT-004` |
+| `persist` | all | `state.mode = target`, `mode_changed_at = now`, append `{at: now, mode: target}` to `mode_history` (§3.5), `mode_transition = null` | 1 s | if the state store is not writable, keep in memory and raise `LAI-AGT-004` |
 | `emit` | all | Publish `mode.changed`; audit `mode.change` | — | — |
 | `sync_catchup` | online | If `sync.last_success_at` older than 24 h, schedule a sync in 5 min (cancellable) | — | — |
 
