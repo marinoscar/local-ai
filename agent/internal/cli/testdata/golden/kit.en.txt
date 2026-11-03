@@ -1,7 +1,0 @@
-== stdout ==
-What you can do with the rebuild kit:
-  export-build  Save this computer's AI program builds in the kit.
-  install       Install kiwix-tools, pmtiles, piper or the agent from the kit.
-  install-debs  Install packages from the kit's offline apt repository.
-Run `aictl help kit <command>` for the details.
-== exit 2 ==

@@ -1,0 +1,24 @@
+== stdout ==
+
+Kit de reconstrucción en el disco de este equipo: verde
+  No hizo falta leer nada otra vez (13 elementos comprobados por nombre, tamaño
+  y registro).
+PARTE       ESTADO  CÓDIGO
+catalog     bien
+installers  bien
+bin         bien
+src         bien
+git         bien
+toolchains  bien
+tools       bien
+debs        bien
+nvidia      bien
+cuda        bien
+prebuilt    bien
+✓ Todo lo que este equipo necesita está en el kit y cada archivo es correcto.
+== stderr ==
+… Leyendo los registros del kit
+… Comprobando la firma de los archivos del agente
+… Comprobando lo que necesita este equipo
+… Comprobando que llama.cpp se podría reconstruir desde el kit
+== exit 0 ==

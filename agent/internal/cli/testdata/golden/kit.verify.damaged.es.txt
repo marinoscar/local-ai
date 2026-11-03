@@ -1,0 +1,42 @@
+== stdout ==
+
+Kit de reconstrucción en el disco de este equipo: rojo
+  Todo se leyó otra vez desde el disco: 24 archivos, 2.3 kB.
+PARTE       ESTADO  CÓDIGO
+catalog     bien
+installers  bien
+bin         bien
+src         bien
+git         bien
+toolchains  dañado  LAI-KIT-001
+tools       dañado  LAI-KIT-001
+debs        bien
+nvidia      bien
+cuda        bien
+prebuilt    bien
+✗ Estos archivos del kit de reconstrucción están dañados o no coinciden con su
+  registro: toolchains/go1.24.0.linux-amd64.tar.gz (cambiado).  [LAI-KIT-001]
+  → Solución: Ejecute `aictl kit verify --full`; sincronice la unidad en un
+              equipo con internet.
+✗ Estos archivos del kit de reconstrucción están dañados o no coinciden con su
+  registro: tools/piper/piper_linux_x86_64.tar.gz (truncado).  [LAI-KIT-001]
+  → Solución: Ejecute `aictl kit verify --full`; sincronice la unidad en un
+              equipo con internet.
+== stderr ==
+… Leyendo los registros del kit
+… Leyendo bin otra vez desde el disco
+… Leyendo catalog otra vez desde el disco
+… Leyendo cuda/12.4-amd64 otra vez desde el disco
+… Leyendo debs/resolute-amd64 otra vez desde el disco
+… Leyendo git/llama.cpp.git otra vez desde el disco
+… Leyendo git/whisper.cpp.git otra vez desde el disco
+… Leyendo nvidia/resolute-amd64-595-open otra vez desde el disco
+… Leyendo prebuilt otra vez desde el disco
+… Leyendo src otra vez desde el disco
+… Leyendo toolchains otra vez desde el disco
+… Leyendo tools/kiwix-tools otra vez desde el disco
+… Leyendo tools/pmtiles otra vez desde el disco
+… Comprobando la firma de los archivos del agente
+… Comprobando lo que necesita este equipo
+… Comprobando que llama.cpp se podría reconstruir desde el kit
+== exit 1 ==

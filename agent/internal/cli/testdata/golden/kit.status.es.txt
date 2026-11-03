@@ -1,0 +1,35 @@
+== stdout ==
+
+Kit de reconstrucción en el disco de este equipo: amarillo
+PARTE       ESTADO   CÓDIGO       ÚLTIMA LECTURA
+catalog     bien                  hace 1 día
+installers  bien
+bin         bien                  hace 1 día
+src         bien                  hace 1 día
+git         bien                  hace 1 día
+toolchains  bien                  hace 1 día
+tools       bien                  hace 1 día
+debs        bien                  hace 1 día
+nvidia      bien                  hace 1 día
+cuda        bien                  hace 1 día
+prebuilt    no está  LAI-KIT-040
+
+Lo que ai-n3 (resolute, amd64, cuda) necesita del kit:
+NECESARIO                                                    ESTADO  CÓDIGO
+el código de llama.cpp de 993868924                          bien
+el código de whisper.cpp de 1a418d8a9                        bien
+el programa del agente para amd64                            bien
+el código del agente node-v0.4.0                             bien
+el compilador Go para amd64                                  bien
+los paquetes sin conexión para resolute-amd64                bien
+los paquetes del controlador NVIDIA para resolute-amd64-595  bien
+el kit de CUDA 12.4                                          bien
+kiwix-tools para amd64                                       bien
+pmtiles para amd64                                           bien
+piper para amd64                                             bien
+un llama.cpp precompilado para 993868924-cuda                aviso   LAI-KIT-040
+! El kit no tiene un llama.cpp precompilado para la compilación actual de este
+  equipo (993868924-cuda). Es solo un aviso.  [LAI-KIT-040]
+  → Solución: Ejecute `aictl ark sync` con internet, o `aictl ark import` desde
+              una unidad buena.
+== exit 0 ==
