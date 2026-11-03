@@ -98,9 +98,9 @@ type Components struct {
 
 	// The ark side (nil when the sync stack could not be built, see ark.go): the best-copy index, the
 	// sync run engine, the readiness service behind GET /ark, the mounted roots (the drive manager
-	// calls ArkRoots.SetDrives before it publishes drive.mounted and drive.unmounted) and the empty
-	// registries of the source resolvers that the multi-part products (#257) fill: SyncResolvers is the
-	// planner half, SyncItemResolvers the engine half.
+	// calls ArkRoots.SetDrives before it publishes drive.mounted and drive.unmounted) and the registries
+	// of the source resolvers, filled with git_mirror, apt_closure and repo_docs (ark_sources.go):
+	// SyncResolvers is the planner half, SyncItemResolvers the engine half.
 	ArkIndex          *ark.Index
 	ArkRoots          *ArkRoots
 	SyncEngine        *run.Engine

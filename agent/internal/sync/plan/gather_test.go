@@ -53,6 +53,8 @@ type gatherRig struct {
 	network  plan.Network
 	statfs   func(string) (int64, int64, error)
 	res      *plan.Resolvers
+	// timeout is Deps.ResolveTimeout (zero: the package default).
+	timeout time.Duration
 }
 
 func newGatherRig(t *testing.T) *gatherRig {
@@ -87,7 +89,9 @@ func (r *gatherRig) gatherer() *plan.Gatherer {
 		Node:      func() plan.NodeInfo { return plan.NodeInfo{Backend: "cpu", Arch: "amd64", Codename: "resolute"} },
 		Network:   func() plan.Network { return r.network },
 		Resolvers: r.res,
-		Now:       func() time.Time { return now },
+
+		ResolveTimeout: r.timeout,
+		Now:            func() time.Time { return now },
 	})
 	if err != nil {
 		r.t.Fatal(err)
@@ -437,6 +441,42 @@ func TestGatherResolvers(t *testing.T) {
 			t.Error("a timed-out resolver must leave the item unresolved")
 		}
 	})
+}
+
+// The time a resolver call may take is the option of the gather, else the gatherer's own (the app gives
+// apt_closure minutes), else the package default.
+func TestGatherResolveTimeoutPrecedence(t *testing.T) {
+	left := func(r *gatherRig, opt plan.GatherOptions) time.Duration {
+		t.Helper()
+		var got time.Duration
+		if err := r.res.Register("kiwix", plan.ResolverFunc(func(ctx context.Context, _ plan.CatalogItem) (plan.Resolved, error) {
+			if dl, ok := ctx.Deadline(); ok {
+				got = time.Until(dl)
+			}
+			return plan.Resolved{}, errors.New("no answer")
+		})); err != nil {
+			t.Fatal(err)
+		}
+		opt.Resolve = true
+		if _, err := r.gatherer().Gather(context.Background(), ark.InternalID, opt); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	r := newGatherRig(t)
+	if d := left(r, plan.GatherOptions{}); d <= 0 || d > plan.DefaultResolveTimeout {
+		t.Errorf("default: %v left, want at most %v", d, plan.DefaultResolveTimeout)
+	}
+	r = newGatherRig(t)
+	r.timeout = 3 * time.Hour
+	if d := left(r, plan.GatherOptions{}); d < 2*time.Hour {
+		t.Errorf("the gatherer's timeout: %v left, want about 3h", d)
+	}
+	r = newGatherRig(t)
+	r.timeout = 3 * time.Hour
+	if d := left(r, plan.GatherOptions{ResolveTimeout: time.Minute}); d <= 0 || d > time.Minute {
+		t.Errorf("the option's timeout: %v left, want at most a minute", d)
+	}
 }
 
 func TestResolversRegistry(t *testing.T) {
