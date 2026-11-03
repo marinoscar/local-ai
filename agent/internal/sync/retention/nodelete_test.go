@@ -39,6 +39,7 @@ var bannedMethods = map[string]bool{"Remove": true, "RemoveAll": true}
 // A file is added here only if what it deletes is not content: the sync journal's own housekeeping.
 var deleteAllowlist = map[string]string{
 	"sync/journal/runs.go": "old run logs of the journal itself (runs/<id>.jsonl), never an item's files",
+	"ark/detect.go":        "the drive detector's write probe: it removes the empty .probe file it created itself, never content",
 }
 
 // scanDeletes returns "path:line: call" for every delete found in the non-test Go files below the
