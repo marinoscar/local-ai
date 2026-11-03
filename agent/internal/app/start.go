@@ -19,6 +19,8 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/logx"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
+	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
+	"github.com/marinoscar/local-ai/agent/internal/sync/run"
 )
 
 // Start runs the startup sequence of agent.md section 4.1 up to step 11 and returns. Steps 12 to 17 run
@@ -136,6 +138,8 @@ func (d *Daemon) stepConfig(context.Context) error {
 			return ids
 		},
 		DetectBackend: hardware.DetectBackend,
+		// The owners of a node.yaml block validate it (the store refuses a file one of them rejects).
+		Blocks: map[string]config.BlockValidator{"sync": run.SettingsValidator{}, "piper": piper.BlockValidator{}},
 	}
 	store := config.Open(config.Options{Root: env.Root, Clock: env.Clock, Hooks: hooks})
 	d.c.Config = store
@@ -337,6 +341,9 @@ func (d *Daemon) stepSubsystems(ctx context.Context) error {
 	}
 	d.startWorker(c.Config)
 	d.startWorker(c.Watcher)
+	if d.ark != nil {
+		d.startWorker(d.ark.driveWorker()) // a drive that goes away stops the transfers writing to it
+	}
 	// The drill reporter reads the kept documents (and stamps drill.watch_since on a node that never
 	// ran a drill), so the drill alerts are derived by the first pass below.
 	if err := d.reporter.Load(); err != nil {
@@ -526,6 +533,9 @@ func (d *Daemon) stepUpdate(ctx context.Context) error {
 func (d *Daemon) stepPeriodic(ctx context.Context) error {
 	c := d.c
 	d.startWorker(&doctorLoop{d: d}) // not doctor.Manager.Start: every pass is serialized (doctorloop.go)
+	if d.ark != nil {
+		d.startWorker(d.ark.ready) // READY.json now and every 6 hours
+	}
 	d.startWorker(c.Tailscale)
 	d.startWorker(c.Health)
 	d.bg.Add(1)
