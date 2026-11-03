@@ -222,6 +222,8 @@ func TestResultAnswered409IsDroppedAndNeverRetried(t *testing.T) {
 	// A later job settles after any stray retry of the first would have gone out.
 	cr.dispatchNow(fake.Job{ID: "job-2", Type: "localai.status.refresh", Params: map[string]any{}, Token: "tok-2"}, 20*time.Second)
 	cr.waitJob("job-2", fake.JobSucceeded)
+	// The fake logs a request after it has handled it: wait for the log, not only for the job's status.
+	cr.waitCount(fake.RouteResult, 2)
 	var paths []string
 	for _, r := range cr.srv.RequestsFor(fake.RouteResult) {
 		paths = append(paths, r.Path[strings.LastIndex(r.Path, "commands/")+9:])
@@ -261,6 +263,7 @@ func TestSettleWithoutAnAnswerRetriesAtOneFiveFifteenSeconds(t *testing.T) {
 		cr.waitCount(fake.RouteResult, 3)
 		cr.step(15 * time.Second)
 		cr.waitJob("job-1", fake.JobSucceeded)
+		cr.waitCount(fake.RouteResult, 4) // the fake logs a request after it has handled it
 		if n := cr.srv.Count(fake.RouteResult); n != 4 {
 			t.Errorf("result requests = %d, want 4", n)
 		}
@@ -308,6 +311,7 @@ func TestResultRefusedBy400BecomesAFailure(t *testing.T) {
 	if !strings.HasPrefix(rec.Error, "LAI-CLD-012: ") {
 		t.Errorf("failure = %q", rec.Error)
 	}
+	cr.waitCount(fake.RouteFailure, 1) // the fake logs a request after it has handled it
 	if cr.srv.Count(fake.RouteResult) != 1 || cr.srv.Count(fake.RouteFailure) != 1 {
 		t.Errorf("results %d failures %d", cr.srv.Count(fake.RouteResult), cr.srv.Count(fake.RouteFailure))
 	}

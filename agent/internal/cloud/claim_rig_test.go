@@ -205,6 +205,19 @@ func (cr *claimRig) start() {
 	cr.waitState(StateLinked)
 }
 
+// startAfterFirstHeartbeat is start for a test whose first claim fails: the first claim answer is held
+// until the first heartbeat answer has been applied. The loops are independent and the last result
+// applied wins, so a heartbeat answer applied after the claim failure would return the link from
+// backoff to linked behind the test's back (issue #237).
+func (cr *claimRig) startAfterFirstHeartbeat() {
+	cr.t.Helper()
+	release := cr.srv.Hold(fake.RouteClaim)
+	cr.enroll()
+	cr.waitState(StateLinked)
+	cr.waitHeartbeatApplied(1)
+	release()
+}
+
 // queue adds a job to the fake cloud with a fresh claim token.
 func (cr *claimRig) queue(id, typ string, params any) fake.Job {
 	cr.t.Helper()

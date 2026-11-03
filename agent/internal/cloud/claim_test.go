@@ -260,7 +260,7 @@ func TestAssignmentWithoutAClaimTokenOmitsTheKey(t *testing.T) {
 func TestClaim401RevokesTheNode(t *testing.T) {
 	cr := newClaimRig(t, []*testHandler{okHandler()})
 	cr.srv.Script(fake.RouteClaim, fake.Reply{Status: 401})
-	cr.start()
+	cr.startAfterFirstHeartbeat()
 	cr.waitState(StateRevoked)
 	cr.waitAlert(doctor.CLD051, true)
 }
@@ -268,7 +268,7 @@ func TestClaim401RevokesTheNode(t *testing.T) {
 func TestClaim403DisablesAndEachHeartbeatReChecks(t *testing.T) {
 	cr := newClaimRig(t, []*testHandler{okHandler()})
 	cr.srv.Locked(func() { cr.srv.Disabled = true })
-	cr.start()
+	cr.startAfterFirstHeartbeat()
 	cr.waitState(StateDisabled)
 	cr.waitAlert(doctor.CLD052, true)
 
@@ -299,7 +299,7 @@ func TestClaim403DisablesAndEachHeartbeatReChecks(t *testing.T) {
 func TestClaim404RegistersAgain(t *testing.T) {
 	cr := newClaimRig(t, []*testHandler{okHandler()})
 	cr.srv.Script(fake.RouteClaim, fake.Err(404, "", ""))
-	cr.start()
+	cr.startAfterFirstHeartbeat()
 	cr.waitCount(fake.RouteRegister, 2)
 	cr.waitState(StateLinked)
 	// The loop starts again with the new registration and claims.
@@ -309,7 +309,7 @@ func TestClaim404RegistersAgain(t *testing.T) {
 func TestClaimFailureBacksOffThenReturnsToLinked(t *testing.T) {
 	cr := newClaimRig(t, []*testHandler{okHandler()})
 	cr.srv.Script(fake.RouteClaim, fake.Reply{Status: 503}, fake.Reply{Status: 503})
-	cr.start()
+	cr.startAfterFirstHeartbeat()
 	cr.waitState(StateBackoff)
 	if n := cr.link.Counters().ClaimFailures.Load(); n != 1 {
 		t.Errorf("claim failures = %d", n)
@@ -333,7 +333,7 @@ func TestClaimFailureBacksOffThenReturnsToLinked(t *testing.T) {
 func TestClaim429CountsAsRateLimitedAndHonoursRetryAfter(t *testing.T) {
 	cr := newClaimRig(t, []*testHandler{okHandler()})
 	cr.srv.Script(fake.RouteClaim, fake.Reply{Status: 429, Header: map[string]string{"Retry-After": "30"}})
-	cr.start()
+	cr.startAfterFirstHeartbeat()
 	cr.waitCount(fake.RouteClaim, 1)
 	cr.dueWithin(30 * time.Second)
 	cr.waitState(StateBackoff)
@@ -351,7 +351,7 @@ func TestClaim429CountsAsRateLimitedAndHonoursRetryAfter(t *testing.T) {
 func TestMalformedClaimAnswerIsAFailureNotACrash(t *testing.T) {
 	cr := newClaimRig(t, []*testHandler{okHandler()})
 	cr.srv.Script(fake.RouteClaim, fake.Reply{Status: 200, Body: map[string]any{"data": map[string]any{"jobs": "not a list"}}})
-	cr.start()
+	cr.startAfterFirstHeartbeat()
 	cr.waitState(StateBackoff)
 	cr.waitTimers(1)
 	cr.step(5 * time.Second)
