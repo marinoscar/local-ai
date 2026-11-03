@@ -24,6 +24,9 @@ node_modules/
 *.zim
 *.pmtiles
 *.onnx
+# ...except the tiny invented fixtures the unit tests read
+!/agent/**/testdata/**/tiny.zim
+!/agent/**/testdata/**/tiny.pmtiles
 
 # Editors / OS
 .DS_Store
