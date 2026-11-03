@@ -109,4 +109,4 @@ while the marker file `scripts/tests/redaction/.redaction-fixtures` exists there
 - Read the issue, the linked spec sections and the relevant ADRs **before** writing code.
 - If anything in the issue is ambiguous, prefer the spec. If the spec is silent, choose the option that keeps offline operation safest, and record the decision in the spec in the same PR.
 - Do not invent new paths, ports or unit names. Use the canonical ones, or add new ones to the canonical table first.
-- Do not run state-changing commands on a production node (`systemctl restart`, `tailscale serve`, rotating keys) unless the issue's test plan says to, and the owner is running it.
+- Do not run state-changing commands on a production node (`systemctl restart`, `tailscale serve`, rotating keys) unless the issue's test plan says to and either the owner is running it, or the owner has delegated the run to the agent in that session (a Remote Control session on the node). When delegated: take a backup and run the dry run first, change one thing at a time, keep the rollback command ready, stop at the first unexpected result, and paste every command and its output into the issue as the evidence.
