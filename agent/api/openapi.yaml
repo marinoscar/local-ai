@@ -919,11 +919,16 @@ paths:
       tags: [ark]
       operationId: listArkDrives
       summary: Detected AI-ARK drives
-      description: Shape owned by ark-sync.md section 3.5. agent.md section 3.8.17.
+      description: |
+        Shape owned by ark-sync.md section 3.5 and 4.1.2. agent.md section 3.8.17. Every drive whose
+        filesystem label is exactly `AI-ARK`, mounted or only plugged in: the mounted ones in mount
+        order (the best-copy order), then the ones that are not mounted. `problems[].title` and `.fix`
+        are in the language of the request (Accept-Language, else `ui.language`). `root_id` is null
+        only when there is no usable filesystem UUID (a drive that is not ext4); `mount` is null for a
+        drive that is not mounted; `ready` is null until a readiness report exists for the root. A node
+        with no AI-ARK drive answers an empty list.
       x-localai-auth: op
       x-localai-timeout: "10 s"
-      x-localai-status: planned
-      x-localai-issue: SYNC-02
       responses:
         "200":
           description: The drives.
@@ -3141,13 +3146,25 @@ components:
         initialized: {type: boolean}
         profile: {type: [string, "null"]}
         ready:
-          type: object
+          type: [object, "null"]
           required: [overall, generated_at]
           additionalProperties: true
           properties:
             overall: {type: string}
             generated_at: {type: string, format: date-time}
-        problems: {type: array, items: {type: object, additionalProperties: true}}
+        problems:
+          type: array
+          items:
+            type: object
+            required: [code, title]
+            additionalProperties: true
+            properties:
+              code: {type: string, pattern: "^LAI-[A-Z]{3}-[0-9]{3}$"}
+              severity: {type: string, enum: [info, warning, error, critical]}
+              title: {type: string}
+              fix: {type: string}
+              details: {type: object, additionalProperties: true}
+        detail: {type: string, description: "A plain-language note for a state that has no doctor code of its own (a damaged ROOT.json). Not translated."}
 
     ArkDrives:
       type: object
