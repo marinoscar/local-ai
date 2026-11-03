@@ -88,11 +88,13 @@ func TestIntegrationCloudModelLoadJob(t *testing.T) {
 	// ark.verify is the re-verification's (SYNC-13): once the sync run is over the slot is free, and the
 	// job starts a run of trigger verify (the run slot is shared, so while the sync was active it would
 	// have answered started: false with that run's id).
-	// Its own deadline: the shared 30 s above has been spent by the steps before it on a loaded runner.
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), 90*time.Second)
+	// The test only needs the run slot free, not the sync finished: on a runner with a real network the
+	// run may be fetching, so it is cancelled (DELETE /ark/sync) and then waited for.
+	d.Components().SyncEngine.Cancel()
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer waitCancel()
 	if err := d.Components().SyncEngine.Wait(waitCtx, syncRes.RunID); err != nil {
-		t.Fatalf("the sync run %s did not end: %v", syncRes.RunID, err)
+		t.Fatalf("the cancelled sync run %s did not end: %v", syncRes.RunID, err)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
