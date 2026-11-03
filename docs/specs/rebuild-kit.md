@@ -361,6 +361,7 @@ Plain list, also printed in the rebuild runbook:
 | LAI-KIT-044 | critical | The kit's agent files failed their signature check | Don't install them. Use another drive and report it. | No los instale. Use otro disco y repórtelo. |
 | LAI-KIT-045 | warning | The kit's list of pinned versions is damaged or newer than this agent | Nothing breaks. Sync the catalog with internet; it brings a fresh list. | Nada se dañó. Sincronice el catálogo con internet; trae una lista nueva. |
 | LAI-KIT-046 | warning | The kit's index and guide could not be refreshed | The kit itself is fine. Run `aictl ark sync`; it rewrites them. | El kit está bien. Ejecute `aictl ark sync`; los reescribe. |
+| LAI-KIT-047 | error | Installing from the kit failed | Nothing was replaced. Read the message, then run `aictl kit verify --full` and try again. | No se reemplazó nada. Lea el mensaje, ejecute `aictl kit verify --full` e intente otra vez. |
 
 ## 9. Test plan
 
