@@ -125,6 +125,30 @@ func TestStatusFull(t *testing.T) {
 	}
 }
 
+// TestStatusArkMetrics: the readiness gauges of the ark view appear under ark.metrics (ark-sync.md
+// section 7), and are absent while no view supplies them.
+func TestStatusArkMetrics(t *testing.T) {
+	r := newRig(t, func(r *rig, d *statusapi.Deps) {
+		d.Ark = fakeArk{statusapi.ArkInfo{
+			Roots: []statusapi.ArkRoot{{Path: "/srv/localai", Kind: "internal", Status: "yellow"}},
+			Metrics: []statusapi.ArkMetric{
+				{Name: "localai_ark_root_overall", Labels: map[string]string{"root": "internal"}, Value: 1},
+				{Name: "localai_ark_root_free_bytes", Labels: map[string]string{"root": "internal"}, Value: 105300000000},
+				{Name: "localai_ark_reverify_age_days_max", Labels: map[string]string{"root": "internal"}, Value: 12},
+			},
+		}}
+	})
+	st := decode[statusapi.Status](t, r.get("/status", "op"))
+	if len(st.Ark.Metrics) != 3 || st.Ark.Metrics[0].Name != "localai_ark_root_overall" || st.Ark.Metrics[0].Labels["root"] != "internal" ||
+		st.Ark.Metrics[1].Value != 105300000000 || st.Ark.Metrics[2].Value != 12 {
+		t.Errorf("metrics = %+v", st.Ark.Metrics)
+	}
+	none := newRig(t, func(r *rig, d *statusapi.Deps) { d.Ark = fakeArk{statusapi.ArkInfo{}} })
+	if body := none.get("/status", "op").Body.String(); strings.Contains(body, `"metrics"`) {
+		t.Errorf("no metrics, no key: %s", body)
+	}
+}
+
 // TestStatusEveryViewUnavailable: a node whose subsystems do not exist yet still answers 200 with the
 // documented empty states (the issue's "renders with every view unavailable").
 func TestStatusEveryViewUnavailable(t *testing.T) {

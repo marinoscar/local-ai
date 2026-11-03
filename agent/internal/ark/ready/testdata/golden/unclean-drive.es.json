@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-11-02T15:00:00Z",
+  "generated_by": {
+    "node_id": "ai-n3",
+    "agent_version": "0.4.0"
+  },
+  "root": {
+    "id": "ark-3f9c0a12",
+    "kind": "ark_drive",
+    "path": "/media/operator/AI-ARK/localai",
+    "profile": "ark-drive-full",
+    "catalog_version": "2026.11.02-1",
+    "fs_total_bytes": 100000000000,
+    "fs_free_bytes": 60000000000,
+    "budget_bytes": 95000000000,
+    "used_bytes": 6213000000,
+    "trash_bytes": 0,
+    "read_only": true
+  },
+  "overall": "red",
+  "survival_capable": false,
+  "clock_wrong": false,
+  "last_sync": {
+    "run_id": "run-20261102T031500Z-a1f3",
+    "trigger": "scheduled",
+    "finished_at": "2026-10-31T15:00:00Z",
+    "state": "done",
+    "age_days": 2
+  },
+  "last_full_reverify_at": "2026-10-31T15:00:00Z",
+  "counts": {
+    "verified": 6,
+    "stale": 0,
+    "missing": 6,
+    "skipped": 0,
+    "failed": 0,
+    "quarantined": 0,
+    "orphan": 0
+  },
+  "items": [
+    {
+      "id": "kit-llama-cpp",
+      "kind": "kit",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-10-31T15:00:00Z",
+      "last_reverified_at": "2026-10-31T15:00:00Z",
+      "age_days": 2,
+      "freshness": "green",
+      "bytes": 500000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "kit-debs-resolute-amd64",
+      "kind": "kit",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-10-31T15:00:00Z",
+      "last_reverified_at": "2026-10-31T15:00:00Z",
+      "age_days": 2,
+      "freshness": "green",
+      "bytes": 3100000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "docs-bundle",
+      "kind": "docs",
+      "tier": 1,
+      "status": "missing",
+      "reason": "read_only",
+      "bytes": 100000000
+    },
+    {
+      "id": "model-alpha-9b-q4",
+      "kind": "model",
+      "tier": 1,
+      "survival": true,
+      "status": "missing",
+      "reason": "read_only",
+      "bytes": 5870000000
+    },
+    {
+      "id": "whisper-small",
+      "kind": "model",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-10-31T15:00:00Z",
+      "last_reverified_at": "2026-10-31T15:00:00Z",
+      "age_days": 2,
+      "freshness": "green",
+      "bytes": 487000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "piper-en-medium",
+      "kind": "model",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-10-31T15:00:00Z",
+      "last_reverified_at": "2026-10-31T15:00:00Z",
+      "age_days": 2,
+      "freshness": "green",
+      "bytes": 63000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "piper-es-medium",
+      "kind": "model",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-10-31T15:00:00Z",
+      "last_reverified_at": "2026-10-31T15:00:00Z",
+      "age_days": 2,
+      "freshness": "green",
+      "bytes": 63000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "wikipedia-en-nopic",
+      "kind": "kiwix",
+      "tier": 1,
+      "status": "missing",
+      "reason": "read_only",
+      "bytes": 47800000000
+    },
+    {
+      "id": "medical-alpha-en",
+      "kind": "kiwix",
+      "tier": 1,
+      "status": "verified",
+      "version": "v1",
+      "verified_at": "2026-10-31T15:00:00Z",
+      "last_reverified_at": "2026-10-31T15:00:00Z",
+      "age_days": 2,
+      "freshness": "green",
+      "bytes": 2000000000,
+      "trust": "pinned"
+    },
+    {
+      "id": "map-region-alpha",
+      "kind": "maps",
+      "tier": 1,
+      "status": "missing",
+      "reason": "read_only",
+      "bytes": 2500000000
+    },
+    {
+      "id": "map-assets",
+      "kind": "maps",
+      "tier": 1,
+      "status": "missing",
+      "reason": "read_only",
+      "bytes": 50000000
+    },
+    {
+      "id": "stackexchange-electronics",
+      "kind": "kiwix",
+      "tier": 2,
+      "status": "missing",
+      "reason": "read_only",
+      "bytes": 6000000000
+    }
+  ],
+  "problems": [
+    {
+      "code": "LAI-ARK-004",
+      "severity": "error",
+      "title": "El sistema de archivos de la unidad del arca tiene errores"
+    }
+  ]
+}

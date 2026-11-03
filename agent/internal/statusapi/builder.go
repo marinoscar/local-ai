@@ -285,6 +285,9 @@ func (b *StatusBuilder) ark() ArkBlock {
 		out.Sync.State = info.SyncState
 	}
 	out.Sync.LastSuccessAt = timePtr(info.LastSuccessAt)
+	for _, m := range info.Metrics {
+		out.Metrics = append(out.Metrics, ArkMetricRow(m))
+	}
 	return out
 }
 

@@ -452,7 +452,12 @@ export interface paths {
         };
         /**
          * The readiness report of every mounted root
-         * @description Shape owned by ark-sync.md section 3.5 and 4.12.1. agent.md section 3.8.17.
+         * @description Shape owned by ark-sync.md section 3.5 and 4.12.1. agent.md section 3.8.17. One report per mounted
+         *     content root, internal first: the `READY.json` of the root, with the title of every problem in the
+         *     language of the request (Accept-Language, else `ui.language`). The report of a read-only root is
+         *     computed and kept in memory, never written to the drive. A node with no mounted root answers an
+         *     empty list.
+         *
          */
         get: operations["getArk"];
         put?: never;
@@ -1322,6 +1327,14 @@ export interface components {
                 } & {
                     [key: string]: unknown;
                 };
+                /** @description The readiness gauges of ark-sync.md section 7: localai_ark_root_overall (0 green, 1 yellow, 2 red), localai_ark_root_free_bytes and localai_ark_reverify_age_days_max, one of each per mounted root (label root). */
+                metrics?: {
+                    name: string;
+                    labels?: {
+                        [key: string]: string;
+                    };
+                    value: number;
+                }[];
             } & {
                 [key: string]: unknown;
             };
@@ -1695,20 +1708,101 @@ export interface components {
             /** @enum {boolean} */
             already: true;
         };
-        /** @description Owned by ark-sync.md section 4.12.1 (READY.json). */
+        /** @description Owned by ark-sync.md section 3.5 (GET /ark) and 4.12.1 (READY.json). */
         ArkRoots: {
-            roots: ({
-                schema_version: number;
-                /** Format: date-time */
-                generated_at: string;
-                root: {
-                    [key: string]: unknown;
-                };
+            roots: components["schemas"]["ReadyReport"][];
+        };
+        /** @description READY.json, schema v1 (ark-sync.md section 4.12.1): the readiness of one content root. `generated_by.node_id` and `root.path` are dropped before the report goes to the cloud (cloud ReadyReportV1). */
+        ReadyReport: {
+            /** @constant */
+            schema_version: 1;
+            /** Format: date-time */
+            generated_at: string;
+            generated_by: {
+                node_id: string;
+                agent_version: string;
+            } & {
+                [key: string]: unknown;
+            };
+            root: {
+                id: string;
                 /** @enum {string} */
-                overall: "green" | "yellow" | "red";
+                kind: "internal" | "ark_drive";
+                path: string;
+                profile: string;
+                catalog_version: string | null;
+                fs_total_bytes: number;
+                fs_free_bytes: number;
+                budget_bytes: number;
+                used_bytes: number;
+                trash_bytes: number;
+                read_only: boolean;
+            } & {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            overall: "green" | "yellow" | "red";
+            /** @description This root alone holds everything survival needs. The node-level value, over every mounted root, is in GET /status. */
+            survival_capable: boolean;
+            /** @description True when the clock is earlier than a time the node has already seen: every item's freshness is then omitted and no age rule is applied. */
+            clock_wrong: boolean;
+            last_sync: ({
+                run_id: string;
+                trigger: string;
+                /** Format: date-time */
+                finished_at: string;
+                state: string;
+                age_days: number;
+            } & {
+                [key: string]: unknown;
+            }) | null;
+            /** Format: date-time */
+            last_full_reverify_at: string | null;
+            counts: {
+                verified: number;
+                stale: number;
+                missing: number;
+                skipped: number;
+                failed: number;
+                quarantined: number;
+                orphan: number;
+            };
+            items: ({
+                id: string;
+                kind: string;
+                tier: number;
+                survival?: boolean;
+                /** @enum {string} */
+                status: "verified" | "stale" | "missing" | "skipped" | "failed" | "quarantined" | "orphan";
+                version?: string;
+                reason?: string;
+                code?: string;
+                /** Format: date-time */
+                verified_at?: string;
+                /** Format: date-time */
+                last_reverified_at?: string;
+                /** Format: date-time */
+                checked_current_at?: string;
+                age_days?: number;
+                /** @enum {string} */
+                freshness?: "green" | "yellow" | "red";
+                bytes?: number;
+                /** @enum {string} */
+                trust?: "pinned" | "sidecar" | "signed_index" | "computed" | "tofu";
             } & {
                 [key: string]: unknown;
             })[];
+            problems: ({
+                code: string;
+                /** @enum {string} */
+                severity: "info" | "warning" | "error" | "critical";
+                item?: string;
+                title: string;
+            } & {
+                [key: string]: unknown;
+            })[];
+        } & {
+            [key: string]: unknown;
         };
         /** @description A drive of GET /ark/drives (ark-sync.md section 3.5). `root_id` is null only when there is no usable filesystem UUID. */
         ArkDrive: {

@@ -254,7 +254,7 @@ An offline rebuild of the *same* tag produces a binary equivalent to the release
 4. **Completeness for the lab** (drive roots): the same for every entry in `pins.json` (`LAI-KIT-041`, yellow).
 5. **Consistency:** the debs closure codename equals this node's codename (internal roots), else `LAI-KIT-042` (error, red: the kit is for a different Ubuntu release); `nvcc` version in the closure is supported by the installed driver (`LAI-KIT-043`).
 6. **Buildability:** `aictl rebuild-llama --dry-run` passes (all preflight checks, with packages resolvable from the kit repo).
-Result: a JSON report `{overall, parts:[{part, status, code?}]}` used by the drill and by READY.json: the kit rows of [ark-sync.md](ark-sync.md) §4.12.2 combine age and codename with this report's completeness and CUDA results (`LAI-KIT-040` red, `LAI-KIT-041` yellow, `LAI-KIT-042` red, `LAI-KIT-043` red).
+Result: a JSON report `{overall, parts:[{part, status, code?}]}` used by the drill and by READY.json: the kit rows of [ark-sync.md](ark-sync.md) §4.12.2 combine age and codename with this report's completeness and CUDA results (`LAI-KIT-040` red on the internal root and yellow on a drive, `LAI-KIT-041` yellow, `LAI-KIT-042` red on the internal root and yellow on a drive, `LAI-KIT-043` yellow).
 
 ## 5. Limits: what can't be rebuilt offline
 
