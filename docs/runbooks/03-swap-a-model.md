@@ -66,6 +66,7 @@ In **Survival mode** the same thing is the Portal's button **8 Switch brain** ([
 
    - **What you should see:** `… Unloading <other model> to make room`, a progress bar, then `✓ Qwen 3.5 9B is ready. (7.1 s)` and the URL to use it.
    - To keep the others loaded (only if there is room): `aictl load <model-id> --keep-others`.
+   - If you press Ctrl-C, you only stop watching: the model keeps loading. Check it with `aictl models`.
    - **If it doesn't work:** `✗ The model … failed to start. The previous model was started again. [LAI-LLM-009]`. Choose a smaller model or read `aictl logs --unit llama`. `LAI-AGT-022`: another load is running; wait and retry.
 
 9. **Download a model** (needs internet and **online** mode):
@@ -139,12 +140,12 @@ The catalog (`catalog/models.yaml` in this repo) is the only list of models any 
 21. **Measure graphics memory and speed:**
 
     ```
-    aictl bench <new-id>
+    sudo aictl bench <new-id>
     ```
 
-    It asks to unload the current models (they are put back at the end). It loads the model at its full context, sends a test request, measures peak graphics memory, then runs `llama-bench`.
-    - **What you should see:** `graphics memory 6.6 GB at ctx 32768 → suggested min_vram_mib: 7240`, speeds in tokens per second, the result file in `/var/lib/localai/bench/`, and a ready YAML snippet "For the catalog PR".
-    - **If it doesn't work:** `LAI-LLM-025` (benchmark failed): close other GPU programs and try again. If the result says "disturbed", someone else loaded a model during the run; run it again.
+    It asks to unload the current models (they are put back at the end; add `--yes` to skip the question). It loads the model at its full context, sends a test request, measures peak graphics memory, then runs `llama-bench`. Do not use the AI meanwhile: Ctrl-C stops it and puts the models back.
+    - **What you should see:** `graphics memory 6.4 GB at ctx 32768 → suggested min_vram_mib: 7240`, speeds in tokens per second, the result file in `/var/lib/localai/bench/`, and a ready YAML snippet "For the catalog PR".
+    - **If it doesn't work:** `LAI-CLI-006`: you forgot `sudo`. `LAI-LLM-025` (benchmark failed): close other GPU programs and try again. `LAI-AGT-022`: a model is loading or unloading; wait and retry. If the result says another model operation ran during the test, someone else loaded a model; no value is suggested, so run it again.
 22. **Paste the measured `min_vram_mib`** (with the comment line the command printed) into your entry. If the model is meant for several node types, measure on each (8 GB, 12 GB, unified) and use the value from the node where it is tightest.
 23. **Open the PR** with `Closes #<issue>`. In the description, include the bench output (GPU, build, date), the lint result, and a short test ("asked 3 questions, answers were sensible"). Run `scripts/check-redaction.sh` first.
 24. **After merge:** the lab admin imports the new catalog release in the cloud (**Lab → Catalog → Import release…**), checks the lint, and presses **Approve** ([10](10-lab-operations.md)). Nodes pick it up on their next nightly sync, or at once with **Push to nodes**. Then restore the test node's catalog (`sudo aictl catalog restore` puts back the catalog it had before step 20, or let the next sync replace it).

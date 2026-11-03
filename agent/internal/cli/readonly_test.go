@@ -495,7 +495,8 @@ func TestSetCommandsAreNotImplementedYet(t *testing.T) {
 	f := newROFix(t, fake.Options{})
 	f.serve("/models", "models")
 	f.serve("/services", "services")
-	for _, args := range [][]string{{"default", "qwen3.5-9b-q4km"}, {"services", "restart", "llama"}} {
+	// `default <id>` is AICTL-05 and works; `services restart` waits for AICTL-10.
+	for _, args := range [][]string{{"services", "restart", "llama"}} {
 		r := f.run(args...)
 		if r.code != ExitFailed || !strings.Contains(r.errOut, "not implemented yet") {
 			t.Errorf("%v: exit %d %q", args, r.code, r.errOut)
