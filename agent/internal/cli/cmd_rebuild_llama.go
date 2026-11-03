@@ -332,19 +332,13 @@ func llamaRequest(c *Call) (build.Request, error) {
 
 // ---- the words ------------------------------------------------------------------------------------
 
-// llamaDuration is what the plan line says a build takes.
-func llamaDuration(l Lang, backend string) string {
-	if backend == build.BackendCPU {
-		return pick(l, "about 30–90 minutes", "unos 30–90 minutos")
-	}
-	return pick(l, "about 20–40 minutes", "unos 20–40 minutos")
-}
-
-// llamaPlanLine is "Building llama.cpp f3586e66b for cuda (sm 75), 5 parallel jobs  (about 20–40 minutes)".
+// llamaPlanLine is "Building llama.cpp f3586e66b for cuda (sm 75), 5 parallel jobs". No duration is
+// promised: the specs give none that holds for every backend and machine (the "Compiling (this takes
+// a while)" line that follows says it is long).
 func llamaPlanLine(l Lang, in build.Inputs) string {
-	return fmt.Sprintf(pick(l, "Building llama.cpp %s for %s%s, %d parallel jobs  (%s)",
-		"Compilando llama.cpp %s para %s%s, %d trabajos en paralelo  (%s)"),
-		in.ShortCommit, in.Backend, sm(in), in.Jobs, llamaDuration(l, in.Backend))
+	return fmt.Sprintf(pick(l, "Building llama.cpp %s for %s%s, %d parallel jobs",
+		"Compilando llama.cpp %s para %s%s, %d trabajos en paralelo"),
+		in.ShortCommit, in.Backend, sm(in), in.Jobs)
 }
 
 func llamaConfirmPrompt(l Lang, in build.Inputs, req build.Request) string {

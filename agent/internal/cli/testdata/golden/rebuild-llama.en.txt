@@ -3,7 +3,6 @@
   Max-Q Design).
 ✓ Switched to the new build. qwen3.5-9b-q4km is loaded again.
 == stderr ==
-… Building llama.cpp f3586e66b for cuda (sm 75), 5 parallel jobs (about 20–40
-  minutes)
+… Building llama.cpp f3586e66b for cuda (sm 75), 5 parallel jobs
 … Compiling (this takes a while)
 == exit 0 ==

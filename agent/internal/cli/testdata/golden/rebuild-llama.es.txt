@@ -3,7 +3,6 @@
   with Max-Q Design).
 ✓ Se cambió a la nueva versión. qwen3.5-9b-q4km está cargado otra vez.
 == stderr ==
-… Compilando llama.cpp f3586e66b para cuda (sm 75), 5 trabajos en paralelo (unos
-  20–40 minutos)
+… Compilando llama.cpp f3586e66b para cuda (sm 75), 5 trabajos en paralelo
 … Compilando (tarda un rato)
 == exit 0 ==
