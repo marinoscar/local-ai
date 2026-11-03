@@ -235,6 +235,29 @@ func kitRoots(c *Call, env local.Env, rootFlag string) ([]kitRoot, error) {
 	return withKit, nil
 }
 
+// kitLock serialises the kit commands with the other aictl commands that change files. A rebuilt
+// node may have no /etc/localai yet (the kit is what rebuilds it), and then there is nothing to
+// lock against: the lock is skipped rather than refusing the recovery.
+func kitLock(c *Call, env local.Env) (release func(), err error) {
+	if fi, serr := os.Stat(env.Paths.EtcDir); serr != nil || !fi.IsDir() {
+		return func() {}, nil
+	}
+	release, lerr := local.Lock(env)
+	if lerr != nil {
+		return nil, localErr(c, lerr)
+	}
+	return release, nil
+}
+
+// kitRecord writes the audit line of a kit command, unless the node has no state folder yet (a
+// rebuild from scratch): there is no audit log to append to, and that is not worth a warning.
+func kitRecord(c *Call, env local.Env, action string, opErr error, target map[string]string) {
+	if fi, err := os.Stat(env.Paths.StateDir); err != nil || !fi.IsDir() {
+		return
+	}
+	recordLocal(c, env, action, opErr, target)
+}
+
 // kitBackend is the llama backend of this node ("cuda", "vulkan", "cpu") from node.yaml, "" when it
 // cannot be read: the default package set then is the cpu one.
 func kitBackend(env local.Env) string {

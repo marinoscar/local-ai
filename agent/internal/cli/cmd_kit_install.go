@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/marinoscar/local-ai/agent/internal/cli/local"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/kit"
 )
@@ -91,9 +90,9 @@ func kitInstallDebs(c *Call) error {
 	if err != nil {
 		return err
 	}
-	release, err := local.Lock(env)
+	release, err := kitLock(c, env)
 	if err != nil {
-		return localErr(c, err)
+		return err
 	}
 	defer release()
 
@@ -127,7 +126,7 @@ func kitInstallDebs(c *Call) error {
 			target["packages"] = strings.Join(res.Requested, ",")
 			target["installed"] = pkgNames(res.Installed)
 		}
-		recordLocal(c, env, actionKitInstallDebs, mapped, target)
+		kitRecord(c, env, actionKitInstallDebs, mapped, target)
 	}
 	if mapped != nil {
 		return mapped
@@ -253,8 +252,8 @@ func kitDebsReport(c *Call, res *kit.Result, root kitRoot) error {
 			"Prueba: no se cambió nada, y no hay nada que instalar."))
 	case res.DryRun:
 		c.Out.OK(fmt.Sprintf(pick(c.Lang,
-			"Dry run: nothing was changed. These %s would be installed from the kit: %s.",
-			"Prueba: no se cambió nada. Estos %s se instalarían desde el kit: %s."),
+			"Dry run: nothing was changed. Would install from the kit (%s): %s.",
+			"Prueba: no se cambió nada. Se instalarían desde el kit (%s): %s."),
 			pkgCount(c.Lang, len(planNames)), nameList(c.Lang, planNames)))
 	case len(res.Installed) == 0:
 		c.Out.OK(fmt.Sprintf(pick(c.Lang,
@@ -377,9 +376,9 @@ func kitInstallTool(c *Call) error {
 	if err != nil {
 		return err
 	}
-	release, err := local.Lock(env)
+	release, err := kitLock(c, env)
 	if err != nil {
-		return localErr(c, err)
+		return err
 	}
 	defer release()
 
@@ -407,7 +406,7 @@ func kitInstallTool(c *Call) error {
 	if res != nil {
 		target["version"] = res.Version
 	}
-	recordLocal(c, env, actionKitInstall, mapped, target)
+	kitRecord(c, env, actionKitInstall, mapped, target)
 	if mapped != nil {
 		return mapped
 	}

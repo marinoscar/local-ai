@@ -437,6 +437,26 @@ func TestInstallDebsDryRunChangesNothing(t *testing.T) {
 	}
 }
 
+// A node being rebuilt from scratch has no /etc/localai and no /var/lib/localai yet: the kit commands
+// must still work (that is what they are for), without a lock, an audit line or a warning.
+func TestKitCommandsWorkOnANodeWithNoConfigurationYet(t *testing.T) {
+	f := newKitFix(t)
+	f.withDebs(t)
+	if err := os.RemoveAll(f.env.Paths.EtcDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(f.env.Paths.StateDir); err != nil {
+		t.Fatal(err)
+	}
+	r := f.run(t, "kit", "install-debs", "--packages", "cmake")
+	if r.code != 0 || strings.Contains(r.errOut, "audit") || strings.Contains(r.errOut, "LAI-") {
+		t.Fatalf("exit %d\n%s\n%s", r.code, r.out, r.errOut)
+	}
+	if _, err := os.Stat(f.env.Paths.EtcDir); err == nil {
+		t.Error("the command must not create /etc/localai")
+	}
+}
+
 func TestInstallDebsIsIdempotent(t *testing.T) {
 	f := newKitFix(t)
 	f.withDebs(t)

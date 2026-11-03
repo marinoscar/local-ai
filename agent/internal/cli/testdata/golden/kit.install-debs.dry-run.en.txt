@@ -1,6 +1,6 @@
 == stdout ==
-✓ Dry run: nothing was changed. These 2 packages would be installed from the
-  kit: cmake-data, cmake.
+✓ Dry run: nothing was changed. Would install from the kit (2 packages):
+  cmake-data, cmake.
 i Also needed by them: cmake-data.
 == stderr ==
 … Checking every file of the kit's debs/noble-amd64
