@@ -5,14 +5,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -169,32 +170,40 @@ func TestSIGKILLAtRandomByteOffsetsThenFinish(t *testing.T) {
 			if err := os.MkdirAll(filepath.Join(base, "srv"), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			child := func() *exec.Cmd {
-				c := exec.Command(self, "-test.run=^TestHelperEngineProcess$")
-				c.Env = append(os.Environ(), envHelper+"=1", envBase+"="+base, envURL+"="+srv.URL+"/m1.gguf", envSeed+"=99", envSize+"="+strconv.Itoa(killSize))
-				return c
+			// os.StartProcess, not os/exec: only internal/execx may import os/exec (agent.md section 3.2).
+			start := func() (*os.Process, *os.File) {
+				r, w, err := os.Pipe()
+				if err != nil {
+					t.Fatal(err)
+				}
+				null, err := os.OpenFile(os.DevNull, os.O_RDONLY, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				env := append(os.Environ(), envHelper+"=1", envBase+"="+base, envURL+"="+srv.URL+"/m1.gguf", envSeed+"=99", envSize+"="+strconv.Itoa(killSize))
+				proc, err := os.StartProcess(self, []string{self, "-test.run=^TestHelperEngineProcess$"}, &os.ProcAttr{Env: env, Files: []*os.File{null, w, w}})
+				_ = null.Close()
+				_ = w.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				return proc, r
 			}
-			c1 := child()
-			out, err := c1.StdoutPipe()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := c1.Start(); err != nil {
-				t.Fatal(err)
-			}
+			proc1, out1 := start()
 			killed := false
-			sc := bufio.NewScanner(out)
+			sc := bufio.NewScanner(out1)
 			for sc.Scan() {
 				var st string
 				var done int64
 				if n, _ := fmt.Sscanf(sc.Text(), "P %s %d", &st, &done); n == 2 && st == state && done >= at && !killed {
 					killed = true
-					if err := c1.Process.Signal(os.Kill); err != nil {
+					if err := proc1.Signal(syscall.SIGKILL); err != nil {
 						t.Fatal(err)
 					}
 				}
 			}
-			_ = c1.Wait()
+			_ = out1.Close()
+			_, _ = proc1.Wait()
 			if !killed {
 				t.Fatalf("the agent finished before it reported %s at %d bytes", state, at)
 			}
@@ -203,9 +212,12 @@ func TestSIGKILLAtRandomByteOffsetsThenFinish(t *testing.T) {
 			}
 
 			// Restart: the agent replays its journal, resumes, and finishes the run.
-			c2 := child()
-			if out, err := c2.CombinedOutput(); err != nil {
-				t.Fatalf("the restarted agent failed: %v\n%s", err, out)
+			proc2, out2 := start()
+			text, _ := io.ReadAll(out2)
+			_ = out2.Close()
+			ps, err := proc2.Wait()
+			if err != nil || !ps.Success() {
+				t.Fatalf("the restarted agent failed: %v %v\n%s", ps, err, text)
 			}
 			got, err := os.ReadFile(filepath.Join(base, "srv", "models", "m1", "m1.gguf"))
 			if err != nil || !bytes.Equal(got, body) {
