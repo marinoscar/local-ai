@@ -18,6 +18,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/modes"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
+	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
 )
 
 // FatalError is a startup failure that ends the process: exit 1, and systemd restarts the agent
@@ -81,6 +82,8 @@ type Daemon struct {
 	sdeps      statusapi.Deps
 	merger     *statusapi.ModelMerger
 	syncEngine modelsapi.SyncEngine
+	ark        *arkStack // nil when the sync stack could not be built
+	piper      *piper.Service
 	hooksSync  syncCanceller
 	reporter   *drill.Reporter
 	updater    *jobs.AgentUpdate

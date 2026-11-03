@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/auth"
 	authfake "github.com/marinoscar/local-ai/agent/internal/auth/fake"
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
+	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
 	hwfake "github.com/marinoscar/local-ai/agent/internal/hardware/fake"
 	modesfake "github.com/marinoscar/local-ai/agent/internal/modes/fake"
@@ -30,6 +32,8 @@ import (
 	routerfake "github.com/marinoscar/local-ai/agent/internal/router/fake"
 	"github.com/marinoscar/local-ai/agent/internal/services"
 	svcfake "github.com/marinoscar/local-ai/agent/internal/services/fake"
+	"github.com/marinoscar/local-ai/agent/internal/sync/download"
+	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 )
 
 // The rig boots the real wiring of this package over fakes: a temp directory for /etc/localai,
@@ -207,7 +211,7 @@ func newRig(t *testing.T, opts ...rigOption) *rig {
 		Stdout: r.logs, Notifier: NewNotifier(r.note.name), Hooks: r.hooks, OnStep: r.steps.onStep,
 		TCPAddr: "127.0.0.1:0", SocketPath: sock, SocketHooks: noChown(),
 		Runner: r.ts, Lookup: r.ts.Lookup, Systemd: r.sysd, Hardware: r.hw,
-		CloudHTTP: offline{}, ModesHTTP: offline{}, CatalogGitHub: failingGitHub{},
+		CloudHTTP: offline{}, ModesHTTP: offline{}, CatalogGitHub: failingGitHub{}, SyncHTTP: offlineSyncHTTP(),
 		LookupLocalAI: func() (int, int, bool) { return 0, 0, false },
 		// The test process is an operator of the socket whoever runs it (CI runs as an ordinary user):
 		// the daemon itself is root in production, which always is.
@@ -220,6 +224,14 @@ func newRig(t *testing.T, opts ...rigOption) *rig {
 		o(r)
 	}
 	return r
+}
+
+// offlineSyncHTTP is the sync downloader's client for a node with no network: every dial fails, so a
+// test can never reach the internet through the sync engine.
+func offlineSyncHTTP() *download.HTTPClient {
+	return download.NewHTTPClient(download.ClientConfig{
+		DialContext: func(context.Context, string, string) (net.Conn, error) { return nil, errors.New("no network") },
+	})
 }
 
 // failingGitHub is a catalog source that is never reachable.
@@ -352,7 +364,18 @@ func (r *rig) writeModels(ids ...string) {
 			r.t.Fatalf("the catalog has no model %s", id)
 		}
 		dir := router.ModelDir(r.path("srv/localai"), id)
-		var files []map[string]string
+		// A real manifest (schema 1) at the version the catalog pins, so the sync engine sees the copy
+		// as verified and current, as READY and the best-copy index do.
+		version := m.Source.Revision
+		if len(version) > 12 {
+			version = version[:12]
+		}
+		man := manifest.Manifest{
+			SchemaVersion: 1, ItemID: id, ItemKind: manifest.KindModel, Engine: m.Engine, CatalogVersion: cat.Version,
+			Version: version, SortKey: version, State: manifest.StateVerified, Source: manifest.Source{Type: m.Source.Type},
+			DownloadedAt: t0, VerifiedAt: t0, LastReverifiedAt: t0, Trust: manifest.TrustPinned,
+			SyncedBy: manifest.SyncedBy{NodeID: rigNode, AgentVersion: "0.1.0-test", RunID: "run-20261102T180000Z-0001"},
+		}
 		for _, f := range m.Files {
 			p := filepath.Join(dir, filepath.FromSlash(f.Name))
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -361,10 +384,10 @@ func (r *rig) writeModels(ids ...string) {
 			if err := os.WriteFile(p, []byte("gguf"), 0o644); err != nil {
 				r.t.Fatal(err)
 			}
-			files = append(files, map[string]string{"kind": f.Kind, "path": f.Name, "sha256": f.SHA256})
+			man.Files = append(man.Files, manifest.File{Kind: f.Kind, Path: f.Name, SizeBytes: 4, SHA256: f.SHA256, SHA256Source: "catalog"})
+			man.TotalBytes += 4
 		}
-		man, _ := json.Marshal(map[string]any{"item_id": id, "state": "verified", "verified_at": t0.Format(time.RFC3339), "files": files})
-		if err := os.WriteFile(filepath.Join(dir, "MANIFEST.json"), man, 0o644); err != nil {
+		if err := manifest.Write(config.OSFS{}, manifest.Path(dir), man); err != nil {
 			r.t.Fatal(err)
 		}
 	}

@@ -11,14 +11,10 @@ import (
 // notWiredYet lists the implemented operations the daemon does not serve yet, each with the reason. An
 // entry leaves this list in the PR of the item that wires it (with app.RegisterRoutes, or by an edit of
 // build.go); the test fails on an entry that is served after all, so the list only shrinks.
-var notWiredYet = map[string]string{
-	"POST /ark/sync":     "the dry-run planner (SYNC-05) needs the sync engine's roots and run lock; the run engine (SYNC-07) registers it",
-	"GET /ark/sync":      "the run engine (SYNC-07, internal/sync/run) is built; the app wiring (#38) registers api.ArkSyncRoutes with adapt.Starter and adapt.Controller",
-	"DELETE /ark/sync":   "GET /ark/sync, as above",
-	"POST /speech/tts":   "Piper (SVC-08) registers its routes, its health probe and its voice index with the other companion services",
-	"GET /speech/voices": "Piper (SVC-08), as above",
-	"GET /ark":           "the readiness service (SYNC-12, internal/ark/ready) needs the planner's gatherer and the best-copy index; the app wiring (#38) registers api.ArkRoutes with ready.Service",
-}
+//
+// It is empty since #266 wired the ark, sync and speech routes (build.go); the next slice that merges
+// as a library adds its operations here with the reason, and removes them in the PR that wires them.
+var notWiredYet = map[string]string{}
 
 // The daemon serves exactly the operations openapi.yaml says are implemented (agent.md section 4.14):
 // a route that exists but is not wired here, or that is wired but marked planned, fails this test, so
