@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -56,21 +55,31 @@ func TestAgentRealBuild(t *testing.T) {
 	}
 	goBin := os.Getenv("LOCALAI_AGENT_GO")
 	if goBin == "" {
-		p, err := exec.LookPath("go")
-		if err != nil {
+		// execx.Lookup only knows the fixed system path; a Go toolchain lives elsewhere.
+		for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+			if fi, err := os.Stat(filepath.Join(dir, "go")); err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o111 != 0 {
+				goBin = filepath.Join(dir, "go")
+				break
+			}
+		}
+		if goBin == "" {
 			t.Fatal("no go program: set LOCALAI_AGENT_GO")
 		}
-		goBin = p
 	}
 	goBin, err := filepath.Abs(goBin)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command(goBin, "env", "GOVERSION").Output()
-	if err != nil {
-		t.Fatalf("go env GOVERSION: %v", err)
+	// Programs are run through execx, the one place that starts them (agent.md section 3.2).
+	runReal := func(path string, args ...string) []byte {
+		t.Helper()
+		res, err := execx.Exec{}.Run(context.Background(), execx.Cmd{Path: path, Args: args, Timeout: time.Minute, MaxOut: 1 << 20})
+		if err != nil || res.ExitCode != 0 {
+			t.Fatalf("%s %s: %v (exit %d) %s", path, strings.Join(args, " "), err, res.ExitCode, res.Stderr)
+		}
+		return res.Stdout
 	}
-	goVer := strings.TrimPrefix(strings.TrimSpace(string(out)), "go")
+	goVer := strings.TrimPrefix(strings.TrimSpace(string(runReal(goBin, "env", "GOVERSION"))), "go")
 	arch := kitArch(runtime.GOARCH)
 
 	// The kit: the source tarball as it is, and a toolchain tarball whose go is the real one.
@@ -167,10 +176,7 @@ func TestAgentRealBuild(t *testing.T) {
 		if err != nil || !bytes.HasPrefix(raw, []byte("\x7fELF")) {
 			t.Fatalf("aiagent is not a compiled program: %v", err)
 		}
-		vout, err := exec.Command(filepath.Join(opt, "bin", "aiagent"), "version", "--json").Output()
-		if err != nil {
-			t.Fatal(err)
-		}
+		vout := runReal(filepath.Join(opt, "bin", "aiagent"), "version", "--json")
 		var info struct{ Version, OS, Arch string }
 		if err := json.Unmarshal(vout, &info); err != nil || info.Version != version || info.OS != "linux" || info.Arch != arch {
 			t.Fatalf("version --json = %s (%v), want %s", vout, err, version)

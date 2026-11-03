@@ -454,7 +454,7 @@ func TestAgentBuildSelectsTheTag(t *testing.T) {
 	r := newAgentRig(t)
 	r.source("node-v0.5.0", sourceEntries(agentModule)...)
 	r.source("node-v0.4.1-rc.1", sourceEntries(agentModule)...)
-	r.newReports = fmt.Sprintf(`{"version":"0.5.0","os":"linux","arch":"amd64"}`)
+	r.newReports = `{"version":"0.5.0","os":"linux","arch":"amd64"}`
 	r.health = func(int) (AgentHealth, error) { return AgentHealth{Version: "0.5.0"}, nil }
 	res, err := r.build(AgentRequest{})
 	if err != nil || res.Tag != "node-v0.5.0" || res.Version != "0.5.0" {
