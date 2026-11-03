@@ -1,0 +1,20 @@
+[Unit]
+Description=Local AI offline drill (asks the agent to run one scheduled drill and waits)
+Documentation=https://github.com/marinoscar/local-ai/blob/main/docs/specs/drill.md
+Requires=localai-agent.service
+After=localai-agent.service localai-sync.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/aictl drill --scheduled --wait
+# Exit codes: aictl.md §3.4. 0 = pass, or skipped (busy, survival, battery); 8 = warn -> still success;
+# 9 = fail and 3 = agent not reachable -> the unit fails, so it shows in `systemctl --failed`.
+SuccessExitStatus=8
+TimeoutStartSec=3h
+KillMode=mixed
+TimeoutStopSec=60s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
