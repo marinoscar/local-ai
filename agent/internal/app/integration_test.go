@@ -180,17 +180,6 @@ func (r *rig) sawMessage(m string) bool {
 	return false
 }
 
-// errCode is details.code of the error envelope, or the code field of its body.
-func errCode(rp reply) string {
-	var e struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	_ = json.Unmarshal(rp.body, &e)
-	return e.Error.Code
-}
-
 // An agent restart restores the models the operator had chosen: the default is set to a model other
 // than the profile's, the router and the agent both restart, and the restart loads that model.
 func TestIntegrationRestartRestoresModels(t *testing.T) {

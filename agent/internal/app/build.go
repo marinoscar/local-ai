@@ -70,16 +70,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	d.stoppers.bus = c.Bus
 
 	// Systemd: the D-Bus Manager with the systemctl fallback, behind the unit allowlist.
-	base := env.Systemd
-	if base == nil {
-		dial := env.DialBus
-		if dial == nil {
-			dial = services.DialSystemBus
-		}
-		auto := services.NewAuto(ctx, dial, env.Runner, services.WithLogger(log), services.WithClock(clock))
-		base = auto
-		d.closers = append(d.closers, auto)
-	}
+	base, _ := d.newSystemd(ctx)
 	c.Systemd = services.NewGuard(base)
 	c.Controller = &services.Controller{Manager: c.Systemd}
 
@@ -341,6 +332,22 @@ func (d *Daemon) build(ctx context.Context) error {
 		d.stoppers.syncer = d.hooksSync
 	}
 	return nil
+}
+
+// newSystemd returns the systemd Manager and the backend that serves it: the injected one, or the
+// D-Bus Manager with the systemctl fallback of services.NewAuto. A system bus that cannot be dialed
+// is not an error: the agent runs `systemctl` through the Runner instead (agent.md section 4.3.2).
+func (d *Daemon) newSystemd(ctx context.Context) (services.Manager, string) {
+	if d.env.Systemd != nil {
+		return d.env.Systemd, "injected"
+	}
+	dial := d.env.DialBus
+	if dial == nil {
+		dial = services.DialSystemBus
+	}
+	auto := services.NewAuto(ctx, dial, d.env.Runner, services.WithLogger(d.log), services.WithClock(d.env.Clock))
+	d.closers = append(d.closers, auto)
+	return auto, auto.Backend()
 }
 
 // buildServer registers every route and constructs the HTTP server (step 10 starts it).

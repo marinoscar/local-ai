@@ -176,7 +176,13 @@ func withEnv(f func(*Env)) rigOption { return func(r *rig) { f(&r.env) } }
 
 func newRig(t *testing.T, opts ...rigOption) *rig {
 	t.Helper()
-	r := &rig{t: t, root: t.TempDir(), logs: &syncBuf{}, steps: &stepLog{}, hooks: NewHooks()}
+	// A short root: the socket path must fit sun_path (108 bytes), which t.TempDir of a subtest does not.
+	root, err := os.MkdirTemp("", "lai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	r := &rig{t: t, root: root, logs: &syncBuf{}, steps: &stepLog{}, hooks: NewHooks()}
 	r.key = newKey(t)
 	r.llama = routerfake.New(r.key)
 	t.Cleanup(r.llama.Close)
@@ -462,6 +468,17 @@ func (r *rig) doAuth(method, path string, body any, auth bool) reply {
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
 	return reply{status: resp.StatusCode, header: resp.Header, body: b}
+}
+
+// errCode is the doctor code of the error envelope of an answer.
+func errCode(rp reply) string {
+	var e struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	_ = json.Unmarshal(rp.body, &e)
+	return e.Error.Code
 }
 
 // hasAlert reports whether the alert manager holds an alert of code.

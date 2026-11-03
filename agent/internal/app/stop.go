@@ -108,13 +108,16 @@ func (d *Daemon) shutdown() ShutdownReport {
 		}
 	}
 	// timed runs fn under its own budget inside the total and records it.
-	timed := func(n int, name string, budget time.Duration, fn func(ctx context.Context) error) {
+	timedIn := func(parent context.Context, n int, name string, budget time.Duration, fn func(ctx context.Context) error) {
 		t0 := clock.Now()
-		ctx, cancel := withDeadline(total, clock, budget)
+		ctx, cancel := withDeadline(parent, clock, budget)
 		err := fn(ctx)
-		over := timedOut(ctx) || timedOut(total)
+		over := timedOut(ctx) || timedOut(parent)
 		cancel()
 		add(ShutdownStep{N: n, Name: name, Duration: clock.Now().Sub(t0), Err: err, TimedOut: over})
+	}
+	timed := func(n int, name string, budget time.Duration, fn func(ctx context.Context) error) {
+		timedIn(total, n, name, budget, fn)
 	}
 
 	// 1
@@ -215,8 +218,10 @@ func (d *Daemon) shutdown() ShutdownReport {
 	if st.bus != nil {
 		st.bus.Close()
 	}
-	// 8
-	timed(8, "flush", shutdownFlushBudget, func(ctx context.Context) error {
+	// 8: the flush is not clipped by the total: losing state.json (a pending survival request, the
+	// recorded mode step) is worse than leaving a few seconds late. It has its own 3 s, so the
+	// worst case is 28 s, still under systemd's 30 s.
+	timedIn(context.Background(), 8, "flush", shutdownFlushBudget, func(ctx context.Context) error {
 		var first error
 		if st.state != nil {
 			if err := runWithin(ctx, st.state.Close); err != nil {
@@ -225,6 +230,11 @@ func (d *Daemon) shutdown() ShutdownReport {
 		}
 		if st.audit != nil {
 			if err := runWithin(ctx, st.audit.Close); err != nil && first == nil {
+				first = err
+			}
+		}
+		for _, c := range d.closers { // the D-Bus connection
+			if err := c.Close(); err != nil && first == nil {
 				first = err
 			}
 		}
