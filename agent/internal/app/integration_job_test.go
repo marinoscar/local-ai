@@ -85,15 +85,27 @@ func TestIntegrationCloudModelLoadJob(t *testing.T) {
 	if st, ok := d.Components().SyncEngine.Status(); !ok || st.Trigger != "cloud" {
 		t.Errorf("the engine's run = %+v, want one started by the cloud", st)
 	}
-	// ark.verify waits for the re-verification (SYNC-13): refused with a code, not run (the fake
-	// delivers it to a claim that did not ask for it, as a hostile cloud would).
+	// ark.verify is the re-verification's (SYNC-13): once the sync run is over the slot is free, and the
+	// job starts a run of trigger verify (the run slot is shared, so while the sync was active it would
+	// have answered started: false with that run's id).
+	if err := d.Components().SyncEngine.Wait(ctx, syncRes.RunID); err != nil {
+		t.Fatal(err)
+	}
 	cloudSrv.QueueJob(cloudfake.Job{ID: "job-verify", Type: "localai.ark.verify", Token: "claim-token-3", Params: map[string]any{}, Force: true})
-	if err := cloudSrv.WaitJob(ctx, "job-verify", cloudfake.JobFailed); err != nil {
+	if err := cloudSrv.WaitJob(ctx, "job-verify", cloudfake.JobSucceeded); err != nil {
 		rec, _ := cloudSrv.Job("job-verify")
 		t.Fatalf("%v: job = %+v", err, rec)
 	}
-	if rec, _ := cloudSrv.Job("job-verify"); !containsAll(rec.Error, "LAI-CLD-057") {
-		t.Errorf("an ark.verify job = %q, want LAI-CLD-057", rec.Error)
+	rec, _ = cloudSrv.Job("job-verify")
+	var verifyRes struct {
+		RunID   string `json:"verify_run_id"`
+		Started bool   `json:"started"`
+	}
+	if err := json.Unmarshal(rec.Result, &verifyRes); err != nil || !verifyRes.Started || !strings.HasPrefix(verifyRes.RunID, "run-") {
+		t.Errorf("an ark.verify job = %s (%v), want a started run", rec.Result, err)
+	}
+	if st, ok := d.Components().SyncEngine.Status(); !ok || st.Trigger != "verify" || st.RunID != verifyRes.RunID {
+		t.Errorf("the engine's run = %+v, want the verify run %s", st, verifyRes.RunID)
 	}
 	if st := d.Components().State.Snapshot(); st.Mode != state.ModeOnline {
 		t.Errorf("mode = %q", st.Mode)

@@ -215,6 +215,18 @@ func TestArkVerifyAndImportSummaries(t *testing.T) {
 			t.Errorf("body %s", b)
 		}
 	})
+	t.Run("import --add-to-profile without --item is a usage error and sends nothing", func(t *testing.T) {
+		r := newArkRig(t)
+		got := r.run(mgArgs("ark", "import", "--from", "ark-3f9c0a12", "--add-to-profile"))
+		if got.code != ExitUsage || !strings.Contains(got.errOut, "--add-to-profile needs at least one --item") {
+			t.Fatalf("%+v", got)
+		}
+		for _, line := range r.requestLines() {
+			if strings.Contains(line, "/ark/import") {
+				t.Errorf("a request was sent: %s", line)
+			}
+		}
+	})
 	t.Run("import --wait: an item the profile does not list is refused with a message", func(t *testing.T) {
 		r := newArkRig(t)
 		r.onStart = func() {
