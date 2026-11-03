@@ -512,6 +512,12 @@ func (d *Daemon) buildServer() error {
 			}
 			return api.RegisterArk(reg, api.ArkDeps{Ready: d.ark.ready})
 		}},
+		{"ark drives", func() error {
+			if d.ark == nil || d.ark.drives == nil { // no stack, no detector: 503, not an empty list
+				return api.RegisterArkDrives(reg, api.ArkDrivesDeps{Drives: noDrives{}})
+			}
+			return api.RegisterArkDrives(reg, api.ArkDrivesDeps{Drives: d.ark.drivesView()})
+		}},
 		{"ark sync", func() error {
 			if d.ark == nil { // no Starter and no Control: a real start, GET and DELETE answer 503
 				return api.RegisterArkSync(reg, api.ArkSyncDeps{Planner: arkUnavailable{}})

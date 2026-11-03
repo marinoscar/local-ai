@@ -109,6 +109,10 @@ type arkStack struct {
 	webSources *arkWebSources
 
 	facts *nodeFacts
+
+	// drives is the AI-ARK drive detector (ark_drives.go); watchDrives says whether it is started.
+	drives      *ark.Manager
+	watchDrives bool
 }
 
 // arkIndex builds the best-copy index. It cannot fail: an index with no roots is empty, and the
@@ -255,6 +259,7 @@ func (d *Daemon) buildArk(ctx context.Context, idx *ark.Index) (*arkStack, error
 	for _, r := range s.engine.Resume(ctx, rec) {
 		lg.Info("a swap interrupted by a restart was finished", "root", r.Root, "item", r.Item, "version", r.Version, "code", r.Code)
 	}
+	s.buildDrives()
 	return s, nil
 }
 

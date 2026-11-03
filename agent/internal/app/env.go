@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
+	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/auth"
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/cloud"
@@ -115,6 +116,11 @@ type Env struct {
 	// OnDriveEvent, when set, is told after the daemon has handled a drive.mounted or drive.unmounted
 	// event (the tests wait on it instead of sleeping). It runs on the event goroutine.
 	OnDriveEvent func(typ, rootID string)
+	// ArkDrives, when set, adjusts the options of the AI-ARK drive detector before it is built: a test
+	// points the mount table, blkid, sysfs and the filesystem at fakes. An Unprivileged daemon starts the
+	// detector only when this is set, because it would otherwise read the real mount table of the machine
+	// the tests run on.
+	ArkDrives func(*ark.Options)
 }
 
 func (e *Env) defaults() {
