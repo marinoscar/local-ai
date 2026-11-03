@@ -29,6 +29,8 @@ const (
 	// repoMirrorName is the kit mirror a node builds the docs from offline.
 	repoMirrorName = "local-ai"
 	tarballName    = "src.tar.gz"
+	// maxDocsTarball bounds the tarball of the tag: the repository without its history is megabytes.
+	maxDocsTarball = 256 << 20
 )
 
 // Codes of the docs producer besides the shared ones.
@@ -240,6 +242,9 @@ func (r *RepoDocs) fetchTarball(ctx context.Context, req Request, tag, staging s
 			return "", "", "", derr
 		}
 		return "", "", "", fmt.Errorf("downloading the source of %s: %w", tag, derr)
+	}
+	if res.Bytes > maxDocsTarball {
+		return "", "", "", fail(CodeVerifyDocs, nil, "the source tarball of %s is larger than %d bytes", tag, maxDocsTarball)
 	}
 	return job.FinalPath(), res.SHA256, "codeload", nil
 }
