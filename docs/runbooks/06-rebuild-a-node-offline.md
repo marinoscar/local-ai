@@ -187,7 +187,7 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
       - Build fails on an NVIDIA computer (CUDA tools missing or not matching the driver): build for Vulkan or the processor instead: `sudo aictl rebuild-llama --from-kit --backend vulkan` (or `--backend cpu`, slow but always works).
       - `LAI-HW-019` (GPU type not detected): give it, for example `--cuda-arch 75` for an RTX 20xx, `86` for RTX 30xx, `89` for RTX 40xx.
       - Runs out of memory while building: `--jobs 2`.
-      - `LAI-LLM-019`, `LAI-KIT-021` or `LAI-KIT-022`: the new build didn't work; the previous one is still in use. Nothing broke.
+      - `LAI-LLM-019` (or `LAI-KIT-021` for the speech-to-text build): the new build didn't work; the previous one is still in use. Nothing broke.
 22. **Build without switching** (to test first): `sudo aictl rebuild-llama --from-kit --no-activate`. It builds and tests the new version but keeps the running one. Old builds are kept too (2 by default; `--keep <n>` changes it).
 23. **Speech-to-text has its own build:** `sudo aictl rebuild-whisper --from-kit` (same idea and flags; `LAI-SVC-012` asks for it).
 24. **Save the working builds into the kit** (so the next rebuild of this computer can skip compiling): `sudo aictl kit export-build`. It also happens by itself after each successful build.

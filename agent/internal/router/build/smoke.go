@@ -143,7 +143,50 @@ func (r *run) smoke(ctx context.Context) (Smoke, *Error) {
 	if devices == nil {
 		devices = []string{}
 	}
+	if e := r.generate(ctx); e != nil {
+		return Smoke{}, e
+	}
 	return Smoke{Version: version, Devices: devices}, nil
+}
+
+// generate is the last step of the smoke test (rebuild-kit.md section 4.3.3): the new llama-cli
+// writes a few words with the smallest verified model of this computer. With no model to ask it is
+// skipped, with a warning; a program that fails or prints nothing is LAI-LLM-019 like any smoke
+// failure, so `current` is never switched to a build that cannot generate.
+func (r *run) generate(ctx context.Context) *Error {
+	skip := func(why string) *Error {
+		r.warnings = append(r.warnings, "The new build was not asked to write a few words: "+why)
+		return nil
+	}
+	if r.m.opt.SmokeModel == nil {
+		return skip("no model is available to test it with.")
+	}
+	model, ok := r.m.opt.SmokeModel()
+	if !ok || model == "" {
+		return skip("no model is available to test it with.")
+	}
+	cli := filepath.Join(r.plan.OutDir, "bin", "llama-cli")
+	args := []string{"-m", model, "-n", "8", "-p", "Hello", "-ngl", "99", "--no-warmup"}
+	r.logf("$ %s %s\n", cli, strings.Join(args, " "))
+	res, err := r.m.opt.Exec.Run(ctx, execx.Cmd{Path: cli, Args: args, Timeout: r.m.opt.Timing.Generate, MaxOut: 1 << 20, Env: toolEnv()})
+	r.logf("%s%s", res.Stdout, res.Stderr)
+	command := "llama-cli -m <model> -n 8 -p Hello -ngl 99 --no-warmup"
+	switch {
+	case err != nil && ctx.Err() != nil:
+		return &Error{Code: CodeBuildUnusable, Stage: StageSmoke, Message: "cancelled", Err: ctx.Err(), Details: map[string]any{}}
+	case err != nil:
+		r.logf("[could not run: %v]\n", err)
+		return newErr(CodeBuildUnusable, StageSmoke, "The new llama.cpp build did not finish writing a few words: "+err.Error(), err,
+			"cause", "smoke_generate_exec", "command", command)
+	case res.ExitCode != 0:
+		r.logf("[exit status %d]\n", res.ExitCode)
+		return newErr(CodeBuildUnusable, StageSmoke, fmt.Sprintf("The new llama.cpp build failed to write a few words: llama-cli exited with status %d.", res.ExitCode), nil,
+			"cause", "smoke_generate_exit", "command", command, "exit_code", res.ExitCode)
+	case strings.TrimSpace(string(res.Stdout)) == "":
+		return newErr(CodeBuildUnusable, StageSmoke, "The new llama.cpp build ran but wrote nothing.", nil,
+			"cause", "smoke_generate_empty", "command", command)
+	}
+	return nil
 }
 
 // VersionLine finds the line of `llama-server --version` that carries the first 7 hex characters of

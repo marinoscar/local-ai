@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -50,9 +51,26 @@ const (
 	ConfigureTimeout = 30 * time.Minute
 	// SmokeTimeout bounds each smoke command.
 	SmokeTimeout = time.Minute
+	// GenerateTimeout bounds the llama-cli completion of the smoke test (rebuild-kit.md section 4.3.3).
+	GenerateTimeout = 2 * time.Minute
 
 	// MinFreeBytes is the free space on the root's filesystem a build needs before it starts.
 	MinFreeBytes uint64 = 2 << 30
+	// KitMinFreeBytes is the free space the offline preflight wants in /opt/localai (the source
+	// tree under llama.cpp/src/ and the .tmp build tree under llama.cpp/builds/) and
+	// KitMinScratchBytes the space in the scratch directory (rebuild-kit.md section 4.3.1).
+	KitMinFreeBytes    uint64 = 5 << 30
+	KitMinScratchBytes uint64 = 1 << 30
+	// DefaultScratchDir is where option B unpacks the CUDA redistributables and where the whisper and
+	// agent builds work (rebuild-kit.md section 7).
+	DefaultScratchDir = "/var/lib/localai/build"
+	// DefaultCompileUser is the user the compile runs as (rebuild-kit.md section 7).
+	DefaultCompileUser = "localai"
+	// CompileAsCaller, as Options.CompileUser, runs the compile as the user of the build manager
+	// itself: for tests and for an unprivileged caller. Production leaves the default.
+	CompileAsCaller = "-"
+	// MinCMake is the oldest cmake the offline preflight accepts.
+	MinCMake = "3.21"
 
 	// DefaultKeep is the number of builds kept besides current (the previous one and the newest other).
 	DefaultKeep = 2
@@ -103,6 +121,15 @@ const (
 	CodeNoSource = doctor.KIT002
 	// CodeBusy: the agent is running another model operation (LAI-AGT-022; exit 6 at the CLI).
 	CodeBusy = doctor.AGT022
+	// CodeSourceDamaged: a source (or prebuilt) package of the kit does not match its recorded
+	// sha256 (LAI-KIT-001).
+	CodeSourceDamaged = doctor.KIT001
+	// Codes of the offline preflight (rebuild-kit.md section 4.3.1).
+	CodeKitTools   = doctor.KIT010 // build tools missing
+	CodeKitCUDA    = doctor.KIT011 // nvcc missing or newer than the driver
+	CodeKitVulkan  = doctor.KIT012 // no real Vulkan device, or its tools are missing
+	CodeKitDriver  = doctor.KIT013 // the NVIDIA driver is not loaded
+	CodeKitDiskLow = doctor.KIT014 // not enough disk space
 )
 
 // Stage names the part of the procedure an Error happened in.
@@ -171,9 +198,26 @@ type Request struct {
 	// checkout is read with `git archive <commit>`, a plain tree is copied as it is. Either way the
 	// tree ends up in src/<commit>/, replacing one that is already there.
 	SourceDir string
-	// Sources, when not nil, replaces Options.Sources for this build (KIT-04's --from-kit passes
-	// the kit sources alone here).
+	// Sources, when not nil, replaces Options.Sources for this build.
 	Sources []Source
+	// FromKit is --from-kit: the chain is the kit alone (the verified tarball of the commit on any
+	// root, then the git mirror of every root: KitSources over Options.KitRoots) and the offline
+	// preflight (rebuild-kit.md section 4.3.1) runs first, so a missing tool is LAI-KIT-010 with
+	// the `aictl kit install-debs` command rather than LAI-LLM-018 with `apt install`. A tree
+	// already extracted in src/<commit>/ is still used first.
+	FromKit bool
+	// DryRun is --dry-run: Build runs the preflight only and returns Result.Preflight; it changes
+	// nothing and needs no root. The error is the first failed check (nil when every check passed).
+	DryRun bool
+	// Prebuilt is --prebuilt: the path of an exported build (a tar.gz with BUILD.json and bin/,
+	// rebuild-kit.md section 4.2). Nothing is compiled: the archive is unpacked into a scratch
+	// directory, BUILD.json and the sha256 of every program are verified, and only then is the build
+	// put in place, smoke tested and activated like a fresh one. A tampered file is LAI-KIT-001.
+	// Commit and Backend, when given, must match the build.
+	Prebuilt string
+	// PrebuiltSHA256, when set, is the digest the kit's prebuilt manifest records for the archive;
+	// the archive is refused if its bytes differ.
+	PrebuiltSHA256 string
 	// Offline skips every source that needs the network (the GitHub clone). With no other source
 	// having the commit the build stops with LAI-KIT-002.
 	Offline bool
@@ -249,6 +293,12 @@ type Result struct {
 	DefaultModel string `json:"-"`
 	// Warnings are things the caller should show: no default model to check, a cleanup that failed.
 	Warnings []string `json:"-"`
+	// Preflight is the offline preflight of a --dry-run or --from-kit build (nil otherwise).
+	Preflight *Report `json:"-"`
+	// DryRun is true when Build only ran the preflight.
+	DryRun bool `json:"-"`
+	// Restored is true for a build restored with Request.Prebuilt.
+	Restored bool `json:"-"`
 	// Path is the directory of the build; LogPath its build.log.
 	Path    string `json:"-"`
 	LogPath string `json:"-"`
@@ -260,6 +310,8 @@ type Result struct {
 // inject Clock and Sleep.
 type Timing struct {
 	Configure, Build, Smoke time.Duration
+	// Generate bounds the llama-cli completion of the smoke test (120 s).
+	Generate time.Duration
 	// Systemctl bounds `systemctl restart` on the path without the agent.
 	Systemctl time.Duration
 	// HealthWait is how long /health may take after the restart (60 s).
@@ -282,6 +334,7 @@ func (t Timing) withDefaults() Timing {
 	def(&t.Configure, ConfigureTimeout)
 	def(&t.Build, BuildTimeout)
 	def(&t.Smoke, SmokeTimeout)
+	def(&t.Generate, GenerateTimeout)
 	def(&t.Systemctl, 2*time.Minute)
 	def(&t.HealthWait, time.Minute)
 	def(&t.CheckWait, 3*time.Minute)
@@ -338,6 +391,40 @@ type Options struct {
 	NumCPU          func() int
 	// Logger receives component=router.build lines; default slog.Default().
 	Logger *slog.Logger
+
+	// Recipe is the program being built (LlamaRecipe).
+	Recipe Recipe
+	// KitRoots returns the content roots that may hold the kit, the internal root first (the
+	// mounted ark drives after it); nil means none. --from-kit, the preflight and the CUDA
+	// redistributables read them.
+	KitRoots func() []string
+	// ScratchDir is DefaultScratchDir.
+	ScratchDir string
+	// Arch is the CPU architecture in kit naming, amd64 or arm64 (from runtime.GOARCH).
+	Arch string
+	// CompileUser is the user the compile runs as through `setpriv --reuid <user> --regid <user>
+	// --clear-groups`: the builds/<id>.tmp tree is created owned by it and handed back to root:root
+	// before the rename (rebuild-kit.md section 7). Empty means DefaultCompileUser; CompileAsCaller
+	// disables the drop (tests, unprivileged callers).
+	CompileUser string
+	// LookupUser resolves the compile user to its ids; default os/user.Lookup.
+	LookupUser func(name string) (uid, gid int, err error)
+	// Streamer reads `xz -dc` of the CUDA redistributables; default execx.Exec{}.
+	Streamer execx.Streamer
+	// Apt simulates installing the missing packages against the kit's apt repository in the
+	// preflight; nil skips the simulation (the check says so). `aictl kit install-debs` (KIT-06)
+	// provides the implementation.
+	Apt AptSimulator
+	// NodeConfig records node.yaml's llama.commit after a switch to a different commit; Exporter
+	// exports the activated build into kit/prebuilt (KIT-05). Both are optional, and a failure of
+	// either is a warning: the build is already in use.
+	NodeConfig NodeRecorder
+	Exporter   PrebuiltExporter
+	// SmokeModel returns the path of the smallest verified llama model on this computer, for the
+	// completion of the smoke test (`llama-cli -m <model> -n 8 -p "Hello" -ngl 99 --no-warmup`,
+	// rebuild-kit.md section 4.3.3); ok is false when there is none. nil, or no model, skips that
+	// step with a warning in Result.Warnings.
+	SmokeModel func() (path string, ok bool)
 }
 
 // Manager is the build manager. It is safe to call Build from one goroutine at a time; the build
@@ -366,8 +453,26 @@ func New(opt Options) *Manager {
 	if opt.FS == nil {
 		opt.FS = OSFS{}
 	}
+	if opt.Recipe.Name == "" {
+		opt.Recipe = LlamaRecipe
+	}
 	if opt.Sources == nil {
-		opt.Sources = DefaultSources()
+		opt.Sources = []Source{GitCloneSource{URL: opt.Recipe.CloneURL}}
+	}
+	if opt.ScratchDir == "" {
+		opt.ScratchDir = DefaultScratchDir
+	}
+	if opt.Arch == "" {
+		opt.Arch = kitArch(runtime.GOARCH)
+	}
+	if opt.CompileUser == "" {
+		opt.CompileUser = DefaultCompileUser
+	}
+	if opt.LookupUser == nil {
+		opt.LookupUser = lookupUser
+	}
+	if opt.Streamer == nil {
+		opt.Streamer = execx.Exec{}
 	}
 	if opt.Clock == nil {
 		opt.Clock = time.Now
@@ -469,13 +574,20 @@ func (m *Manager) Resolve(ctx context.Context, req Request) (Inputs, error) {
 		in.CudaArch = arch
 	}
 
-	in.Jobs = req.Jobs
-	if in.Jobs <= 0 {
-		mem, err := m.opt.MemAvailableMiB()
-		if err != nil {
-			m.log.Warn("could not read MemAvailable; building with one job", "error", err)
-			mem = 0
-		}
+	// jobs = min(--jobs, nproc, floor(MemAvailable_GiB / 2)), at least 1 (rebuild-kit.md section
+	// 4.3.1): a request for more jobs than the memory feeds would only get the build killed.
+	mem, err := m.opt.MemAvailableMiB()
+	if err != nil {
+		m.log.Warn("could not read MemAvailable", "error", err)
+	}
+	switch {
+	case err != nil && req.Jobs > 0:
+		in.Jobs = min(req.Jobs, max(1, m.opt.NumCPU()))
+	case err != nil:
+		in.Jobs = 1
+	case req.Jobs > 0:
+		in.Jobs = min(req.Jobs, Jobs(m.opt.NumCPU(), mem))
+	default:
 		in.Jobs = Jobs(m.opt.NumCPU(), mem)
 	}
 	return in, nil
@@ -579,4 +691,29 @@ func parseMemAvailableMiB(b []byte) (int64, error) {
 		return kb / 1024, nil
 	}
 	return 0, errors.New("build: MemAvailable not found in /proc/meminfo")
+}
+
+// kitArch maps runtime.GOARCH to the architecture names of the kit layout.
+func kitArch(goarch string) string {
+	if goarch == "arm64" {
+		return "arm64"
+	}
+	return "amd64"
+}
+
+// lookupUser resolves a user name to its numeric user and group id.
+func lookupUser(name string) (int, int, error) {
+	u, err := user.Lookup(name)
+	if err != nil {
+		return 0, 0, err
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return 0, 0, err
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return 0, 0, err
+	}
+	return uid, gid, nil
 }
