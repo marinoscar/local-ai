@@ -89,7 +89,7 @@ This extends the "survival exception" of security-model.md §3; agent.md must im
         es_article: "Hemorragia"
         order: 10
 ```
-Initial first-aid keys (article paths to be verified against the actual ZIMs in CAT-03 "Populate initial ark content", [catalog.md](catalog.md) §10): `cpr`, `choking`, `bleeding`, `shock`, `burns`, `fracture`, `head_injury`, `allergic_reaction`, `snake_bite`, `dehydration` (oral rehydration), `heat_stroke`, `hypothermia`, `wound_infection`, `childbirth`, plus from the survival collection: `water_purification`, `food_safety`.
+Initial first-aid keys (article paths verified against the real ZIMs in CAT-03, [catalog.md](catalog.md) §3.1; an `article` is the entry path inside the ZIM, not percent-encoded, and the Portal encodes each path segment when it builds the `/library/content/<book>/<article>` URL): `cpr`, `choking`, `bleeding`, `shock`, `burns`, `fracture`, `head_injury`, `allergic_reaction`, `snake_bite`, `dehydration` (oral rehydration), `heat_stroke`, `hypothermia`, `wound_infection`, `childbirth`, plus from the survival collection: `water_purification`, `food_safety`.
 
 **node.yaml** (`portal:` block, owned here; agent.md must include it):
 ```yaml
@@ -125,12 +125,12 @@ Returns only what a stranger at the keyboard needs. **Never** included: tokens, 
     "chat":    {"state": "ready"},
     "photo":   {"state": "degraded", "reason": "needs_switch", "vision_model": "<small-vlm-id>"},
     "talk":    {"state": "ready", "stt": true, "tts_languages": ["en","es"]},
-    "library": {"state": "ready", "books": [{"content_id": "wikimed-en", "title": "WikiMed (English)", "book": "mdwiki_en_all", "lang": "en"}]},
+    "library": {"state": "ready", "books": [{"content_id": "wikimed-en", "title": "WikiMed (English)", "book": "wikipedia_en_medicine_maxi", "lang": "en"}]},
     "maps":    {"state": "ready", "search": true, "gps": false},
     "manuals": {"state": "ready", "items": [{"id": "01-survival-mode", "title": "Survival mode", "url": "/docs/01-survival-mode.html"}]}
   },
   "first_aid": [
-    {"key": "bleeding", "title": "Sangrado grave", "url": "/library/content/mdwiki_es_all/Hemorragia", "available": true}
+    {"key": "bleeding", "title": "Sangrado grave", "url": "/library/content/wikipedia_es_medicine_maxi/Hemorragia", "available": true}
   ],
   "ark": {"overall": "yellow", "survival_capable": true, "drive_connected": true},
   "alerts": [
@@ -242,8 +242,8 @@ Flow (§4.6). If the loaded brain has no vision: a box above the question: "The 
 ├──────────────────────────────────────────────────────────────────────────────────────────────┤
 │ Results (12)                                   │ Books                                       │
 │ • Water purification — Wikipedia               │ [ Wikipedia (English) ]                     │
-│ • Portable water purification — WikiHow        │ [ WikiMed (medicine) ]                      │
-│ • Boiling water — Survival collection          │ [ WikiHow ]   [ iFixit (repairs) ]          │
+│ • Portable water purification — Survival lib.  │ [ WikiMed (medicine) ]                      │
+│ • Boiling water — Survival collection          │ [ Survival library ] [ iFixit (repairs) ]   │
 │ …                                              │ [ Wikipedia (Español) ]                     │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```

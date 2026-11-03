@@ -512,7 +512,7 @@ State values: `ok`, `degraded` (works with a problem), `down` (should run but do
   ```json
   {"services": [
     {"name": "kiwix", "unit": "localai-kiwix.service", "state": "ok", "since": "2026-11-02T03:00:12Z",
-     "last_check": "2026-11-02T14:05:00Z", "detail": "7 books", "books": [{"content_id": "wikimed-en", "name": "mdwiki_en_all", "root": "internal"}], "problems": []},
+     "last_check": "2026-11-02T14:05:00Z", "detail": "7 books", "books": [{"content_id": "wikimed-en", "name": "wikipedia_en_medicine_maxi", "root": "internal"}], "problems": []},
     {"name": "whisper", "unit": "localai-whisper.service", "state": "ok", "model": "whisper-small", "device": "cpu", "problems": [{"code": "LAI-SVC-013", "severity": "info"}]},
     {"name": "piper", "unit": null, "state": "ok", "voices": ["piper-en-medium", "piper-es-medium"]},
     {"name": "maps", "unit": null, "state": "degraded", "maps": ["osm-central-america"], "problems": [{"code": "LAI-SVC-032", "severity": "warning"}]}
@@ -636,7 +636,7 @@ Shown in the desktop and the Portal, so both languages are given. Range 100–14
 
 ### 9.3 Manual on ai-n3
 1. `aictl services` → kiwix, whisper, piper, maps all `ok` (whisper `device: cpu`).
-2. `curl -s 'http://127.0.0.1:7070/library/search?books.name=mdwiki_en_all&pattern=bleeding&pageLength=1' | head` → HTML with a result.
+2. `curl -s 'http://127.0.0.1:7070/library/search?books.name=wikipedia_en_medicine_maxi&pattern=bleeding&pageLength=1' | head` → HTML with a result.
 3. Record a WAV: `arecord -f S16_LE -r 16000 -c 1 -d 4 /tmp/t.wav` and say "how do I purify water"; then `curl -s -H "Authorization: Bearer $(sudo cat /etc/localai/agent-token)" -F audio=@/tmp/t.wav http://127.0.0.1:7070/api/v1/speech/stt | jq .` → the text, `"language": "en"`.
 4. `curl -s -H "Authorization: Bearer …" -H 'Content-Type: application/json' -d '{"text":"Hierva el agua durante un minuto."}' http://127.0.0.1:7070/api/v1/speech/tts -o /tmp/s.wav -D - | grep X-LocalAI` → `X-LocalAI-Language: es`; `aplay /tmp/s.wav` is Spanish speech.
 5. Turn Wi-Fi off. Open `http://127.0.0.1:7070/maps/` → the map with labels; search "Liberia" → the Costa Rican city first; "Nearest: hospital" lists hospitals.

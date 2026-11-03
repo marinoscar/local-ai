@@ -133,9 +133,9 @@ content:
     license: "CC BY-SA 4.0"
     source:
       type: kiwix                        # kiwix | url | pmtiles_extract | apt_closure | git_mirror | github_release | repo_docs
-      # kiwix: resolves the newest dated file matching the book name by parsing the download.kiwix.org directory listing at base_url (ark-sync.md §4.9.2)
+      # kiwix: resolves the newest dated file matching the book name by parsing the Kiwix download directory listing at base_url (ark-sync.md §4.9.2)
       book: wikipedia_en_all_nopic       # Kiwix book name (without date)
-      base_url: https://download.kiwix.org/zim/wikipedia/
+      base_url: https://lb.download.kiwix.org/zim/wikipedia/   # the origin host the OPDS entries link to (see section 3.1)
       version_policy: latest             # latest | pinned
       pinned: null                       # {file: wikipedia_en_all_nopic_2026-09.zim, sha256: ...} when pinned
       checksum: sidecar                  # sidecar = <url>.sha256 published by Kiwix ; pinned = use pinned.sha256
@@ -226,7 +226,7 @@ content:
   - id: wikimed-en
     kind: kiwix
     survival_tier: 1
-    source: {type: kiwix, book: mdwiki_en_all_maxi, base_url: "https://download.kiwix.org/zim/other/", version_policy: latest, checksum: sidecar}   # book name verified in CAT-03
+    source: {type: kiwix, book: wikipedia_en_medicine_maxi, base_url: "https://lb.download.kiwix.org/zim/wikipedia/", version_policy: latest, checksum: sidecar}   # book name verified in CAT-03
     portal_links:                        # optional, kiwix items only: first-aid links of the Survival Portal (survival-portal.md §3.4)
       - key: bleeding                    # stable key, unique across the catalog; also the icon name
         title: {en: "Severe bleeding", es: "Sangrado grave"}
@@ -265,29 +265,42 @@ content:
 - Kit item ids: `kit-debs-<codename>-<arch>` and `kit-nvidia-<codename>-<arch>-<branch>`. `<codename>` is the Ubuntu codename of the nodes that use the item (`resolute` = 26.04 LTS today); lint checks that the id matches `source.codename`/`source.arch`. A node whose codename has no item gets `LAI-KIT-042`.
 
 ### 3.1 Initial content set (finalized in CAT-03 "Populate initial ark content")
-Kiwix books (exact book names verified against the Kiwix OPDS catalog during implementation):
-- **Tier 1 (all profiles):**
-  - Wikipedia EN: `wikipedia-en-nopic` (small-8gb) and `wikipedia-en-maxi` (cuda-12gb, max-128gb, ark-drive-full)
-  - WikiMed / mdwiki (medical, EN)
-  - WikiHow EN
-  - iFixit EN
-  - the Kiwix "post-disaster" / zimgit survival collections (water, first aid, food, power)
-  - Wikipedia ES (nopic): `wikipedia-es-nopic`
-- **Tier 2:**
-  - Wikibooks EN
-  - Wikivoyage EN/ES
-  - Stack Exchange (diy, electronics, cooking, gardening, outdoors, ham radio, superuser, askubuntu, unix, stackoverflow-nopic)
-  - Project Gutenberg (EN, subset)
-  - Khan Academy / LibreTexts where available
-  - WikiMed ES
-- **Tier 3:** Wiktionary EN/ES, TED, and the remaining large collections (ark drive only).
+Every Kiwix `book` below was checked on 2026-11-03 against the Kiwix OPDS catalog (`https://opds.library.kiwix.org/catalog/v2/entries?count=-1`, the host `library.kiwix.org` redirects to). The OPDS `name` plus `flavour` give the `book` (`wikipedia_en_all` + `nopic` = `wikipedia_en_all_nopic`; an entry without a flavour is just the name), the OPDS acquisition link gives the directory of `base_url` and the size, and the resolver's own steps (directory listing, `.sha256` sidecar, `HEAD` size) were replayed for every item. All 41 Kiwix items resolve. `base_url` is `https://lb.download.kiwix.org/zim/<directory>/`: `download.kiwix.org` now answers every path, the `.sha256` files included, with a `301` to `lb.download.kiwix.org`, and the sidecar rule of [ark-sync.md](ark-sync.md) §4.9.2 refuses a redirect, so the catalog names the host the OPDS links use. An item that keeps the old host fails with `LAI-SYN-022`.
+
+**Tier 1 (every profile unless noted):**
+| id | book | notes |
+|---|---|---|
+| `docs-bundle` | `repo_docs` | rendered `docs/`, pinned class |
+| `wikimed-en` | `wikipedia_en_medicine_maxi` | WikiMed with pictures; carries the first-aid `portal_links` |
+| `survival-first-aid`, `survival-water`, `survival-food` | `zimgit-medicine_en`, `zimgit-water_en`, `zimgit-food-preparation_en` | the zimgit survival collections (PDF libraries) |
+| `survival-post-disaster` | `zimgit-post-disaster_en` | superset of the three above plus shelter, foraging, hunting, knots and nuclear threats |
+| `ifixit-en` | `ifixit_en_all` | repair guides |
+| `osm-central-america`, `places-central-america` | `pmtiles_extract`, GeoNames `url` | see Maps |
+| `wikipedia-en-nopic` | `wikipedia_en_all_nopic` | small-8gb, cpu-only, ark-drive-full |
+| `wikipedia-es-nopic` | `wikipedia_es_all_nopic` | |
+| `wikipedia-en-maxi` | `wikipedia_en_all_maxi` | cuda-12gb, max-128gb, ark-drive-full |
+
+**Tier 2:** `wikimed-es` (`wikipedia_es_medicine_maxi`), `mdwiki-en` (`mdwiki_en_all_maxi`), `stackexchange-{diy,electronics,cooking,gardening,outdoors,ham,superuser,askubuntu,unix}` (`<site>.stackexchange.com_en_all`, `superuser.com_en_all`, `askubuntu.com_en_all`), `wikibooks-en`, `wikivoyage-en`, `wikivoyage-es`, the Project Gutenberg English subsets `gutenberg-en-technology`, `gutenberg-en-agriculture`, `gutenberg-en-medicine` (Library of Congress classes T, S and R: `gutenberg_en_lcc-t`, `-s`, `-r`), `libretexts-en-{medicine,engineering,biology,chemistry}`, `energypedia-en` (the "power" collection), and `khanacademy-en` and `khanacademy-es` (about 180 GB and 160 GB, last built in 2023, so only `ark-drive-full` lists them).
+
+**Tier 3 (ark drive and large nodes):** `wiktionary-en`, `wiktionary-es`, `ted-natural-disaster`, `ted-water`, `ted-medicine`, `gutenberg-es-all`, `stackexchange-stackoverflow` and `survivor-library` (the two very large ones are `ark-drive-full` only), and `osm-north-america`.
+
+**Differences from the first draft of this section** (the book does not exist, or the id could not stay as written):
+- **WikiHow EN does not exist.** Neither the OPDS catalog nor the download directories hold a WikiHow book, so there is no `wikihow-en`. The how-to role is covered by `ifixit-en`, the survival collections and the Stack Exchange sites.
+- **WikiMed is `wikipedia_en_medicine` (flavour `maxi`), not `mdwiki_en_all_maxi`.** The Spanish edition exists only as `wikipedia_es_medicine`, and the portal needs an English and a Spanish book of the same kind, so `wikimed-en` and `wikimed-es` are the two WikiMed books. `mdwiki_en_all_maxi` (a different medical wiki, English only) is the extra tier 2 item `mdwiki-en`.
+- **`survival-collection` is five items.** One catalog item is one ZIM, and the survival collections are separate ZIMs (water, first aid, food, post-disaster), so the single id of the first draft became `survival-first-aid`, `survival-water`, `survival-food` and `survival-post-disaster`. There is no Kiwix "power" survival ZIM; `energypedia-en` fills that role.
+- **There is no `stackoverflow` nopic flavour.** The only book is `stackoverflow.com_en_all` (about 115 GB), so `stackexchange-stackoverflow` is tier 3.
+- **`map-assets` is not in the catalog yet.** A `github_release` item needs a pinned tag, an asset name and a 64-hex sha256 (lint rejects anything else), and the redaction check refuses a 64-hex string in a tracked file (issue #251 is open). It is added in the pull request that resolves #251, with the real tag and digest; until then the `map-assets` id is reserved and no profile lists it.
+
+**Sizes and refresh.** `expected_size_bytes` is the OPDS size rounded up to two significant digits after 3 % growth, only for planning; sync uses the real size. `osm-central-america` keeps the 2.5 GB of the issue; `osm-north-america` (`maxzoom: 13`, 15 GB) is an estimate that the first `aictl ark sync --dry-run` replaces with the `pmtiles extract --dry-run` figure. `places-central-america` is about 3.6 MB of GeoNames files (`expected_size_bytes: 5000000`). Static books (the zimgit collections, Gutenberg, LibreTexts, Khan, TED) refresh yearly, Wikipedia and Wikibooks every 90 days, the rest every 180 days.
 
 Maps:
 - `osm-central-america` (tier 1, all profiles)
 - `osm-north-america` (tier 3, ark drive only)
-- `map-assets` (tier 1)
+- `map-assets` (tier 1; pending, see above)
 
 Kit: everything in [rebuild-kit.md](rebuild-kit.md), tier 1.
+
+**First-aid links.** `wikimed-en` carries fifteen `portal_links` (`cpr`, `choking`, `bleeding`, `shock`, `burns`, `fracture`, `head_injury`, `allergic_reaction`, `snake_bite`, `dehydration`, `heat_stroke`, `hypothermia`, `wound_infection`, `childbirth`, `food_safety`) with an English article of `wikipedia_en_medicine_maxi` and a Spanish article of `wikipedia_es_medicine_maxi` (`es_item: wikimed-es`). `survival-water` carries `water_purification` (`files/Water (2).pdf`, "Purifying Water During an Emergency", with the Spanish article `Agua_potable` of `wikimed-es`). `food_safety` is on `wikimed-en` because no survival ZIM holds a food-safety document. An `article` is the entry path inside the ZIM exactly as `libzim` lists it (not percent-encoded; a PDF of a zimgit collection is `files/<name>.pdf` with spaces and parentheses): the Portal encodes each path segment when it builds the `/library/content/<book>/<article>` URL. Every path was opened in the ZIM files of the same books (`libzim`), none is a redirect, and the English `dehydration` link is `Oral_rehydration_therapy`, its Spanish one `Sales_de_rehidratación_oral`.
 
 ## 4. Profiles (`profiles/<id>.yaml`)
 
@@ -309,10 +322,12 @@ storage:
   min_free_bytes: 25000000000 # never let the filesystem drop below this
 include:
   models: [qwen3.5-9b-q4km, <small-vlm-id>, <tiny-fallback-id>, <embedding-id>, whisper-small, piper-en-medium, piper-es-medium]
-  content: [wikipedia-en-nopic, wikimed-en, wikihow-en, ifixit-en, survival-collection, wikipedia-es-nopic,
-            osm-central-america, map-assets, places-central-america, kit-llama-cpp, kit-debs-resolute-amd64, kit-nvidia-resolute-amd64-595-open,
+  content: [docs-bundle, wikimed-en, survival-first-aid, survival-water, survival-food, survival-post-disaster, ifixit-en,
+            osm-central-america, places-central-america, wikipedia-en-nopic, wikipedia-es-nopic,
+            wikimed-es, wikibooks-en, ...,                      # tier 2, see catalog/profiles/small-8gb.yaml
+            kit-llama-cpp, kit-debs-resolute-amd64, kit-nvidia-resolute-amd64-595-open,
             kit-agent-binaries, kit-agent-source, kit-go-toolchain, kit-whisper-cpp, kit-kiwix-tools, kit-pmtiles, kit-piper,
-            kit-desktop, docs-bundle]
+            kit-desktop]
 default_model: qwen3.5-9b-q4km
 survival:                    # see architecture/modes.md §3
   models: [qwen3.5-9b-q4km, <small-vlm-id>]
