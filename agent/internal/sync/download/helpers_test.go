@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"io"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
@@ -555,8 +554,6 @@ func mustFetch(t *testing.T, e *env, j FileJob) Result {
 	}
 	return res
 }
-
-func drain(r io.Reader) { _, _ = io.Copy(io.Discard, r) }
 
 func sumHex(b []byte) string { return hex.EncodeToString(b) }
 
