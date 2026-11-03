@@ -11,6 +11,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/auth"
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/cloud"
+	"github.com/marinoscar/local-ai/agent/internal/cloud/jobs"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/drill"
@@ -240,11 +241,30 @@ func (d *Daemon) build(ctx context.Context) error {
 	d.sdeps = sdeps
 	d.merger = merger
 
-	// The cloud link. The claim plane (#36) and the snapshot sources arrive through the hooks.
+	// The drill's reporter: the last completed run in memory, the feed of the two drill alerts and the
+	// cloud snapshot's drill block, so they can never disagree about which run is the last one.
+	results := drill.NewResults(drill.ResultsOptions{Dir: c.Paths.DrillDir(), Owner: d.owner})
+	reporter, err := drill.NewReporter(drill.ReporterOptions{
+		Results: results, State: c.State, Clock: clock, OnChange: d.kickDoctor, Logger: log,
+	})
+	if err != nil {
+		return fmt.Errorf("drill reporter: %w", err)
+	}
+	d.reporter = reporter
+	if err := drill.RegisterAlertChecks(c.Checks, reporter, clock); err != nil {
+		return err
+	}
+
+	// The cloud link. The snapshot sources besides the drill's (ark, sync) and any replacement of the
+	// drill's arrive through the hook.
 	var snap cloud.SnapshotOptions
+	snap.Drill = reporter
 	if f := d.hooks.snapshot; f != nil {
 		s := f(c)
-		snap.Ark, snap.Sync, snap.Drill = s.Ark, s.Sync, s.Drill
+		snap.Ark, snap.Sync = s.Ark, s.Sync
+		if s.Drill != nil {
+			snap.Drill = s.Drill
+		}
 	}
 	snap.Models, snap.Catalog = merger, c.Catalog
 	c.Cloud, err = cloud.New(cloud.Deps{
@@ -258,9 +278,6 @@ func (d *Daemon) build(ctx context.Context) error {
 		return fmt.Errorf("cloud link: %w", err)
 	}
 	d.views.cloud.Store(c.Cloud)
-	if f := d.hooks.claim; f != nil {
-		d.claim.set(f(c))
-	}
 
 	// The sync engine behind the model routes: the extension point, or the documented stub.
 	var syncEngine modelsapi.SyncEngine = noSyncEngine{}
@@ -270,6 +287,20 @@ func (d *Daemon) build(ctx context.Context) error {
 		}
 	}
 	d.syncEngine = syncEngine
+	d.modelsDeps = modelsapi.Deps{
+		Config: c.Config, Catalog: c.Catalog, Models: merger, Mode: mv, Sync: syncEngine, Lock: c.OpLock,
+		Regenerator: sdeps.Regenerator, Keys: router.NewFileKey(fs, c.Paths.APIKey()), KeyFS: fs,
+		KeyPath: c.Paths.APIKey(), Restarter: c.Orchestrator, State: c.State, Pusher: c.Cloud, Tailnet: c.Tailscale,
+		Publisher: c.Bus, Alerts: alerts, Audit: d.audit, Now: clock.Now, Logger: log,
+	}
+	d.models, err = modelsapi.New(d.modelsDeps)
+	if err != nil {
+		return fmt.Errorf("models service: %w", err)
+	}
+	d.svcDeps = api.ServicesDeps{
+		Status: svcView, Actions: c.Controller, Health: sup, Llama: router.NewLlamaHook(c.Orchestrator),
+		Mode: d.modeName, Audit: d.audit, Logger: log,
+	}
 
 	// The mode engine.
 	var link modes.LinkController
@@ -298,9 +329,16 @@ func (d *Daemon) build(ctx context.Context) error {
 	}
 	mv.e.Store(c.Modes)
 
+	// The cloud command plane: the claim loop over the executors of internal/cloud/jobs, each calling
+	// the same method as the REST route of its operation. A claim plane registered with UseClaimPlane
+	// replaces it.
+	if err := d.buildClaimPlane(sdeps); err != nil {
+		return err
+	}
+
 	// The drill framework and the internal-root monitor.
 	c.Drill, err = drill.New(drill.Deps{
-		Registry: drill.NewRegistry(), Results: drill.NewResults(drill.ResultsOptions{Dir: c.Paths.DrillDir(), Owner: d.owner}),
+		Registry: drill.NewRegistry(), Results: results, Observer: reporter,
 		State: c.State, Publisher: c.Bus, Mode: mv, Llama: llamaActivity{lock: c.OpLock, view: c.RouterWatcher},
 		Power: powerSource{h: c.Hardware}, Metrics: gauge, NodeID: node, AgentVersion: env.Version,
 		CatalogVersion: func() string { return c.Catalog.Get().Catalog.Version }, Clock: clock, Logger: log,
@@ -365,12 +403,7 @@ func (d *Daemon) buildServer() error {
 		{"events", func() error {
 			return api.RegisterEvents(reg, api.EventsOptions{Bus: c.Bus, Stopping: d.eventsStopping, Clock: env.Clock, Logger: d.log})
 		}},
-		{"services", func() error {
-			return api.RegisterServices(reg, api.ServicesDeps{
-				Status: health.Combine(c.Watcher, c.Health), Actions: c.Controller, Health: c.Health,
-				Llama: router.NewLlamaHook(c.Orchestrator), Mode: d.modeName, Audit: d.audit, Logger: d.log,
-			})
-		}},
+		{"services", func() error { return api.RegisterServices(reg, d.svcDeps) }},
 		{"logs", func() error {
 			return api.RegisterLogs(reg, api.LogsDeps{Journal: services.NewJournal(env.Runner, "")})
 		}},
@@ -390,14 +423,7 @@ func (d *Daemon) buildServer() error {
 				Now:      env.Clock.Now,
 			})
 		}},
-		{"models", func() error {
-			return modelsapi.Register(reg, modelsapi.Deps{
-				Config: c.Config, Catalog: c.Catalog, Models: d.merger, Mode: d.mode, Sync: d.syncEngine, Lock: c.OpLock,
-				Regenerator: d.sdeps.Regenerator, Keys: router.NewFileKey(config.OSFS{}, c.Paths.APIKey()), KeyFS: config.OSFS{},
-				KeyPath: c.Paths.APIKey(), Restarter: c.Orchestrator, State: c.State, Pusher: c.Cloud, Tailnet: c.Tailscale,
-				Publisher: c.Bus, Alerts: router.ManagerAlerts(c.Doctor), Audit: d.audit, Now: env.Clock.Now, Logger: d.log,
-			})
-		}},
+		{"models", func() error { return d.models.Register(reg) }},
 		{"model operations", func() error {
 			cfg := c.Config.Get()
 			max := 1
@@ -446,6 +472,43 @@ func (d *Daemon) buildServer() error {
 	}
 	c.API = srv
 	d.stoppers.server = srv
+	return nil
+}
+
+// buildClaimPlane builds the cloud command plane (agent.md section 4.8.6): the executors of the
+// job types the node can run, the claim loop over them and its inflight.json, bound to the link. A
+// registration of UseClaimPlane replaces all of it. A job type whose dependency is missing is left out
+// of the executors and refused with LAI-CLD-057, like a type missing from cloud.allow: ark.sync and
+// ark.verify wait for the sync engine, agent.update for the self-update (UseAgentUpdate).
+func (d *Daemon) buildClaimPlane(sdeps statusapi.Deps) error {
+	c := d.c
+	if f := d.hooks.claim; f != nil {
+		d.claim.set(f(c))
+		return nil
+	}
+	jd := jobs.Deps{
+		Router: c.Orchestrator, Models: d.models, Modes: c.Modes, Services: d.svcDeps,
+		Logs: services.NewJournal(d.env.Runner, ""), Catalog: sdeps, Link: c.Cloud, Status: sdeps.Builder(),
+		State: c.State, Hardware: c.Hardware, Clock: d.env.CloudClock,
+	}
+	var recoverFn func(context.Context, cloud.InflightEntry) bool
+	if f := d.hooks.agentUpd; f != nil {
+		u := f(c)
+		jd.AgentUpdate, recoverFn = u.Updater, u.Recover
+	}
+	reg, err := cloud.NewRegistry(jobs.Handlers(jd)...)
+	if err != nil {
+		return fmt.Errorf("cloud job executors: %w", err)
+	}
+	claimer, err := cloud.NewClaimer(cloud.ClaimerDeps{
+		Handlers: reg, Inflight: cloud.InflightStore{FS: config.OSFS{}, Path: c.Paths.Inflight()}, Audit: d.audit,
+		Online: d.mode.online, Clock: d.env.CloudClock, Rand: d.env.CloudRand, Recover: recoverFn, Logger: d.log,
+	})
+	if err != nil {
+		return fmt.Errorf("cloud claim loop: %w", err)
+	}
+	claimer.Bind(c.Cloud)
+	d.claim.set(ClaimPlane{Loop: claimer, Inflight: claimer.Inflight})
 	return nil
 }
 

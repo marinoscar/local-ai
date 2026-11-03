@@ -68,6 +68,9 @@ func (p Paths) Audit() string { return p.Join(varDir + "/audit.jsonl") }
 // CloudLink is /var/lib/localai/cloud/link.json.
 func (p Paths) CloudLink() string { return p.Join(varDir + "/cloud/link.json") }
 
+// Inflight is /var/lib/localai/cloud/inflight.json.
+func (p Paths) Inflight() string { return p.Join(varDir + "/cloud/inflight.json") }
+
 // DrillDir is /var/lib/localai/drill.
 func (p Paths) DrillDir() string { return p.Join(varDir + "/drill") }
 

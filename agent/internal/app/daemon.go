@@ -8,8 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/marinoscar/local-ai/agent/internal/api"
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
+	"github.com/marinoscar/local-ai/agent/internal/drill"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/modes"
@@ -79,6 +81,11 @@ type Daemon struct {
 	merger     *statusapi.ModelMerger
 	syncEngine modelsapi.SyncEngine
 	hooksSync  syncCanceller
+	reporter   *drill.Reporter
+	modelsDeps modelsapi.Deps
+	models     *modelsapi.Service
+	svcDeps    api.ServicesDeps
+	doctorKick chan struct{} // coalesced requests for a doctor pass (the drill reporter's OnChange)
 
 	startedCh chan struct{} // closed at step 17
 	gateCh    chan struct{} // closed when step 12 ends
@@ -112,7 +119,8 @@ type pendingAlert struct {
 // NewDaemon returns a Daemon over env. Nothing runs until Start.
 func NewDaemon(env Env) *Daemon {
 	env.defaults()
-	d := &Daemon{env: env, hooks: env.Hooks.freeze(), startedCh: make(chan struct{}), gateCh: make(chan struct{})}
+	d := &Daemon{env: env, hooks: env.Hooks.freeze(), startedCh: make(chan struct{}), gateCh: make(chan struct{}),
+		doctorKick: make(chan struct{}, 1)}
 	d.c = &Components{Env: env, Paths: env.paths(), Notify: env.Notifier}
 	d.audit = &auditSlot{}
 	d.claim = &claimSlot{}
@@ -244,6 +252,16 @@ func (d *Daemon) runStep(ctx context.Context, n int, name string, budget time.Du
 		d.env.OnStep(StepEvent{N: n, Name: name, End: true, Err: err})
 	}
 	return err
+}
+
+// kickDoctor asks for a doctor pass soon: the drill reporter calls it when a document changed what it
+// reports, so an alert shows up at once and not at the next 60 s pass. It never blocks; requests that
+// arrive while one is pending share it.
+func (d *Daemon) kickDoctor() {
+	select {
+	case d.doctorKick <- struct{}{}:
+	default:
+	}
 }
 
 // auditSlot is the audit log as the subsystems that are built before it was opened see it: it

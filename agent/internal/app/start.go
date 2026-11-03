@@ -337,6 +337,11 @@ func (d *Daemon) stepSubsystems(ctx context.Context) error {
 	}
 	d.startWorker(c.Config)
 	d.startWorker(c.Watcher)
+	// The drill reporter reads the kept documents (and stamps drill.watch_since on a node that never
+	// ran a drill), so the drill alerts are derived by the first pass below.
+	if err := d.reporter.Load(); err != nil {
+		d.log.Warn("the drill results could not be read", "error", err.Error())
+	}
 	// The first doctor pass runs now, so a degraded start (missing node.yaml, a damaged state file)
 	// is an alert from the moment the API answers; the periodic loop starts at step 16.
 	c.Doctor.Tick(ctx)
@@ -511,7 +516,7 @@ func (d *Daemon) stepUpdate(ctx context.Context) error {
 // mode engine's policy (step 13), which knows whether the node is online.
 func (d *Daemon) stepPeriodic(ctx context.Context) error {
 	c := d.c
-	d.startWorker(c.Doctor)
+	d.startWorker(&doctorLoop{d: d}) // not doctor.Manager.Start: every pass is serialized (doctorloop.go)
 	d.startWorker(c.Tailscale)
 	d.startWorker(c.Health)
 	d.bg.Add(1)

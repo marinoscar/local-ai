@@ -73,6 +73,12 @@ func TestHookRegistrationRules(t *testing.T) {
 	if err := h.UseClaimPlane(func(*Components) ClaimPlane { return ClaimPlane{} }); err == nil {
 		t.Error("a second claim plane")
 	}
+	if err := h.UseAgentUpdate(func(*Components) AgentUpdate { return AgentUpdate{} }); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.UseAgentUpdate(func(*Components) AgentUpdate { return AgentUpdate{} }); err == nil {
+		t.Error("a second agent updater")
+	}
 	if err := h.UseSyncEngine(func(*Components) modelsapi.SyncEngine { return nil }); err != nil {
 		t.Fatal(err)
 	}
@@ -98,11 +104,12 @@ func TestPackageLevelRegistrationUsesDefaultHooks(t *testing.T) {
 	RegisterWorker("w", func(*Components) (Worker, error) { return nil, nil })
 	RegisterRoutes("r", func(*api.Registry, *Components) error { return nil })
 	UseClaimPlane(func(*Components) ClaimPlane { return ClaimPlane{} })
+	UseAgentUpdate(func(*Components) AgentUpdate { return AgentUpdate{} })
 	UseSyncEngine(func(*Components) modelsapi.SyncEngine { return nil })
 	UseSnapshotSources(func(*Components) SnapshotSources { return SnapshotSources{} })
 	set := DefaultHooks.freeze()
 	if len(set.update) != 1 || len(set.postStart) != 1 || len(set.workers) != 1 || len(set.routes) != 1 ||
-		set.claim == nil || set.sync == nil || set.snapshot == nil {
+		set.claim == nil || set.agentUpd == nil || set.sync == nil || set.snapshot == nil {
 		t.Errorf("the registrations did not reach DefaultHooks: %+v", set)
 	}
 	mustPanic := func(name string, f func()) {

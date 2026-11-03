@@ -7,6 +7,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
 	"github.com/marinoscar/local-ai/agent/internal/cloud"
+	"github.com/marinoscar/local-ai/agent/internal/cloud/jobs"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 )
 
@@ -44,6 +45,15 @@ type ClaimPlane struct {
 	Inflight func() (count int, info map[string]any)
 }
 
+// AgentUpdate is what the self-update (AGENT-19) gives the command plane: the updater behind the
+// agent.update job and, optionally, the function that takes over an agent.update entry of
+// inflight.json that an earlier process left behind (it settles it after the post-update health
+// check).
+type AgentUpdate struct {
+	Updater jobs.AgentUpdater
+	Recover func(ctx context.Context, e cloud.InflightEntry) bool
+}
+
 // SnapshotSources are the optional sources of the cloud state snapshot besides the status builder.
 // The ark and sync slices implement ArkSource and SyncSource; the drill slice implements DrillSource.
 type SnapshotSources struct {
@@ -76,6 +86,7 @@ type Hooks struct {
 	workers   []namedWorker
 	routes    []namedRoutes
 	claim     func(c *Components) ClaimPlane
+	agentUpd  func(c *Components) AgentUpdate
 	sync      func(c *Components) modelsapi.SyncEngine
 	snapshot  func(c *Components) SnapshotSources
 }
@@ -183,8 +194,21 @@ func (h *Hooks) RegisterRoutes(name string, add RouteHook) error {
 	return nil
 }
 
-// UseClaimPlane sets the cloud command plane factory (#36). It runs once, right after the link is
-// built; only one may be set.
+// UseAgentUpdate sets the self-update the command plane's agent.update job runs (AGENT-19). Without
+// it the job is refused with LAI-AGT-023. It runs once, when the claim plane is built; only one may be
+// set.
+func (h *Hooks) UseAgentUpdate(build func(c *Components) AgentUpdate) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.agentUpd != nil {
+		return fmt.Errorf("app: the agent updater is already set")
+	}
+	h.agentUpd = build
+	return nil
+}
+
+// UseClaimPlane replaces the daemon's own cloud command plane (the claim loop over the executors of
+// internal/cloud/jobs) with another one. It runs once, when the plane is built; only one may be set.
 func (h *Hooks) UseClaimPlane(build func(c *Components) ClaimPlane) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -224,6 +248,7 @@ type hookSet struct {
 	workers           []namedWorker
 	routes            []namedRoutes
 	claim             func(c *Components) ClaimPlane
+	agentUpd          func(c *Components) AgentUpdate
 	sync              func(c *Components) modelsapi.SyncEngine
 	snapshot          func(c *Components) SnapshotSources
 }
@@ -239,7 +264,7 @@ func (h *Hooks) freeze() hookSet {
 		postStart: append([]namedHook(nil), h.postStart...),
 		workers:   append([]namedWorker(nil), h.workers...),
 		routes:    append([]namedRoutes(nil), h.routes...),
-		claim:     h.claim, sync: h.sync, snapshot: h.snapshot,
+		claim:     h.claim, agentUpd: h.agentUpd, sync: h.sync, snapshot: h.snapshot,
 	}
 }
 
@@ -268,6 +293,9 @@ func RegisterRoutes(name string, add RouteHook) { must(DefaultHooks.RegisterRout
 
 // UseClaimPlane sets the command plane factory of DefaultHooks.
 func UseClaimPlane(build func(c *Components) ClaimPlane) { must(DefaultHooks.UseClaimPlane(build)) }
+
+// UseAgentUpdate sets the self-update of DefaultHooks.
+func UseAgentUpdate(build func(c *Components) AgentUpdate) { must(DefaultHooks.UseAgentUpdate(build)) }
 
 // UseSyncEngine sets the sync engine factory of DefaultHooks.
 func UseSyncEngine(build func(c *Components) modelsapi.SyncEngine) {
