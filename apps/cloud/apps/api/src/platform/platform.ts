@@ -35,7 +35,7 @@ import {
   USER_DEFAULTS,
 } from '@marinoscar/platform-api/identity';
 import { JOBS_EVENT_BUS, JOBS_METRICS, JobsModule } from '@marinoscar/platform-api/jobs';
-import { NodeCredentialModule, NodeCredentialService } from '@marinoscar/platform-api/nodes';
+import { NODE_JOB_INPUTS, NODE_OBJECT_STORE, NodeCredentialModule, NodeCredentialService, NodesModule } from '@marinoscar/platform-api/nodes';
 import { SETTINGS_DATA, SETTINGS_PROFILE_IMAGES, SettingsModule } from '@marinoscar/platform-api/settings';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -49,6 +49,7 @@ import {
   SystemSettingsStoreAdapter,
 } from './adapters';
 import { platformHost } from './host';
+import { NoNodeJobInputs, NoNodeObjectStore } from './nodes/nodes-host';
 import { ENABLED, enabledSlices } from './slices/manifest';
 import { userDataModule } from './user-data/user-data.config';
 
@@ -64,6 +65,9 @@ const CORE_PORTS: Array<Provider & { provide: unknown }> = [
   { provide: USER_DEFAULTS, useClass: AppUserDefaults },
   { provide: IDENTITY_JOBS, useClass: IdentityJobsAdapter },
   { provide: IDENTITY_NODE_CREDENTIALS, useExisting: NodeCredentialService },
+  // The nodes slice's data plane has nothing to sign here (see ./nodes/nodes-host.ts).
+  { provide: NODE_OBJECT_STORE, useClass: NoNodeObjectStore },
+  { provide: NODE_JOB_INPUTS, useClass: NoNodeJobInputs },
   // The host core's bus and metrics (PlatformHostCoreModule, global): the
   // principal cache's cross-replica invalidation, the queue's wake-up, and the
   // `app.auth.*` / `app.jobs.*` instruments.
@@ -107,6 +111,14 @@ export class AppHostModule {}
  */
 export const jobsModule = JobsModule.forRoot({ appName: APP_NAME, imports: [AppHostModule] });
 
+/**
+ * The worker-node control plane: `POST /api/nodes/register`, heartbeat, claim and deregister (the routes the Local AI
+ * agent uses as an EAB worker node, docs/specs/cloud-app.md section 3.6), the fleet admin routes and their sweeps.
+ * The Local AI node routes (`/api/nodes/:id/localai/*`, src/localai/node-link) sit next to these and add the binding
+ * guard. Configured here for the same reason as `jobsModule`: it registers the `nodes` settings namespace.
+ */
+export const nodesModule = NodesModule.forRoot({ imports: [AppHostModule] });
+
 export const PLATFORM_MODULES = [
   // The API host core: the event bus (EVENT_BUS_ADAPTER), the platform's app
   // metrics, maintenance mode (`/api/admin/maintenance` and the only
@@ -121,6 +133,7 @@ export const PLATFORM_MODULES = [
   // The `nod_` worker-node credential family the identity guard accepts.
   NodeCredentialModule,
   jobsModule,
+  nodesModule,
   // The optional slices that `packages/shared/slices.json` enables, in mount
   // order (each one's `forRoot()` is built here and nowhere else).
   ...ENABLED.flatMap((slice) => slice.modules?.(enabledSlices) ?? []),
