@@ -14,13 +14,12 @@ import (
 // mountsRig starts the daemon with llama and kiwix pointed at recording httptest upstreams.
 type mountsRig struct {
 	*rig
-	mu            sync.Mutex
-	llama, kiwix  []http.Header
-	llamaPaths    []string
-	kiwixPaths    []string
-	kiwixSrv      *httptest.Server
-	llamaSrv      *httptest.Server
-	secretOutside string
+	mu           sync.Mutex
+	llama, kiwix []http.Header
+	llamaPaths   []string
+	kiwixPaths   []string
+	kiwixSrv     *httptest.Server
+	llamaSrv     *httptest.Server
 }
 
 func newMountsRig(t *testing.T, kiwixUp bool) *mountsRig {

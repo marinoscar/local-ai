@@ -53,11 +53,10 @@ func (f *llamaFake) port() int {
 }
 
 type fakeOps struct {
-	mu       sync.Mutex
-	loads    []api.ModelLoadRequest
-	unloads  []api.ModelUnloadRequest
-	loadErr  error
-	unloadFn func()
+	mu      sync.Mutex
+	loads   []api.ModelLoadRequest
+	unloads []api.ModelUnloadRequest
+	loadErr error
 }
 
 func (o *fakeOps) Load(_ context.Context, r api.ModelLoadRequest) (api.ModelLoadResult, error) {
