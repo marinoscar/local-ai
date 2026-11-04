@@ -108,3 +108,56 @@ func TestPrebuiltIsAskedForAFewWordsToo(t *testing.T) {
 		t.Errorf("no completion: %v", h.exec.lines())
 	}
 }
+
+// The node's own model fills the GPU: the smoke test falls back to the processor once, and only for an
+// out-of-memory failure.
+func TestSmokeCompletionFallsBackToTheProcessorWhenTheGPUIsFull(t *testing.T) {
+	h := newHarness(t)
+	calls := 0
+	h.exec.on(func(c execx.Cmd) (execx.Result, error, bool) {
+		if !strings.HasSuffix(c.Path, "llama-cli") {
+			return execx.Result{}, nil, false
+		}
+		calls++
+		for i, a := range c.Args {
+			if a == "-ngl" && c.Args[i+1] == "99" {
+				return exitWith(1, "cudaMalloc failed: out of memory"), nil, true
+			}
+		}
+		return okOut("Hello there"), nil, true
+	})
+	res, err := h.build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 || !res.Switched {
+		t.Errorf("llama-cli ran %d times, switched %v, want 2 and true", calls, res.Switched)
+	}
+	found := false
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "on the processor") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no warning about the processor: %v", res.Warnings)
+	}
+}
+
+func TestSmokeCompletionDoesNotRetryOtherFailures(t *testing.T) {
+	h := newHarness(t)
+	calls := 0
+	h.exec.on(func(c execx.Cmd) (execx.Result, error, bool) {
+		if strings.HasSuffix(c.Path, "llama-cli") {
+			calls++
+			return exitWith(1, "error: failed to load model"), nil, true
+		}
+		return execx.Result{}, nil, false
+	})
+	if _, err := h.build(); err == nil {
+		t.Fatal("a non-memory failure must still fail the smoke test")
+	}
+	if calls != 1 {
+		t.Errorf("llama-cli ran %d times, want 1", calls)
+	}
+}
