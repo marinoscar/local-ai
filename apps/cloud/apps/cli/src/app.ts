@@ -27,4 +27,7 @@ export const APP_CLI_OPTIONS: CreateCliOptions = {
   // The VPS stack-agent's two job types (docs/specs/cloud-app.md section 4.10). They are claimed only by a worker
   // started with `--types` naming them (runbook 10 part 10); every other worker leaves them alone.
   nodeExecutors: vpsExecutors(),
+  // The OpenAI-compatible gateway (docs/specs/gateway.md section 3.1): the edge vhost must not buffer /v1/ nor cut a
+  // streamed completion at 60 s. 1800 s matches the gateway's own total timeout (nginx gateway.conf).
+  proxy: { streamPaths: [{ path: '/v1/', timeoutSeconds: 1800 }] },
 };
