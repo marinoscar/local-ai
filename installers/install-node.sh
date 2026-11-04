@@ -1233,7 +1233,7 @@ phase_verify() {
   local laptop=0 sumargs=()
   i07_is_laptop && laptop=1
   if [[ -e /var/run/reboot-required || -e "$STATE_DIR/reboot-required" ]] || ((REBOOT_REQUIRED)) ||
-    { ((laptop)) && [[ "${PH_STATUS[P4]:-}" == done ]]; }; then
+    { ((laptop)) && [[ "${PH_STATUS[P4]:-}" == "done" ]]; }; then
     REBOOT_REQUIRED=1
   fi
   sumargs=(setup summary "${common[@]}" "${inv_args[@]}")
