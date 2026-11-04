@@ -132,8 +132,19 @@ export class FakeCommandStore {
       if (orderBy?.createdAt === 'desc') found.reverse();
       return found[0] ? { ...found[0] } : null;
     },
-    findMany: async ({ where, take }: { where?: Where; take?: number; select?: unknown; orderBy?: unknown } = {}): Promise<LocalaiCommand[]> =>
-      this.rows.filter((row) => this.matches(row, where)).slice(0, take).map((row) => ({ ...row })),
+    findMany: async ({ where, take, skip }: { where?: Where; take?: number; skip?: number; select?: unknown; orderBy?: unknown } = {}): Promise<LocalaiCommand[]> =>
+      this.rows
+        .filter((row) => this.matches(row, where))
+        .slice(skip ?? 0, take === undefined ? undefined : (skip ?? 0) + take)
+        .map((row) => ({ ...row })),
+    count: async ({ where }: { where?: Where } = {}): Promise<number> => this.rows.filter((row) => this.matches(row, where)).length,
+    /** By id; `include`/`select` of `node` joins the lab id registered in `knownNodes` for the row's node. */
+    findUnique: async ({ where, include, select }: { where: { id: string }; select?: { node?: unknown }; include?: { node?: unknown } }): Promise<(LocalaiCommand & { node?: { nodeId: string; displayName: string } }) | null> => {
+      const found = this.rows.find((row) => row.id === where.id);
+      if (!found) return null;
+      const lab = [...this.knownNodes.entries()].find(([, rowId]) => rowId === found.nodeId)?.[0] ?? 'ai-n0';
+      return include?.node || select?.node ? { ...found, node: { nodeId: lab, displayName: `Node ${lab}` } } : { ...found };
+    },
     updateMany: async ({ where, data }: { where?: Where; data: Partial<LocalaiCommand> }): Promise<{ count: number }> => {
       let count = 0;
       for (const row of this.rows) {

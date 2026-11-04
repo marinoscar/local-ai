@@ -8,13 +8,25 @@
 // committed, and a failed publish is logged, never raised: the long poll also wakes on its own timeout.
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, type LocalaiCommand } from '@prisma/client';
+import { AUDIT_SINK, type AuditEventInput, type AuditSink } from '@marinoscar/platform-api/core';
 import { EVENT_BUS, type EventBus } from '@marinoscar/platform-api/host';
 
 import { COMMAND_TYPE_PREFIX, COMMANDS, isCommandType, type CommandType } from '../contracts/commands';
 import type { FailureRequest, RenewRequest, ResultRequest, SettleResponse } from '../contracts/command-wire';
 import { PrismaService } from '../../prisma/prisma.service';
+import { LOCALAI_PERMISSION_IDS } from '../localai.permissions';
 import type { CommandSource, EnqueuedCommand, LocalaiCommandEnqueuer } from './command-enqueuer';
-import { invalidCommandParams, invalidResult, leaseLost, resultTypeMismatch } from './command-errors';
+import { AUDIT_COMMAND_CANCELLED, AUDIT_COMMAND_REQUESTED, AUDIT_COMMAND_TARGET } from './command-audit';
+import {
+  commandForbidden,
+  commandNotCancellable,
+  invalidCommandParams,
+  invalidResult,
+  leaseLost,
+  resultTypeMismatch,
+  unknownCommand,
+  unknownLabNode,
+} from './command-errors';
 import {
   COMMAND_ENQUEUED_CHANNEL,
   COMMAND_SETTLED_CHANNEL,
@@ -25,8 +37,10 @@ import {
 } from './command-events';
 import { parseFailureString } from './command-failure';
 import { ACTIVE_STATUSES, isHeld, renewedLeaseExpiry } from './command-lifecycle';
-import { dedupKeyFor, policyOf } from './command-policy';
+import { assertModelOnNode, assertNodeTakesCommands, modelRequiredOnNode } from './command-refusals';
+import { dedupKeyFor, maySend, permissionFor, policyOf, type CommandRequester } from './command-policy';
 import { scrubJson } from './command-scrub';
+import { toCommandView, type CommandView } from './command-view';
 
 /** Who asked: a person, or the system itself (a cron, a resend-keys fan-out). */
 export interface CommandActor {
@@ -36,6 +50,12 @@ export interface CommandActor {
 export interface EnqueueResult {
   command: LocalaiCommand;
   /** False when an active command with the same dedup key already existed and was returned instead (HTTP 200, not 201). */
+  created: boolean;
+}
+
+/** What `request` answers: the command as the UI sees it, and whether it is new (HTTP 201) or an active duplicate (200). */
+export interface RequestResult {
+  command: CommandView;
   created: boolean;
 }
 
@@ -71,7 +91,95 @@ export class CommandsService implements LocalaiCommandEnqueuer {
     private readonly prisma: PrismaService,
     @Inject(EVENT_BUS) private readonly bus: EventBus,
     @Inject(LOCALAI_CLOCK) private readonly clock: LocalaiClock,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
+
+  /**
+   * The UI-facing entry (docs/specs/cloud-app.md sections 3.9 and 4.4, CLOUD-09): what a person or a script asks for.
+   * In order: the type is a registry type (400); the caller holds the permission the policy table names for it
+   * (403); the params pass the type's strict schema (400); the node exists (404), is enrolled (409 LAI-CLD-035) and
+   * is not in Offline or Survival mode per its last snapshot (422 LAI-CLD-034); a model command finds the model
+   * downloaded on the node (422). Then `enqueueForNode` does the insert and the dedup. A NEW command is audited
+   * (`localai.command.requested`); an active duplicate returned with `created: false` writes nothing.
+   * `type` may be unprefixed (`model.load`); the answer carries the prefixed one.
+   */
+  async request(nodeId: string, type: string, rawParams: unknown, requester: CommandRequester, source: CommandSource): Promise<RequestResult> {
+    const full = this.resolveType(type);
+    if (!maySend(full, requester.permissions)) throw commandForbidden(permissionFor(full));
+    const parsed = COMMANDS[full].params.safeParse(rawParams ?? {});
+    if (!parsed.success) throw invalidCommandParams(parsed.error, full);
+
+    const node = await this.prisma.localaiNode.findUnique({ where: { nodeId }, select: { id: true, nodeId: true, phase: true, mode: true } });
+    if (!node) throw unknownLabNode();
+    assertNodeTakesCommands(node);
+    const modelId = modelRequiredOnNode(full, parsed.data);
+    if (modelId !== null) {
+      const model = await this.prisma.localaiNodeModel.findUnique({ where: { nodeId_modelId: { nodeId: node.id, modelId } }, select: { present: true } });
+      assertModelOnNode(model);
+    }
+
+    const { command, created } = await this.enqueueForNode(node.id, full, parsed.data, { userId: requester.userId }, source);
+    if (created) {
+      await this.recordAudit({
+        action: AUDIT_COMMAND_REQUESTED,
+        actorUserId: requester.userId,
+        targetType: AUDIT_COMMAND_TARGET,
+        targetId: command.id,
+        meta: { nodeId: node.nodeId, type: full, params: JSON.stringify(command.params) },
+      });
+    }
+    return { command: toCommandView(command, node.nodeId), created };
+  }
+
+  /**
+   * Cancels a `queued` command (DELETE /commands/:id). The caller needs the permission of the command's type; an
+   * unknown or non-uuid id is 404. One conditional write (`WHERE status = 'queued'`): a command a node claimed in the
+   * meantime, or one that already settled, is 409. Leaving `queued` frees the command's dedup key. Audited as
+   * `localai.command.cancelled`.
+   */
+  async cancel(commandId: string, requester: CommandRequester): Promise<CommandView> {
+    const row = await this.prisma.localaiCommand.findUnique({ where: { id: commandId }, include: { node: { select: { nodeId: true } } } });
+    if (!row) throw unknownCommand();
+    // A stored type this build does not know (removed in a later release) is treated as an admin type.
+    const needed = isCommandType(row.type) ? permissionFor(row.type) : LOCALAI_PERMISSION_IDS.LAB_ADMIN;
+    if (!requester.permissions.includes(needed)) throw commandForbidden(needed);
+
+    const now = this.clock.now();
+    const updated = await this.prisma.localaiCommand.updateMany({
+      where: { id: commandId, status: 'queued' },
+      data: { status: 'cancelled', finishedAt: now },
+    });
+    if (updated.count !== 1) {
+      const current = await this.prisma.localaiCommand.findUnique({ where: { id: commandId }, select: { status: true } });
+      if (!current) throw unknownCommand();
+      throw commandNotCancellable(current.status);
+    }
+
+    await this.recordAudit({
+      action: AUDIT_COMMAND_CANCELLED,
+      actorUserId: requester.userId,
+      targetType: AUDIT_COMMAND_TARGET,
+      targetId: commandId,
+      meta: { nodeId: row.node.nodeId, type: row.type, params: JSON.stringify(row.params) },
+    });
+    return toCommandView({ ...row, status: 'cancelled', finishedAt: now }, row.node.nodeId);
+  }
+
+  /** The registry type for a body `type` (with or without the `localai.` prefix); anything else is a 400. */
+  private resolveType(type: string): CommandType {
+    const full = type.startsWith(COMMAND_TYPE_PREFIX) ? type : `${COMMAND_TYPE_PREFIX}${type}`;
+    if (!isCommandType(full)) throw invalidCommandParams(null, type);
+    return full;
+  }
+
+  /** Audit runs after the write it records; a failure is logged (the error name only) and never undoes the write. */
+  private async recordAudit(event: AuditEventInput): Promise<void> {
+    try {
+      await this.audit.record(event);
+    } catch (error) {
+      this.logger.error(`audit ${event.action} failed for command_id=${event.targetId} (${error instanceof Error ? error.name : 'error'})`);
+    }
+  }
 
   /**
    * The port every other feature queues through (`LOCALAI_COMMAND_ENQUEUER`): `nodeId` is the lab id (`ai-n3`) and
