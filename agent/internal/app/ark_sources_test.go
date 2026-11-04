@@ -858,8 +858,8 @@ func TestOfflineNodeBuildsFromALocalMirrorAndSkipsWhatNeedsTheNetwork(t *testing
 				t.Errorf("%s: %s source %q version %q, want a local build of the catalog's version", it.ID, it.Action, it.Source, it.ToVersion)
 			}
 		default:
-			if it.Action != plan.ActionSkip || it.Reason != plan.ReasonUnresolved || it.ToVersion != "" {
-				t.Errorf("%s: %s (%s) version %q, want skip unresolved", it.ID, it.Action, it.Reason, it.ToVersion)
+			if it.Action != plan.ActionSkip || it.Reason != plan.ReasonNeedsNetwork || it.ToVersion != "" {
+				t.Errorf("%s: %s (%s) version %q, want skip needs_network", it.ID, it.Action, it.Reason, it.ToVersion)
 			}
 		}
 	}
@@ -923,7 +923,7 @@ func TestOfflineNodeBuildsFromALocalMirrorAndSkipsWhatNeedsTheNetwork(t *testing
 		if got["result"] != want && !(want == "verified" && got["result"] == "done") {
 			t.Errorf("GET item %s = %v, want %s", id, got, want)
 		}
-		if want == "skipped" && got["reason"] != string(plan.ReasonUnresolved) {
+		if want == "skipped" && got["reason"] != string(plan.ReasonNeedsNetwork) {
 			t.Errorf("GET item %s has no reason: %v", id, got)
 		}
 	}
@@ -962,8 +962,8 @@ func TestOfflineNodeWithoutAMirrorSkipsEverySourceItem(t *testing.T) {
 		t.Error("the plan of a node with no internet says it is online")
 	}
 	for _, it := range p.Items {
-		if it.Action != plan.ActionSkip || it.Reason != plan.ReasonUnresolved {
-			t.Errorf("%s: %s (%s), want skip unresolved", it.ID, it.Action, it.Reason)
+		if it.Action != plan.ActionSkip || it.Reason != plan.ReasonNeedsNetwork {
+			t.Errorf("%s: %s (%s), want skip needs_network", it.ID, it.Action, it.Reason)
 		}
 		switch it.ID {
 		case "docs-bundle", "kit-catalog":

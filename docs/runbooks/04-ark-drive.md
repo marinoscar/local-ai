@@ -483,7 +483,7 @@ Use this when a computer has **no internet** (or you are in offline or survival 
     aictl ark import --dry-run
     ```
 
-    - **What you should see:** a table of what would be copied (`download` or `update`, with a note like `from ark-3f9c0a12 (local copy)`), what is already here (`keep`), what the drive does not have (`skip` with `unresolved (offline)`), the size to copy, and last `Nothing was changed (dry run).`
+    - **What you should see:** a table of what would be copied (`download` or `update`, with a note like `from ark-3f9c0a12 (local copy)`), what is already here (`keep`), what the drive does not have (`skip` with `needs the network`), the size to copy, and last `Nothing was changed (dry run).`
     - Two drives plugged in? It stops with `LAI-ARK-015` and lists them. Run it again with the one you want: `aictl ark import --from ark-3f9c0a12 --dry-run`.
     - **If it doesn't work:** `LAI-ARK-001`: the computer has nowhere to store the content; run `aictl doctor`. `LAI-CAT-003`: the computer's profile name is not in its catalog; see [07-troubleshooting.md](07-troubleshooting.md).
 

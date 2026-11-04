@@ -99,6 +99,8 @@ func (c *Call) planReason(reason string) string {
 		return pick(l, "no disk space", "sin espacio")
 	case "unresolved":
 		return pick(l, "unresolved", "sin resolver")
+	case "needs_network":
+		return pick(l, "needs network", "necesita red")
 	case "time_limit":
 		return pick(l, "time limit", "sin tiempo")
 	case "read_only":
