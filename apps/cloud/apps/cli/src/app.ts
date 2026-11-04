@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { APP_NAME, CLI_NAME, REPO_SLUG } from '@app/shared';
 import type { CreateCliOptions } from '@marinoscar/platform-cli';
 
+import { vpsExecutors } from './localai/vps-publish.executor.js';
+
 /** This CLI's version: apps/cli/package.json, or `0.0.0-unknown` in an unusual install. */
 function readVersion(): string {
   try {
@@ -22,4 +24,7 @@ export const APP_CLI_OPTIONS: CreateCliOptions = {
   identity: { name: CLI_NAME, displayName: `${APP_NAME} CLI`, productName: APP_NAME, repoSlug: REPO_SLUG },
   version: readVersion(),
   extraCommands: [],
+  // The VPS stack-agent's two job types (docs/specs/cloud-app.md section 4.10). They are claimed only by a worker
+  // started with `--types` naming them (runbook 10 part 10); every other worker leaves them alone.
+  nodeExecutors: vpsExecutors(),
 };
