@@ -71,6 +71,11 @@ sudo bash /media/<user>/AI-ARK/localai/kit/installers/install-node.sh --from-ark
 | `--uninstall` | — | §4.4 |
 | `--log <path>` | `/var/log/localai-install.log` | Log file |
 | `-v` | off | Verbose (shell trace into the log only) |
+| `--keep-inventory` | off | Copy `--inventory` to `/etc/localai/inventory.local.yaml` (needs `--inventory` or `--from-ark`) |
+| `--purge-config`, `--purge-content`, `--revert-hardening`, `--restore-legacy` | off | Only with `--uninstall` (§4.4); otherwise exit 2 |
+| `--version`, `-h`, `--help` | — | Print the stamped version (§3.6) / the usage, exit 0 |
+
+Argument rules: an unknown flag or a positional argument, a flag without its value, `--node-id` outside the regex, `--agent-sha256` that is not 64 lowercase hex, a missing `--desktop-user`, `--from-ark` folder, `--enroll-file`, `--pin-file` or `--inventory`, a `--cloud-url` that is not `http(s)://host` or carries `user:password@`, `--migrate` with `--no-migrate`, `--hardening` with `--no-hardening`, `--repair` with `--uninstall`, and `--enroll` together with `--enroll-file` are all exit 2. Anything shaped like a credential (`nod_…`, `--token`, `--password` …) is refused with exit 2 and is scrubbed in the message.
 
 Exit codes: `0` success (maybe with "reboot required"), `1` a phase failed (message names the phase and the doctor code), `2` bad arguments, `3` preflight refused (unsupported system), `4` user aborted.
 
@@ -113,16 +118,36 @@ The release fails if the template lacks any of the three, if a token the stamper
 ## 4. Behaviour
 
 ### 4.1 Driver skeleton
+The shape below is what `installers/install-node.sh` does; the exact code lives in the script.
 ```bash
 #!/usr/bin/env bash
-set -Eeuo pipefail
+set -Eeuo pipefail                  # set only when the file is executed; a test may `source` it to call functions
 umask 077
-LOG=/var/log/localai-install.log
-exec 3>&1                                   # fd 3 = real terminal
-exec > >(scrub | tee -a "$LOG" >&3) 2>&1    # scrub = sed filter removing secrets (§4.6)
+LOG=/var/log/localai-install.log    # --log; rotated to .1 above 10 MB before it is opened
 trap 'on_error $LINENO "$BASH_COMMAND"' ERR
-phase() { …; }                              # prints "==> [n/15] <name>", records start/end in state.json
+say() { …; }                        # one message -> scrub -> screen AND "<UTC ts> [P6 packages] <message>" in the log
+run_logged cmd…                     # a command's combined output goes through say(); the last 50 lines are kept for on_error
+run_phase n entry                   # prints "==> [n/15] <name>", runs check_<x> / phase_<x>, records state.json
 ```
+Messages are scrubbed line by line by `say()` (there is no global `exec > >(scrub | tee …)` redirection: it cannot give each log line its phase tag and it races with process exit). `-v` sends `set -x` to the log only, through its own scrub process. The phase table (`PHASE_TABLE`: id, function suffix, name, owner item) is the one registry of phases P1..P15; P0 is the driver itself.
+
+A phase that a later item has not built yet is an **explicit named no-op**: `phase_<x>` prints `NOT IMPLEMENTED YET: … (owner: INST-0N, issue #N)`, returns 10, and `state.json` records `not-implemented` (never `done`). A run that skipped any phase ends with `THIS INSTALLER IS INCOMPLETE`. `--repair` and `--uninstall` are parsed and validated, then print the same notice and change nothing until INST-08.
+
+Refusals leave through `fail <exit> <doctor-code> <message>`; bad arguments through `usage_error` (exit 2, before anything is touched). `Ctrl-C` or `SIGTERM` exits 4. An unexpected command failure runs `on_error` (phase, line, command, exit code, last 50 output lines) and exits 1; no doctor code is registered for "unexpected", the message points at the log.
+
+Test hooks: with `LAI_INSTALLER_DEV=1` (never set on a node) the script reads `LAI_INSTALL_STATE_DIR` and `LAI_INSTALL_SYSTEMD_DIR`, may run as non-root, and an unstamped template may do a `--dry-run`. Without it an unstamped copy refuses to run (exit 2, §3.6) and a real run needs root (exit 3, `LAI-INS-003`).
+
+`state.json` (§4.1 of this spec, `schema: 1`) is rewritten atomically (temp file in the same folder, then `mv`), mode 0600, one phase per line so a shell can read it back without `jq`:
+```json
+{
+  "schema": 1, "installer_version": "0.1.0", "updated_at": "2026-11-02T18:04:11Z",
+  "phases": {
+    "P6": {"name":"packages","status":"done","version":"0.1.0","finished_at":"2026-11-02T18:04:11Z","details":""}
+  }
+}
+```
+`status` is `running`, `done`, `failed` or `not-implemented`. A dry run never writes it (and never creates the lock file or the state folder).
+
 Each phase is a bash function `phase_<name>` that first checks whether it is already satisfied (idempotency check), prints "already done" if so, and otherwise acts. A phase that fails stops the script with its doctor code; re-running resumes at that phase (earlier phases are checked again, cheaply).
 
 ### 4.2 Dry run
