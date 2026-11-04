@@ -61,3 +61,38 @@ func TestWhisperDisabledWritesNothing(t *testing.T) {
 		t.Error("the whisper unit was written on a node with whisper off")
 	}
 }
+
+// kiwix.enabled at startup: the unit is written (so an upgraded agent's new unit text reaches the disk) and
+// systemd is never asked to start it; with kiwix off nothing is written.
+func TestKiwixEnabledWritesTheUnitAtStartAndNeverStartsIt(t *testing.T) {
+	r := newRig(t, func(r *rig) { r.writeNodeYAMLText(r.nodeYAML() + "kiwix:\n  enabled: true\n") })
+	r.start()
+	r.waitStarted()
+	unit := r.path("etc/systemd/system/localai-kiwix.service")
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		b, err := os.ReadFile(unit)
+		if err == nil && strings.Contains(string(b), "kiwix-serve") && strings.Contains(string(b), "AF_NETLINK") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the kiwix unit was not written at start: %v\nlog:\n%s", err, r.logText())
+		}
+		runtime.Gosched()
+	}
+	for _, c := range r.sysd.Calls() {
+		if c.Unit == services.UnitKiwix && (c.Verb == services.VerbStart || c.Verb == services.VerbRestart) {
+			t.Fatalf("the writer started or restarted kiwix: %v", c)
+		}
+	}
+}
+
+func TestKiwixDisabledWritesNoUnit(t *testing.T) {
+	r := newRig(t)
+	r.start()
+	r.waitStarted()
+	time.Sleep(50 * time.Millisecond)
+	if _, err := os.Stat(r.path("etc/systemd/system/localai-kiwix.service")); err == nil {
+		t.Error("the kiwix unit was written on a node with kiwix off")
+	}
+}
