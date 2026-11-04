@@ -48,25 +48,25 @@ func newMountsRig(t *testing.T, kiwixUp bool) *mountsRig {
 		_, _ = io.WriteString(w, "kiwix:"+r.URL.Path)
 	}))
 	t.Cleanup(m.kiwixSrv.Close)
-	kiwixPort := portOf(t, m.kiwixSrv.URL)
+	kiwixPort := upPort(t, m.kiwixSrv.URL)
 	if !kiwixUp {
 		l, err := net.Listen("tcp4", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
-		kiwixPort = portOf(t, "http://"+l.Addr().String())
+		kiwixPort = upPort(t, "http://"+l.Addr().String())
 		_ = l.Close() // nothing listens there now
 	}
 	m.rig = newRig(t, func(r *rig) {
 		text := "schema_version: 1\nnode:\n  id: " + rigNode + "\n  display_name: Node Three\nprofile: small-8gb\n" +
-			"tailscale:\n  manage: false\n  serve_pattern: none\nports:\n  agent: 7070\n  llama: " + portOf(t, m.llamaSrv.URL) +
+			"tailscale:\n  manage: false\n  serve_pattern: none\nports:\n  agent: 7070\n  llama: " + upPort(t, m.llamaSrv.URL) +
 			"\n  kiwix: " + kiwixPort + "\n  whisper: 8081\n"
 		r.writeNodeYAMLText(text)
 	})
 	return m
 }
 
-func portOf(t *testing.T, raw string) string {
+func upPort(t *testing.T, raw string) string {
 	t.Helper()
 	u, err := url.Parse(raw)
 	if err != nil {
