@@ -403,7 +403,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	}
 	c.Modes, err = modes.New(modes.Deps{
 		State: c.State, Events: c.Bus, Audit: d.audit, Link: link, Prober: c.Prober, Tailscale: c.Tailscale,
-		Models: c.Orchestrator, Services: c.Controller, Sync: syncCtl,
+		Models: c.Orchestrator, Services: c.Controller, Sync: syncCtl, Portal: d.portalStore(),
 		SurvivalServices: func() []string {
 			if p := d.profile(); p != nil {
 				return p.Survival.RequireServices
@@ -504,11 +504,11 @@ func (d *Daemon) buildServer() error {
 				Builder:  d.portalBuilder(d.svcDeps.Health),
 				Settings: func() portal.Settings { return portal.SettingsFrom(c.Config.Get(), c.Catalog.Get().Catalog) },
 				Now:      env.Clock.Now,
-				Metrics:  portal.NewMetrics(),
+				Metrics:  d.portalMetrics(),
 			})
 		}},
 		{"portal ui", func() error {
-			return reg.Add(api.SPARoutes(api.SPAOptions{FS: ui.Dist(), Mode: d.modeName})...)
+			return reg.Add(api.SPARoutes(api.SPAOptions{FS: ui.Dist(), Mode: d.modeName, PortalHook: d.portalStore().Hook})...)
 		}},
 		{"models", func() error { return d.models.Register(reg) }},
 		{"model operations", func() error {
@@ -604,7 +604,7 @@ func (d *Daemon) buildServer() error {
 	}
 	srv, err := api.New(api.Options{
 		Config: c.Config, TCPAddr: env.TCPAddr, SocketPath: sock, SocketGroup: env.SocketGroup, Version: env.Version,
-		Mode: d.modeName, Auth: c.Auth, Registry: reg, Logger: d.log, Hooks: env.SocketHooks,
+		Mode: d.modeName, Auth: c.Auth, Registry: reg, Logger: d.log, Hooks: env.SocketHooks, Guard: d.portalStore().Guard,
 	})
 	if err != nil {
 		return &FatalError{Code: doctor.AGT099, Err: fmt.Errorf("api server: %w", err)}

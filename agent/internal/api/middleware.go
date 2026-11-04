@@ -334,6 +334,14 @@ func (s *Server) serveRoute(rt *Route, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The Portal session guard: the per-session rate limits (survival-portal.md section 3.3).
+	if p.Kind == KindPortal && s.opts.Guard != nil {
+		if err := s.opts.Guard(w, r, rt, p); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+	}
+
 	// Step 9: content type and body limit.
 	limit := rt.MaxBody
 	if limit == 0 {

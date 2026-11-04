@@ -60,7 +60,8 @@ Non-goals:
 ### 3.3 Portal session
 Issued by `GET /portal` when `state.mode == survival` and the request passes the loopback Host check (security-model.md §2):
 - Cookie `lai_portal=<43-char base64url of 32 random bytes>; Path=/; HttpOnly; SameSite=Strict; Max-Age=43200`. Stored server-side in memory with `issued_at`, `last_seen`; sliding expiry 12 h.
-- **All Portal sessions are invalidated** when the mode leaves `survival`.
+- **All Portal sessions are invalidated** when the mode leaves `survival` (the mode engine calls `DropAll` before it reports the transition done). A `lai_portal` cookie that no longer resolves (dropped, expired, or the agent restarted) is anonymous: level-`none` routes work, and every other route answers `401 LAI-SVC-110`, so the SPA reloads `/portal` for a new session.
+- **Implementation** (`internal/portal/session.go`, `scope.go`): the store keeps `issued_at` and `last_seen` per session in memory and labels it with a hash of the cookie (the cookie value is never logged; `portal.session_issued` is). The per-route scope is the `Auth` list of each route in the route table (a Portal principal satisfies only routes that list `portal`, plus level `none`). The rate limits are enforced by `api.Options.Guard` after the Origin rule, with one sliding window per session and bucket; they die with the session. `unload_others` is always `true` for a Portal load: the planner then evicts only as many models as the fit rules require, which is the same as `!CanKeepOthers(id, loaded)`. `GET /portal` issues the cookie (`Sessions.Hook` as `SPAOptions.PortalHook`); other `/portal/*` client routes do not.
 - Allowed with a Portal session (everything else returns `401` with `LAI-SVC-110`):
   | Route | Restriction |
   |---|---|

@@ -251,7 +251,7 @@ func (d *Daemon) stepDirs(context.Context) error {
 func (d *Daemon) stepSecrets(context.Context) error {
 	p := d.c.Paths
 	acfg := auth.Config{
-		TokenPath: p.AgentToken(), PINPath: p.AdminPIN(), Groups: d.env.Groups, Audit: d.audit, Alert: authAlert(d), Logger: d.log,
+		Portal: d.portalStore(), TokenPath: p.AgentToken(), PINPath: p.AdminPIN(), Groups: d.env.Groups, Audit: d.audit, Alert: authAlert(d), Logger: d.log,
 	}
 	if d.env.Unprivileged {
 		tp, pp := config.SecretPolicy{Mode: 0o640, UID: -1, GID: -1}, config.SecretPolicy{Mode: 0o600, UID: -1, GID: -1}

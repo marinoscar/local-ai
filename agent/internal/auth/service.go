@@ -215,13 +215,15 @@ func (s *Service) tcpPrincipal(r *http.Request) (p api.Principal, deny *api.Erro
 	}
 	// 4. cookie lai_portal
 	if c, err := r.Cookie(PortalCookie); err == nil && s.portal != nil {
-		if id, ok := s.portal.Lookup(c.Value); ok {
-			if s.portal.Allowed(r) {
-				return api.Principal{Kind: api.KindPortal, Credential: api.CredPortal, Via: audit.ViaPortal, PortalSessionID: id}, nil
-			}
-			if deny == nil {
-				deny = api.NewError(api.CodePortalSessionEnded, http.StatusUnauthorized, nil)
-			}
+		id, ok := s.portal.Lookup(c.Value)
+		if ok && s.portal.Allowed(r) {
+			return api.Principal{Kind: api.KindPortal, Credential: api.CredPortal, Via: audit.ViaPortal, PortalSessionID: id}, nil
+		}
+		// A cookie that is unknown (the session expired, the agent restarted, the node left survival)
+		// or not usable now is anonymous, and a route that needs more answers LAI-SVC-110 so the
+		// Portal reloads itself and gets a new session (survival-portal.md section 3.3).
+		if deny == nil {
+			deny = api.NewError(api.CodePortalSessionEnded, http.StatusUnauthorized, nil)
 		}
 	}
 	// 5. none

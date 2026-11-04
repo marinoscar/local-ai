@@ -137,9 +137,9 @@ func TestPortalHook(t *testing.T) {
 		wantError(t, e.do(req{path: "/whoami", cookies: portalCookie}), 401, api.CodePortalSessionEnded)
 		wantError(t, e.do(req{path: "/admin-only", cookies: portalCookie}), 401, api.CodePortalSessionEnded)
 	})
-	t.Run("an unknown cookie is anonymous", func(t *testing.T) {
+	t.Run("an unknown cookie is anonymous, and a route that needs more says the Portal session ended", func(t *testing.T) {
 		unknown := map[string]string{PortalCookie: "nope"}
-		wantError(t, e.do(req{path: "/either", cookies: unknown}), 401, api.CodeUnauthenticated)
+		wantError(t, e.do(req{path: "/either", cookies: unknown}), 401, api.CodePortalSessionEnded)
 		wantPrincipal(t, e.do(req{path: "/open", cookies: unknown}), "anonymous")
 	})
 	t.Run("on an open route a Portal cookie is harmless", func(t *testing.T) {
@@ -162,7 +162,7 @@ func TestPortalHook(t *testing.T) {
 	})
 	t.Run("dropped sessions stop resolving", func(t *testing.T) {
 		e.portal.DropAll()
-		wantError(t, e.do(req{path: "/either", cookies: portalCookie}), 401, api.CodeUnauthenticated)
+		wantError(t, e.do(req{path: "/either", cookies: portalCookie}), 401, api.CodePortalSessionEnded)
 	})
 }
 
