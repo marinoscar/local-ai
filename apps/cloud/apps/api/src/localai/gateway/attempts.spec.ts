@@ -204,3 +204,60 @@ describe('TableCandidateSource', () => {
     expect(await ask({ kind: 'candidates', candidates: [best, candidate('n2')] }, 1)).toEqual({ kind: 'candidate', candidate: best });
   });
 });
+
+describe('AttemptLoop eligibility and call shape (GW-10)', () => {
+  function build(options: { routable?: (nodeId: string) => boolean; candidates?: SelectedCandidate[] } = {}) {
+    const routing = new FakeRouting();
+    if (options.candidates) routing.candidates = options.candidates;
+    const calls: UpstreamCall[] = [];
+    const asked: string[][] = [];
+    const transport: UpstreamTransport = {
+      async call(call) {
+        calls.push(call);
+        return reply(200);
+      },
+      ...(options.routable ? { routable: async (node) => options.routable!(node.nodeId) } : {}),
+    };
+    const base = new TableCandidateSource(routing);
+    const source: CandidateSource = {
+      async next(req) {
+        asked.push([...req.tried]);
+        return base.next(req);
+      },
+    };
+    const loop = new AttemptLoop({ routing, keys: { get: async () => 'k' }, transport, source, log: { warn: () => undefined } });
+    return { loop, routing, calls, asked };
+  }
+
+  it('passes the content type and the tailnet route of the candidate to the transport', async () => {
+    const { loop, calls } = build({ candidates: [candidate('n1', { servePattern: 'A', tailnetIp: 'ip-marker', tailnetMachine: 'machine-marker' })] });
+    await loop.run(request({ contentType: 'multipart/form-data; boundary=zz' }));
+    expect(calls[0]).toMatchObject({ contentType: 'multipart/form-data; boundary=zz', route: { servePattern: 'A', tailnetIp: 'ip-marker', tailnetMachine: 'machine-marker' } });
+    const { loop: json, calls: jsonCalls } = build();
+    await json.run(request());
+    expect(jsonCalls[0]!.contentType).toBe('application/json');
+  });
+
+  it('skips a node the transport cannot route to WITHOUT counting an attempt, and asks the source for the next one', async () => {
+    const { loop, routing, calls, asked } = build({ routable: (id) => id !== 'n1' });
+    const outcome = await loop.run(request({ maxAttempts: 1 }));
+    expect(outcome).toMatchObject({ ok: true, kind: 'success', attempts: 1 });
+    expect(calls.map((c) => c.nodeId)).toEqual(['n2']);
+    expect(asked).toEqual([[], ['n1']]);
+    expect(routing.events.some((e) => e.endsWith(':n1'))).toBe(false); // never acquired, never marked
+  });
+
+  it('skips a candidate the request is not eligible for', async () => {
+    const { loop, calls } = build({ candidates: [candidate('text-only'), candidate('audio', { inputModalities: ['text', 'audio'] })] });
+    const outcome = await loop.run(request({ eligible: (c) => c.inputModalities.includes('audio') }));
+    expect(outcome).toMatchObject({ ok: true, attempts: 1 });
+    expect(calls.map((c) => c.nodeId)).toEqual(['audio']);
+  });
+
+  it('every node left out on the first attempt is the source\'s answer (no capacity), not a transport failure', async () => {
+    const { loop, calls } = build({ routable: () => false });
+    const outcome = await loop.run(request());
+    expect(outcome).toMatchObject({ ok: false, reason: 'error', attempts: 0, error: { localaiCode: 'LAI-GW-021' } });
+    expect(calls).toEqual([]);
+  });
+});

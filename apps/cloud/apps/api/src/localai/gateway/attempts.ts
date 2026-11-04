@@ -15,7 +15,11 @@
 //                        load wraps it, waits for the model to load and asks again.
 //   * `AttemptHooks`     GW-07/GW-08: `beforeAttempt`, `onAttemptFailed`, `onFirstByte` (the stream passthrough and
 //                        the usage recorder observe the loop without being part of it).
-//   * `UpstreamTransport` GW-10: the tailnet mode.
+//   * `UpstreamTransport` GW-10: the tailnet mode (and `routable()`, below).
+// ELIGIBILITY (GW-10). A candidate the request cannot use is skipped WITHOUT being an attempt: the transport's
+// `routable()` (a node with no tailnet address in tailnet mode) and the request's own `eligible()` (a transcription goes
+// to models that accept audio). The skipped node ids are added to `tried` for the source only, so the source offers the
+// next one; `tried.size` (the attempt count) never includes them.
 // `inflight` is counted from the moment a candidate is chosen: released here on every failed attempt, and by the
 // `release()` of a committed attempt when the caller's response ends.
 import type { Readable } from 'node:stream';
@@ -118,6 +122,10 @@ export interface AttemptRequest {
   path: string;
   body: Buffer;
   accept: string;
+  /** The request's `Content-Type`; `application/json` when absent. A multipart body carries its own boundary here. */
+  contentType?: string;
+  /** Candidates this request can use at all (GW-10: audio-capable for a transcription). Absent means every candidate. */
+  eligible?(candidate: SelectedCandidate): boolean;
   maxAttempts: number;
   /** `firstByteMs` is already the model policy's override when there is one. */
   timeouts: Pick<GatewayTimeouts, 'connectMs' | 'firstByteMs' | 'idleMs'>;
@@ -219,7 +227,7 @@ export class AttemptLoop {
     for (let attempt = 1; attempt <= request.maxAttempts; attempt += 1) {
       if (request.signal.aborted) return aborted();
 
-      const choice = await this.source.next({ model: request.model, tried, attempt, failures, signal: request.signal });
+      const choice = await this.nextEligible(request, tried, attempt, failures);
       if (request.signal.aborted) return aborted();
       if (choice.kind === 'none') {
         const error = choice.error ?? aggregateFailures(failures);
@@ -270,9 +278,10 @@ export class AttemptLoop {
           response = await this.deps.transport.call({
             nodeId: candidate.nodeId,
             publicHost: candidate.publicHost,
+            route: { servePattern: candidate.servePattern, tailnetIp: candidate.tailnetIp, tailnetMachine: candidate.tailnetMachine },
             path: request.path,
             body: request.body,
-            contentType: 'application/json',
+            contentType: request.contentType ?? 'application/json',
             accept: request.accept,
             requestId: request.requestId,
             apiKey,
@@ -329,6 +338,27 @@ export class AttemptLoop {
     }
 
     return { ok: false, reason: 'error', error: aggregateFailures(failures), attempts: tried.size, nodeId: lastNode, failures };
+  }
+
+  /** The next candidate from the source that this request can use; the ones it cannot use are skipped, not attempted. */
+  private async nextEligible(request: AttemptRequest, tried: ReadonlySet<string>, attempt: number, failures: readonly AttemptFailure[]): Promise<CandidateChoice> {
+    const skipped = new Set<string>();
+    for (;;) {
+      const visible = skipped.size === 0 ? tried : new Set([...tried, ...skipped]);
+      const choice = await this.source.next({ model: request.model, tried: visible, attempt, failures, signal: request.signal });
+      if (choice.kind !== 'candidate') return choice;
+      const candidate = choice.candidate;
+      const usable =
+        (request.eligible?.(candidate) ?? true) &&
+        (await (this.deps.transport.routable?.({
+          nodeId: candidate.nodeId,
+          publicHost: candidate.publicHost,
+          route: { servePattern: candidate.servePattern, tailnetIp: candidate.tailnetIp, tailnetMachine: candidate.tailnetMachine },
+        }) ?? true));
+      if (usable) return choice;
+      skipped.add(candidate.nodeId);
+      if (request.signal.aborted) return { kind: 'none', error: null };
+    }
   }
 
   /** A hook is an observer: whatever it throws must never fail the request. */
