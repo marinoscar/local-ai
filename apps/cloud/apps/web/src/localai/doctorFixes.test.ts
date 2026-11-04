@@ -29,7 +29,7 @@ describe('plainError', () => {
   it('looks a code up, ignores anything that is not a code, and never throws on odd input', () => {
     expect(registryRow('LAI-SYN-031')?.fix).toContain('internet connection');
     expect(registryRow('not a code')).toBeNull();
-    expect(registryRow('LAI-ZZZ-999')).toBeNull();
+    expect(registryRow('lai-cld-034')).toBeNull();
     expect(plainError({ code: 'bogus', message: 'plain message' })).toEqual({ code: null, meaning: null, fix: 'plain message' });
     expect(plainError(undefined).fix).not.toBe('');
   });

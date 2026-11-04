@@ -19,7 +19,7 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
    - The header: number of nodes, how many online, alerts, and "Gateway: ● N nodes" (how many nodes the gateway can use).
    - Each card: **health** (green Healthy, amber Degraded, red Down, grey "Offline mode (expected)"), **mode** (Online / Offline / Survival), hardware, **loaded models** (★ = default), graphics memory use, **Ark** per content root (internal and drive, with the drive's age), last **Sync** and **Drill**, agent and catalog versions (▲ = behind).
    - Grey is **not** a problem: the node was put in offline or survival mode on purpose and isn't expected to report.
-3. **Node page** (press **Open** on a card): header with profile, agent version, llama.cpp build, **Refresh status**, **Go offline…** (lab owner). Tabs:
+3. **Node page** (press **Open** on a card): header with profile, agent version, llama.cpp build, **Refresh status**, **Go offline…** and **Update agent X → Y…** (lab owner; the update button shows when a newer agent version is set in the lab settings, and is greyed out unless the node is online and behind). Buttons you may not use are not shown at all. Tabs:
    - **Models:** state, on disk, fits; **Load**, **Unload**, **Set default**, **Download**; row menu **⋮ → Delete files…** (owner, type the id). See [03](03-swap-a-model.md).
    - **Ark:** each root's tiers, missing/failed items, space, last sync and verify; **Sync now** (with **Preview (dry run)**), **Verify**; the last error code with its fix.
    - **Services:** llama, kiwix, whisper, sync, drill; **Restart** for the first three.
