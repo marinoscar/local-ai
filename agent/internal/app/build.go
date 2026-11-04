@@ -498,13 +498,10 @@ func (d *Daemon) buildServer() error {
 		{"status", func() error { return statusapi.Register(reg, d.sdeps) }},
 		{"portal", func() error {
 			return portal.Register(reg, portal.RouteOptions{
-				Builder: portal.NewMinimal(portal.MinimalSources{
-					Config: c.Config, State: c.State, Mode: d.mode, Hardware: c.Hardware, Router: c.RouterWatcher,
-					Catalog: c.Catalog, Alerts: c.Doctor,
-					Settings: func() portal.Settings { return portal.SettingsFrom(c.Config.Get(), c.Catalog.Get().Catalog) },
-				}),
+				Builder:  d.portalBuilder(d.svcDeps.Health),
 				Settings: func() portal.Settings { return portal.SettingsFrom(c.Config.Get(), c.Catalog.Get().Catalog) },
 				Now:      env.Clock.Now,
+				Metrics:  portal.NewMetrics(),
 			})
 		}},
 		{"portal ui", func() error {
