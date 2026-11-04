@@ -1,0 +1,431 @@
+/* Survival Portal styles. Classes only: the CSP has no 'unsafe-inline' (survival-portal.md section 4.11).
+   Base 20 px; three text scales (1, 1.25, 1.5) change the root size and everything else is rem. */
+
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url("../fonts/AtkinsonHyperlegible-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url("../fonts/AtkinsonHyperlegible-Bold.woff2") format("woff2");
+}
+
+:root {
+  --fg: #111111;
+  --bg: #fafaf7;
+  --panel: #ffffff;
+  --line: #111111;
+  --focus: #1a4fd6;
+  --primary: #123c9f;
+  --ok: #095a25;
+  --warn: #7a4f00;
+  --bad: #8f1115;
+  --warn-bg: #ffe9a8;
+  --bad-bg: #ffd2cf;
+  --info-bg: #dbe7ff;
+  --gap: 24px;
+}
+
+html {
+  font-size: 20px;
+  color-scheme: light;
+}
+html.scale-1_25 {
+  font-size: 25px;
+}
+html.scale-1_5 {
+  font-size: 30px;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Atkinson Hyperlegible", system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 4px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+#main:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip {
+  position: absolute;
+  left: 8px;
+  top: -80px;
+  z-index: 10;
+  background: var(--panel);
+  border: 3px solid var(--line);
+  padding: 8px 16px;
+  color: var(--fg);
+}
+.skip:focus {
+  top: 8px;
+}
+
+/* Header */
+.top {
+  padding: 8px 32px 0;
+}
+.top-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+.brand {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.top-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+.clock,
+.battery {
+  font-weight: 700;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+}
+.battery-low {
+  color: var(--warn);
+}
+.battery-critical {
+  color: var(--bad);
+}
+
+/* Segmented controls: language and text size */
+.seg {
+  display: inline-flex;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel);
+}
+.seg-btn {
+  font: inherit;
+  font-weight: 700;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 0;
+  background: var(--panel);
+  color: var(--fg);
+  cursor: pointer;
+}
+.seg-btn + .seg-btn {
+  border-left: 3px solid var(--line);
+}
+.seg-btn[aria-pressed="true"] {
+  background: var(--primary);
+  color: #ffffff;
+}
+
+/* Status line */
+.statusline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 20px;
+  padding: 6px 0 10px;
+  border-bottom: 2px solid var(--line);
+  min-height: 48px;
+}
+.statusline-main {
+  font-size: 1.1rem;
+}
+.statusline-end {
+  margin-left: auto;
+  font-weight: 700;
+}
+.dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  color: #ffffff;
+  font-weight: 700;
+}
+.dot-green {
+  background: var(--ok);
+}
+.dot-amber {
+  background: var(--warn);
+}
+.dot-red {
+  background: var(--bad);
+}
+
+/* Banners */
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 32px;
+  font-weight: 700;
+  border-bottom: 3px solid var(--line);
+}
+.banner-info {
+  background: var(--info-bg);
+}
+.banner-warn {
+  background: var(--warn-bg);
+}
+.banner-danger {
+  background: var(--bad-bg);
+}
+.banner-note {
+  font-weight: 400;
+}
+.glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 3px solid var(--line);
+  border-radius: 50%;
+  font-weight: 700;
+  background: var(--panel);
+}
+
+/* Layout */
+.main {
+  padding: 16px 32px 24px;
+}
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  grid-auto-rows: minmax(8.5rem, auto);
+  gap: var(--gap);
+}
+.grid > li {
+  display: flex;
+}
+
+/* Big buttons */
+.big {
+  --accent: var(--line);
+  font: inherit;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 4px;
+  text-align: left;
+  padding: 10px 14px 12px;
+  background: var(--panel);
+  color: var(--fg);
+  border: 4px solid var(--accent);
+  border-radius: 14px;
+  cursor: pointer;
+}
+.big:hover {
+  background: #f0f0ea;
+}
+.big-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--accent);
+}
+.big-num {
+  margin-left: auto;
+  color: var(--fg);
+  font-size: 1.1rem;
+  font-weight: 700;
+  border: 2px solid var(--fg);
+  border-radius: 6px;
+  min-width: 1.6rem;
+  text-align: center;
+}
+.big-mark {
+  color: var(--bad);
+  font-weight: 700;
+  font-size: 1.4rem;
+}
+.big-label {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.big-sub {
+  font-size: 0.9rem;
+}
+.lock {
+  color: var(--fg);
+}
+.icon {
+  flex: none;
+}
+.a-chat {
+  --accent: #0b5fa5;
+}
+.a-photo {
+  --accent: #7a2e8e;
+}
+.a-talk {
+  --accent: #b3261e;
+}
+.a-library {
+  --accent: #1b6b2f;
+}
+.a-maps {
+  --accent: #8a4b00;
+}
+.a-manuals {
+  --accent: #3d4852;
+}
+.a-status {
+  --accent: #00706b;
+}
+.a-brain {
+  --accent: #5a3ea0;
+}
+
+/* First aid */
+.firstaid {
+  margin-top: 20px;
+  border-top: 2px solid var(--line);
+  padding-top: 10px;
+}
+.firstaid-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.firstaid-title {
+  margin: 0 10px 0 0;
+  font-size: 1.1rem;
+  text-transform: uppercase;
+}
+.chip {
+  font: inherit;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 3px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel);
+  color: var(--fg);
+  text-decoration: none;
+  cursor: pointer;
+}
+.disclaimer {
+  margin: 8px 0 0;
+}
+
+/* Generic buttons and screens */
+.btn {
+  font: inherit;
+  font-weight: 700;
+  min-height: 48px;
+  padding: 8px 22px;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--fg);
+  cursor: pointer;
+}
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.screen {
+  max-width: 60rem;
+}
+.screen-title {
+  font-size: 1.8rem;
+  margin: 8px 0 16px;
+}
+.lead {
+  font-size: 1.1rem;
+  margin: 0 0 14px;
+}
+.code {
+  font-weight: 700;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+/* Lock dialog */
+.dialog {
+  max-width: 40rem;
+  padding: 24px;
+  border: 4px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--fg);
+}
+.dialog::backdrop {
+  background: rgba(17, 17, 17, 0.6);
+}
+.dialog-title {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

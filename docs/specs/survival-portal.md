@@ -177,6 +177,7 @@ Design target: **1366×768** with no scrolling on the home screen at 100 % text 
 - Buttons: 300×170 px, 4 columns × 2 rows, 24 px gaps. Number keys `1`–`8` open them; `F` focuses the first-aid row; `Esc` always returns home.
 - The status line is one sentence built from `capabilities` (§4.2): green dot "Ready", amber "Ready, with problems — see Status", red "Not ready — see Status". Colour rule: **red** if `chat` or `library` is `unavailable`; else **amber** if any capability is not `ready`; else **green**.
 - **Not in survival mode** (Portal opened from the Dashboard, or `kiosk: true`): a wide banner replaces the status line: "Survival mode is off. [ Start survival mode ]" (button calls `POST /api/v1/mode/survival`). Buttons that need a session (Chat, Photo, Talk, Switch brain) show a small lock and, when pressed without a full session, the dialog "To use this, start Survival mode or log in. [ Start survival mode ] [ Log in ]".
+- Locks and explanations are decided per route, so a deep link behaves like a button: a session-only screen (`/portal/chat`, `photo`, `talk`, `brain`) with `session: none` shows Home with the lock dialog (a third button, **Cancel**, and `Esc` return Home); an `unavailable` capability opens the explanation screen. Library and Maps are never locked. The status line is shown only in survival mode; its tick row is Library, Maps and Talk.
 - The battery indicator turns amber at ≤ 20 % and red with a full-width banner at ≤ 10 % on battery ("Battery very low. Plug in now or the computer will turn off.").
 
 #### 4.1.2 Chat (button 1)
@@ -545,12 +546,20 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `help.emergency` | Emergency number: {n} | Número de emergencias: {n} |
 | `help.lastResort` | If nothing works: restart the computer and wait 2 minutes. | Si nada funciona: reinicie la computadora y espere 2 minutos. |
 | `size.label` | Text size | Tamaño del texto |
+| `common.loading` | Loading … | Cargando … |
+| `common.skip` | Skip to the main content | Saltar al contenido principal |
+| `common.notReady` | This screen is not ready in this version. Use the buttons on Home. | Esta pantalla aún no está lista en esta versión. Use los botones de Inicio. |
+| `time.hm` | {h} h {m} min | {h} h {m} min |
+| `time.m` | {m} min | {m} min |
+| `status.noBrain` | none | ninguno |
+| `banner.startFailed` | Could not start survival mode. Try again. | No se pudo iniciar el modo supervivencia. Intente otra vez. |
+| `manuals.none` | The manuals are not installed. Plug in the ark drive. | Los manuales no están instalados. Conecte el disco del arca. |
 
 Doctor-code titles and fixes come from the agent in the UI language (§3.5).
 
 ### 4.10 Accessibility
 - **Text:** base 20 px, buttons 30 px bold, never below 16 px anywhere. Three text-scale steps (100 %, 125 %, 150 %) via the `A A+ A++` control and `Ctrl +`/`Ctrl −`; layouts reflow (CSS grid with `minmax`), so 150 % at 1366×768 scrolls vertically but never horizontally. Browser zoom up to 200 % is supported.
-- **Font:** Atkinson Hyperlegible (SIL OFL), regular and bold, embedded as WOFF2 (Latin + Latin-1 + Latin Extended-A, which covers Spanish), with `system-ui, sans-serif` fallback.
+- **Font:** Atkinson Hyperlegible (SIL OFL), regular and bold, embedded as WOFF2 (Latin and Latin-1, which cover Spanish; a rare Latin Extended-A letter falls back to `system-ui`), with `system-ui, sans-serif` fallback.
 - **Contrast:** all text ≥ 7:1 (WCAG AAA) against its background; button accent colours are used only for borders and icons, never as the only carrier of meaning (each state also has text and an icon: ✓, !, ✗).
 - **Keyboard only:** everything reachable with `Tab`/`Shift+Tab` in reading order; `Enter`/`Space` activate; `1`–`8`, `F`, `Esc` as in §4.1.1; `Space` starts/stops recording on Talk; no keyboard traps (the reader frame's header always receives `Esc` via a `keydown` listener on the parent and, same-origin, on the iframe document). Focus ring 4 px, `#1A4FD6`, with a 2 px white inner outline, visible on every element.
 - **Screen readers:** semantic landmarks (`header`, `main`, `nav`), every button has an accessible name and description, status changes are announced via an `aria-live="polite"` region (errors `assertive`), and streaming answers announce only when complete.
