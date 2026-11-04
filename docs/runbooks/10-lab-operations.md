@@ -1,6 +1,6 @@
 # 10. Running the lab
 
-Use this when you operate the whole lab from `https://ai.marin.cr`: checking node health and alerts, approving catalogs, managing gateway keys, reading the audit log, doing the weekly and monthly checks, and updating agents and llama.cpp on every node.
+Use this when you operate the whole lab from `https://ai.marin.cr`: checking node health and alerts, approving catalogs, managing gateway keys, reading the audit log, doing the weekly and monthly checks, and updating agents and llama.cpp on every node, and installing or updating the cloud app itself (Part 9).
 
 > **Before you start**
 > - You need: a Google account on the cloud's allowlist. What you can do depends on your role: **viewer** can look; **contributor** and **org admin** can also send everyday commands and create their own API keys; the **lab owner** (system admin) can add and retire nodes, approve catalogs, send destructive commands, manage every key and read the audit log ([cloud-app.md §3.4](../specs/cloud-app.md#34-identity-allowlist-and-permissions)).
@@ -211,3 +211,123 @@ Use this to let a person into the cloud, to change what they may do, or to take 
     - **If it doesn't work:** Google shows `redirect_uri_mismatch`: the address in the client must match that line exactly, with no trailing slash.
 
 The cloud's own machines (the nodes) never use these roles. A node signs in with its own credential and can only talk to its own node routes ([cloud-app.md §4.2](../specs/cloud-app.md#42-binding-guard-every-apinodesidlocalai-route)).
+
+---
+
+## Part 9. Deploying and updating the cloud
+
+Use this when the cloud app at `https://ai.marin.cr` is installed for the first time, when you move it to a new version, or when you move it to a newer agent release. **The cloud is never needed for a node to work**: if a deploy goes wrong, every node keeps answering locally and only remote control and the gateway pause. Take your time, and do not touch a node to fix the cloud.
+
+> **Owner steps.** Steps 57 to 70 need things only the lab owner has: the DNS zone, the VPS and its login, the Google account and the AWS login. An assistant working in the repository cannot do them. Every place where you replace something is a `<PLACEHOLDER>`: the real values live in `inventory.local.yaml` on your computer and on the ark drive, never in this repository.
+
+> **Before you start**
+> - You need: your computer with this repository and an `inventory.local.yaml` that has `public_ip` and `route53_zone_id` filled in; the `aws` command logged in to the account that owns the `marin.cr` zone; a login (SSH, as `root`) to the VPS; the Google account that will be the lab owner (`<ADMIN_EMAIL>`).
+> - The VPS already runs the shared proxy (`/opt/infra/proxy`) and the shared Postgres (container `infra-postgres`) from `marin-server-infra` ([overview.md §6](../architecture/overview.md)), has Docker, Git and Node 24, and is reachable on ports 80 and 443.
+> - A published agent release. Open <https://github.com/marinoscar/local-ai/releases>, find the newest line called `node-v…` that is not a draft. The part after `node-v` is your `<AIAGENT_VERSION>` (for the release `node-v0.1.0-rc.1` it is `0.1.0-rc.1`).
+> - **Time:** about 1 hour the first time; 10 minutes for an update.
+
+> 🛠 Verify when implemented (Epic E6, CLOUD-18). The commands are the design of [cloud-app.md §3.13](../specs/cloud-app.md#313-deploy-laictl-deploy-to-the-vps); record in the issue what differed on the real VPS.
+
+### 9.1 First install
+
+57. **Check that the deploy branch exists.** Open the repository on GitHub, press **Actions**, choose the workflow **cloud-deploy-branch**, and check that the newest run is green. Then open the branch list and look for `deploy/cloud`.
+    - **What you should see:** a green run, and a branch `deploy/cloud` whose newest commit is called `deploy: apps/cloud @ <seven characters>`.
+    - **If it doesn't work:** no branch yet: press **Run workflow**, keep **target_branch** as `deploy/cloud`, press the green button, and wait for the green mark. A red run: open it; the last step says why (a leak found by the redaction check, or a symlink). Fix it on `main`; do not edit `deploy/cloud` by hand.
+    - To rehearse without touching the real branch, run the same workflow with **target_branch** `deploy/cloud-test` first, then delete that scratch branch.
+58. **Point the name at the VPS (DNS).** On your computer, in the repository folder:
+    ```bash
+    scripts/cloud-dns.sh            # dry run: shows the change, sends nothing
+    scripts/cloud-dns.sh --apply    # creates or updates the record
+    scripts/cloud-dns.sh --verify   # checks the answer (repeat after a few minutes if it says "nothing")
+    ```
+    The script reads the VPS address and the zone from `inventory.local.yaml` (or from `--ip` and `--zone`). It writes the change to `~/ai-cloud-dns.json`, a private file outside the repository. The record is `ai.marin.cr`, type `A`, time-to-live 300 seconds. It refuses an address that is private, a tailnet address or still a `<PLACEHOLDER>`.
+    - **What you should see:** `✓ Route53 applied the change.` and later `✓ ai.marin.cr answers with the VPS address.`
+    - **If it doesn't work:** `AWS refused the change`: you are logged in to the wrong AWS account or the zone id is wrong. `not a public address`: the inventory holds the tailnet or LAN address; use the VPS public one. The same by hand, if you prefer: `aws route53 change-resource-record-sets --hosted-zone-id <ROUTE53_ZONE_ID> --change-batch file://$HOME/ai-cloud-dns.json`, then `dig +short ai.marin.cr`.
+59. **Create the database and its role on the VPS.** Over SSH, as `root`. The cloud uses its own ordinary role, never the administrator and never the public port:
+    ```bash
+    docker exec -i infra-postgres psql -U <PG_ADMIN_USER> -v ON_ERROR_STOP=1 <<'SQL'
+    CREATE ROLE local_ai_app LOGIN PASSWORD '<DB_PASSWORD>' NOSUPERUSER NOBYPASSRLS;
+    CREATE DATABASE local_ai OWNER local_ai_app;
+    SQL
+    docker exec -i infra-postgres psql -U <PG_ADMIN_USER> -d local_ai -v ON_ERROR_STOP=1 -c 'ALTER SCHEMA public OWNER TO local_ai_app;'
+    ```
+    Invent a long `<DB_PASSWORD>` (password manager) and keep it for step 61. The repository keeps this SQL here only; the real `marin-server-infra` repository records the role too.
+    - **What you should see:** `CREATE ROLE`, `CREATE DATABASE`, `ALTER SCHEMA`.
+    - **If it doesn't work:** `role already exists`: the role was made earlier; skip the first line and set its password with `ALTER ROLE local_ai_app PASSWORD '<DB_PASSWORD>';`. `No such container`: find the Postgres container name with `docker ps` and use that name.
+60. **Create the Google sign-in.** In the Google Cloud console open **APIs & Services → Credentials → Create credentials → OAuth client ID**, type **Web application**. Under **Authorized redirect URIs** add exactly `https://ai.marin.cr/api/auth/google/callback` (no slash at the end). Copy the **client id** and **client secret** into your password manager. Under **OAuth consent screen** leave the publishing status on **Testing** (add `<ADMIN_EMAIL>` and your people as test users) or **Internal**. Never **In production**.
+    - **What you should see:** the client appears in the list with that one redirect address.
+    - **If it doesn't work:** later, `redirect_uri_mismatch` on sign-in means the address differs by a character; fix it here (Part 8, step 56).
+61. **Install the cloud on the VPS.** Over SSH, as `root`:
+    ```bash
+    mkdir -p /opt/infra/apps && cd /opt/infra/apps
+    git clone --branch deploy/cloud https://github.com/marinoscar/local-ai.git local-ai-cloud-src
+    cd local-ai-cloud-src && npm ci --workspace=cli && npm run build --workspace=cli
+    node apps/cli/dist/cli.js deploy doctor --domain ai.marin.cr
+    node apps/cli/dist/cli.js deploy install --domain ai.marin.cr --ref deploy/cloud --no-version-bump --name local-ai-cloud
+    ```
+    (`--no-version-bump` because the branch is generated; versions are changed on `main`.) The installer asks for the settings of `.env`. Answer like this, and let it generate the secrets it offers to generate:
+
+    | Question | Answer |
+    |---|---|
+    | `APP_URL` | `https://ai.marin.cr` |
+    | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | from step 60 |
+    | `GOOGLE_CALLBACK_URL` | `https://ai.marin.cr/api/auth/google/callback` |
+    | `INITIAL_ADMIN_EMAIL` | `<ADMIN_EMAIL>` (your own Google address: this person becomes the lab owner) |
+    | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_SSL` | `infra-postgres`, `5432`, `local_ai`, `local_ai_app`, `<DB_PASSWORD>`, as the installer's text says for the private network |
+    | `AIAGENT_VERSION` | `<AIAGENT_VERSION>` from "Before you start" |
+    | `JWT_SECRET`, `COOKIE_SECRET`, `SECRETS_ENCRYPTION_KEY` | generated |
+    | `TENANCY_MODE`, `JOBS_WORKER_MODE`, `EVENT_BUS_ADAPTER`, `OTEL_ENABLED`, `CORS_ORIGIN`, gateway switches | keep the defaults the installer shows (`single`, `all`, `in-process`, `false`, empty, `true` and `public`). The full list with the reason for each is in [cloud-app.md §3.13](../specs/cloud-app.md#313-deploy-laictl-deploy-to-the-vps) |
+
+    The installer builds the images, starts the stack, writes the `ai.marin.cr` vhost into `/opt/infra/proxy/conf.d/`, asks for the certificate and schedules its renewal.
+    - **What you should see:** `deploy doctor` all green before the install; at the end of the install a green summary with the address `https://ai.marin.cr`.
+    - **If it doesn't work:** the image build stops with `AIAGENT_VERSION is not set` or a download error: the version is empty or does not name an existing release; fix it in the `.env` of the install folder and run the install (or `deploy update`) again. The certificate step fails: DNS (step 58) has not spread yet; wait 5 minutes and retry. Anything else: keep the output, put it in the issue, and see [07-troubleshooting.md](07-troubleshooting.md).
+62. **Back up the encryption key now.** Find the line `SECRETS_ENCRYPTION_KEY=…` in the `.env` file of the install folder (`deploy install` prints that folder at the end; the file is `infra/compose/.env` inside it). Copy the value into your password manager **and** into `inventory.local.yaml` on the ark drive. Do it before anything else.
+    - **Why:** the cloud encrypts every node's llama key and every stored credential with this key. Lose it and none of them can be read again (`LAI-CLD-032`): you would have to re-send every key from every node. A copy of the database is useless without it.
+    - **What you should see:** two places, outside the VPS, that hold the same value.
+    - **If it doesn't work:** you cannot find the line: do not continue; ask in the issue. Never paste the value into the issue or the repository.
+63. **Check it is alive.** On any computer:
+    ```bash
+    curl -s https://ai.marin.cr/api/health/ready
+    ```
+    - **What you should see:** `{"data":{"status":"ok",…}}`.
+    - **If it doesn't work:** `502`: the API container is still starting; wait a minute. A certificate warning: step 61 did not finish the certificate. Other answers: on the VPS run `docker compose logs api --tail 100` in the install folder and put the lines (without secrets) in the issue.
+64. **Sign in.** Open `https://ai.marin.cr`, press **Sign in with Google** with `<ADMIN_EMAIL>`.
+    - **What you should see:** the **Lab** page with **No nodes yet** and an **Add node** button.
+    - **If it doesn't work:** "not allowed": `INITIAL_ADMIN_EMAIL` was typed differently from your Google address; fix `.env` and run `deploy update`. `redirect_uri_mismatch`: step 60.
+65. **Check the catalog checker is in the image.** On the VPS, in the install folder:
+    ```bash
+    docker compose exec api /opt/localai/bin/aictl version --json
+    ```
+    - **What you should see:** a short JSON text with the agent version you chose.
+    - **If it doesn't work:** `no such file`: the image was built without the checker; this shows in the cloud as `LAI-CLD-033`. Set `AIAGENT_VERSION` in `.env` and run `deploy update` (step 68).
+66. **Check the three node settings.** In the cloud open **Admin → Settings → Workers** (`/admin/settings/workers`).
+    - **What you should see:** `staleHeartbeatSeconds` **45**, `offlineStaleMultiplier` **4**, `offlineRetentionDays` **3650**. The first deploy writes them by itself.
+    - **If it doesn't work:** other numbers: set these three and save; **Admin → Settings → Doctor** shows the check "node settings" green afterwards.
+67. **Check the gateway paths on the VPS (read only).** The long answers of the `/v1/` gateway need the edge to stream for up to 1800 seconds, and the inner `gateway.conf`. Those come with the gateway work (GW-03) and are not added by this part. Until they exist, nothing is wrong. After GW-03, check:
+    ```bash
+    grep -rn "1800" /opt/infra/proxy/conf.d/ | grep -i ai.marin.cr
+    ls apps/cloud/infra/nginx/app.d/locations/gateway.conf   # in the install folder, from the repository's apps/cloud
+    ```
+    - **What you should see:** a line with `1800` for `/v1/`, and the file listed.
+    - **If it doesn't work:** nothing to fix here; report it on the GW-03 issue.
+68. **Record the vhost.** In the private `marin-server-infra` repository, add the new `ai.marin.cr` vhost the deploy wrote into `/opt/infra/proxy/conf.d/`, so a rebuilt VPS gets it back ([overview.md §6](../architecture/overview.md)).
+    - **What you should see:** a commit in that repository.
+    - **If it doesn't work:** you have no access: ask the owner of that repository.
+
+### 9.2 Updating
+
+An update is two parts: the code lands on `main` (a pull request, with `cloud-ci` green), then the workflow **cloud-deploy-branch** copies it to `deploy/cloud`, then you update the VPS.
+
+69. **Wait for the branch.** After the pull request is merged, open **Actions → cloud-deploy-branch** and wait for the green run (a few minutes). Check that the newest commit of `deploy/cloud` mentions the seven-character code of your merge (the first seven characters of its commit id on GitHub).
+    - **What you should see:** `deploy: apps/cloud @ <that code>`.
+    - **If it doesn't work:** no new run: `cloud-ci` was red or did not run (it only runs when `apps/cloud`, `packages/ui` or `catalog` changed). The run says "already up to date": nothing changed in the cloud, which is fine.
+70. **Update the VPS.** Over SSH, as `root`:
+    ```bash
+    cd /opt/infra/apps/local-ai-cloud-src
+    node apps/cli/dist/cli.js deploy update --name local-ai-cloud --no-version-bump
+    ```
+    To move to a newer agent release first change `AIAGENT_VERSION` in the install folder's `.env` to the new `<AIAGENT_VERSION>`, then run the `deploy update` line.
+    - **What you should see:** a green summary that names the same seven-character code as the branch's newest commit (step 69); `curl -s https://ai.marin.cr/api/health/ready` answers `ok`; the Lab page loads and the nodes' cards come back within a minute (they keep reporting by themselves).
+    - **If it doesn't work:** the summary shows an older code: run `git pull --ff-only` in this folder and the `deploy update` line again. The build fails: the old cloud keeps running; read the error, fix it on `main`, wait for the branch (step 69) and run the update again. Nodes are not affected in the meantime. A restore of the whole cloud from a database copy needs the key from step 62.
+
+When the cloud can't be reached at all, nodes show `LAI-CLD-053` and keep working; see [07-troubleshooting.md](07-troubleshooting.md#cloud-shows-node-offline).

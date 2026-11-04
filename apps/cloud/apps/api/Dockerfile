@@ -12,6 +12,9 @@ COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 COPY apps/cli/package.json ./apps/cli/
 COPY packages/shared ./packages/shared/
+# @localai/ui is a workspace of the lock file. In the repository packages/localai-ui is a symlink; the deploy branch
+# (scripts/cloud-deploy-branch.sh) replaces it with a real directory, so the install finds its package.json.
+COPY packages/localai-ui/package.json ./packages/localai-ui/
 RUN npm ci --workspace=api --include-workspace-root
 COPY apps/api/prisma ./apps/api/prisma/
 COPY apps/api/prisma.config.ts ./apps/api/

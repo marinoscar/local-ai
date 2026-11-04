@@ -1,0 +1,67 @@
+name: cloud-deploy-branch
+
+# Publishes apps/cloud as a flat tree to the branch `deploy/cloud`, which the VPS installs from
+# (docs/specs/cloud-app.md section 3.13; interim for the upstream seam request SR-3, section 3.12).
+# The work is in scripts/cloud-deploy-branch.sh (tested by scripts/tests/test-cloud-deploy-branch.sh):
+# rsync -L dereferences packages/localai-ui, the tree is checked (no symlink, no .env, Dockerfile COPY sources,
+# scripts/check-redaction.sh) and ONE commit is fast-forwarded onto the branch. It never force-pushes.
+#
+# Runs after cloud-ci succeeded on a push to main (cloud-ci itself only runs when apps/cloud/**, packages/ui/**
+# or catalog/** changed), or by hand. A hand run on another branch may only write a scratch branch
+# deploy/cloud-<suffix>; only main may write deploy/cloud.
+on:
+  workflow_run:
+    workflows: [cloud-ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Branch to write: deploy/cloud, or a scratch branch such as deploy/cloud-test'
+        required: false
+        default: deploy/cloud
+
+# One run at a time, none cancelled: two pushes must never race on deploy/cloud.
+concurrency:
+  group: cloud-deploy-branch
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build the flat tree and commit it to the deploy branch
+    runs-on: ubuntu-latest
+    # A pull request run of cloud-ci from a fork branch named "main" also has head_branch == main, so the event
+    # and the repository are checked as well.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    permissions:
+      contents: write
+    env:
+      TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'deploy/cloud' }}
+      SOURCE_SHA_FULL: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The commit cloud-ci tested, not whatever main is now. Full history: the script compares source commits.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Only main may write deploy/cloud
+        run: |
+          if [ "$TARGET_BRANCH" = "deploy/cloud" ] && [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Run this workflow from main to write deploy/cloud, or set target_branch to a scratch branch such as deploy/cloud-test."
+            exit 1
+          fi
+
+      - name: Build the tree, check it, commit and push (never force)
+        run: |
+          scripts/cloud-deploy-branch.sh publish \
+            --branch "$TARGET_BRANCH" \
+            --source-sha "$(git rev-parse --short=7 "$SOURCE_SHA_FULL")"

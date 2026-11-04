@@ -1,0 +1,30 @@
+name: cloud-deploy-tooling
+
+# Tests the deploy-branch publisher and the Route53 helper against throwaway repositories and a fake `aws`
+# (no network, no real remote). The last test case builds the real apps/cloud, so a change there that would
+# break the deploy tree (a symlink, a leak, a Dockerfile COPY of a missing path) fails here before it is merged.
+on:
+  push:
+    branches: [main]
+    paths: ['scripts/cloud-deploy-branch.sh', 'scripts/cloud-dns.sh', 'scripts/templates/**', 'scripts/check-redaction.sh', 'scripts/tests/test-cloud-deploy-branch.sh', 'scripts/tests/test-cloud-dns.sh', 'apps/cloud/**', 'packages/ui/**', '.github/workflows/cloud-deploy-branch.yml', '.github/workflows/cloud-deploy-tooling.yml']
+  pull_request:
+    branches: [main]
+    paths: ['scripts/cloud-deploy-branch.sh', 'scripts/cloud-dns.sh', 'scripts/templates/**', 'scripts/check-redaction.sh', 'scripts/tests/test-cloud-deploy-branch.sh', 'scripts/tests/test-cloud-dns.sh', 'apps/cloud/**', 'packages/ui/**', '.github/workflows/cloud-deploy-branch.yml', '.github/workflows/cloud-deploy-tooling.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  tooling:
+    name: shellcheck and script tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: shellcheck
+        run: shellcheck -S style scripts/cloud-deploy-branch.sh scripts/cloud-dns.sh && shellcheck -S warning scripts/tests/test-cloud-deploy-branch.sh scripts/tests/test-cloud-dns.sh
+      - name: Workflow YAML parses
+        run: python3 -c "import yaml,sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" .github/workflows/cloud-deploy-branch.yml .github/workflows/cloud-deploy-tooling.yml
+      - name: Deploy-branch publisher
+        run: scripts/tests/test-cloud-deploy-branch.sh
+      - name: Route53 helper
+        run: scripts/tests/test-cloud-dns.sh
