@@ -37,7 +37,10 @@ export function lintCell(version: CatalogVersionSummary, checking: boolean): { t
   return { text: '✔', tone: 'ok' };
 }
 
-const visuallyHidden = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' } as const;
+/** Cell border: the row carries it on narrow screens. */
+const rowCell = { borderBottomWidth: { xs: 0, sm: '1px' }, borderBottomStyle: 'solid', borderBottomColor: 'divider' } as const;
+
+const visuallyHidden = { position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' } as const;
 
 export interface VersionTableProps {
   versions: readonly CatalogVersionSummary[];
@@ -56,7 +59,7 @@ export function VersionTable({ versions, pending = {}, canWrite, pushing = false
   return (
     <Box sx={{ overflowX: 'auto' }}>
       <Table size="small" aria-label="Catalog versions">
-        <TableHead>
+        <TableHead sx={{ display: { xs: 'none', sm: 'table-header-group' } }}>
           <TableRow>
             <TableCell component="th" scope="col">
               Version
@@ -83,15 +86,21 @@ export function VersionTable({ versions, pending = {}, canWrite, pushing = false
             const lint = lintCell(version, checking);
             const editable = version.status === 'draft' || version.status === 'invalid' || version.status === 'valid';
             return (
-              <TableRow key={version.version} hover data-testid={`row-${version.version}`}>
-                <TableCell component="th" scope="row" sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+              <TableRow
+                key={version.version}
+                hover
+                data-testid={`row-${version.version}`}
+                // Under 600 px a row is a small card: version, status and lint on one line, the actions under them.
+                sx={{ display: { xs: 'flex', sm: 'table-row' }, flexWrap: 'wrap', alignItems: 'center', borderBottomWidth: { xs: '1px', sm: 0 }, borderBottomStyle: 'solid', borderBottomColor: 'divider', py: { xs: 0.5, sm: 0 } }}
+              >
+                <TableCell component="th" scope="row" sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap', ...rowCell }}>
                   {version.version}
                 </TableCell>
                 <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{SOURCE_LABEL[version.source]}</TableCell>
-                <TableCell>
+                <TableCell sx={rowCell}>
                   <StatusChip status={version.status} />
                 </TableCell>
-                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                <TableCell sx={{ whiteSpace: 'nowrap', ...rowCell }}>
                   {lint.tone === 'wait' ? <CircularProgress size={12} sx={{ mr: 0.75 }} aria-hidden="true" /> : null}
                   <Typography component="span" variant="body2" color={lint.tone === 'bad' ? 'error' : 'text.primary'} data-testid={`lint-${version.version}`}>
                     {lint.tone === 'ok' ? (
@@ -106,7 +115,7 @@ export function VersionTable({ versions, pending = {}, canWrite, pushing = false
                     )}
                   </Typography>
                 </TableCell>
-                <TableCell>
+                <TableCell sx={{ ...rowCell, flexBasis: { xs: '100%', sm: 'auto' }, pt: { xs: 0, sm: undefined } }}>
                   <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                     {canWrite && editable ? (
                       <Button size="small" onClick={() => onEdit(version.version)} aria-label={`Edit ${version.version}`}>

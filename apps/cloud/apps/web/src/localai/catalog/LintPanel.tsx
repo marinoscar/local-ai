@@ -56,6 +56,7 @@ export function LintPanel({ version, status, lintedAt, lintResult, stale = false
               sx={{
                 display: 'flex',
                 alignItems: 'flex-start',
+                justifyContent: 'flex-start',
                 gap: 1,
                 width: '100%',
                 textAlign: 'left',
