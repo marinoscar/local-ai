@@ -105,6 +105,8 @@ func implementedRoutes(t *testing.T) []api.Route {
 	// POST /ark/verify and POST /ark/import (SYNC-13); the starter and the importer are not called, so they stay nil.
 	routes = append(routes, api.ArkVerifyRoutes(api.ArkVerifyDeps{})...)
 	routes = append(routes, api.ArkImportRoutes(api.ArkImportDeps{})...)
+	// GET /docs/index (AGENT-16); /docs/ itself is outside the API prefix and not in the document.
+	routes = append(routes, api.DocsRoutes(api.DocsOptions{})...)
 	return routes
 }
 
