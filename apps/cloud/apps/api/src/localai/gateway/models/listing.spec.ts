@@ -211,10 +211,10 @@ describe('ModelListing: the key scope', () => {
 
   it('find() answers null for an entry outside the scope, even when it exists', async () => {
     const { listing } = await listingOf();
-    const key = { allowedModels: ['qwen3.5-9b-q4km'] };
-    expect((await listing.find(key, 'qwen3.5-9b-q4km'))?.id).toBe('qwen3.5-9b-q4km');
-    expect(await listing.find(key, 'lab-coder')).toBeNull();
-    expect(await listing.find(key, 'qwen3-coder-next-q4km')).toBeNull();
+    const scoped = { allowedModels: ['qwen3.5-9b-q4km'] };
+    expect((await listing.find(scoped, 'qwen3.5-9b-q4km'))?.id).toBe('qwen3.5-9b-q4km');
+    expect(await listing.find(scoped, 'lab-coder')).toBeNull();
+    expect(await listing.find(scoped, 'qwen3-coder-next-q4km')).toBeNull();
     expect(await listing.find(open, 'lab-coder')).toMatchObject({ id: 'lab-coder' });
     expect(await listing.find(open, 'unknown')).toBeNull();
   });
