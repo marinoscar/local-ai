@@ -1,19 +1,34 @@
 // The read side of `GET /api/localai/nodes` and `GET /api/localai/nodes/:nodeId` (docs/specs/cloud-app.md section
 // 3.9): gathers the rows (nodes, projected models, worker heartbeats, active alerts, the approved catalog), then hands
 // them to the pure builder. Read-only; writes nothing and publishes nothing.
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { AUDIT_SINK, type AuditSink } from '@marinoscar/platform-api/core';
 import { deriveNodeHealth, type NodeHealth } from '@marinoscar/platform-api/nodes';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import type { LabNodesResponse, NodeCardDto, NodeDetailDto } from './dto/node-card';
+import { modelSizesFromFiles } from './catalog-model-sizes';
 import { LabSettingsService } from './lab-settings.service';
 import { buildNodeCard, compareNodeIds, summarize, type CardContext, type CardNodeRow, type CardSource } from './node-card.builder';
+
+/** Audit actions of the node routes (permanent strings, docs/specs/cloud-app.md section 3.5). `targetType` is `localai_node`, `targetId` the `ai-nN` id. */
+export const AUDIT_NODE_TAILNET_REVEALED = 'localai.node.tailnet_revealed';
+export const AUDIT_NODE_TARGET = 'localai_node';
+
+const TYPE_PREFIX = 'localai.';
+
+/** The command types a node allows, without the `localai.` prefix; `null` when the cloud has no linked worker row to ask. */
+export function acceptedTypesOf(eligible: readonly string[] | null | undefined): string[] | null {
+  if (!eligible) return null;
+  return eligible.filter((type) => type.startsWith(TYPE_PREFIX)).map((type) => type.slice(TYPE_PREFIX.length));
+}
 
 @Injectable()
 export class LabNodesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly settings: LabSettingsService,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   /** Every node that is not retired, as cards, with the header counts. */
@@ -24,13 +39,53 @@ export class LabNodesService {
     return { summary: summarize(cards, labWideAlerts), nodes: cards };
   }
 
-  /** One node: the card fields plus `lastState`. `tailnetIp` is added only when `revealTailnet` (the controller checks lab:admin). */
-  async detail(nodeId: string, revealTailnet: boolean, now: Date = new Date()): Promise<NodeDetailDto> {
+  /**
+   * One node: the card fields, the last snapshot and what the tabs need. `tailnetIp` is added only when `revealTailnet`
+   * (the controller checks lab:admin), and then exactly one `localai.node.tailnet_revealed` audit row is written FIRST:
+   * if the audit cannot be written the address is not returned (fail closed). The row's meta is `{}`; the address is
+   * never audited or logged.
+   */
+  async detail(nodeId: string, revealTailnet: boolean, actorUserId: string | null = null, now: Date = new Date()): Promise<NodeDetailDto> {
     const row = await this.prisma.localaiNode.findUnique({ where: { nodeId } });
     if (!row || row.phase === 'retired') throw new NotFoundException({ message: 'No Local AI node has this id' });
     const { cards } = await this.cardsFor([row], now);
-    const detail: NodeDetailDto = { ...cards[0]!, lastState: row.lastState ?? null, keyReceived: row.keyReportedAt !== null };
-    if (revealTailnet) detail.tailnetIp = row.tailnetIp ?? null;
+    const [credential, worker, approved, settings] = await Promise.all([
+      row.nodeCredentialId ? this.prisma.nodeCredential.findUnique({ where: { id: row.nodeCredentialId }, select: { tokenPrefix: true, lastUsedAt: true, createdAt: true, revokedAt: true } }) : null,
+      row.workerNodeId ? this.prisma.workerNode.findUnique({ where: { id: row.workerNodeId }, select: { eligibleTypes: true } }) : null,
+      this.prisma.localaiCatalogVersion.findFirst({ where: { status: 'approved' }, select: { files: true } }),
+      this.settings.read(),
+    ]);
+    const detail: NodeDetailDto = {
+      ...cards[0]!,
+      lastState: row.lastState ?? null,
+      keyReceived: row.keyReportedAt !== null,
+      settings: {
+        publicHost: row.publicHost,
+        servePattern: row.servePattern as 'A' | 'B' | 'none',
+        tailnetMachine: row.tailnetMachine ?? null,
+        tailnetIpSet: Boolean(row.tailnetIp),
+        gatewayEnabled: row.gatewayEnabled,
+        gatewayPriority: row.gatewayPriority,
+        catalogPin: row.catalogPin ?? null,
+        profile: row.profile ?? null,
+        connectivity: row.connectivity ?? null,
+      },
+      keys: {
+        keyHint: row.keyHint ?? null,
+        keyReportedAt: row.keyReportedAt ? row.keyReportedAt.toISOString() : null,
+        credential:
+          credential && !credential.revokedAt
+            ? { prefix: credential.tokenPrefix, lastUsedAt: credential.lastUsedAt ? credential.lastUsedAt.toISOString() : null, createdAt: credential.createdAt.toISOString() }
+            : null,
+      },
+      acceptedTypes: acceptedTypesOf(worker?.eligibleTypes),
+      modelSizes: modelSizesFromFiles(approved?.files),
+      agentLatestVersion: settings.agentLatestVersion,
+    };
+    if (revealTailnet) {
+      await this.audit.record({ action: AUDIT_NODE_TAILNET_REVEALED, actorUserId, targetType: AUDIT_NODE_TARGET, targetId: row.nodeId, meta: {} });
+      detail.tailnetIp = row.tailnetIp ?? null;
+    }
     return detail;
   }
 

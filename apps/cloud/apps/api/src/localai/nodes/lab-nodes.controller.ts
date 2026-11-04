@@ -22,15 +22,16 @@ export class LabNodesController {
 
   @Get(':nodeId')
   @Auth({ permissions: [LOCALAI_PERMISSIONS.LAB_READ.id] })
-  @ApiOperation({ summary: 'One node: the card fields plus the last snapshot' })
+  @ApiOperation({ summary: 'One node: the card fields, the last snapshot and the tab data. ?reveal=tailnet (lab:admin) adds the tailnet IP and writes one audit row' })
   @ApiQuery({ name: 'reveal', required: false, enum: ['tailnet'], description: 'lab:admin only: include the stored tailnet IP' })
   detail(
     @Param('nodeId') nodeId: string,
     @Query('reveal') reveal: string | undefined,
     @CurrentUser('permissions') permissions: string[] | undefined,
+    @CurrentUser('id') actorUserId: string | undefined,
   ): Promise<NodeDetailDto> {
     // The IP is shown only to someone who holds lab:admin AND asked for it; a viewer's `?reveal=tailnet` is ignored.
     const mayReveal = reveal === 'tailnet' && (permissions ?? []).includes(LOCALAI_PERMISSIONS.LAB_ADMIN.id);
-    return this.nodes.detail(nodeId, mayReveal);
+    return this.nodes.detail(nodeId, mayReveal, actorUserId ?? null);
   }
 }
