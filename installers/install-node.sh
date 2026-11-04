@@ -415,7 +415,7 @@ run_phase() {
   local dur=$((SECONDS - start))
   case "$rc" in
     0)
-      set_phase "$id" done ""
+      set_phase "$id" "done" ""
       say "phase $id $name: done in ${dur}s" ;;
     "$PHASE_NOT_IMPLEMENTED")
       set_phase "$id" not-implemented "not implemented yet in installer $INSTALLER_VERSION"
@@ -471,7 +471,7 @@ parse_args() {
   while (($# > 0)); do
     case "$1" in
       --node-id|--profile|--backend|--from-ark|--enroll-file|--cloud-url|--pin-file|--inventory|--serve-pattern|--log|--desktop-user|--agent-sha256)
-        (($# >= 2)) && [[ "$2" != --* ]] || usage_error "$1 needs a value"
+        if (($# < 2)) || [[ "$2" == --* ]]; then usage_error "$1 needs a value"; fi
         val="$2"
         case "$1" in
           --node-id) [[ "$val" =~ $NODE_ID_RE ]] || usage_error "--node-id '$val' must look like ai-n1 .. ai-n9999"; OPT_NODE_ID="$val" ;;
