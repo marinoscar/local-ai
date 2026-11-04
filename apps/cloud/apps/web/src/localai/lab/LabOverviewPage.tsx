@@ -1,6 +1,7 @@
 // The Lab overview (`/lab`, lab:read; docs/specs/cloud-app.md section 3.11): one card per node, header counts and the
 // gateway figure. The page only lays out what the API computed; health, routable and ark colours are never derived here.
 import AddIcon from '@mui/icons-material/Add';
+import HistoryIcon from '@mui/icons-material/History';
 import HubIcon from '@mui/icons-material/Hub';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import { Alert, Box, Button, Chip, CircularProgress, Link, Typography } from '@mui/material';
@@ -41,9 +42,15 @@ export function LabOverviewPage({ fetchNodes, now, timeZone }: LabOverviewPagePr
             Catalog
           </Button>
           {canAdd ? (
-            <Button component={RouterLink} to="/lab/nodes/new" variant="contained" startIcon={<AddIcon />}>
-              Add node
-            </Button>
+            <>
+              {/* The audit trail is lab:admin only (GET /api/localai/audit), so is its way in. */}
+              <Button component={RouterLink} to="/lab/audit" variant="outlined" startIcon={<HistoryIcon />}>
+                Audit trail
+              </Button>
+              <Button component={RouterLink} to="/lab/nodes/new" variant="contained" startIcon={<AddIcon />}>
+                Add node
+              </Button>
+            </>
           ) : null}
         </Box>
       </Box>
