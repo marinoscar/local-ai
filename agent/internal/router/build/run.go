@@ -302,6 +302,13 @@ func (r *run) handOver() *Error {
 			return fail("chown", err)
 		}
 	}
+	// A scratch source tree (whisper.cpp) is written to by its own configure step (configure_file puts
+	// generated files into the tree), so the compile user must own it too. It is removed after the build.
+	if r.m.opt.Recipe.ScratchSource && r.plan.SourceDir != "" {
+		if err := chownTree(r.m.opt.FS, r.plan.SourceDir, uid, gid); err != nil {
+			return fail("chown_source", err)
+		}
+	}
 	r.drop, r.uid, r.gid, r.setpriv, r.compileUser = true, uid, gid, path, user
 	return nil
 }
