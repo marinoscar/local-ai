@@ -16,6 +16,14 @@ include:
   content:
     # tier 1
     - docs-bundle
+    - kit-catalog
+    - kit-llama-cpp
+    - kit-whisper-cpp
+    - kit-go-toolchain
+    - kit-kiwix-tools
+    - kit-pmtiles
+    - kit-piper
+    - kit-debs-resolute-amd64
     - wikimed-en
     - survival-first-aid
     - survival-water

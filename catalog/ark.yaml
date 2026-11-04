@@ -9,7 +9,7 @@
 # real size from the origin.
 #
 # Order matters: the planner drops later list positions first within a tier (catalog.md section 4), and
-# the profiles list items in this order. Kit items (kit-*) are KIT-01 and are not in this file yet.
+# the profiles list items in this order. Kit items (kit-*, rebuild-kit.md section 3.2) follow docs-bundle.
 #
 # No sha256 is written here: Kiwix items use the origin's sidecar and the place files use computed
 # checksums with trust on first use (catalog.md section 3.1). `map-assets` (a github_release item that
@@ -28,6 +28,183 @@ content:
     source:
       type: repo_docs
     expected_size_bytes: 150000000
+
+  # ---- Rebuild kit (rebuild-kit.md section 3.2). Kit items are always tier 1 (catalog.md section 3). ----
+  # Not here yet: kit-agent-binaries, kit-agent-source and kit-desktop need a published agent / desktop
+  # release to pin (INST-01 #115, #134); kit-cuda-redist is off by default. Pins below were computed from
+  # the downloaded release files (decision #251); nothing is copied from a mirror's listing unchecked.
+
+  - id: kit-catalog
+    kind: kit
+    display_name: "Catalog (rebuild kit)"
+    summary: "The catalog this drive was planned with, so the drive describes itself."
+    summary_es: "El catálogo con el que se planeó esta unidad, para que se describa a sí misma."
+    survival_tier: 1
+    source:
+      type: repo_docs
+    expected_size_bytes: 5000000
+
+  - id: kit-llama-cpp
+    kind: kit
+    display_name: "llama.cpp source (rebuild kit)"
+    summary: "Git mirror and source tarball of the pinned llama.cpp commit, to rebuild the inference engine offline."
+    summary_es: "Espejo git y tarball del commit fijado de llama.cpp, para reconstruir el motor sin internet."
+    survival_tier: 1
+    source:
+      type: git_mirror
+      url: https://github.com/ggml-org/llama.cpp.git
+      also_tarball_of: pinned
+    expected_size_bytes: 2500000000
+    refresh_days: 1
+
+  - id: kit-whisper-cpp
+    kind: kit
+    display_name: "whisper.cpp source (rebuild kit)"
+    summary: "Git mirror and source tarball of the pinned whisper.cpp commit, to rebuild speech to text offline."
+    summary_es: "Espejo git y tarball del commit fijado de whisper.cpp, para reconstruir la voz a texto sin internet."
+    survival_tier: 1
+    source:
+      type: git_mirror
+      url: https://github.com/ggml-org/whisper.cpp.git
+      also_tarball_of: pinned
+    expected_size_bytes: 1000000000
+    refresh_days: 1
+
+  - id: kit-go-toolchain
+    kind: kit
+    display_name: "Go toolchain 1.24.13 (rebuild kit)"
+    summary: "The Go compiler for amd64 and arm64, to rebuild the agent offline."
+    summary_es: "El compilador de Go para amd64 y arm64, para reconstruir el agente sin internet."
+    survival_tier: 1
+    license: "BSD-3-Clause"
+    source:
+      type: url
+      files:
+        - {url: "https://go.dev/dl/go1.24.13.linux-amd64.tar.gz", sha256: "1fc94b57134d51669c72173ad5d49fd62afb0f1db9bf3f798fd98ee423f8d730"}
+        - {url: "https://go.dev/dl/go1.24.13.linux-arm64.tar.gz", sha256: "74d97be1cc3a474129590c67ebf748a96e72d9f3a2b6fef3ed3275de591d49b3"}
+      version_policy: pinned
+      checksum: pinned
+    expected_size_bytes: 160000000
+
+  - id: kit-kiwix-tools
+    kind: kit
+    display_name: "kiwix-tools 3.8.2 (rebuild kit)"
+    summary: "kiwix-serve and kiwix-manage for amd64 and arm64, to serve the offline books."
+    summary_es: "kiwix-serve y kiwix-manage para amd64 y arm64, para servir los libros sin internet."
+    survival_tier: 1
+    license: "GPL-3.0"
+    source:
+      type: url
+      files:
+        - {url: "https://download.kiwix.org/release/kiwix-tools/kiwix-tools_linux-x86_64-3.8.2.tar.gz", sha256: "b0ae98dd344aa0469a15ab42feff6d5aafb79541a82fb4e2647c74b073123815"}
+        - {url: "https://download.kiwix.org/release/kiwix-tools/kiwix-tools_linux-aarch64-3.8.2.tar.gz", sha256: "a9898fc5363437327350db669bbc03dcc7ecfd498dae727d7184bebe77019514"}
+      version_policy: pinned
+      checksum: pinned
+    expected_size_bytes: 45000000
+
+  - id: kit-pmtiles
+    kind: kit
+    display_name: "go-pmtiles 1.31.2 (rebuild kit)"
+    summary: "The pmtiles program for amd64 and arm64, to make and check offline map files."
+    summary_es: "El programa pmtiles para amd64 y arm64, para crear y revisar mapas sin internet."
+    survival_tier: 1
+    license: "BSD-3-Clause"
+    source:
+      type: url
+      files:
+        - {url: "https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles_1.31.2_Linux_x86_64.tar.gz", sha256: "3ed7dbf4ec2e6dfe5e25b6f70d1ffc932729f93c86db353bf514dd71010a312f"}
+        - {url: "https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles_1.31.2_Linux_arm64.tar.gz", sha256: "f8bd47e7ea866863489cad588fbaf2f31f42e5821f7a03f009b3769f05801cb1"}
+      version_policy: pinned
+      checksum: pinned
+    expected_size_bytes: 35000000
+
+  - id: kit-piper
+    kind: kit
+    display_name: "piper 2023.11.14-2 (rebuild kit)"
+    summary: "The piper speech program for amd64 and arm64, to speak answers aloud."
+    summary_es: "El programa de voz piper para amd64 y arm64, para leer las respuestas en voz alta."
+    survival_tier: 1
+    license: "MIT"
+    source:
+      type: url
+      files:
+        - {url: "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz", sha256: "a50cb45f355b7af1f6d758c1b360717877ba0a398cc8cbe6d2a7a3a26e225992"}
+        - {url: "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_aarch64.tar.gz", sha256: "fea0fd2d87c54dbc7078d0f878289f404bd4d6eea6e7444a77835d1537ab88eb"}
+      version_policy: pinned
+      checksum: pinned
+    expected_size_bytes: 55000000
+
+  - id: kit-debs-resolute-amd64
+    kind: kit
+    display_name: "Ubuntu 26.04 packages, amd64 (rebuild kit)"
+    summary: "Every package needed to rebuild a node on a fresh Ubuntu 26.04, as a local apt repository."
+    summary_es: "Todos los paquetes para reconstruir un nodo en un Ubuntu 26.04 nuevo, como repositorio apt local."
+    survival_tier: 1
+    source:
+      type: apt_closure
+      codename: resolute
+      arch: amd64
+      packages: [build-essential, cmake, ninja-build, pkg-config, ccache, git,
+                 libvulkan-dev, glslc, spirv-headers, vulkan-tools, mesa-vulkan-drivers,
+                 curl, jq, ca-certificates, iw, network-manager, pciutils, usbutils, minisign, zstd, udisks2,
+                 openssh-server, python3, tailscale, nvidia-cuda-toolkit]
+      extra_repos:
+        - name: tailscale
+          uri: https://pkgs.tailscale.com/stable/ubuntu
+          suite: resolute
+          components: [main]
+          key: tailscale-archive-keyring.gpg
+        - name: nvidia-cuda
+          uri: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2604/x86_64/
+          suite: /
+          components: []
+          key: nvidia-cuda-archive-keyring.gpg
+    expected_size_bytes: 6000000000
+    refresh_days: 30
+
+  - id: kit-nvidia-resolute-amd64-595-open
+    kind: kit
+    display_name: "NVIDIA driver 595 (open), Ubuntu 26.04 amd64 (rebuild kit)"
+    summary: "The NVIDIA driver packages and signed kernel modules for the CUDA nodes."
+    summary_es: "Los paquetes del controlador NVIDIA y los módulos de kernel firmados para los nodos CUDA."
+    survival_tier: 1
+    source:
+      type: apt_closure
+      codename: resolute
+      arch: amd64
+      packages: [nvidia-driver-595-open, nvidia-utils-595, libnvidia-compute-595, nvidia-dkms-595-open,
+                 dkms, linux-headers-generic, linux-modules-nvidia-595-open-generic]
+      extra_repos: []
+    expected_size_bytes: 700000000
+    refresh_days: 30
+
+  - id: kit-local-ai-repo
+    kind: kit
+    display_name: "local-ai repository (rebuild kit)"
+    summary: "A full copy of this project with its history: docs, catalog and source."
+    summary_es: "Una copia completa de este proyecto con su historial: documentos, catálogo y código."
+    survival_tier: 1
+    source:
+      type: git_mirror
+      url: https://github.com/marinoscar/local-ai.git
+    expected_size_bytes: 500000000
+    refresh_days: 1
+
+  - id: kit-ubuntu-iso-26.04
+    kind: kit
+    display_name: "Ubuntu 26.04.1 desktop installer (rebuild kit)"
+    summary: "The Ubuntu installer image, to reinstall a machine from scratch (ark drive only)."
+    summary_es: "La imagen instaladora de Ubuntu, para reinstalar una máquina desde cero (solo en la unidad ark)."
+    survival_tier: 1
+    license: "various open source"
+    source:
+      type: url
+      url: https://releases.ubuntu.com/26.04/ubuntu-26.04.1-desktop-amd64.iso
+      sidecar_url: https://releases.ubuntu.com/26.04/SHA256SUMS
+      version_policy: latest
+      checksum: sidecar
+    expected_size_bytes: 6600000000
+    refresh_days: 90
 
   - id: wikimed-en
     kind: kiwix
