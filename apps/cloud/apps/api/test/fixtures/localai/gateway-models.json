@@ -1,0 +1,74 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "lab-coder",
+      "object": "model",
+      "created": 1793620800,
+      "owned_by": "localai",
+      "x-localai": {
+        "state": "loaded",
+        "nodes": ["ai-n1"],
+        "display_name": "Lab coder",
+        "roles": ["coder", "chat"],
+        "input_modalities": ["text"],
+        "context_length": 131072,
+        "max_output_tokens": 16384,
+        "reasoning": false,
+        "alias_of": "qwen3-coder-next-q4km"
+      }
+    },
+    {
+      "id": "qwen3-coder-next-q4km",
+      "object": "model",
+      "created": 1793620800,
+      "owned_by": "localai",
+      "x-localai": {
+        "state": "loaded",
+        "nodes": ["ai-n1"],
+        "display_name": "Qwen3 Coder Next",
+        "roles": ["coder", "chat"],
+        "input_modalities": ["text"],
+        "context_length": 131072,
+        "max_output_tokens": 16384,
+        "reasoning": false,
+        "alias_of": null
+      }
+    },
+    {
+      "id": "qwen3.5-9b-q4km",
+      "object": "model",
+      "created": 1793620800,
+      "owned_by": "localai",
+      "x-localai": {
+        "state": "loaded",
+        "nodes": ["ai-n3"],
+        "display_name": "Qwen 3.5 9B",
+        "roles": ["chat", "reasoning", "coder"],
+        "input_modalities": ["text"],
+        "context_length": 32768,
+        "max_output_tokens": 8192,
+        "reasoning": true,
+        "alias_of": null
+      }
+    },
+    {
+      "id": "qwen3.6-35b-a3b-q4km",
+      "object": "model",
+      "created": 1793620800,
+      "owned_by": "localai",
+      "x-localai": {
+        "state": "loadable",
+        "nodes": ["ai-n2"],
+        "display_name": "Qwen 3.6 35B A3B",
+        "roles": ["chat", "reasoning"],
+        "input_modalities": ["text"],
+        "context_length": 32768,
+        "max_output_tokens": 8192,
+        "reasoning": true,
+        "alias_of": null,
+        "load_wait_s": 120
+      }
+    }
+  ]
+}

@@ -42,6 +42,7 @@ export function candidate(nodeId: string, overrides: Partial<SelectedCandidate> 
     canLoad: true,
     slots: 2,
     ctx: 8192,
+    inputModalities: ['text'],
   };
   return { ...base, inflight: 0, suspectUntil: 0, ewmaTtfbMs: null, ...overrides };
 }

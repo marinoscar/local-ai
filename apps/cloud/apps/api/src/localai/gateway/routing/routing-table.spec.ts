@@ -483,3 +483,36 @@ describe('RoutingTable: waitForLoaded', () => {
     await expect(wait).resolves.toBe(false);
   });
 });
+
+describe('RoutingTable: healthyCandidates (the listing of /v1/models)', () => {
+  async function two() {
+    const { source, table, clock } = setup();
+    source.rows = [node('ai-n1', [model('model-a', { inputModalities: ['text', 'image'] })]), node('ai-n2', [model('model-a', { status: 'unloaded' })])];
+    await table.rebuild();
+    return { table, clock };
+  }
+  const brief = (table: RoutingTable) => table.healthyCandidates('model-a').map((c) => `${c.nodeId}:${c.status}`).sort();
+
+  it('returns loaded and loadable candidates with what the node reported', async () => {
+    const { table } = await two();
+    expect(brief(table)).toEqual(['ai-n1:loaded', 'ai-n2:loadable']);
+    expect(table.healthyCandidates('model-a').find((c) => c.nodeId === 'ai-n1')?.inputModalities).toEqual(['text', 'image']);
+    expect(table.healthyCandidates('no-such-model')).toEqual([]);
+  });
+
+  it('leaves out a suspect node until the suspicion ends, and a node with an invalid key until it reports one', async () => {
+    const { table, clock } = await two();
+    table.markSuspect(ref('ai-n1'));
+    expect(brief(table)).toEqual(['ai-n2:loadable']);
+    clock.advance(30_001);
+    expect(brief(table)).toEqual(['ai-n1:loaded', 'ai-n2:loadable']);
+    table.markKeyInvalid({ nodeId: 'ai-n2' });
+    expect(brief(table)).toEqual(['ai-n1:loaded']);
+  });
+
+  it('shows a model marked unloaded as loadable', async () => {
+    const { table } = await two();
+    table.markUnloaded('ai-n1', 'model-a');
+    expect(brief(table)).toEqual(['ai-n1:loadable', 'ai-n2:loadable']);
+  });
+});

@@ -82,6 +82,7 @@ export class PrismaRoutingSource implements RoutingSource {
           status: model.status,
           slots: model.slots,
           ctx: model.ctx,
+          inputModalities: model.inputModalities,
         })),
       };
     });

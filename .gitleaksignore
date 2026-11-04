@@ -1,0 +1,7 @@
+# gitleaks fingerprints that are accepted findings (docs/architecture/security-model.md section 5).
+# One fingerprint per line: <commit>:<file>:<rule>:<line>. History is never rewritten, so a finding in an old commit
+# of a PR range is listed here once the current tree no longer has it.
+#
+# A model id (qwen3.5-9b-q4km) in a variable named `key` in a spec: a test placeholder, not a credential. Fixed in the
+# next commit of the same PR (#395); this only silences the already-fixed historical commit.
+bec56af6eb9404e5a8ca0cb675480b95424f6ee2:apps/cloud/apps/api/src/localai/gateway/models/listing.spec.ts:generic-api-key:215
