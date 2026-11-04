@@ -8,6 +8,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/docsrender"
 	"github.com/marinoscar/local-ai/agent/internal/execx"
+	"github.com/marinoscar/local-ai/agent/internal/kit/aptkeys"
 	"github.com/marinoscar/local-ai/agent/internal/svc/whisper"
 	"github.com/marinoscar/local-ai/agent/internal/sync/download"
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
@@ -61,13 +62,13 @@ func (s *arkStack) registerSources(dl *download.Downloader) error {
 
 	// apt never runs as root: the service user when there is one. An unprivileged development run has
 	// no Credential and runs apt as the agent's own user (a root agent without the service user is
-	// refused by the producer itself, LAI-SYN-060). The keyrings of the extra repositories are not
-	// embedded in the agent yet (rebuild-kit.md section 3.4), so only the Ubuntu archive keyring is
-	// read, from the build machine's /usr/share/keyrings. What happens to an extra repository without
+	// refused by the producer itself, LAI-SYN-060). The vendor keyrings (Tailscale, NVIDIA CUDA) are
+	// embedded in the agent with pinned fingerprints (kit/aptkeys, rebuild-kit.md section 3.4); the Ubuntu archive keyring is
+	// read from the build machine's /usr/share/keyrings. What happens to an extra repository without
 	// a keyring is node.yaml sync.apt_unverified_repos (allow by default, issue #274), read at the
 	// start of every closure so a change of node.yaml applies to the next run.
 	src.apt = &resolve.AptClosure{
-		Env: env, SystemKeyringDir: d.c.Paths.Join("/usr/share/keyrings"), Euid: d.env.Geteuid, User: aptSandboxUser,
+		Env: env, Keyrings: aptkeys.Get, SystemKeyringDir: d.c.Paths.Join("/usr/share/keyrings"), Euid: d.env.Geteuid, User: aptSandboxUser,
 		AllowUnverifiedRepos: func() bool { return d.syncSettings().AllowUnverifiedAptRepos() },
 	}
 	if d.haveLocalAI && !d.env.Unprivileged {
