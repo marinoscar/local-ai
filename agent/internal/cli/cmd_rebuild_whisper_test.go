@@ -644,7 +644,7 @@ func TestRebuildWhisperRecordsTheCommitInNodeYAML(t *testing.T) {
 
 func TestRebuildWhisperSmokeModelIsTheSmallestVerifiedWhisperModel(t *testing.T) {
 	f := newWhisperFix(t)
-	models := filepath.Join(f.env.Paths.InternalRoot, "models")
+	models := filepath.Join(f.env.Paths.InternalRoot, "speech", "whisper") // overview.md section 3.3
 	put := func(id, engine, kind string, size int, state string) {
 		dir := filepath.Join(models, id)
 		file := "ggml-" + id + ".bin"
