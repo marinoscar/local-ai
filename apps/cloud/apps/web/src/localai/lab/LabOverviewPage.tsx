@@ -2,6 +2,7 @@
 // gateway figure. The page only lays out what the API computed; health, routable and ark colours are never derived here.
 import AddIcon from '@mui/icons-material/Add';
 import HubIcon from '@mui/icons-material/Hub';
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import { Alert, Box, Button, Chip, CircularProgress, Typography } from '@mui/material';
 import { usePermissions } from '@marinoscar/platform-web/identity/headless';
 import { NodeCard, type LabSummaryDto } from '@localai/ui';
@@ -35,11 +36,16 @@ export function LabOverviewPage({ fetchNodes, now, timeZone }: LabOverviewPagePr
         <Typography id="lab-title" variant="h4" component="h1">
           Lab
         </Typography>
-        {canAdd ? (
-          <Button component={RouterLink} to="/lab/nodes/new" variant="contained" startIcon={<AddIcon />}>
-            Add node
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button component={RouterLink} to="/lab/catalog" variant="outlined" startIcon={<LibraryBooksIcon />}>
+            Catalog
           </Button>
-        ) : null}
+          {canAdd ? (
+            <Button component={RouterLink} to="/lab/nodes/new" variant="contained" startIcon={<AddIcon />}>
+              Add node
+            </Button>
+          ) : null}
+        </Box>
       </Box>
 
       {data ? (
