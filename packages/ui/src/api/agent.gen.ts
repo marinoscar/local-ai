@@ -148,7 +148,7 @@ export interface paths {
         /**
          * The reduced, localized status of the Survival Portal
          * @description No auth. The schema and example are owned by survival-portal.md section 3.5 (AGENT-14 provides the
-         *     route, the 2 s cache and a minimal builder; PORTAL-01 the full schema). It never contains paths, keys,
+         *     route and the 2 s cache; PORTAL-01 the full schema and the capability model). It never contains paths, keys,
          *     hostnames, ids beyond model ids, or cloud details. Cached for 2 s per language and session kind.
          *     The language is `?lang=`, else `portal.language` (when `en` or `es`), else the profile's
          *     `survival.portal_language`, else `Accept-Language` or `ui.language`. `session` tells the SPA what it may
@@ -1413,8 +1413,8 @@ export interface components {
             /** @description Present and true when the last probe failed and this is the previous value. */
             stale?: boolean;
         };
-        /** @description Owned by survival-portal.md section 3.5; only the keys every build sets are required here. */
-        PortalStatus: {
+        /** @description Owned by survival-portal.md section 3.5. Built by internal/portal from cached views; it never holds a path, key, address, hostname (only the node id), user name, cloud detail, drive id or log. */
+        PortalStatusV1: {
             schema_version: number;
             /** Format: date-time */
             generated_at: string;
@@ -1424,8 +1424,8 @@ export interface components {
             language: "en" | "es";
             /** @enum {string} */
             session: "none" | "portal" | "full";
-            emergency_number?: string;
-            power?: {
+            emergency_number: string;
+            power: {
                 on_ac: boolean;
                 battery_pct: number | null;
                 minutes_left: number | null;
@@ -1436,34 +1436,111 @@ export interface components {
                 /** @description On battery and under 10 %. */
                 critical: boolean;
             };
-            clock_ok?: boolean;
+            clock_ok: boolean;
             brain: {
-                loaded: {
-                    [key: string]: unknown;
-                }[];
+                loaded: components["schemas"]["PortalModel"][];
+                /** @description The model that is starting, or null. */
                 loading: {
-                    [key: string]: unknown;
+                    id?: string;
+                    display_name?: string;
+                    roles?: string[];
+                    vision?: boolean;
                 } | null;
+                /** @description Catalog llama models of the profile; survival ones first. */
                 choices: {
-                    [key: string]: unknown;
+                    id: string;
+                    display_name: string;
+                    summary: string;
+                    roles: string[];
+                    vision: boolean;
+                    loadable: boolean;
+                    survival: boolean;
+                    /** @enum {string} */
+                    speed_hint?: "fast" | "medium" | "slow";
                 }[];
-            } & {
-                [key: string]: unknown;
             };
+            /** @description survival-portal.md section 4.2. code is present only when a problem causes the state (needs_switch has none). */
             capabilities: {
-                [key: string]: unknown;
+                chat: {
+                    /** @enum {string} */
+                    state: "ready" | "degraded" | "unavailable";
+                    code?: string;
+                    reason?: string;
+                };
+                photo: {
+                    /** @enum {string} */
+                    state: "ready" | "degraded" | "unavailable";
+                    code?: string;
+                    reason?: string;
+                    /** @description Present with reason needs_switch: the model to switch to. */
+                    vision_model?: string;
+                };
+                talk: {
+                    /** @enum {string} */
+                    state: "ready" | "degraded" | "unavailable";
+                    code?: string;
+                    reason?: string;
+                    stt: boolean;
+                    tts_languages: string[];
+                };
+                library: {
+                    /** @enum {string} */
+                    state: "ready" | "degraded" | "unavailable";
+                    code?: string;
+                    reason?: string;
+                    books: {
+                        content_id: string;
+                        title: string;
+                        /** @description The undated kiwix book name. */
+                        book: string;
+                        lang: string;
+                    }[];
+                };
+                maps: {
+                    /** @enum {string} */
+                    state: "ready" | "degraded" | "unavailable";
+                    code?: string;
+                    reason?: string;
+                    search: boolean;
+                    gps: boolean;
+                };
+                manuals: {
+                    /** @enum {string} */
+                    state: "ready" | "degraded" | "unavailable";
+                    code?: string;
+                    reason?: string;
+                    items: {
+                        id: string;
+                        title: string;
+                        url: string;
+                    }[];
+                };
             };
-            first_aid?: {
-                [key: string]: unknown;
+            /** @description Empty until PORTAL-11. */
+            first_aid: {
+                key: string;
+                title: string;
+                url: string;
+                available: boolean;
             }[];
+            ark: {
+                /** @enum {string} */
+                overall: "green" | "yellow" | "red" | "unknown";
+                survival_capable: boolean;
+                drive_connected: boolean;
+            };
             alerts: {
                 code: string;
                 severity: components["schemas"]["Severity"];
                 title: string;
                 fix: string;
             }[];
-        } & {
-            [key: string]: unknown;
+        };
+        PortalModel: {
+            id: string;
+            display_name: string;
+            roles: string[];
+            vision: boolean;
         };
         /** @description GET /hardware (agent.md section 3.8.6). */
         Hardware: {
@@ -2774,7 +2851,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PortalStatus"];
+                    "application/json": components["schemas"]["PortalStatusV1"];
                 };
             };
             /** @description LAI-AGT-020: lang is not en or es (details.field is lang). */

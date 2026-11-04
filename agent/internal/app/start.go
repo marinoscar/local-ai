@@ -17,6 +17,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
+	"github.com/marinoscar/local-ai/agent/internal/portal"
 	"github.com/marinoscar/local-ai/agent/internal/router"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
@@ -140,7 +141,8 @@ func (d *Daemon) stepConfig(context.Context) error {
 		},
 		DetectBackend: hardware.DetectBackend,
 		// The owners of a node.yaml block validate it (the store refuses a file one of them rejects).
-		Blocks: map[string]config.BlockValidator{"sync": run.SettingsValidator{}, "piper": piper.BlockValidator{}},
+		Blocks: map[string]config.BlockValidator{"sync": run.SettingsValidator{}, "piper": piper.BlockValidator{},
+			"portal": portal.BlockValidator{}},
 	}
 	store := config.Open(config.Options{Root: env.Root, Clock: env.Clock, Hooks: hooks})
 	d.c.Config = store

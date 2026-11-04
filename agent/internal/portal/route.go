@@ -78,6 +78,8 @@ type RouteOptions struct {
 	// TTL overrides CacheTTL; Now is the clock (default time.Now).
 	TTL time.Duration
 	Now func() time.Time
+	// Metrics counts the requests (localai_portal_status_requests_total); nil ignores them.
+	Metrics *Metrics
 }
 
 // Route returns GET /portal/status: no auth, 5 s, a 2 s cache keyed by language and session.
@@ -133,6 +135,7 @@ func (h *statusHandler) serve(w http.ResponseWriter, r *http.Request) error {
 	if h.opt.Settings != nil {
 		settings = h.opt.Settings()
 	}
+	h.opt.Metrics.StatusRequest(sessionOf(info.Principal))
 	req := Request{Lang: resolveLang(q, settings, info.Lang), Session: sessionOf(info.Principal), Now: h.opt.Now()}
 
 	body, err := h.body(r, req)

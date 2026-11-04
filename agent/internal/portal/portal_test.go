@@ -183,7 +183,7 @@ func newRig(t *testing.T, nodeConf string) *rig {
 	r.rt = &fakeRouter{view: router.View{At: t0}}
 	r.alerts = &fakeAlerts{}
 	store := statusapi.NewCatalogStore(catalog.Loaded{Catalog: r.cat, Source: catalog.SourceOffline}, t0)
-	min := portal.NewMinimal(portal.MinimalSources{
+	min := portal.NewBuilder(portal.Sources{
 		Config: r.cfg, Mode: r.mode, Hardware: r.hw, Router: r.rt, Catalog: store, Alerts: r.alerts,
 		Settings:  func() portal.Settings { return portal.SettingsFrom(r.cfg.Get(), r.cat) },
 		BuildTime: t0.Add(-24 * time.Hour),
@@ -263,8 +263,8 @@ func TestPortalStatus(t *testing.T) {
 	if st.Brain.Loading == nil || st.Brain.Loading.ID != "model-gamma-vl-q4" || !st.Brain.Loading.Vision {
 		t.Errorf("loading = %+v", st.Brain.Loading)
 	}
-	if st.Capabilities["chat"].State != portal.StateReady {
-		t.Errorf("chat = %+v", st.Capabilities["chat"])
+	if st.Capabilities.Chat.State != portal.StateReady {
+		t.Errorf("chat = %+v", st.Capabilities.Chat)
 	}
 	if len(st.Alerts) != 1 || st.Alerts[0].Code != doctor.SVC013 {
 		t.Fatalf("alerts = %+v", st.Alerts)
@@ -292,7 +292,9 @@ func TestPortalPower(t *testing.T) {
 		{"unknown power", hardware.Power{Source: hardware.SourceUnknown}, "no_battery", false, false, false, nil, nil},
 		{"discharging", batteryPower(72, hardware.SourceBattery, false), "discharging", false, false, false, intp(72), nil},
 		{"low", batteryPower(19, hardware.SourceBattery, false), "discharging", false, true, false, intp(19), nil},
-		{"exactly 20 is not low", batteryPower(20, hardware.SourceBattery, false), "discharging", false, false, false, intp(20), nil},
+		{"exactly 20 is low", batteryPower(20, hardware.SourceBattery, false), "discharging", false, true, false, intp(20), nil},
+		{"21 is not low", batteryPower(21, hardware.SourceBattery, false), "discharging", false, false, false, intp(21), nil},
+		{"exactly 10 is critical", batteryPower(10, hardware.SourceBattery, false), "discharging", false, true, true, intp(10), nil},
 		{"critical", batteryPower(9, hardware.SourceBattery, false), "discharging", false, true, true, intp(9), nil},
 		{"charging", batteryPower(50, hardware.SourceAC, true), "charging", true, false, false, intp(50), nil},
 		{"full", batteryPower(100, hardware.SourceAC, false), "full", true, false, false, intp(100), nil},
@@ -342,7 +344,7 @@ func TestPortalChatCapability(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			r := newRig(t, nodeYAML)
 			r.rt.view = router.View{At: t0, Models: c.models}
-			chat := status(t, r.get("/portal/status", "", nil)).Capabilities["chat"]
+			chat := status(t, r.get("/portal/status", "", nil)).Capabilities.Chat
 			if chat.State != c.state || chat.Code != c.code {
 				t.Errorf("chat = %+v", chat)
 			}
@@ -508,7 +510,7 @@ func TestPortalClockOK(t *testing.T) {
 
 func TestPortalWithoutAnyView(t *testing.T) {
 	reg := api.NewRegistry()
-	b := portal.NewMinimal(portal.MinimalSources{})
+	b := portal.NewBuilder(portal.Sources{})
 	if err := portal.Register(reg, portal.RouteOptions{Builder: b}); err != nil {
 		t.Fatal(err)
 	}
@@ -522,7 +524,7 @@ func TestPortalWithoutAnyView(t *testing.T) {
 	s.Handler().ServeHTTP(rec, req)
 	apitest.RecordResult(t, req, rec)
 	st := status(t, rec)
-	if st.Mode != "offline" || st.Session != "none" || st.Capabilities["chat"].Code != doctor.SVC106 || st.Alerts == nil || len(st.Alerts) != 0 || st.Power.State != "no_battery" {
+	if st.Mode != "offline" || st.Session != "none" || st.Capabilities.Chat.Code != doctor.SVC106 || st.Alerts == nil || len(st.Alerts) != 0 || st.Power.State != "no_battery" {
 		t.Errorf("status = %+v", st)
 	}
 	if err := portal.Register(api.NewRegistry(), portal.RouteOptions{}); err == nil {

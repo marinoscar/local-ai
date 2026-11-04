@@ -293,7 +293,7 @@ paths:
       summary: The reduced, localized status of the Survival Portal
       description: |
         No auth. The schema and example are owned by survival-portal.md section 3.5 (AGENT-14 provides the
-        route, the 2 s cache and a minimal builder; PORTAL-01 the full schema). It never contains paths, keys,
+        route and the 2 s cache; PORTAL-01 the full schema and the capability model). It never contains paths, keys,
         hostnames, ids beyond model ids, or cloud details. Cached for 2 s per language and session kind.
         The language is `?lang=`, else `portal.language` (when `en` or `es`), else the profile's
         `survival.portal_language`, else `Accept-Language` or `ui.language`. `session` tells the SPA what it may
@@ -314,7 +314,7 @@ paths:
             Cache-Control: {description: "no-store: the body is rebuilt at most every 2 s and must not be kept by a cache.", schema: {type: string, enum: [no-store]}}
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/PortalStatus"}
+              schema: {$ref: "#/components/schemas/PortalStatusV1"}
               examples:
                 survival:
                   value:
@@ -330,9 +330,17 @@ paths:
                     brain:
                       loaded: [{id: qwen3.5-9b-q4km, display_name: "Qwen 3.5 9B", roles: [chat, reasoning, coder], vision: false}]
                       loading: null
-                      choices: []
-                    capabilities: {chat: {state: ready}}
+                      choices:
+                        - {id: qwen3.5-9b-q4km, display_name: "Qwen 3.5 9B", summary: "Asistente general rápido", roles: [chat], vision: false, loadable: true, survival: true}
+                    capabilities:
+                      chat: {state: ready}
+                      photo: {state: degraded, reason: needs_switch, vision_model: qwen3.5-4b-q4km}
+                      talk: {state: ready, stt: true, tts_languages: [en, es]}
+                      library: {state: ready, books: [{content_id: wikimed-en, title: "WikiMed (English)", book: mdwiki_en_all, lang: en}]}
+                      maps: {state: ready, search: true, gps: false}
+                      manuals: {state: ready, items: [{id: 01-survival-mode, title: "Modo supervivencia", url: /docs/01-survival-mode.html}]}
                     first_aid: []
+                    ark: {overall: yellow, survival_capable: true, drive_connected: true}
                     alerts: [{code: LAI-SVC-013, severity: info, title: "El reconocimiento de voz usa el procesador.", fix: "Nada que hacer."}]
         "400":
           $ref: "#/components/responses/InvalidRequest"
@@ -2592,11 +2600,11 @@ components:
         profile: {type: [string, "null"]}
         stale: {type: boolean, description: "Present and true when the last probe failed and this is the previous value."}
 
-    PortalStatus:
-      description: "Owned by survival-portal.md section 3.5; only the keys every build sets are required here."
+    PortalStatusV1:
+      description: "Owned by survival-portal.md section 3.5. Built by internal/portal from cached views; it never holds a path, key, address, hostname (only the node id), user name, cloud detail, drive id or log."
       type: object
-      required: [schema_version, generated_at, node_id, mode, language, session, brain, capabilities, alerts]
-      additionalProperties: true
+      required: [schema_version, generated_at, node_id, mode, language, emergency_number, session, power, clock_ok, brain, capabilities, first_aid, ark, alerts]
+      additionalProperties: false
       properties:
         schema_version: {type: integer}
         generated_at: {type: string, format: date-time}
@@ -2604,7 +2612,7 @@ components:
         mode: {$ref: "#/components/schemas/ModeValue"}
         language: {type: string, enum: [en, es]}
         session: {type: string, enum: [none, portal, full]}
-        emergency_number: {type: string}
+        emergency_number: {type: string, maxLength: 20}
         power:
           type: object
           required: [on_ac, battery_pct, minutes_left, state, low, critical]
@@ -2620,13 +2628,126 @@ components:
         brain:
           type: object
           required: [loaded, loading, choices]
-          additionalProperties: true
+          additionalProperties: false
           properties:
-            loaded: {type: array, items: {type: object, additionalProperties: true}}
-            loading: {type: [object, "null"], additionalProperties: true}
-            choices: {type: array, items: {type: object, additionalProperties: true}}
-        capabilities: {type: object, additionalProperties: true}
-        first_aid: {type: array, items: {type: object, additionalProperties: true}}
+            loaded: {type: array, items: {$ref: "#/components/schemas/PortalModel"}}
+            loading: {type: [object, "null"], description: "The model that is starting, or null.", additionalProperties: false, properties: {id: {type: string}, display_name: {type: string}, roles: {type: array, items: {type: string}}, vision: {type: boolean}}}
+            choices:
+              description: "Catalog llama models of the profile; survival ones first."
+              type: array
+              items:
+                type: object
+                required: [id, display_name, summary, roles, vision, loadable, survival]
+                additionalProperties: false
+                properties:
+                  id: {type: string}
+                  display_name: {type: string}
+                  summary: {type: string}
+                  roles: {type: array, items: {type: string}}
+                  vision: {type: boolean}
+                  loadable: {type: boolean}
+                  survival: {type: boolean}
+                  speed_hint: {type: string, enum: [fast, medium, slow]}
+        capabilities:
+          description: "survival-portal.md section 4.2. code is present only when a problem causes the state (needs_switch has none)."
+          type: object
+          required: [chat, photo, talk, library, maps, manuals]
+          additionalProperties: false
+          properties:
+            chat:
+              type: object
+              required: [state]
+              additionalProperties: false
+              properties:
+                state: {type: string, enum: [ready, degraded, unavailable]}
+                code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+                reason: {type: string}
+            photo:
+              type: object
+              required: [state]
+              additionalProperties: false
+              properties:
+                state: {type: string, enum: [ready, degraded, unavailable]}
+                code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+                reason: {type: string}
+                vision_model: {type: string, description: "Present with reason needs_switch: the model to switch to."}
+            talk:
+              type: object
+              required: [state, stt, tts_languages]
+              additionalProperties: false
+              properties:
+                state: {type: string, enum: [ready, degraded, unavailable]}
+                code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+                reason: {type: string}
+                stt: {type: boolean}
+                tts_languages: {type: array, items: {type: string, pattern: "^[a-z]{2,3}$"}}
+            library:
+              type: object
+              required: [state, books]
+              additionalProperties: false
+              properties:
+                state: {type: string, enum: [ready, degraded, unavailable]}
+                code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+                reason: {type: string}
+                books:
+                  type: array
+                  items:
+                    type: object
+                    required: [content_id, title, book, lang]
+                    additionalProperties: false
+                    properties:
+                      content_id: {type: string}
+                      title: {type: string}
+                      book: {type: string, description: "The undated kiwix book name."}
+                      lang: {type: string}
+            maps:
+              type: object
+              required: [state, search, gps]
+              additionalProperties: false
+              properties:
+                state: {type: string, enum: [ready, degraded, unavailable]}
+                code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+                reason: {type: string}
+                search: {type: boolean}
+                gps: {type: boolean}
+            manuals:
+              type: object
+              required: [state, items]
+              additionalProperties: false
+              properties:
+                state: {type: string, enum: [ready, degraded, unavailable]}
+                code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+                reason: {type: string}
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, title, url]
+                    additionalProperties: false
+                    properties:
+                      id: {type: string}
+                      title: {type: string}
+                      url: {type: string, pattern: "^/docs/"}
+        first_aid:
+          description: "Empty until PORTAL-11."
+          type: array
+          items:
+            type: object
+            required: [key, title, url, available]
+            additionalProperties: false
+            properties:
+              key: {type: string}
+              title: {type: string}
+              url: {type: string}
+              available: {type: boolean}
+        ark:
+          type: object
+          required: [overall, survival_capable, drive_connected]
+          additionalProperties: false
+          properties:
+            overall: {type: string, enum: [green, yellow, red, unknown]}
+            survival_capable: {type: boolean}
+            drive_connected: {type: boolean}
         alerts:
           type: array
           items:
@@ -2638,6 +2759,16 @@ components:
               severity: {$ref: "#/components/schemas/Severity"}
               title: {type: string}
               fix: {type: string}
+
+    PortalModel:
+      type: object
+      required: [id, display_name, roles, vision]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        display_name: {type: string}
+        roles: {type: array, items: {type: string}}
+        vision: {type: boolean}
 
     Hardware:
       description: "GET /hardware (agent.md section 3.8.6)."
