@@ -34,8 +34,8 @@ t "valid flags are all accepted" 0 "==> [15/15]" dry --node-id ai-n4 --profile d
   --no-migrate --yes --pin-file "$INST" --inventory "$INST" --keep-inventory --no-hardening --no-ssh --no-polkit --no-tailscale \
   --no-sync --serve-pattern A --reboot --enroll-file "$INST"
 t "from-ark, desktop-user and agent-sha256" 0 "source: ark:$w" dry --from-ark "$w" --desktop-user root --agent-sha256 "$fakehex"
-t "repair is parsed and says not implemented" 0 "NOT IMPLEMENTED YET: --repair" dry --repair
-t "uninstall with its modifiers is parsed" 0 "NOT IMPLEMENTED YET: --uninstall" dry --uninstall --purge-config --purge-content --revert-hardening --restore-legacy
+t "repair is parsed (dry run)" 0 "[dry-run] would run: aictl doctor" dry --repair
+t "uninstall with its modifiers is parsed (dry run)" 0 "Summary:" dry --uninstall --purge-config --purge-content --revert-hardening
 t "unknown flag -> 2" 2 "unknown argument '--bogus'" dry --bogus
 t "positional argument -> 2" 2 "unknown argument" dry extra
 t "flag without value -> 2" 2 "needs a value" dry --node-id
@@ -148,6 +148,180 @@ mkdir -p "$w/bin"
 printf '#!/bin/sh\nprintf "Inst fake-pkg-a (1.0 Ubuntu)\\nInst fake-pkg-b (2.0 Ubuntu)\\n"\n' >"$w/bin/apt-get"; chmod +x "$w/bin/apt-get"
 t "apt_or_say lists the packages apt would install" 0 "[dry-run] would install 2 package(s) with apt-get: fake-pkg-a fake-pkg-b" bash -c 'export PATH="$2:$PATH"; source "$1"; DRY_RUN=1; apt_or_say lai-test-no-such-pkg' _ "$INST" "$w/bin"
 t "apt_or_say skips what is installed" 0 "already installed: bash" bash -c 'source "$1"; DRY_RUN=1; apt_or_say bash' _ "$INST"
+
+echo "== uninstall and repair (INST-08; fake root, fake systemctl/tailscale/aictl/userdel/groupdel)"
+FB="$w/fakebin"; mkdir -p "$FB"; CALLS="$w/calls.log"
+for c in tailscale aictl userdel groupdel; do
+  printf '#!/bin/sh\necho "%s $*" >>"%s"\nexit 0\n' "$c" "$CALLS" >"$FB/$c"; chmod +x "$FB/$c"
+done
+cat >"$FB/systemctl" <<FAKE
+#!/bin/sh
+# records the call and, for the llama-qwen start, what the disk looked like at that moment
+echo "systemctl \$*" >>"$CALLS"
+case "\$*" in
+  *"enable --now llama-qwen"*)
+    k="\$LAI_INSTALL_ROOT/etc/llama-qwen/api-key"
+    if [ -f "\$k" ] && [ ! -L "\$k" ]; then echo "STATE key-real-file" >>"$CALLS"; fi
+    if [ -d "\$LAI_INSTALL_ROOT/etc/localai" ]; then echo "STATE etc-localai-present" >>"$CALLS"; fi
+    if [ -d "\$LAI_INSTALL_ROOT/opt/localai" ]; then echo "STATE opt-localai-present" >>"$CALLS"; fi
+    if [ -f "\$LAI_INSTALL_ROOT/etc/systemd/system/llama-qwen.service" ]; then echo "STATE unit-restored" >>"$CALLS"; fi ;;
+esac
+if [ -n "\$FAKE_SYSTEMCTL_FAIL" ]; then case "\$*" in *"\$FAKE_SYSTEMCTL_FAIL"*) exit 1;; esac; fi
+exit 0
+FAKE
+chmod +x "$FB/systemctl"
+FR="$w/fr"
+mkroot() { # mkroot [legacy]
+  rm -rf "$FR" "$w/answers"; : >"$CALLS"
+  mkdir -p "$FR/etc/localai" "$FR/var/lib/localai/install" "$FR/srv/localai/models" "$FR/opt/localai/bin" "$FR/opt/localai/installers" \
+    "$FR/etc/systemd/system/localai-llama.service.d" "$FR/usr/local/bin" "$FR/usr/local/sbin" "$FR/etc/polkit-1/rules.d" "$FR/etc/llama-qwen"
+  printf 'KEYKEYKEY\n' >"$FR/etc/localai/api-key"; chmod 600 "$FR/etc/localai/api-key"
+  printf 'node_id: ai-n4\ntailscale:\n  serve_pattern: B\n' >"$FR/etc/localai/node.yaml"
+  printf 'nodcred\n' >"$FR/etc/localai/cloud-credential"
+  : >"$FR/srv/localai/models/m.gguf"; : >"$FR/opt/localai/bin/aiagent"
+  printf '#!/bin/sh\n' >"$FR/opt/localai/installers/install-node.sh"; chmod 755 "$FR/opt/localai/installers/install-node.sh"
+  ln -s /opt/localai/installers/install-node.sh "$FR/usr/local/sbin/install-node.sh"
+  ln -s /opt/localai/bin/aiagent "$FR/usr/local/bin/aictl"
+  : >"$FR/etc/polkit-1/rules.d/50-localai-operators.rules"
+  for u in agent llama kiwix whisper; do : >"$FR/etc/systemd/system/localai-$u.service"; done
+  : >"$FR/etc/systemd/system/localai-sync.timer"
+  ln -s /etc/localai/api-key "$FR/etc/llama-qwen/api-key"
+  printf '{}\n' >"$FR/var/lib/localai/install/state.json"
+  if [[ "${1:-}" == legacy ]]; then
+    mkdir -p "$FR/var/lib/localai/migration/llama-qwen"; printf '[Service]\nExecStart=/bin/true\n' >"$FR/var/lib/localai/migration/llama-qwen/llama-qwen.service"
+    ln -s /dev/null "$FR/etc/systemd/system/llama-qwen.service"
+  fi
+}
+# unenv: the environment of a run on the fake root. un <answers...> -- <args...> feeds the prompts in order.
+unenv() { PATH="${UN_PATH:-$FB}:$PATH" LAI_INSTALLER_DEV=1 LAI_INSTALL_ROOT="$FR" LAI_INSTALL_ANSWERS="$w/answers" LAI_INSTALL_SELF="$STAMPED" \
+    LAI_INSTALL_STATE_DIR="$FR/var/lib/localai/install" LAI_INSTALL_SYSTEMD_DIR="$FR/etc/systemd/system" "$@"; }
+un() {
+  local ans=()
+  while [[ "$1" != "--" ]]; do ans+=("$1"); shift; done; shift
+  : >"$w/answers"; [[ ${#ans[@]} -eq 0 ]] || printf '%s\n' "${ans[@]}" >"$w/answers"
+  unenv "$STAMPED" --log "$w/un.log" "$@"
+}
+calls_has() { grep -qF -- "$1" "$CALLS"; }
+calls_lacks() { ! grep -qE -- "$1" "$CALLS"; }
+
+mkroot
+t "uninstall: answering n aborts with exit 4, nothing changed" 4 "Not confirmed" un n -- --uninstall
+t "  ...and everything is still there" 0 "" test -e "$FR/opt/localai/bin/aiagent" -a -e "$FR/etc/systemd/system/localai-agent.service"
+t "uninstall: --yes does not answer the question (no answer = exit 4)" 4 "Not confirmed" un -- --uninstall --yes
+t "  ...nothing called systemctl" 0 "" test ! -s "$CALLS"
+t "uninstall: plain run exits 0" 0 "Local AI has been removed" un y -- --uninstall
+t "  unit files are gone" 0 "" test -z "$(ls "$FR"/etc/systemd/system/localai-* 2>/dev/null)"
+t "  /opt/localai (incl. installers/) is gone" 0 "" test ! -e "$FR/opt/localai"
+t "  aictl link, sbin install-node.sh link, polkit rule are gone" 0 "" test ! -L "$FR/usr/local/bin/aictl" -a ! -L "$FR/usr/local/sbin/install-node.sh" -a ! -e "$FR/etc/polkit-1/rules.d/50-localai-operators.rules"
+t "  /etc/localai, /var/lib/localai and /srv/localai survive" 0 "" test -f "$FR/etc/localai/api-key" -a -f "$FR/etc/localai/node.yaml" -a -d "$FR/var/lib/localai" -a -f "$FR/srv/localai/models/m.gguf"
+t "  the phase record is dropped so a reinstall re-runs" 0 "" test ! -e "$FR/var/lib/localai/install/state.json"
+t "  units disabled, as in the spec" 0 "" calls_has "systemctl disable --now localai-sync.timer"
+t "  daemon-reload ran" 0 "" calls_has "systemctl daemon-reload"
+t "  unenrolled (cloud credential present)" 0 "" calls_has "aictl cloud unenroll --yes"
+t "  Tailscale Serve pattern B listener removed" 0 "" calls_has "tailscale serve --https=443 off"
+t "  user and group kept without --purge-config" 0 "" calls_lacks '^(userdel|groupdel)'
+
+mkroot
+t "purge-config needs DELETE: a wrong word aborts (exit 4)" 4 "you did not type DELETE" un y delete -- --uninstall --purge-config
+t "  ...and nothing was removed" 0 "" test -d "$FR/etc/localai" -a -e "$FR/opt/localai/bin/aiagent"
+t "purge-config: --yes does not skip the DELETE prompt" 4 "you did not type DELETE" un y -- --uninstall --purge-config --yes
+t "purge-config with DELETE removes config and state" 0 "config and state were deleted" un y DELETE -- --uninstall --purge-config
+t "  /etc/localai and /var/lib/localai are gone, content stays" 0 "" test ! -e "$FR/etc/localai" -a ! -e "$FR/var/lib/localai" -a -f "$FR/srv/localai/models/m.gguf"
+t "  userdel localai and groupdel localai-operators ran" 0 "" bash -c 'grep -q "^userdel localai" "$1" && grep -q "^groupdel localai-operators" "$1"' _ "$CALLS"
+
+mkroot
+t "purge-content asks for DELETE and shows the size" 0 "of models and content" un y DELETE -- --uninstall --purge-content
+t "  /srv/localai is gone, /etc/localai stays" 0 "" test ! -e "$FR/srv/localai" -a -d "$FR/etc/localai"
+mkroot
+t "purge-content with a wrong word aborts (exit 4)" 4 "you did not type DELETE" un y no -- --uninstall --purge-content
+t "  ...content intact" 0 "" test -f "$FR/srv/localai/models/m.gguf"
+t "both purges: DELETE is asked twice and both trees go" 0 "config and state were deleted" un y DELETE DELETE -- --uninstall --purge-config --purge-content
+t "  all three trees are gone" 0 "" test ! -e "$FR/etc/localai" -a ! -e "$FR/srv/localai" -a ! -e "$FR/var/lib/localai"
+
+mkroot legacy
+out="$(un y DELETE -- --uninstall --restore-legacy --purge-config 2>&1)"; rc=$?
+t "restore-legacy + purge-config exits 0" 0 "" test $rc -eq 0
+t "  llama-qwen was started" 0 "" calls_has "systemctl enable --now llama-qwen.service"
+t "  at that moment the key was already a real file" 0 "" calls_has "STATE key-real-file"
+t "  at that moment /etc/localai and /opt/localai still existed (started before steps 6-7)" 0 "" bash -c 'grep -q "STATE etc-localai-present" "$1" && grep -q "STATE opt-localai-present" "$1"' _ "$CALLS"
+t "  at that moment the unit was already restored" 0 "" calls_has "STATE unit-restored"
+t "  the unit content came from the migration backup" 0 "" grep -q "ExecStart=/bin/true" "$FR/etc/systemd/system/llama-qwen.service"
+t "  the mask link was replaced by a real file" 0 "" test ! -L "$FR/etc/systemd/system/llama-qwen.service"
+t "  /etc/llama-qwen/api-key is a real 0600 file with the key, after /etc/localai is gone" 0 "" bash -c '[ ! -L "$1" ] && [ -f "$1" ] && [ "$(stat -c %a "$1")" = 600 ] && grep -q KEYKEYKEY "$1" && [ ! -e "$2" ]' _ "$FR/etc/llama-qwen/api-key" "$FR/etc/localai"
+t "  unmask ran before enable" 0 "" bash -c 'u=$(grep -n "unmask llama-qwen" "$1" | head -1 | cut -d: -f1); e=$(grep -n "enable --now llama-qwen" "$1" | head -1 | cut -d: -f1); [ -n "$u" ] && [ "$u" -lt "$e" ]' _ "$CALLS"
+t "  Tailscale Serve is left alone" 0 "" calls_lacks '^tailscale'
+t "  the summary says it was restored" 0 "" grep -q "old llama-qwen service was restored" <<<"$out"
+mkroot legacy
+: >"$w/answers"; printf 'y\nDELETE\n' >"$w/answers"
+t "restore-legacy start failure exits 1 with LAI-INS-080" 1 "LAI-INS-080" env FAKE_SYSTEMCTL_FAIL="enable --now llama-qwen" "$(command -v env)" PATH="$FB:$PATH" LAI_INSTALLER_DEV=1 LAI_INSTALL_ROOT="$FR" LAI_INSTALL_ANSWERS="$w/answers" LAI_INSTALL_STATE_DIR="$FR/var/lib/localai/install" LAI_INSTALL_SYSTEMD_DIR="$FR/etc/systemd/system" "$STAMPED" --log "$w/un.log" --uninstall --restore-legacy --purge-config
+t "  ...nothing under /etc/localai or /opt/localai was removed" 0 "" test -f "$FR/etc/localai/api-key" -a -e "$FR/opt/localai/bin/aiagent"
+mkroot
+t "restore-legacy without a saved copy warns and goes on" 0 "no saved llama-qwen.service" un y -- --uninstall --restore-legacy
+t "  ...no llama-qwen start was attempted" 0 "" calls_lacks 'llama-qwen'
+mkroot legacy; rm -f "$FR/etc/localai/api-key"
+t "restore-legacy with the key missing: LAI-INS-080 before any change" 1 "LAI-INS-080" un y -- --uninstall --restore-legacy
+t "  ...everything still installed" 0 "" test -e "$FR/opt/localai/bin/aiagent"
+t "restore-legacy with purge-content conflicts (exit 2)" 2 "conflict" un y -- --uninstall --restore-legacy --purge-content
+mkroot
+sed -i "s/serve_pattern: B/serve_pattern: A/" "$FR/etc/localai/node.yaml"
+t "tailscale pattern A removes the tcp listener" 0 "" un y -- --uninstall
+t "  ...the --tcp=18080 one" 0 "" calls_has "tailscale serve --tcp=18080 off"
+mkroot
+t "revert-hardening says plainly when it is not available yet" 0 "NOT reverted" un y -- --uninstall --revert-hardening
+t "revert-hardening is called when INST-03 defines it" 0 "HARDENING-REVERTED" bash -c 'source "$1"; revert_hardening() { echo HARDENING-REVERTED; }; declare -F revert_hardening >/dev/null && revert_hardening' _ "$INST"
+
+echo "== uninstall safety guards"
+sg() { bash -c 'source "$1"; LOG_OPEN=; DRY_RUN=0; shift; safe_rm_rf "$@"' _ "$INST" "$@"; }
+mkdir -p "$w/g/opt/localai" "$w/g/home/x"
+t "guard: an empty path is refused (LAI-INS-081)" 1 "LAI-INS-081" sg "$w/g" ""
+t "guard: / is refused" 1 "LAI-INS-081" sg "$w/g" "/"
+t "guard: /home is refused" 1 "LAI-INS-081" sg "$w/g" "/home/x"
+t "guard: a relative path is refused" 1 "LAI-INS-081" sg "$w/g" "opt/localai"
+t "guard: /opt/localai/../x is refused" 1 "LAI-INS-081" sg "$w/g" "/opt/localai/../x"
+t "guard: nothing was deleted by the refusals" 0 "" test -d "$w/g/opt/localai" -a -d "$w/g/home/x"
+t "guard: an allowed tree is removed" 0 "" bash -c 'source "$1"; LOG_OPEN=; DRY_RUN=0; safe_rm_rf "$2" /opt/localai && test ! -e "$2/opt/localai"' _ "$INST" "$w/g"
+
+echo "== uninstall dry run"
+mkroot legacy
+before="$(find "$FR" -printf '%p %m %l\n' | sort | md5sum)"
+dryun() { unenv "$STAMPED" --dry-run --log "$w/un.log" "$@"; }
+out="$(dryun --uninstall --restore-legacy --purge-config --revert-hardening 2>&1)"
+t "dry-run uninstall says what it would remove" 0 "" grep -qF -- "[dry-run] would run: rm -rf -- $FR/opt/localai" <<<"$out"
+t "  would ask for DELETE but does not" 0 "" grep -q "would ask you to type DELETE" <<<"$out"
+t "  the fake root is identical afterwards" 0 "" test "$before" = "$(find "$FR" -printf '%p %m %l\n' | sort | md5sum)"
+t "  no state-changing command really ran (only reads)" 0 "" calls_lacks 'disable|enable|unmask|daemon-reload|userdel|groupdel|tailscale|unenroll'
+
+echo "== repair"
+mkroot
+printf 'OLD MODIFIED\n' >"$FR/opt/localai/installers/install-node.sh"; chmod 777 "$FR/opt/localai/installers/install-node.sh"
+rm -f "$FR/usr/local/sbin/install-node.sh"
+secret_before="$(cat "$FR"/etc/localai/* | sha256sum)"
+out="$(un -- --repair 2>&1)"; rc=$?
+t "repair exits 0 (the fake aictl doctor is clean)" 0 "" test $rc -eq 0
+t "  the modified installed install-node.sh is replaced by this copy, mode 0755" 0 "" bash -c 'cmp -s "$1" "$2" && [ "$(stat -c %a "$2")" = 755 ]' _ "$STAMPED" "$FR/opt/localai/installers/install-node.sh"
+t "  the old copy was backed up first" 0 "" test -n "$(find "$FR/var/lib/localai/install/backup" -name install-node.sh 2>/dev/null)"
+t "  the deleted /usr/local/sbin symlink is back" 0 "" test "$(readlink "$FR/usr/local/sbin/install-node.sh")" = /opt/localai/installers/install-node.sh
+t "  aictl doctor ran at the end" 0 "" calls_has "aictl doctor"
+t "  identity, secrets and content are unchanged" 0 "" test "$secret_before" = "$(cat "$FR"/etc/localai/* | sha256sum)" -a -f "$FR/srv/localai/models/m.gguf"
+t "  phases ran in repair mode" 0 "REPAIR_MODE=1" bash -c 'source "$1"; REPAIR_MODE=1; echo REPAIR_MODE=$REPAIR_MODE' _ "$INST"
+snap() { find "$FR" -not -path '*/backup*' -not -name state.json -not -name '.state.*' -printf '%p %m %l\n' | sort | md5sum; }
+before="$(snap)"
+un -- --repair >/dev/null 2>&1
+t "repair is idempotent (second run changes no file, mode or link)" 0 "" test "$before" = "$(snap)"
+t "  second run says the installer copy is already up to date" 0 "already up to date" un -- --repair
+t "repair does not trust 'done' in state.json: all 15 phases run again" 0 "==> [15/15]" un -- --repair
+mkdir -p "$w/fb2"; printf '#!/bin/sh\nexit 3\n' >"$w/fb2/aictl"; chmod +x "$w/fb2/aictl"
+failing_doctor() { UN_PATH="$w/fb2" unenv "$STAMPED" --log "$w/un.log" --repair; }
+t "repair: a failing aictl doctor makes repair exit 1" 1 "still reports problems" failing_doctor
+mkroot
+printf 'OLD\n' >"$FR/opt/localai/installers/install-node.sh"; b="$(md5sum <"$FR/opt/localai/installers/install-node.sh")"
+t "repair --dry-run shows the diff" 0 "[dry-run] would change" dryun --repair
+t "  ...and changed nothing" 0 "" test "$b" = "$(md5sum <"$FR/opt/localai/installers/install-node.sh")"
+cp "$STAMPED" "$FR/opt/localai/installers/install-node.sh"
+t "repair run from the installed copy itself says it cannot judge it" 0 "uses the installed copy itself" unenv env -u LAI_INSTALL_SELF "$FR/opt/localai/installers/install-node.sh" --log "$w/un.log" --repair
+mkdir -p "$w/ark/localai/kit/installers"; printf 'KITCOPY\n' >"$w/ark/localai/kit/installers/install-node.sh"
+t "repair from the installed copy takes the kit copy with --from-ark" 0 "" unenv env -u LAI_INSTALL_SELF "$FR/opt/localai/installers/install-node.sh" --log "$w/un.log" --from-ark "$w/ark" --repair
+t "  ...and installed it" 0 "" grep -q KITCOPY "$FR/opt/localai/installers/install-node.sh"
 
 echo "== release stamping"
 if command -v minisign >/dev/null 2>&1; then

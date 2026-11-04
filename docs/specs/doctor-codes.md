@@ -479,6 +479,8 @@ The script reads the `codes.go` layout described in its header: a const block (`
 | LAI-INS-050 | error (warning in doctor) | Tailscale serve pattern doesn't match the inventory | Use `--serve-pattern` with the value in the inventory. |
 | LAI-INS-060 | warning | The admin PIN wasn't set | Run `sudo aictl pin set`. |
 | LAI-INS-070 | info | A reboot is needed to finish the install | Reboot when convenient. |
+| LAI-INS-080 | error | Putting the old llama-qwen service back failed | Nothing under /etc/localai was removed. Read the message above, fix it, and run the same --uninstall command again. |
+| LAI-INS-081 | error | The uninstaller refused to delete a path it does not own | Nothing was deleted. Report the log at /var/log/localai-install.log. |
 
 ### `LAI-KIT` — owner: [rebuild-kit.md](rebuild-kit.md)
 > Copied from [rebuild-kit.md](rebuild-kit.md) §8 (authoritative; Spanish fixes are there).
