@@ -11,6 +11,7 @@ import { Brain } from "./screens/Brain";
 import { Home } from "./screens/Home";
 import { Status } from "./screens/Status";
 import { LockDialog } from "./screens/LockDialog";
+import { mapsManualsBody, useHelpRedirect } from "./screens/mapsManuals";
 import { Stub } from "./screens/Stub";
 import { Talk } from "./screens/Talk";
 import { Unavailable } from "./screens/Unavailable";
@@ -54,6 +55,7 @@ export function App() {
   const screen = useScreen();
   const status = state.status;
   const view = viewFor(screen, status);
+  useHelpRedirect(screen, status);
   const loc = useLocation();
   const reading = loc.split("?")[0].replace(/\/+$/, "") === "/portal/read";
 
@@ -108,7 +110,7 @@ export function App() {
         ) : view.screen === "brain" && status ? (
           <Brain status={status} />
         ) : (
-          <Stub screen={view.screen} />
+          (mapsManualsBody(view.screen, status) ?? <Stub screen={view.screen} />)
         );
     }
   }

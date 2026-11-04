@@ -34,6 +34,9 @@ export function viewFor(
   if (status && NEEDS_SESSION.has(screen) && status.session === "none")
     return { kind: "lock" };
   const cap = CAP_OF[screen];
+  // No manuals on disk: the button opens the built-in emergency page (survival-portal.md section 4.8).
+  if (screen === "manuals" && status?.capabilities.manuals?.state === "unavailable")
+    return { kind: "screen", screen: "help" };
   if (status && cap && status.capabilities[cap]?.state === "unavailable")
     return { kind: "unavailable", cap };
   return { kind: "screen", screen };

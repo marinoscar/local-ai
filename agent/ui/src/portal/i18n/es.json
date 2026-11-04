@@ -173,6 +173,7 @@
   "brain.ready": "{name} está funcionando.",
   "banner.startFailed": "No se pudo iniciar el modo supervivencia. Intente otra vez.",
   "manuals.none": "Los manuales no están instalados. Conecte el disco del arca.",
+  "manuals.degraded": "Estos manuales se hicieron sin los valores reales de esta computadora. Las direcciones aparecen como marcadores, no como valores reales.",
   "library.searchButton": "Buscar",
   "library.failed": "La búsqueda no funcionó. Intente de nuevo.",
   "reader.frame": "Artículo"

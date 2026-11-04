@@ -271,6 +271,8 @@ Opens `/maps/` ([companion-services.md](companion-services.md) §4.4.3) inside t
 ```
 Items come from `capabilities.manuals.items` (rendered runbooks under `/docs/`). They open in the reader frame. "Print the Survival card" opens the PDF (`/docs/survival-card-<node-id>.pdf`).
 
+*Details (PORTAL-10):* the grid order is survival (`01-…`), rebuild offline (`06-…`), troubleshooting (`07-…`), every other item in the order the agent sent it, then the card button and "All manuals …" (`/docs/`). Items, the card and the list open in the reader (`/portal/read?src=…&back=/portal/manuals`). The card button asks the agent with a `HEAD` for the PDF; on any non-2xx answer or no answer it opens the `.html` card instead, and with no usable `node_id` in the status it opens `/docs/`. When the capability is `degraded` with `LAI-SYN-062` a note (`manuals.degraded`) says addresses appear as placeholders. When the capability is `unavailable`, `/portal/manuals` shows the built-in page of §4.8 (`/portal/help`) instead of the unavailable screen, and every other unavailable screen has an "Emergency help" button to it. `/portal/maps` is the reader frame on `/maps/` (the viewer owns the search, Where am I and Nearest controls); with no map the unavailable screen shows `maps.none` and `LAI-SVC-030`.
+
 #### 4.1.8 Status and battery (button 7)
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -593,6 +595,7 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `brain.ready` | {name} is running. | {name} está funcionando. |
 | `banner.startFailed` | Could not start survival mode. Try again. | No se pudo iniciar el modo supervivencia. Intente otra vez. |
 | `manuals.none` | The manuals are not installed. Plug in the ark drive. | Los manuales no están instalados. Conecte el disco del arca. |
+| `manuals.degraded` | These manuals were made without this computer's real settings. Addresses appear as placeholders, not real values. | Estos manuales se hicieron sin los valores reales de esta computadora. Las direcciones aparecen como marcadores, no como valores reales. |
 
 Doctor-code titles and fixes come from the agent in the UI language (§3.5).
 
