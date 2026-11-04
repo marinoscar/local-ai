@@ -2,7 +2,9 @@ import { useEffect, useRef } from "react";
 import { Shell } from "./components/Shell";
 import { t, useLang } from "./i18n/i18n";
 import { setScale, stepScale, useScale } from "./prefs";
-import { navigate, useScreen } from "./router";
+import { navigate, useLocation, useScreen } from "./router";
+import { Library } from "./screens/Library";
+import { Reader } from "./screens/Reader";
 import { ChatInterstitial } from "./screens/ChatInterstitial";
 import { Home } from "./screens/Home";
 import { LockDialog } from "./screens/LockDialog";
@@ -48,6 +50,8 @@ export function App() {
   const screen = useScreen();
   const status = state.status;
   const view = viewFor(screen, status);
+  const loc = useLocation();
+  const reading = loc.split("?")[0].replace(/\/+$/, "") === "/portal/read";
 
   useEffect(() => {
     document.title = t("app.title");
@@ -65,7 +69,12 @@ export function App() {
   }, [screen]);
 
   let body;
-  switch (view.kind) {
+  if (reading) {
+    body = (
+      <Reader search={loc.includes("?") ? loc.slice(loc.indexOf("?")) : ""} />
+    );
+  } else {
+    switch (view.kind) {
     case "home":
       body = <Home status={status} dialogOpen={false} />;
       break;
@@ -84,9 +93,12 @@ export function App() {
       body =
         view.screen === "chat" ? (
           <ChatInterstitial status={status} />
+        ) : view.screen === "library" ? (
+          <Library status={status} />
         ) : (
           <Stub screen={view.screen} />
         );
+    }
   }
   return (
     <Shell state={state} home={view.kind === "home" || view.kind === "lock"}>
