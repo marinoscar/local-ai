@@ -206,6 +206,8 @@ File: `apps/cloud/apps/api/prisma/fragments/localai.prisma`. Then `npm run db:co
 - **Dropped starter tables.** The same migration drops `notes` and `documents` (the models left the composed schema in CLOUD-01) and runs inside the `app.rls_bypass` transaction form because `documents` is a row-level-security table; the `documents_org_isolation` entry left `platform.lock` `rlsPolicies` with it. `android_app_releases` stays (the `android-app` fragment is still composed).
 - **Tests.** `test/localai/indexes.db.spec.ts` (the three indexes and the settings seed, in rolled-back transactions) and `test/localai/ownership.spec.ts`.
 
+**As built (GW-01, #136).** The gateway models are in their own fragment, `prisma/fragments/localai-gateway.prisma` (migration `20261104215031_add_localai_gateway`); the listing is [gateway.md](gateway.md) §3.6, whose "As built (GW-01)" block says where the registrations live. In this registry `LocalaiGatewayKey` is kind `user` (the one user-owned Local AI model: purge `delete`, export without the hash) and the other three gateway tables are `system`, so the CLOUD-04 sentence above that every model is app-owned `system` holds for all but the key.
+
 ```prisma
 // ---------------------------------------------------------------------------
 // Local AI nodes. One row per lab node id (ai-n<N>). Extends EAB worker_nodes.
