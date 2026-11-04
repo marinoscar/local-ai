@@ -92,3 +92,22 @@ export const POLICY_TYPES = Object.keys(COMMAND_POLICY) as CommandType[];
 type _SameKeys = Exclude<keyof typeof COMMANDS, keyof typeof COMMAND_POLICY> | Exclude<keyof typeof COMMAND_POLICY, keyof typeof COMMANDS>;
 const _sameKeys: [_SameKeys] extends [never] ? true : never = true;
 void _sameKeys;
+
+/** Who is asking: the user and the effective permissions of the credential (system grants plus the org role). */
+export interface CommandRequester {
+  userId: string;
+  permissions: readonly string[];
+}
+
+/** The permission a caller needs to send (or cancel) a command of `type`: the policy table's, never invented. */
+export function permissionFor(type: CommandType): CommandPolicy['permission'] {
+  return COMMAND_POLICY[type].permission;
+}
+
+/**
+ * Whether the caller holds the permission the policy table names for `type`. Exact: `lab:admin` does not stand in
+ * for `lab:operate` (the table in spec 3.4 grants them separately; the lab owner holds both).
+ */
+export function maySend(type: CommandType, permissions: readonly string[]): boolean {
+  return permissions.includes(permissionFor(type));
+}
