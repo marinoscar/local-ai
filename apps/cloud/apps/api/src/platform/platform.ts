@@ -14,6 +14,8 @@
 // core's `maintenance` namespace is registered by `PlatformHostCoreModule.forRoot()`,
 // first in PLATFORM_MODULES, so before `SettingsModule.forRoot()` too.)
 import './storage.settings';
+// The `localai` namespace (lab alert thresholds, catalog source, gateway defaults): src/localai/localai.settings.ts.
+import '../localai/localai.settings';
 // Everything the enabled slices add to the registries (settings namespaces,
 // credential purposes, storage prefixes, notifications, onboarding steps...).
 // Before the first `forRoot()` below, and never from `onModuleInit`.
