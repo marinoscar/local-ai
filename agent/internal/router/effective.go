@@ -70,7 +70,7 @@ func (p ManifestPresence) Present(root string, m *catalog.Model) bool {
 	if p.FS == nil || m == nil || root == "" {
 		return false
 	}
-	mf := modelDir(root, m.ID) + "/MANIFEST.json"
+	mf := itemDir(root, m) + "/MANIFEST.json"
 	info, err := p.FS.Stat(mf)
 	if err != nil || !info.Mode().IsRegular() || info.Size() > maxManifestBytes {
 		return false
@@ -109,6 +109,20 @@ func (p ManifestPresence) Present(root string, m *catalog.Model) bool {
 		}
 	}
 	return true
+}
+
+// itemDir is where the sync engine keeps a model on a root (overview.md section 3.3, ark-sync.md section
+// 4.11): llama models in models/<id>, whisper models in speech/whisper/<id>, piper voices in
+// speech/piper/<id>.
+func itemDir(root string, m *catalog.Model) string {
+	base := strings.TrimRight(root, "/")
+	switch m.Engine {
+	case "whisper":
+		return base + "/speech/whisper/" + m.ID
+	case "piper":
+		return base + "/speech/piper/" + m.ID
+	}
+	return modelDir(root, m.ID)
 }
 
 // modelDir is <root>/models/<id>.
