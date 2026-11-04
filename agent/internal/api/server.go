@@ -52,6 +52,10 @@ type Options struct {
 	Auth Authenticator
 	// Registry holds the routes. Nil means DefaultRegistry.
 	Registry *Registry
+	// Guard, when set, runs for every request authenticated as a Portal session, after the route's
+	// Auth list and the CSRF rule accepted it and before the handler: PORTAL-02 enforces the
+	// per-session rate limits here (survival-portal.md section 3.3). An error answers the request.
+	Guard func(w http.ResponseWriter, r *http.Request, rt *Route, p Principal) error
 	// Logger receives the access log and the lifecycle messages; the server adds component=api.
 	// Nil: slog.Default.
 	Logger *slog.Logger

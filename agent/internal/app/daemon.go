@@ -17,6 +17,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/maps"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/modes"
+	"github.com/marinoscar/local-ai/agent/internal/portal"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"github.com/marinoscar/local-ai/agent/internal/svc/kiwix"
@@ -84,6 +85,9 @@ type Daemon struct {
 	gauges     *gauges
 	sdeps      statusapi.Deps
 	merger     *statusapi.ModelMerger
+	portalOnce sync.Once
+	pSessions  *portal.Sessions
+	pMetrics   *portal.Metrics
 	syncEngine modelsapi.SyncEngine
 	ark        *arkStack // nil when the sync stack could not be built
 	piper      *piper.Service
