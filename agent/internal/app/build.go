@@ -160,6 +160,12 @@ func (d *Daemon) build(ctx context.Context) error {
 	kiwixSpec := health.KiwixSpec(prober, ports(), func() bool { return blockEnabled(cfg.Get(), "kiwix") })
 	d.kiwixStatus = kiwix.NewStatus()
 	d.kiwixStatus.Attach(kiwixSpec.Probe.(*health.FuncProbe), kiwix.HTTPFetcher{}, func() int { return cfg.Get().Ports.Kiwix })
+	d.whisperSTT = whisper.NewSTT(whisper.STTDeps{
+		Config:  func() whisper.STTConfig { return whisper.STTConfigFrom(cfg.Get()) },
+		Port:    func() int { return cfg.Get().Ports.Whisper },
+		ModelID: func() string { return whisper.EnvModelID(d.c.Paths.Join(whisper.EnvPath), nil) },
+		Now:     clock.Now, Metrics: metrics, Logger: log,
+	})
 	sup, err := health.New(health.Options{
 		Manager: c.Systemd, Publisher: c.Bus, Mode: d.modeName, Metrics: metrics, Clock: clock, Logger: log,
 		Specs: []health.Spec{
@@ -567,6 +573,7 @@ func (d *Daemon) buildServer() error {
 		{"library", func() error {
 			return reg.Add(kiwix.Routes(kiwix.NewProxy(kiwix.ProxyOptions{Port: c.Config.Get().Ports.Kiwix, Logger: d.log}))...)
 		}},
+		{"speech stt", func() error { return reg.Add(d.whisperSTT.Routes()...) }},
 	}
 	for _, r := range regs {
 		if err := r.add(); err != nil {

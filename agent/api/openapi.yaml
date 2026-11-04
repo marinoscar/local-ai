@@ -1601,12 +1601,12 @@ paths:
       operationId: speechToText
       summary: Transcribe audio
       description: |
-        Owned by companion-services.md section 3.4; the agent only routes it to whisper-server. The upload is
-        `multipart/form-data` (not JSON) and the limit is 25 MiB. agent.md section 3.8.25.
+        Owned by companion-services.md section 3.4 and 4.2.5. The upload is `multipart/form-data` (not JSON) and
+        the limit is 25 MiB. The agent decodes the WAV, averages the channels, resamples to 16 kHz and sends it
+        to whisper-server (one request in flight, two waiting). The transcript is never logged. Messages and
+        fixes follow `X-LocalAI-UI-Language`. agent.md section 3.8.25.
       x-localai-auth: [op, portal]
       x-localai-timeout: "120 s"
-      x-localai-status: planned
-      x-localai-issue: SVC-07
       requestBody:
         required: true
         content:
@@ -1625,12 +1625,12 @@ paths:
                 english: {value: {text: "How do I clean a deep cut?", language: en, language_probability: 0.97, duration_s: 3.2, model: whisper-small, elapsed_ms: 1840}}
         "400":
           $ref: "#/components/responses/InvalidRequest"
-          description: "LAI-SVC-014: not WAV, unsupported encoding, too long, empty or silent; LAI-AGT-020 malformed request."
+          description: "LAI-SVC-014: not WAV, unsupported encoding, too long, empty or silent (details.reason: not_wav, truncated, no_format_chunk, bad_format_chunk, unsupported_encoding, unsupported_channels, unsupported_rate, no_data_chunk, bad_block_align, empty, too_long, silent; silence also carries the message \"I couldn't hear anything. Try again closer to the microphone.\"); LAI-AGT-020 malformed multipart body, a duplicate audio part, a language that is not auto or a 2 to 3 letter code, or a prompt over 200 characters."
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "413":
           $ref: "#/components/responses/TooLarge"
-          description: "LAI-SVC-014 or LAI-AGT-025: larger than 25 MiB."
+          description: "LAI-SVC-014 (details.reason too_large): larger than 25 MiB."
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -1638,7 +1638,7 @@ paths:
         "500": {$ref: "#/components/responses/Internal"}
         "503":
           $ref: "#/components/responses/Starting"
-          description: "LAI-AGT-024 the agent is starting or stopping; LAI-SVC-010 no model; LAI-SVC-011 the server is down."
+          description: "LAI-AGT-024 the agent is starting or stopping; LAI-SVC-010 whisper-server cannot be reached and no model is installed; LAI-SVC-011 the server is down, answered with an error, or whisper.enabled is false (details.reason: connect, status, bad_reply, error_field, disabled)."
         "504":
           $ref: "#/components/responses/GatewayTimeout"
           description: "LAI-SVC-016: whisper took longer than 60 s."
