@@ -10,6 +10,8 @@ export interface FakeLlamaRequest {
   url: string;
   headers: IncomingHttpHeaders;
   body: string;
+  /** The body bytes exactly as received (a multipart upload is not valid UTF-8). */
+  rawBody: Buffer;
 }
 
 export type FakeLlamaBehaviour = (request: FakeLlamaRequest, response: ServerResponse, raw: IncomingMessage) => void | Promise<void>;
@@ -21,8 +23,12 @@ export function respondJson(response: ServerResponse, status: number, body: unkn
   response.end(payload);
 }
 
-/** A well-formed OK answer for the three endpoints, echoing the model it was asked for. */
+/** A well-formed OK answer for the four endpoints, echoing the model it was asked for. */
 export const okBehaviour: FakeLlamaBehaviour = (request, response) => {
+  if (request.url === '/v1/audio/transcriptions') {
+    respondJson(response, 200, { text: 'hola mundo' });
+    return;
+  }
   const body = JSON.parse(request.body) as { model?: string };
   if (request.url === '/v1/embeddings') {
     respondJson(response, 200, { object: 'list', model: body.model, data: [{ object: 'embedding', index: 0, embedding: [0.1, 0.2] }], usage: { prompt_tokens: 7, total_tokens: 7 } });
@@ -48,7 +54,8 @@ export class FakeLlama {
       raw.on('data', (chunk: Buffer) => chunks.push(chunk));
       raw.on('end', () => {
         const fake = holder.fake!;
-        const request: FakeLlamaRequest = { method: raw.method ?? '', url: raw.url ?? '', headers: raw.headers, body: Buffer.concat(chunks).toString('utf8') };
+        const rawBody = Buffer.concat(chunks);
+        const request: FakeLlamaRequest = { method: raw.method ?? '', url: raw.url ?? '', headers: raw.headers, body: rawBody.toString('utf8'), rawBody };
         fake.requests.push(request);
         response.on('close', () => {
           if (!response.writableFinished) fake.abortedAt.push(Date.now());
