@@ -1,0 +1,43 @@
+appId: cr.marin.localai.desktop
+productName: ai-desktop
+copyright: Copyright © 2026 Oscar Marin
+directories: { output: release, buildResources: build }
+asar: true
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+extraResources:
+  - { from: build/linux/icon.png, to: icon.png }
+  - { from: build/linux/tray, to: tray }
+npmRebuild: false
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  loadBrowserProcessSpecificV8Snapshot: false
+  grantFileProtocolExtraPrivileges: false
+publish:
+  provider: github
+  owner: marinoscar
+  repo: local-ai
+  releaseType: draft
+linux:
+  icon: build/linux/icons
+  target: [ { target: deb, arch: [x64] }, { target: AppImage, arch: [x64] } ]
+  executableName: ai-desktop
+  syncDesktopName: true
+  category: Utility
+  maintainer: Local AI maintainers <noreply@marin.cr>
+  synopsis: Local AI on this computer, with or without internet.
+  description: Desktop app for the Local AI node agent. Works fully offline.
+deb:
+  artifactName: ai-desktop_${version}_${arch}.${ext}
+  appArmorProfile: build/linux/ai-desktop.apparmor
+  depends: [libnotify4, libxtst6, libnss3, xdg-utils, libsecret-1-0, policykit-1]
+  recommends: [gnome-shell-extension-appindicator]
+appImage:
+  artifactName: ai-desktop-${version}-x86_64.AppImage

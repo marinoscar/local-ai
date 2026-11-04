@@ -1,0 +1,14 @@
+# AppArmor profile for ai-desktop (docs/specs/desktop.md section 3.3).
+# Ubuntu 24.04+ restricts unprivileged user namespaces, and Chromium's sandbox needs them. Without this profile the
+# app aborts at start-up with "No usable sandbox" (doctor code LAI-DSK-015). The profile is unconfined on purpose: its
+# only job is to grant `userns` to this one binary. The shell's real limits are the Electron fuses, the egress guard
+# and the navigation allowlists (desktop.md sections 3.6 and 6).
+abi <abi/4.0>,
+include <tunables/global>
+
+profile ai-desktop /opt/ai-desktop/ai-desktop flags=(unconfined) {
+  userns,
+
+  # Site-specific additions
+  include if exists <local/ai-desktop>
+}

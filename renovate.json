@@ -14,6 +14,11 @@
       "matchFileNames": ["apps/cloud/**"],
       "matchPackageNames": ["@marinoscar/platform-*"],
       "ignoreUnstable": true
+    },
+    {
+      "description": "apps/desktop pins every dependency to an exact version, Electron above all (docs/specs/desktop.md section 3.2). Renovate opens each bump as a pull request; an Electron bump must pass the packaged end-to-end suite.",
+      "matchFileNames": ["apps/desktop/**"],
+      "rangeStrategy": "pin"
     }
   ]
 }
