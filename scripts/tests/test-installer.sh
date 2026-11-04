@@ -18,6 +18,9 @@ export TMPDIR="$w/tmp"; mkdir -p "$TMPDIR"
 fakecred="nod_$(printf 'FAKEFAKEFAKE')1234"       # generated fake credential, never a real one
 fakehex="$(printf 'ab%.0s' $(seq 32))"             # 64 hex characters
 
+# shellcheck source=scripts/tests/test-installer-p5p6-fixtures.sh
+source "$SRC/scripts/tests/test-installer-p5p6-fixtures.sh"
+
 # A hand-stamped copy (fake version and key) for runs that must not be refused as "unstamped".
 STAMPED="$w/install-node.fake-stamped.sh"
 sed -e 's|@@LAI_RELEASE_TAG@@|node-v9.9.9-test|g' -e 's|@@LAI_RELEASE_VERSION@@|9.9.9-test|g' \
@@ -31,6 +34,7 @@ mkdir -p "$w/fx/llama.cpp-$C40"; : >"$w/fx/llama.cpp-$C40/CMakeLists.txt"; tar -
 cat >"$w/llfake/aictl" <<'EOS'
 #!/bin/sh
 echo "aictl $*" >>"$FAKE_LOG"
+[ "$1 $2" = "kit install-debs" ] && exit 0   # P6 offline (INST-04)
 [ "${FAKE_AICTL_FAIL:-0}" = 1 ] && { echo "cmake: error: boom"; exit 1; }
 while [ $# -gt 0 ]; do case "$1" in --commit) c=$2;; --backend) b=$2;; --source) s=$2;; esac; shift; done
 [ -f "$s/CMakeLists.txt" ] || { echo "no source at $s"; exit 1; }
@@ -57,6 +61,7 @@ t "template says it is unstamped and stops" 2 "never stamped" "$INST" --log "$w/
 t "valid flags are all accepted" 0 "==> [15/15]" dry --node-id ai-n4 --profile desk-small --backend cpu --cloud-url https://ai.example.test \
   --no-migrate --yes --pin-file "$INST" --inventory "$INST" --keep-inventory --no-hardening --no-ssh --no-polkit --no-tailscale \
   --no-sync --serve-pattern A --reboot --enroll-file "$INST"
+mkdir -p "$w/localai/kit"   # P6 offline needs a kit folder on the drive
 t "from-ark, desktop-user and agent-sha256" 0 "source: ark:$w" dry --from-ark "$w" --desktop-user root --agent-sha256 "$fakehex"
 t "repair is parsed (dry run)" 0 "[dry-run] would run: aictl doctor" dry --repair
 t "uninstall with its modifiers is parsed (dry run)" 0 "Summary:" dry --uninstall --purge-config --purge-content --revert-hardening
@@ -105,8 +110,8 @@ mkdir -p "$w/tmp"; before="$(find "$w" -mindepth 1 -not -path "$w/tmp*" -not -na
 dryout="$(dry --node-id ai-n9 2>&1)"; rc=$?
 t "dry run exits 0" 0 "" test $rc -eq 0
 t "prints all 15 phase headers" 0 "" bash -c 'for n in $(seq 1 15); do grep -q "^==> \[$n/15\]" <<<"$1" || exit 1; done' _ "$dryout"
-# In a dry run P7, P8 (INST-05), P11, P14 and P15 (INST-07) are implemented; 10 phases are still stubs. Lower this as items land.
-STUBS_IN_DRY_RUN=10
+# In a dry run P5, P6 (INST-04), P7, P8 (INST-05), P11, P14 and P15 (INST-07) are implemented; 8 phases are still stubs. Lower this as items land.
+STUBS_IN_DRY_RUN=8
 t "every phase that is not implemented says so" 0 "" test "$(grep -c '^NOT IMPLEMENTED YET: this phase' <<<"$dryout")" = "$STUBS_IN_DRY_RUN"
 t "phases 7 and 8 are implemented, not stubs" 0 "" bash -c '! sed -n "/^==> \[7\/15\]/,/^==> \[9\/15\]/p" <<<"$1" | grep -q "NOT IMPLEMENTED"' _ "$dryout"
 t "says the installer is incomplete" 0 "" grep -q "THIS INSTALLER IS INCOMPLETE" <<<"$dryout"
@@ -131,9 +136,9 @@ t "kind is fresh" 0 "kind: fresh" grep -F "kind: fresh" <<<"$realout"
 s="$w/rstate/state.json"
 t "state.json exists, 0600" 0 "" test "$(stat -c %a "$s")" = 600
 t "state.json is valid JSON when python is present" 0 "" bash -c 'command -v python3 >/dev/null || exit 0; python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); assert len(d[\"phases\"])==15" "$1"' _ "$s"
-# Phases whose real implementation has landed (INST-07: P11, P14 under the skeleton's defaults). Every other phase
+# Phases whose real implementation has landed (INST-04: P5, P6; INST-07: P11, P14 under the skeleton's defaults). Every other phase
 # is still a stub and must be recorded as not-implemented; add a phase id here when its item is merged.
-IMPLEMENTED="P7 P8 P11 P14"
+IMPLEMENTED="P5 P6 P7 P8 P11 P14"
 t "every phase has status, version, finished_at, details" 0 "" bash -c '[ "$(grep -cE "\"status\":\"(not-implemented|done)\",\"version\":\"9.9.9-test\",\"finished_at\":\"20[0-9-]*T[0-9:]*Z\",\"details\":" "$1")" = 15 ]' _ "$s"
 t "a stub is never recorded as done" 0 "" bash -c 'for i in $(seq 1 15); do case " $2 " in *" P$i "*) continue ;; esac; grep -q "\"P$i\": .*\"status\":\"done\"" "$1" && exit 1; done; exit 0' _ "$s" "$IMPLEMENTED"
 t "atomic: no temp file left behind" 0 "" test -z "$(find "$w/rstate" -name '.state.*')"
@@ -143,7 +148,7 @@ t "second run is a re-run" 0 "kind: re-run" grep -F "kind: re-run" <<<"$rerun"
 touch "$w/systemd/llama-qwen.service"
 t "legacy llama-qwen.service means migration" 0 "kind: migration" bash -c 'env "${@:5}" LAI_INSTALL_STATE_DIR="$2" LAI_INSTALL_SYSTEMD_DIR="$3" "$1" --yes --log "$4" 2>&1' _ "$STAMPED" "$w/rstate" "$w/systemd" "$w/real.log" "${llhooks[@]}"
 rm -f "$w/systemd/llama-qwen.service"
-t "state load reads what state write wrote" 0 "" bash -c 'source "$1"; STATE_FILE="$2"; state_load; [ "${PH_STATUS[P6]}" = not-implemented ] && [ "${PH_STATUS[P7]}" = done ] && [ "${#PH_STATUS[@]}" = 15 ]' _ "$INST" "$s"
+t "state load reads what state write wrote" 0 "" bash -c 'source "$1"; STATE_FILE="$2"; state_load; [ "${PH_STATUS[P6]}" = done ] && [ "${PH_STATUS[P7]}" = done ] && [ "${#PH_STATUS[@]}" = 15 ]' _ "$INST" "$s"
 # A phase that is done and whose check passes reports "already done" (the hook later items use).
 t "idempotency: a done phase with a passing check says 'already done'" 0 "already done" bash -c '
   source "$1"; DRY_RUN=1; STATE_FILE="$2/none"; PH_STATUS[P1]=done; check_preflight() { return 0; }
@@ -568,6 +573,9 @@ if command -v minisign >/dev/null 2>&1; then
 else
   echo "  skip minisign not installed: stamping tests skipped"
 fi
+
+# shellcheck source=scripts/tests/test-installer-p5p6.sh
+source "$SRC/scripts/tests/test-installer-p5p6.sh"
 
 echo; echo "passed: $pass  failed: $failn"
 [[ $failn -eq 0 ]]

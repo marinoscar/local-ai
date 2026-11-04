@@ -1,0 +1,5 @@
+libvulkan-dev
+glslc
+spirv-headers
+vulkan-tools
+mesa-vulkan-drivers

@@ -1,0 +1,11 @@
+ca-certificates
+curl
+jq
+git
+iw
+network-manager
+pciutils
+usbutils
+minisign
+zstd
+udisks2

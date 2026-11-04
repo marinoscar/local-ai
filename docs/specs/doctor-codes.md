@@ -471,6 +471,7 @@ The script reads the `codes.go` layout described in its header: a const block (`
 | LAI-INS-032 | error | Building llama.cpp failed | Read `build.log` in the failed build folder under `/opt/localai/llama.cpp/builds/` (named in the message); run `sudo install-node.sh --repair`. |
 | LAI-INS-033 | error | Migration failed and was rolled back | The old service is running again. Read the log and report it. |
 | LAI-INS-034 | critical | The agent didn't start | Run `journalctl -u localai-agent -n 50` and `sudo install-node.sh --repair`. |
+| LAI-INS-035 | error | Users, folders, permissions or companion programs could not be set up | Read the lines above, fix what they name (disk full, read-only disk, damaged ark drive), and re-run `sudo install-node.sh`. |
 | LAI-INS-040 | warning | Lid/power-key settings aren't active | Reboot the computer (don't restart logind). |
 | LAI-INS-041 | warning | Sleep targets aren't masked | Run `sudo install-node.sh --repair`. |
 | LAI-INS-042 | warning | GNOME idle suspend is still on | Log in as the desktop user and run `sudo install-node.sh --repair`. |

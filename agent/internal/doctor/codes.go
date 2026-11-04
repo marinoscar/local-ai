@@ -374,6 +374,7 @@ const (
 	INS032 = "LAI-INS-032"
 	INS033 = "LAI-INS-033"
 	INS034 = "LAI-INS-034"
+	INS035 = "LAI-INS-035"
 	INS040 = "LAI-INS-040"
 	INS041 = "LAI-INS-041"
 	INS042 = "LAI-INS-042"
@@ -2402,6 +2403,12 @@ var table = []Code{
 		Severity: Critical,
 		Title:    Msg{EN: "The agent didn't start", ES: "El agente no arrancó"},
 		Fix:      Msg{EN: "Run `journalctl -u localai-agent -n 50` and `sudo install-node.sh --repair`.", ES: "Ejecute `journalctl -u localai-agent -n 50` y `sudo install-node.sh --repair`."},
+	},
+	{
+		ID:       INS035,
+		Severity: Error,
+		Title:    Msg{EN: "Users, folders, permissions or companion programs could not be set up", ES: "No se pudieron preparar los usuarios, carpetas, permisos o programas acompañantes"},
+		Fix:      Msg{EN: "Read the lines above, fix what they name (disk full, read-only disk, damaged ark drive), and re-run `sudo install-node.sh`.", ES: "Lea las líneas anteriores, corrija lo que indican (disco lleno, disco de solo lectura, unidad ark dañada) y vuelva a ejecutar `sudo install-node.sh`."},
 	},
 	{
 		ID:       INS040,
