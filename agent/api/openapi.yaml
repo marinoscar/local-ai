@@ -2040,8 +2040,6 @@ paths:
       description: From the first content root with `docs/index.json` (written by `aictl docs render`), internal root first. An empty list if none. agent.md section 3.8.29.
       x-localai-auth: op
       x-localai-timeout: "5 s"
-      x-localai-status: planned
-      x-localai-issue: AGENT-16
       responses:
         "200":
           description: The index.

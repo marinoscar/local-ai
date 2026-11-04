@@ -583,6 +583,8 @@ func (d *Daemon) buildServer() error {
 		}},
 		{"speech stt", func() error { return reg.Add(d.whisperSTT.Routes()...) }},
 		{"maps", func() error { return reg.Add(d.maps.Routes()...) }},
+		{"chat", func() error { return reg.Add(d.chatRoutes()...) }},
+		{"docs", func() error { return reg.Add(d.docsRoutes()...) }},
 	}
 	for _, r := range regs {
 		if err := r.add(); err != nil {
