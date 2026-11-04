@@ -126,7 +126,7 @@ export class BrainSwitchMachine {
     try {
       await this.deps.post(this.id);
     } catch (e) {
-      if (this.state.phase !== "loading") return;
+      if (this.getSnapshot().phase !== "loading") return;
       if (e instanceof ApiError)
         this.fail("rejected", e.code || CODE_BRAIN_FAILED, e.message, e.fix);
       else this.fail("rejected", CODE_BRAIN_FAILED, "", "");
