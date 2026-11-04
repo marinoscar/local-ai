@@ -2,8 +2,9 @@
 // cloud adds its module here as it lands (node link now; state, commands, catalog, gateway later).
 import { Module } from '@nestjs/common';
 
+import { CatalogModule } from './catalog/catalog.module';
 import { LocalaiNodesModule } from './nodes/nodes.module';
 import { NodeLinkModule } from './node-link/node-link.module';
 
-@Module({ imports: [NodeLinkModule, LocalaiNodesModule] })
+@Module({ imports: [NodeLinkModule, LocalaiNodesModule, CatalogModule] })
 export class LocalaiModule {}

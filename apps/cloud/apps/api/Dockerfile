@@ -17,6 +17,29 @@ COPY apps/api/prisma ./apps/api/prisma/
 COPY apps/api/prisma.config.ts ./apps/api/
 RUN cd apps/api && DATABASE_URL="postgresql://build:build@localhost:5432/build" npx prisma generate
 
+# The catalog checker. The cloud lints catalogs with the REAL `aictl catalog lint --json` (docs/specs/cloud-app.md
+# section 4.6), never a copy of its rules: this stage downloads the static `aiagent` of the matching agent release
+# (`node-v<AIAGENT_VERSION>`), checks it against the release's SHA256SUMS and fails the build on any mismatch.
+# `aiagent` is a multi-call binary chosen by argv[0], so `aictl` is a symlink to it. Only the production image carries
+# it; the development image has none and a lint then ends as LAI-CLD-033.
+FROM base AS aiagent
+ARG AIAGENT_VERSION
+ARG AIAGENT_RELEASE_REPO=marinoscar/local-ai
+ARG TARGETARCH
+RUN set -eu; \
+    test -n "$AIAGENT_VERSION" || { echo "AIAGENT_VERSION is not set: build the API image with the agent release version (infra/compose/app.env.example)" >&2; exit 1; }; \
+    case "${TARGETARCH:-amd64}" in amd64|arm64) arch="${TARGETARCH:-amd64}" ;; *) echo "unsupported architecture ${TARGETARCH}" >&2; exit 1 ;; esac; \
+    apk add --no-cache curl; \
+    base="https://github.com/${AIAGENT_RELEASE_REPO}/releases/download/node-v${AIAGENT_VERSION}"; \
+    mkdir -p /opt/localai/bin /tmp/aiagent; cd /tmp/aiagent; \
+    curl --proto '=https' --tlsv1.2 -fsSL -o "aiagent-linux-${arch}" "${base}/aiagent-linux-${arch}"; \
+    curl --proto '=https' --tlsv1.2 -fsSL -o SHA256SUMS "${base}/SHA256SUMS"; \
+    line="$(grep "  aiagent-linux-${arch}\$" SHA256SUMS)"; test -n "$line" || { echo "SHA256SUMS has no entry for aiagent-linux-${arch}" >&2; exit 1; }; \
+    echo "$line" | sha256sum -c -; \
+    install -m 0755 "aiagent-linux-${arch}" /opt/localai/bin/aiagent; \
+    ln -s aiagent /opt/localai/bin/aictl; \
+    /opt/localai/bin/aictl catalog lint --help >/dev/null
+
 FROM base AS development
 COPY --from=deps /app ./
 COPY tsconfig.base.json ./
@@ -34,6 +57,9 @@ RUN npm run build
 
 FROM base AS production
 ENV NODE_ENV=production
+# The catalog checker (see the `aiagent` stage); LOCALAI_AICTL_PATH is the path the lint job runs.
+COPY --from=aiagent /opt/localai /opt/localai
+ENV LOCALAI_AICTL_PATH=/opt/localai/bin/aictl
 COPY --from=deps /app ./
 COPY tsconfig.base.json ./
 COPY --from=build /app/apps/api/dist ./apps/api/dist
