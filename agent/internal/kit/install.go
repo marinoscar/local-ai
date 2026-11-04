@@ -250,12 +250,25 @@ func pmtilesFile(m manifest.Manifest, arch string) (manifest.File, string, bool)
 	return manifest.File{}, "", false
 }
 
-// piperFile: the release number is not in the file name, so the version is the item's.
+// piperReleaseRe takes the release number out of a GitHub release URL:
+// https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz.
+var piperReleaseRe = regexp.MustCompile(`/releases/download/([0-9][0-9A-Za-z.+_-]{0,63})/[^/]+$`)
+
+// piperFile: the release number is not in the file name, and the manifest's version of a url item is the
+// content hash of the sync, not the release (found on a real node). It is read from the file's source
+// URL; the item's version is used only when it is itself a release number.
 func piperFile(m manifest.Manifest, arch string) (manifest.File, string, bool) {
 	want := map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[arch]
 	for _, f := range m.Files {
-		if g := piperFileRe.FindStringSubmatch(f.Path); g != nil && g[1] == want && m.Version != "" {
-			return f, m.Version, true
+		g := piperFileRe.FindStringSubmatch(f.Path)
+		if g == nil || g[1] != want {
+			continue
+		}
+		if r := piperReleaseRe.FindStringSubmatch(f.URL); r != nil {
+			return f, r[1], true
+		}
+		if v := m.Version; v != "" && regexp.MustCompile(`^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(-[0-9]+)?$`).MatchString(v) {
+			return f, v, true
 		}
 	}
 	return manifest.File{}, "", false
