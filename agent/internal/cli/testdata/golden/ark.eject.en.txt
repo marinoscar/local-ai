@@ -1,0 +1,4 @@
+== stdout ==
+✓ You can unplug the drive now.
+== stderr ==
+== exit 0 ==

@@ -1,0 +1,4 @@
+== stdout ==
+✓ Ya puede desconectar el disco.
+== stderr ==
+== exit 0 ==

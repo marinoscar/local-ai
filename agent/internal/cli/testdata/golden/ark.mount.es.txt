@@ -1,0 +1,4 @@
+== stdout ==
+✓ La unidad ark-0000aaaa está montada en /media/root/AI-ARK.
+== stderr ==
+== exit 0 ==

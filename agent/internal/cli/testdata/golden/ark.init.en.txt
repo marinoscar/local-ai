@@ -1,0 +1,9 @@
+== stdout ==
+✓ AI-ARK is set up as an ark drive (ark-3f9c0a12). Fill it with
+  `aictl ark sync --root ark-3f9c0a12`.
+== stderr ==
+Set up AI-ARK as an ark drive?
+  /dev/sdb1, mounted at /media/user/AI-ARK, 2.0 TB
+It adds a folder named localai and nothing else.
+It does not format or erase the drive.
+Type ark-3f9c0a12 to confirm: == exit 0 ==
