@@ -156,7 +156,7 @@ test.describe("Switch brain", () => {
       },
     });
     await emit(page, "model.loaded", { model: "vlm-4b", load_ms: 4000 });
-    await expect(page.getByText("Vision 4B is running.")).toBeVisible();
+    await expect(page.locator(".panel").getByText("Vision 4B is running.")).toBeVisible();
     await page.getByRole("button", { name: "Back" }).click();
     await expect(page.locator(".choice").first()).toContainText("Vision 4B");
   });
@@ -173,7 +173,7 @@ test.describe("Switch brain", () => {
       rolled_back: true,
     });
     await expect(
-      page.getByText(
+      page.locator(".panel").getByText(
         "Vision 4B couldn't start. The previous brain was restarted.",
       ),
     ).toBeVisible();
