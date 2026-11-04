@@ -48,7 +48,7 @@
         "action": "skip",
         "to_version": "catalog-2026.11.02-1",
         "final_bytes": 100000000,
-        "reason": "unresolved"
+        "reason": "needs_network"
       },
       {
         "pos": 4,
@@ -71,7 +71,7 @@
         "action": "skip",
         "to_version": "rev-beta-0002",
         "final_bytes": 5000000000,
-        "reason": "unresolved"
+        "reason": "needs_network"
       },
       {
         "pos": 6,
@@ -108,7 +108,7 @@
         "action": "skip",
         "to_version": "2026-09",
         "final_bytes": 4000000000,
-        "reason": "unresolved",
+        "reason": "needs_network",
         "refresh_days": 30
       },
       {
@@ -119,7 +119,7 @@
         "tier": 3,
         "action": "skip",
         "final_bytes": 30000000000,
-        "reason": "unresolved",
+        "reason": "needs_network",
         "refresh_days": 180
       },
       {
@@ -131,7 +131,7 @@
         "action": "skip",
         "to_version": "20261001",
         "final_bytes": 12000000000,
-        "reason": "unresolved",
+        "reason": "needs_network",
         "refresh_days": 90
       },
       {

@@ -22,16 +22,16 @@ const (
 
 // words is the text of the human plan in one language.
 type words struct {
-	planFor, budget, planned, freeNow, keepFree                   string
-	cItem, cTier, cAction, cVersion, cSize, cNote                 string
-	downloads, peak, dryRun, notes, fix, notForNode, offline      string
-	readOnly, keepRefresh, keepNoInterval, keepUnresolved         string
-	keepUnresolvedOffline, keepBudget, refreshDue, catalogPin     string
-	was, oldKept, fromLocal, localWaits, frees, budgetNote        string
-	localBuild, notInProfile                                      string
-	diskNote, unresolved, unresolvedOffline, readOnlyNote, orphan string
-	itemOne, itemMany, andMore, sevInfo, sevWarning, sevError     string
-	actions                                                       map[Action]string
+	planFor, budget, planned, freeNow, keepFree                                 string
+	cItem, cTier, cAction, cVersion, cSize, cNote                               string
+	downloads, peak, dryRun, notes, fix, notForNode, offline                    string
+	readOnly, keepRefresh, keepNoInterval, keepUnresolved                       string
+	keepUnresolvedOffline, keepBudget, refreshDue, catalogPin                   string
+	was, oldKept, fromLocal, localWaits, frees, budgetNote                      string
+	localBuild, notInProfile                                                    string
+	diskNote, unresolved, unresolvedOffline, needsNetwork, readOnlyNote, orphan string
+	itemOne, itemMany, andMore, sevInfo, sevWarning, sevError                   string
+	actions                                                                     map[Action]string
 }
 
 var en = words{
@@ -52,7 +52,7 @@ var en = words{
 	fromLocal: "from %s (local copy)", localWaits: "from %s (local copy, after it finishes)",
 	localBuild: "built here from local files (no network)", notInProfile: "not in this computer's profile; add --add-to-profile",
 	frees:      "frees %s of old versions in .trash",
-	budgetNote: "budget", diskNote: "not enough free disk space", unresolved: "unresolved", unresolvedOffline: "unresolved (offline)",
+	budgetNote: "budget", diskNote: "not enough free disk space", unresolved: "unresolved", unresolvedOffline: "unresolved (offline)", needsNetwork: "needs the network",
 	readOnlyNote: "read-only root", orphan: "not in profile; run `aictl ark prune --orphans`",
 	itemOne: "item", itemMany: "items", andMore: "and %d more",
 	actions: map[Action]string{ActionKeep: "keep", ActionDownload: "download", ActionUpdate: "update", ActionSkip: "skip", ActionOrphan: "orphan"},
@@ -77,7 +77,7 @@ var es = words{
 	fromLocal: "desde %s (copia local)", localWaits: "desde %s (copia local, cuando termine)",
 	localBuild: "se construye aquí con archivos locales (sin red)", notInProfile: "no está en el perfil de este equipo; use --add-to-profile",
 	frees:      "libera %s de versiones antiguas en .trash",
-	budgetNote: "presupuesto", diskNote: "no hay espacio libre suficiente en el disco", unresolved: "sin resolver", unresolvedOffline: "sin resolver (sin conexión)",
+	budgetNote: "presupuesto", diskNote: "no hay espacio libre suficiente en el disco", unresolved: "sin resolver", unresolvedOffline: "sin resolver (sin conexión)", needsNetwork: "necesita la red",
 	readOnlyNote: "raíz de solo lectura", orphan: "no está en el perfil; ejecute `aictl ark prune --orphans`",
 	itemOne: "elemento", itemMany: "elementos", andMore: "y %d más",
 	actions: map[Action]string{ActionKeep: "conservar", ActionDownload: "descargar", ActionUpdate: "actualizar", ActionSkip: "omitir", ActionOrphan: "huérfano"},
@@ -292,6 +292,8 @@ func note(p RootPlan, it ItemPlan, w words) string {
 			} else {
 				parts = append(parts, w.unresolved)
 			}
+		case ReasonNeedsNetwork:
+			parts = append(parts, w.needsNetwork)
 		case ReasonReadOnly:
 			parts = append(parts, w.readOnlyNote)
 		case ReasonNotInProfile:

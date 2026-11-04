@@ -119,6 +119,9 @@ type PlanInput struct {
 	// Offline forbids the network (connectivity none, or a caller that is importing). An item whose
 	// target version has no local copy is then unresolved. Local copies work in every mode.
 	Offline bool
+	// Import marks a plan made for an import from a drive (section 4.14): an item the drive lacks is
+	// unresolved, not "needs the network", because the network was never an option.
+	Import bool
 	// LocalBuild marks the items (by id) that a producer can build here with no network from material
 	// already on a mounted root (the gatherer fills it offline from a LocalResolver). Offline, such an
 	// item is planned with source local_build instead of skipped as unresolved. Ignored online.
@@ -151,10 +154,13 @@ const (
 	ReasonBudget      Reason = "budget"
 	ReasonDisk        Reason = "disk"
 	ReasonUnresolved  Reason = "unresolved"
-	ReasonTimeLimit   Reason = "time_limit"
-	ReasonReadOnly    Reason = "read_only"
-	ReasonBackend     Reason = "backend"
-	ReasonCatalogPin  Reason = "catalog_pin"
+	// ReasonNeedsNetwork: a skipped item that only the network can give, planned on a run that may not
+	// use it (offline). The next run that may use the network does it. Online skips stay unresolved.
+	ReasonNeedsNetwork Reason = "needs_network"
+	ReasonTimeLimit    Reason = "time_limit"
+	ReasonReadOnly     Reason = "read_only"
+	ReasonBackend      Reason = "backend"
+	ReasonCatalogPin   Reason = "catalog_pin"
 	// ReasonNotInProfile: an import was asked for an item the internal profile does not list, without
 	// add_to_profile (ark-sync.md section 4.14). The item is refused with a message.
 	ReasonNotInProfile Reason = "not_in_profile"

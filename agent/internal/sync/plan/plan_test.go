@@ -387,7 +387,7 @@ func TestUnresolved(t *testing.T) {
 		wantReason plan.Reason
 	}{
 		{name: "present is kept", present: true, wantAction: plan.ActionKeep, wantReason: plan.ReasonUnresolved},
-		{name: "absent is skipped", wantAction: plan.ActionSkip, wantReason: plan.ReasonUnresolved},
+		{name: "absent is skipped (needs the network)", wantAction: plan.ActionSkip, wantReason: plan.ReasonNeedsNetwork},
 		{name: "present on a read-only root is still kept", present: true, readOnly: true, wantAction: plan.ActionKeep, wantReason: plan.ReasonUnresolved},
 		{name: "absent on a read-only root is read_only", readOnly: true, wantAction: plan.ActionSkip, wantReason: plan.ReasonReadOnly},
 	}
@@ -418,8 +418,8 @@ func TestModesThatForbidTheNetwork(t *testing.T) {
 			s.resolve("m", "v1", 10) // known from the catalog pin, but there is no local copy
 			s.in.Mode = mode
 			p := plan.Plan(s.build())
-			if got := row(t, p, "m"); got.Action != plan.ActionSkip || got.Reason != plan.ReasonUnresolved || got.Source != "" {
-				t.Errorf("m = %+v, want skip/unresolved", got)
+			if got := row(t, p, "m"); got.Action != plan.ActionSkip || got.Reason != plan.ReasonNeedsNetwork || got.Source != "" {
+				t.Errorf("m = %+v, want skip/needs_network", got)
 			}
 			if !p.Offline || p.Mode != mode {
 				t.Errorf("offline %v mode %q", p.Offline, p.Mode)

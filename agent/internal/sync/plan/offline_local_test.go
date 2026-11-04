@@ -182,7 +182,7 @@ func TestPlanOfflineLocalBuild(t *testing.T) {
 		if d.Action != plan.ActionDownload || d.Source != plan.SourceLocalBuild || d.FromRoot != "" || d.ToVersion != "catalog-"+catVersion {
 			t.Errorf("docs-bundle = %+v", d)
 		}
-		if w := row(t, p, "w-latest"); w.Action != plan.ActionSkip || w.Reason != plan.ReasonUnresolved {
+		if w := row(t, p, "w-latest"); w.Action != plan.ActionSkip || w.Reason != plan.ReasonNeedsNetwork {
 			t.Errorf("w-latest needs the network offline: %+v", w)
 		}
 		if tot := p.Totals(); tot.NetworkBytes != 0 || tot.LocalBytes != 5 {
@@ -197,7 +197,7 @@ func TestPlanOfflineLocalBuild(t *testing.T) {
 	})
 	t.Run("not marked: skipped as before", func(t *testing.T) {
 		p := plan.Plan(mk().build())
-		if d := row(t, p, "docs-bundle"); d.Action != plan.ActionSkip || d.Reason != plan.ReasonUnresolved {
+		if d := row(t, p, "docs-bundle"); d.Action != plan.ActionSkip || d.Reason != plan.ReasonNeedsNetwork {
 			t.Errorf("docs-bundle = %+v", d)
 		}
 	})
