@@ -44,3 +44,6 @@ worktrees/
 # Cloud app (apps/cloud): second guard for the generated environment file
 apps/cloud/infra/compose/.env*
 !apps/cloud/infra/compose/.env*.example
+
+# The Route53 change batch written by scripts/cloud-dns.sh holds the real VPS address
+ai-cloud-dns*.json

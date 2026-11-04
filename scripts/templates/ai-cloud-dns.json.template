@@ -1,0 +1,4 @@
+{ "Comment": "Local AI cloud app",
+  "Changes": [ { "Action": "UPSERT", "ResourceRecordSet": {
+      "Name": "<CLOUD_HOST>", "Type": "A", "TTL": 300,
+      "ResourceRecords": [ { "Value": "<VPS_PUBLIC_IP>" } ] } } ] }
