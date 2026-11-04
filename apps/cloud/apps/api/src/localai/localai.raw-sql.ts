@@ -26,4 +26,13 @@ export const LOCALAI_RAW_SQL: readonly { readonly file: string; readonly why: st
       'from the node row, bound as a parameter and cast to uuid), never request text. localai_nodes has no row-level security ' +
       'and no user scope.',
   },
+  {
+    file: 'localai/gateway/usage/usage-store.ts',
+    why:
+      'The usage recorder adds a batch to the daily rollup with INSERT ... ON CONFLICT (key_id, day) DO UPDATE SET requests = ' +
+      'requests + EXCLUDED.requests (and the two token sums), the one statement that cannot lose an increment when two ' +
+      'flushes meet; Prisma cannot express an increment on conflict. Every value is a bound parameter (key id cast to uuid, ' +
+      'the UTC day cast to date, counts and token sums as numbers); nothing is request text. localai_gateway_usage_daily ' +
+      'has no row-level security and no user scope: it holds counts per key and day, never a prompt.',
+  },
 ];
