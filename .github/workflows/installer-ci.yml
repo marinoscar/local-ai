@@ -3,10 +3,10 @@ name: installer-ci
 # is installed). Spec: docs/specs/installer.md.
 on:
   pull_request:
-    paths: ['installers/**', 'scripts/tests/test-installer.sh', 'scripts/release/**', '.github/workflows/installer-ci.yml']
+    paths: ['installers/**', 'agent/internal/setup/**', 'scripts/check-no-logind-restart.sh', 'scripts/tests/test-no-logind-restart.sh', 'scripts/tests/test-installer.sh', 'scripts/release/**', '.github/workflows/installer-ci.yml']
   push:
     branches: [main]
-    paths: ['installers/**', 'scripts/tests/test-installer.sh', 'scripts/release/**', '.github/workflows/installer-ci.yml']
+    paths: ['installers/**', 'agent/internal/setup/**', 'scripts/check-no-logind-restart.sh', 'scripts/tests/test-no-logind-restart.sh', 'scripts/tests/test-installer.sh', 'scripts/release/**', '.github/workflows/installer-ci.yml']
 permissions:
   contents: read
 jobs:
@@ -18,3 +18,5 @@ jobs:
       - name: shellcheck the installer and its test
         run: shellcheck -S style installers/install-node.sh && shellcheck -S warning scripts/tests/test-installer.sh
       - run: scripts/tests/test-installer.sh
+      - name: nothing restarts, reloads or signals systemd-logind
+        run: scripts/check-no-logind-restart.sh && scripts/tests/test-no-logind-restart.sh

@@ -206,11 +206,11 @@ Only for laptops (or `--hardening`). Each step is ported from [source/laptop-ser
    IdleAction=ignore
    ```
    If the file exists with identical content: skip. If different: back it up and replace.
-   **Never restart `systemd-logind`.** Restarting it while a graphical session is logged in froze the login on the reference machine and needed a hard power-off. The script does **not** run `systemctl restart systemd-logind`, `systemctl kill -s HUP systemd-logind`, or anything else that touches logind. It sets `reboot_required = true` with reason "logind settings apply after a reboot". A test (shellcheck-style grep in CI) fails if the script contains `restart systemd-logind` or `kill .* systemd-logind`.
+   **Never restart `systemd-logind`.** Restarting it while a graphical session is logged in froze the login on the reference machine and needed a hard power-off. The script does **not** run `systemctl restart systemd-logind`, `systemctl kill -s HUP systemd-logind`, or anything else that touches logind. It sets `reboot_required = true` with reason "logind settings apply after a reboot". `scripts/check-no-logind-restart.sh` (a CI step of `installer-ci`, tested by `scripts/tests/test-no-logind-restart.sh`) fails if `installers/` or `agent/` contains `restart systemd-logind`, `kill .* systemd-logind` and the like; the Go code also refuses to run any command that names `systemd-logind`.
    Verify (after reboot, by `aictl doctor`): `systemd-analyze cat-config systemd/logind.conf | grep -E 'Lid|IdleAction|Key'` shows the values (`LAI-INS-040`).
 2. **Mask sleep targets:** `systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target` (masking doesn't restart anything and is safe live). Verify: `systemctl is-enabled …` prints `masked` four times (`LAI-INS-041`).
 3. **GNOME idle suspend off** (only if GNOME is installed, `gsettings` exists):
-   - For the desktop user, if their session bus exists (`/run/user/<uid>/bus`):
+   - For the desktop user, if their session bus exists (`/run/user/<uid>/bus`; the agent runs these as that user with the same environment instead of calling `sudo`, which is equivalent):
      ```bash
      sudo -u "$DESKTOP_USER" DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$UID_DESKTOP/bus \
        gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
@@ -247,8 +247,10 @@ Only for laptops (or `--hardening`). Each step is ported from [source/laptop-ser
    - Verify: `iw dev <iface> get power_save` → `Power save: off` (`LAI-INS-044`); doctor re-checks after reconnects and reboots. Note in the summary: "Wi-Fi can still stall; an Ethernet cable is strongly recommended for a server laptop."
 6. **Remote access:** unless `--no-ssh`: `apt-get install -y openssh-server`, `systemctl enable --now ssh`. Tailscale is P10. If Tailscale is installed: `tailscale set --ssh=false` (plain OpenSSH is used). `ufw`: left as it is; the summary says whether it's active and recommends deciding on purpose (the reference machine had it inactive).
 7. **Housekeeping checks** (report only, never changed): unattended-upgrades `Automatic-Reboot` (kernel updates wait for a manual reboot; recommended to keep it off), AC online (`/sys/class/power_supply/AC*/online` = 1, else "Plug in: a discharging battery means the server dies when it empties"). Printed checklist items for things software can't set: BIOS **"Power on after AC restore"**, battery charge limit, Ethernet.
-8. **Reboot requirement:** if step 1 changed anything, `reboot_required = true`. The installer never reboots unless `--reboot` is given, and then only at the very end after printing the summary and a 10 s countdown (Ctrl-C cancels).
+8. **Reboot requirement:** if step 1 changed anything, `reboot_required = true` (reason "logind settings apply after a reboot"), recorded in `<state dir>/hardening.json` (mode 0600, with `applied`, `applied_at`, `desktop_user` and the summary lines for P15) and in the details of P4 in `state.json`. The flag clears itself once the machine has booted after `applied_at`; until then the doctor reports `LAI-INS-070` instead of `LAI-INS-040` (which only means something after a reboot). Replaced files are backed up to `<state dir>/backup/<UTC-ts>/<original path>` (root 0700). The installer never reboots unless `--reboot` is given, and then only at the very end after printing the summary and a 10 s countdown (Ctrl-C cancels).
 9. **Lid test instructions** are printed in the summary (from the source §5.1), with the one-line logger and the expected "no gaps" result.
+
+The installer calls `aiagent setup harden [--dry-run] [--json] [--hardening] [--no-ssh] [--desktop-user <name>] [--state-dir <dir>]` (runs only on laptops unless `--hardening`; a battery or a laptop DMI chassis type means laptop). `aiagent setup harden --check` verifies without changing anything (exit 1 if a `LAI-INS-040`..`044` finding exists; a pending `LAI-INS-070` is not a failure) and is the P4 idempotency check; `--revert` is §4.4 step 9. The same checks are registered with the agent doctor as `ins.logind` (040, 070), `ins.sleep_targets` (041), `ins.gnome_idle` (042), `ins.power_profile` (043) and `ins.wifi_powersave` (044); they report nothing on a node where the hardening was not applied or was reverted.
 
 #### P5. Users, groups and directories
 `aiagent setup dirs`:
@@ -386,7 +388,7 @@ VPS CHECKLIST for ai-n4 (run on the VPS as root; details: docs/source/vps-ai-nod
 6. Remove `/opt/localai` (including `/opt/localai/installers/`), `/usr/local/bin/aictl`, `/usr/local/sbin/install-node.sh`, `/etc/polkit-1/rules.d/50-localai-operators.rules`.
 7. `--purge-config`: remove `/etc/localai` and `/var/lib/localai` (asks to type `DELETE`). Without it they stay, so a reinstall keeps the node id, key, token and PIN.
 8. `--purge-content`: remove `/srv/localai` (asks to type `DELETE` and shows its size). Never touches ark drives.
-9. `--revert-hardening`: restore or remove the logind drop-in, `systemctl unmask` the sleep targets, remove the dconf file and run `dconf update`, remove the NM conf and dispatcher script; `reboot_required` if logind changed. (SSH, packages, users and groups are left.)
+9. `--revert-hardening` (`aiagent setup harden --revert`): restore (from the oldest backup, i.e. what was there before Local AI) or remove the logind drop-in, `systemctl unmask` the sleep targets, remove the dconf file and run `dconf update`, remove the NM conf and dispatcher script; `reboot_required` if logind changed. (SSH, packages, users and groups are left.)
 10. `userdel localai` and `groupdel localai-operators` only with `--purge-config`.
 Exit 0 with a summary of what was kept.
 
