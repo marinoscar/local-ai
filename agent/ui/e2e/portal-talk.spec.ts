@@ -80,8 +80,8 @@ test.describe("Talk with the fake microphone (English)", () => {
     );
     await talk(page);
     await recordAndStop(page);
-    await expect(page.getByText("LAI-SVC-014")).toBeVisible();
-    await expect(page.getByText("I couldn't hear anything.")).toBeVisible();
+    await expect(page.locator(".talk-error").getByText("LAI-SVC-014")).toBeVisible();
+    await expect(page.locator(".talk-error").getByText("I couldn't hear anything.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   });
 });
@@ -95,9 +95,9 @@ test.describe("Talk without a microphone", () => {
     await rig(page, { ...EN, tts: "ok" });
     await talk(page);
     await page.locator(".mic").click();
-    await expect(page.getByText("LAI-SVC-103")).toBeVisible();
-    await expect(page.getByText("The microphone is blocked or missing.")).toBeVisible();
-    await expect(page.getByText(/Firefox: click the microphone icon/)).toBeVisible();
+    await expect(page.locator(".talk-error").getByText("LAI-SVC-103")).toBeVisible();
+    await expect(page.locator(".talk-error").getByText("The microphone is blocked or missing.")).toBeVisible();
+    await expect(page.locator(".talk-error").getByText(/Firefox: click the microphone icon/)).toBeVisible();
   });
 });
 
