@@ -17,6 +17,7 @@ import { STORAGE_OPTIONS, simpleUploadFileSizeLimit, type ResolvedStorageModuleO
 
 import { AppModule } from './app.module';
 import { raiseCatalogDraftBodyLimit } from './localai/catalog/catalog-body-limit';
+import { registerGatewayRoutes } from './localai/gateway/routes';
 import { registerNodeLinkBodyLimits } from './localai/node-link/node-link.body-limits';
 import { isSliceEnabled } from './platform/slices/manifest';
 import { PrismaService } from './prisma/prisma.service';
@@ -55,6 +56,8 @@ export async function createApp(): Promise<NestFastifyApplication> {
   }
   app.setGlobalPrefix('api');
   registerPlatformDocs(app, APP_OPENAPI);
+  // The OpenAI-compatible gateway: raw Fastify routes under /api/gateway/v1 (public /v1/), outside Nest's interceptors and guards.
+  await registerGatewayRoutes(app);
   return app;
 }
 
