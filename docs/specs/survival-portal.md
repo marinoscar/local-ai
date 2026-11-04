@@ -338,7 +338,7 @@ If the agent's API stops responding while the Portal is open, the SPA shows a fu
 
 `/chat/` is a loopback-only reverse proxy from the agent (`127.0.0.1:7070`) to the llama-server router (`127.0.0.1:8080`) that **injects the API key**, so the WebUI works without anyone typing a key, and the key never reaches the browser.
 
-**Enabling rule** (evaluated per request): `mode == survival` **or** a valid full session **or** a valid Portal session. Otherwise `403` with a bilingual HTML page: "Chat is locked. Start Survival mode or log in." with buttons (`LAI-SVC-101`).
+**Enabling rule** (evaluated per request): `mode == survival` **or** a valid full session **or** a valid Portal session. Otherwise `403` with a bilingual HTML page: "Chat is locked. Start Survival mode or log in." with two link buttons (`LAI-SVC-101`): **Start survival mode** goes to `/portal` (whose banner starts the mode; the page itself has no script and no POST form) and **Log in** goes to `/`.
 
 **Request handling** (`httputil.ReverseProxy` with a custom `Rewrite`):
 1. `/chat` → `301 /chat/`. Strip the `/chat` prefix; forward the rest (path and query) to `http://127.0.0.1:8080`.
@@ -356,7 +356,7 @@ If the agent's API stops responding while the Portal is open, the SPA shows a fu
    | anything else | forwarded only if `GET`/`HEAD`, else `403` (`LAI-SVC-115`) |
 7. Body limit 32 MiB (photos). No request timeout for streams; idle timeout 10 min.
 
-**Response handling:** `FlushInterval: -1` (stream SSE immediately); WebSocket upgrades are passed through; `Set-Cookie` from upstream is dropped; `X-Frame-Options: SAMEORIGIN` and `Referrer-Policy: no-referrer` are added; the WebUI's own headers are otherwise unchanged. Upstream unreachable → `502` page "The AI isn't running. [ Switch brain ] [ Status ]" (`LAI-SVC-102`).
+**Response handling:** `FlushInterval: -1` (stream SSE immediately); WebSocket upgrades are passed through; `Set-Cookie` from upstream is dropped; `X-Frame-Options: SAMEORIGIN` and `Referrer-Policy: no-referrer` are added; the WebUI's own headers are otherwise unchanged. Upstream unreachable → `502` page "The AI isn't running. [ Switch brain ] [ Status ]", the buttons going to `/portal/brain` and `/portal/status`, in the request's UI language (`LAI-SVC-102`).
 
 **What this means for security:** in survival mode, any local process can use `/chat/` without the key. That's accepted: survival means "anyone at the keyboard may use the AI", the listener is loopback-only, and only inference is exposed (no admin routes). Outside survival a session is required.
 
