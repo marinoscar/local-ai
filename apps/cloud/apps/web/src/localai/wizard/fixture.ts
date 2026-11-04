@@ -1,6 +1,6 @@
 // Test data for the wizard: the shapes the API returns (apps/api/src/localai/wizard). The node credential is built at
 // run time, never a literal, so no token-shaped string sits in the repository.
-import type { Checklist, ChecklistStep, ChecklistStepId, CreateNodeResult, NodeStatus, StepKind, StepState } from './wizardTypes';
+import type { Checklist, ChecklistStep, ChecklistStepId, CreateNodeResult, NodeStatus, StepKind, StepState, VpsStatus } from './wizardTypes';
 import type { WizardClient } from './wizardApi';
 
 export const NODE_ID = 'ai-n4';
@@ -64,6 +64,17 @@ export function checklist(states: Partial<Record<ChecklistStepId, StepState>> = 
 
 export const ALL_DONE: Partial<Record<ChecklistStepId, StepState>> = Object.fromEntries(ORDER.map((s) => [s, 'done' as StepState]));
 
+/** The automatic-publish status: prepared by default, with any part replaced. */
+export function vpsStatus(patch: { publish?: Partial<VpsStatus['publish']>; unpublish?: Partial<VpsStatus['unpublish']>; run?: Partial<VpsStatus['run']>; host?: string | null } = {}): VpsStatus {
+  return {
+    nodeId: NODE_ID,
+    host: patch.host === undefined ? 'ai-n4.marin.cr' : patch.host,
+    publish: { available: true, blockers: [], ...patch.publish },
+    unpublish: { available: true, blockers: [], ...patch.unpublish },
+    run: { state: 'idle', action: null, jobId: null, enqueuedAt: null, finishedAt: null, steps: [], certificateExpiresAt: null, error: null, ...patch.run },
+  };
+}
+
 /** A fake transport. Every call is a `vi.fn` so a test can script and inspect it. */
 export function fakeClient(patch: Partial<{ [K in keyof WizardClient]: ReturnType<typeof vi.fn> }> = {}): WizardClient & { [K in keyof WizardClient]: ReturnType<typeof vi.fn> } {
   const status: NodeStatus = { nodeId: NODE_ID, phase: 'pending', keyReceived: false };
@@ -73,6 +84,9 @@ export function fakeClient(patch: Partial<{ [K in keyof WizardClient]: ReturnTyp
     nodeStatus: vi.fn().mockResolvedValue(status),
     checklist: vi.fn().mockResolvedValue(checklist()),
     act: vi.fn().mockResolvedValue(checklist()),
+    vpsStatus: vi.fn().mockResolvedValue(vpsStatus()),
+    vpsPublish: vi.fn().mockResolvedValue({ jobId: 'job-1' }),
+    vpsUnpublish: vi.fn().mockResolvedValue({ jobId: 'job-2' }),
     ...patch,
   } as never;
 }

@@ -7,7 +7,6 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { AddNodeWizard } from './AddNodeWizard';
 import { ALL_DONE, checklist, createResult, fakeClient, makeToken, NODE_ID, SHA } from './fixture';
-import { PUBLISH_AUTOMATICALLY_TOOLTIP } from './StepPublish';
 
 let permissions: string[] = [];
 vi.mock('@marinoscar/platform-web/identity/headless', () => ({
@@ -342,13 +341,10 @@ describe('step 3: publish', () => {
     expect(screen.queryByTestId('lab-banner')).toBeNull();
   });
 
-  it('has the Publish automatically button, disabled, with the tooltip', async () => {
+  it('has the Publish automatically button, enabled when nothing blocks it (the panel itself is in VpsPublishPanel.test.tsx)', async () => {
     await toPublish();
-    const button = screen.getByRole('button', { name: 'Publish automatically' });
-    expect(button).toBeDisabled();
-    fireEvent.mouseOver(button.parentElement!);
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(PUBLISH_AUTOMATICALLY_TOOLTIP);
-    expect(PUBLISH_AUTOMATICALLY_TOOLTIP).toBe('Coming later: needs the VPS helper (§4.10)');
+    const button = await screen.findByRole('button', { name: 'Publish automatically' });
+    await waitFor(() => expect(button).toBeEnabled());
   });
 
   it('Check runs the server check and shows the answer; Mark done / Mark as to do call the server', async () => {

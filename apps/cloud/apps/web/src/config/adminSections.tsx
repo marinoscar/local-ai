@@ -1,3 +1,4 @@
+import CloudQueueIcon from '@mui/icons-material/CloudQueue';
 import { doctorSettingsPage } from '@marinoscar/platform-web/doctor/ui';
 import { identityAdminSections } from '@marinoscar/platform-web/identity/ui';
 import { jobsAdminSections } from '@marinoscar/platform-web/jobs/ui';
@@ -22,6 +23,14 @@ const CORE_ADMIN_SECTIONS: SettingsSectionDef[] = [
       // The fleet page needs the nodes control plane, which the starter does not mount.
       ...jobsAdminSections.operations.filter((card) => card.path !== '/admin/settings/workers'),
       { ...doctorSettingsPage.card, Icon: doctorSettingsPage.Icon },
+      // VPS publishing (docs/specs/cloud-app.md section 4.10): the Route53 key. `lab:admin` is what /api/localai/vps/route53 enforces.
+      {
+        title: 'VPS publishing',
+        description: 'The AWS key the VPS helper uses to publish a new node’s name in DNS. Write-only: it is never shown again.',
+        Icon: CloudQueueIcon,
+        path: '/admin/settings/vps-publishing',
+        permission: 'lab:admin',
+      },
     ],
   },
   // `Danger Zone` stays LAST (docs/specs/settings-ui.md): new groups go above it.

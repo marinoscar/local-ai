@@ -29,6 +29,7 @@ import { USER_SETTINGS_SECTIONS } from './config/userSettingsSections';
 import { CatalogPage } from './localai/catalog/CatalogPage';
 import { AlertsPage } from './localai/alerts/AlertsPage';
 import { LabOverviewPage } from './localai/lab/LabOverviewPage';
+import { Route53KeyPage } from './localai/vps/Route53KeyPage';
 import { AddNodeWizard } from './localai/wizard/AddNodeWizard';
 import { NodeDetailPage } from './localai/node/NodeDetailPage';
 import { AppPlatformHost } from './platformHost';
@@ -189,6 +190,8 @@ export function AppRoutes() {
           <Route path="admin/settings/jobs" element={<Gate permission="jobs:read"><JobsPage /></Gate>} />
           <Route path="admin/settings/jobs/insights" element={<Gate permission="jobs:read"><JobInsightsPage /></Gate>} />
           <Route path="admin/settings/doctor" element={<Gate permission="system_settings:read"><DoctorPage /></Gate>} />
+          {/* VPS publishing (section 4.10): the Route53 key. The permission is the string /api/localai/vps/route53 enforces. */}
+          <Route path="admin/settings/vps-publishing" element={<Gate permission="lab:admin"><Route53KeyPage /></Gate>} />
           <Route path="settings/danger-zone" element={<UserDangerZonePage />} />
           <Route path="admin/settings/factory-reset" element={<Gate permission={factoryResetSettingsPage.card.permission!}><FactoryResetPage /></Gate>} />
           {/* The enabled optional slices' pages (packages/shared/slices.json; src/slices/). */}
