@@ -20,7 +20,8 @@ const usage = `usage:
   aiagent ctl [args...]              run the CLI (same as aictl)
   aiagent version [--json]           print the build version
   aiagent migrate [llama-qwen] [...] legacy migration: replace llama-qwen.service in place (root; --dry-run, --rollback)
-  aiagent update-rollback-check      internal: run by the rollback timer (agent.md section 4.10)
+  aiagent setup <step> [flags]       internal installer steps (root only; see aiagent setup)
+  aiagent update-rollback-check     internal: run by the rollback timer (agent.md section 4.10)
 `
 
 // serve is `aiagent serve`; a test replaces it so that no test starts the real daemon on the machine.
@@ -66,6 +67,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	case "migrate":
 		return runMigrate(ctx, args[2:], stdout, stderr)
+	case "setup":
+		return runSetup(args[2:], stdout, stderr)
 	case "update-rollback-check":
 		if len(args) != 2 {
 			fmt.Fprint(stderr, usage)

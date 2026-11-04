@@ -1,0 +1,39 @@
+Local AI node ai-n4 is installed.        (profile small-8gb, backend cuda, agent 0.4.0)
+
+  Brain:        qwen3.5-9b-q4km (loading in the background)
+  Local UI:     http://127.0.0.1:7070          Survival Portal: http://127.0.0.1:7070/portal
+  API key:      ab12…ef90   (full key: aictl key show)
+  Content:      sync running (186 GB planned)   check: aictl ark sync
+  Cloud:        enrolled at https://ai.marin.cr
+
+TO DO
+  [ ] REBOOT this computer (laptop power settings apply after a reboot).   sudo reboot
+  [ ] Log out and back in, so <user> can use the desktop app (group localai-operators).
+  [ ] Join the tailnet:  sudo tailscale up --ssh=false
+  [ ] BIOS: turn on "Power on after AC restore".  Prefer an Ethernet cable over Wi-Fi.
+  [ ] Publish the node on the VPS (checklist below).
+
+Join the tailnet (do this once, then come back):
+  sudo tailscale up --ssh=false
+Open the URL it prints, sign in, and approve the machine "test-box".
+Check:  tailscale status      (shows this machine and the VPS "prod-server")
+
+LAPTOP LID TEST (after the reboot; details: docs/source/laptop-server-setup.md §5.1)
+  1. Start the logger:
+       nohup bash -c 'while true; do echo "$(date +%T) up=$(cut -d" " -f1 /proc/uptime) lid=$(awk "{print \$2}" /proc/acpi/button/lid/*/state)"; sleep 10; done' >> ~/lid-test.log 2>&1 &
+  2. Close the lid for 5 to 10 minutes, open it, then read:  cat ~/lid-test.log
+  3. Pass: lid=closed rows about 10 seconds apart, no gaps, and "uptime -s" has not changed.
+  Wi-Fi can still stall; an Ethernet cable is strongly recommended.
+
+VPS CHECKLIST for ai-n4 (run on the VPS as root; details: docs/source/vps-ai-nodes-setup.md §6)
+  1. On this node, check llama answers:   curl -s http://127.0.0.1:8080/health
+  2. DNS: Route 53 zone marin.cr (<ROUTE53_ZONE_ID>): A record ai-n4.marin.cr -> <VPS_PUBLIC_IP>, TTL 300
+  3. From the VPS:  tailscale ping test-box
+       Pattern B:  curl -i --resolve test-box.<TAILNET>.ts.net:443:<TAILNET_IP_AI_N4> https://test-box.<TAILNET>.ts.net/health
+  4. Bootstrap HTTP vhost /opt/infra/proxy/nginx/conf.d/ai-n4.marin.cr.conf (ACME webroot + redirect);
+       docker exec proxy-nginx nginx -t && docker exec proxy-nginx nginx -s reload
+  5. Certificate: certbot webroot for ai-n4.marin.cr (email <ADMIN_EMAIL>)
+  6. Final HTTPS vhost: copy ai-n2.marin.cr.conf (Pattern B); change names, cert paths,
+       proxy_pass IP and proxy_ssl_name/Host. Keep Authorization passthrough, buffering off, timeouts 15s/600s/600s.
+  7. Validate: unauthenticated /v1/models -> 401; with the key -> 200.
+  8. Commit the vhost in marin-server-infra; optionally add the node to Open WebUI.

@@ -971,6 +971,304 @@ main() {
   return 0
 }
 
+# ===============================================================================================================
+# INST-07 (issue #154): P11 Tailscale, P14 initial content, P15 verify and summary.
+# These definitions replace the stubs created by define_phase_stubs (this block runs after it, at source time).
+# Spec: docs/specs/installer.md section 4.3 P11, P14, P15.
+# ===============================================================================================================
+
+# i07_dev <ENV_NAME> <default>: the value of a development hook when LAI_INSTALLER_DEV=1, else the default.
+i07_dev() {
+  local name="$1" def="$2"
+  if ((DEV)) && [[ -n "${!name:-}" ]]; then printf '%s' "${!name}"; else printf '%s' "$def"; fi
+}
+# i07_fail <doctor-code> <message>: record the running phase as failed (so a re-run resumes here), then exit 1.
+i07_fail() {
+  [[ -z "${CUR_PHASE_ID:-}" ]] || set_phase "$CUR_PHASE_ID" failed "$1" || true
+  fail 1 "$@"
+}
+# In a development/test run (LAI_INSTALLER_DEV=1) the real agent, aictl and tailscale are never used unless a hook
+# names them, so a test can not touch the machine it runs on.
+i07_aiagent() { if ((DEV)); then printf '%s' "${LAI_INSTALLER_AIAGENT:-/nonexistent/aiagent}"; else printf '%s' /opt/localai/bin/aiagent; fi; }
+i07_aictl() { if ((DEV)); then printf '%s' "${LAI_INSTALLER_AICTL:-/nonexistent/aictl}"; else printf '%s' aictl; fi; }
+i07_tailscale() { if ((DEV)); then printf '%s' "${LAI_INSTALLER_TAILSCALE:-/nonexistent/tailscale}"; else printf '%s' tailscale; fi; }
+i07_node_yaml() { i07_dev LAI_INSTALL_NODE_YAML /etc/localai/node.yaml; }
+i07_have_agent() { [[ -x "$(i07_aiagent)" ]]; }
+
+# Facts shared between the three phases of this item (a re-run recomputes them; nothing depends on memory).
+TS_JOINED=0          # tailscale status --json says BackendState Running
+TS_SERVE_PATTERN=""  # "A", "B" or "" (none recorded yet); P9 writes it to node.yaml tailscale.serve_pattern
+CONTENT_LINE=""      # the "Content:" line of the summary
+CLOUD_LINE=""        # a phase 13 implementation may set this; otherwise P15 derives it from the options
+BRAIN_LINE=""        # a phase 9 implementation may set this; otherwise the Go default is printed
+REBOOT_REQUIRED=0    # any phase may set 1 when a reboot is needed
+
+# i07_inventory_args: "--inventory <file>" when a real inventory was given and exists (else the agent looks
+# at /etc/localai/inventory.local.yaml itself).
+i07_inventory_args() {
+  if [[ -n "$OPT_INVENTORY" && -f "$OPT_INVENTORY" ]]; then printf '%s\n' --inventory "$OPT_INVENTORY"; fi
+}
+
+# i07_tailnet_joined: 0 when `tailscale status --json` shows BackendState Running (read only, always real).
+i07_tailnet_joined() {
+  command -v "$(i07_tailscale)" >/dev/null 2>&1 || return 1
+  local js
+  js="$("$(i07_tailscale)" status --json 2>/dev/null || true)"
+  grep -Eq '"BackendState"[[:space:]]*:[[:space:]]*"Running"' <<<"$js"
+}
+
+# ---- P11 Tailscale -----------------------------------------------------------------------------------------
+check_tailscale() {
+  ((OPT_NO_TAILSCALE == 1)) && return 0
+  command -v "$(i07_tailscale)" >/dev/null 2>&1 || return 1
+  systemctl is-active --quiet tailscaled 2>/dev/null
+}
+
+# i07_codename / i07_arch: where the signed apt repo and the kit debs are chosen.
+i07_codename() {
+  local f
+  f="$(i07_dev LAI_INSTALL_OS_RELEASE /etc/os-release)"
+  # shellcheck disable=SC1090
+  (. "$f" 2>/dev/null && printf '%s' "${VERSION_CODENAME:-}") || true
+}
+
+# i07_install_tailscale: online = official signed apt repo (never "curl | sh"); offline = the kit deb.
+i07_install_tailscale() {
+  if command -v "$(i07_tailscale)" >/dev/null 2>&1; then
+    say "Tailscale is already installed."
+    return 0
+  fi
+  local codename arch
+  codename="$(i07_codename)"
+  arch="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
+  [[ -n "$codename" ]] || i07_fail LAI-INS-030 "cannot tell the Ubuntu release name (VERSION_CODENAME). Fix /etc/os-release, then re-run."
+  if [[ -n "$OPT_FROM_ARK" ]]; then
+    local dir="$OPT_FROM_ARK/localai/kit/debs/$codename-$arch" debs=()
+    if [[ -d "$dir" ]]; then
+      local f
+      for f in "$dir"/tailscale_*.deb; do [[ -f "$f" ]] && debs+=("$f"); done
+    fi
+    if ((${#debs[@]} == 0)); then
+      i07_fail LAI-INS-030 "the ark drive has no Tailscale package for $codename-$arch (looked in $dir). Sync the drive on a computer with internet, or use --no-tailscale."
+    fi
+    say "Installing Tailscale from the ark drive: ${debs[0]##*/}"
+    run_or_say dpkg -i "${debs[0]}" || i07_fail LAI-INS-030 "installing the Tailscale package from the ark drive failed. Read the messages above, fix, and re-run."
+  else
+    local keyring list base="https://pkgs.tailscale.com/stable/ubuntu"
+    keyring="$(i07_dev LAI_INSTALL_TS_KEYRING /usr/share/keyrings/tailscale-archive-keyring.gpg)"
+    list="$(i07_dev LAI_INSTALL_TS_LIST /etc/apt/sources.list.d/tailscale.list)"
+    say "Adding the official Tailscale apt repository for $codename."
+    if [[ ! -s "$keyring" ]]; then
+      run_or_say curl -fsSL --output "$keyring" "$base/$codename.noarmor.gpg" ||
+        i07_fail LAI-INS-030 "downloading the Tailscale signing key failed. Check the internet connection, then re-run."
+    else
+      say "already present: $keyring"
+    fi
+    if [[ ! -s "$list" ]]; then
+      run_or_say curl -fsSL --output "$list" "$base/$codename.tailscale-keyring.list" ||
+        i07_fail LAI-INS-030 "downloading the Tailscale apt source failed. Check the internet connection, then re-run."
+    else
+      say "already present: $list"
+    fi
+    run_or_say apt-get update || i07_fail LAI-INS-030 "apt-get update failed. Read the messages above, fix, and re-run."
+    apt_or_say tailscale || i07_fail LAI-INS-030 "installing Tailscale failed. Read the apt messages above, fix, and re-run."
+  fi
+}
+
+# i07_check_serve_pattern: decides the pattern and stops with LAI-INS-050 when it contradicts the inventory.
+i07_check_serve_pattern() {
+  local agent args=() out rc=0
+  agent="$(i07_aiagent)"
+  if ! i07_have_agent; then
+    TS_SERVE_PATTERN="${OPT_SERVE_PATTERN:-}"
+    say "The agent is not installed yet, so the serve pattern is not checked against the inventory now (${TS_SERVE_PATTERN:-none given})."
+    return 0
+  fi
+  args=(setup serve-check --node-yaml "$(i07_node_yaml)")
+  [[ -z "$OPT_NODE_ID" ]] || args+=(--node-id "$OPT_NODE_ID")
+  [[ -z "$OPT_SERVE_PATTERN" ]] || args+=(--serve-pattern "$OPT_SERVE_PATTERN")
+  local inv_args=() l
+  while IFS= read -r l; do [[ -z "$l" ]] || inv_args+=("$l"); done < <(i07_inventory_args)
+  out="$("$agent" "${args[@]}" "${inv_args[@]}" 2>&1)" || rc=$?
+  if ((rc != 0)); then
+    say "$out"
+    set_phase "$CUR_PHASE_ID" failed "LAI-INS-050 serve pattern mismatch" || true
+    fail 1 LAI-INS-050 "the Tailscale serve pattern does not match the inventory. Re-run with --serve-pattern set to the value in the inventory."
+  fi
+  [[ "$out" == none ]] && out=""
+  TS_SERVE_PATTERN="$out"
+  say "serve pattern: ${TS_SERVE_PATTERN:-none} (recorded in node.yaml; the installer never runs tailscale serve, the agent does in online mode)"
+}
+
+phase_tailscale() {
+  if ((OPT_NO_TAILSCALE == 1)); then
+    say "skipped: --no-tailscale (Tailscale is online-only; this node can still run fully offline)."
+    return 0
+  fi
+  i07_install_tailscale
+  run_or_say systemctl enable --now tailscaled
+  if i07_tailnet_joined; then
+    TS_JOINED=1
+    say "This computer is already on the tailnet."
+  else
+    TS_JOINED=0
+    say "This computer is not on the tailnet yet. The installer never logs in: the summary at the end shows the one command to run."
+  fi
+  i07_check_serve_pattern
+  return 0
+}
+
+# ---- P14 Initial content -----------------------------------------------------------------------------------
+check_content() { return 1; }   # starting a sync or import twice is harmless: the agent refuses a second run
+
+# i07_planned_size <dry-run output>: the last "<n> <unit>" size on a line that talks about the download.
+i07_planned_size() {
+  grep -iE 'download|total|plan' <<<"$1" | grep -oE '[0-9]+([.][0-9]+)? ?([KMGT]i?B)' | tail -n 1 || true
+}
+
+phase_content() {
+  if ((OPT_NO_SYNC)); then
+    CONTENT_LINE="not started (--no-sync). Start it with: aictl ark sync"
+    say "skipped: --no-sync."
+    return 0
+  fi
+  if [[ -n "$OPT_FROM_ARK" ]]; then
+    local rootjson="$OPT_FROM_ARK/localai/ROOT.json" id=""
+    [[ ! -f "$rootjson" ]] || id="$(sed -n -E 's/.*"root_id"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$rootjson" | head -n 1)"
+    if [[ -z "$id" ]]; then
+      CONTENT_LINE="not started (the ark drive has no root id). Start it with: aictl ark import --catalog"
+      say "The ark drive has no readable ROOT.json, so the content import was not started. Later run: aictl ark import --catalog"
+      return 0
+    fi
+    run_or_say "$(i07_aictl)" ark import --from "$id" --catalog ||
+      { CONTENT_LINE="import did not start. Try: aictl ark import --from $id --catalog"; say "The import could not be started now (the install goes on). Later run: aictl ark import --from $id --catalog"; return 0; }
+    CONTENT_LINE="import running from the ark drive   check: aictl ark import"
+    say "Importing the content from the ark drive in the background."
+  else
+    local plan="" size="" rc=0
+    if command -v "$(i07_aictl)" >/dev/null 2>&1; then
+      plan="$("$(i07_aictl)" ark sync --dry-run 2>&1)" || rc=$?
+      if ((rc != 0)); then
+        say "$plan"
+        CONTENT_LINE="not started (could not plan the download). Try again with: aictl ark sync"
+        say "The download could not be planned now (the install goes on). Later run: aictl ark sync"
+        return 0
+      fi
+      size="$(i07_planned_size "$plan")"
+    else
+      say "aictl is not installed yet, so the download cannot be planned now."
+    fi
+    if [[ -n "$size" ]]; then
+      say "Will download $size over the next hours"
+    else
+      say "Will download the planned content over the next hours"
+    fi
+    run_or_say "$(i07_aictl)" ark sync ||
+      { CONTENT_LINE="did not start. Try: aictl ark sync"; say "The sync could not be started now (the install goes on). Later run: aictl ark sync"; return 0; }
+    CONTENT_LINE="sync running${size:+ ($size planned)}   check: aictl ark sync"
+  fi
+  say "Check progress with: aictl ark sync (status) or the desktop app."
+  return 0
+}
+
+# ---- P15 Verify and summary --------------------------------------------------------------------------------
+check_verify() { return 1; }    # always re-run: the summary reflects the machine as it is now
+
+# i07_is_laptop: --hardening / --no-hardening decide; otherwise a battery or a portable chassis type.
+i07_is_laptop() {
+  case "$OPT_HARDENING" in yes) return 0 ;; no) return 1 ;; esac
+  if ((DEV)) && [[ -n "${LAI_INSTALLER_LAPTOP:-}" ]]; then [[ "$LAI_INSTALLER_LAPTOP" == 1 ]]; return; fi
+  local b
+  for b in /sys/class/power_supply/BAT*; do [[ -e "$b" ]] && return 0; done
+  local ct
+  ct="$(cat /sys/class/dmi/id/chassis_type 2>/dev/null || true)"
+  [[ "$ct" == 8 || "$ct" == 9 || "$ct" == 10 || "$ct" == 14 ]]
+}
+
+# i07_keep_inventory: --keep-inventory copies the real inventory to /etc/localai/inventory.local.yaml (root 0600).
+i07_keep_inventory() {
+  ((OPT_KEEP_INVENTORY)) || return 0
+  local dest
+  dest="$(i07_dev LAI_INSTALL_INVENTORY_DEST /etc/localai/inventory.local.yaml)"
+  if [[ -z "$OPT_INVENTORY" || ! -f "$OPT_INVENTORY" ]]; then
+    say "WARNING: --keep-inventory was given but there is no inventory file to keep (looked for '${OPT_INVENTORY:-none}')."
+    return 0
+  fi
+  if [[ -f "$dest" ]] && cmp -s "$OPT_INVENTORY" "$dest"; then
+    say "already up to date: $dest"
+    return 0
+  fi
+  local owner=root:root
+  ((DEV)) && owner="$(id -u):$(id -g)"
+  run_or_say install -D -m 0600 -o "${owner%%:*}" -g "${owner##*:}" "$OPT_INVENTORY" "$dest"
+}
+
+phase_verify() {
+  i07_keep_inventory
+  local agent inv_args=() l
+  agent="$(i07_aiagent)"
+  while IFS= read -r l; do [[ -z "$l" ]] || inv_args+=("$l"); done < <(i07_inventory_args)
+  local common=(--node-yaml "$(i07_node_yaml)")
+  [[ -z "$OPT_NODE_ID" ]] || common+=(--node-id "$OPT_NODE_ID")
+  [[ -z "$OPT_SERVE_PATTERN" ]] || common+=(--serve-pattern "$OPT_SERVE_PATTERN")
+
+  if ! i07_have_agent; then
+    if ((DRY_RUN)); then
+      say "[dry-run] would run: aiagent setup verify, then aiagent setup summary (the agent is not installed yet, so nothing can be shown)."
+      return 0
+    fi
+    say "The agent is not installed (phase 9 did not put it in place), so the checks and the summary cannot run."
+    return "$PHASE_NOT_IMPLEMENTED"
+  fi
+
+  say "Checking the install:"
+  local out rc=0
+  out="$("$agent" setup verify "${common[@]}" "${inv_args[@]}" 2>&1)" || rc=$?
+  say "$out"
+  if ((rc != 0)); then
+    say "The post-install checks found a problem (see the line with LAI-INS above). The install is NOT finished: fix it and re-run."
+    return 1
+  fi
+
+  local laptop=0 sumargs=()
+  i07_is_laptop && laptop=1
+  if [[ -e /var/run/reboot-required || -e "$STATE_DIR/reboot-required" ]] || ((REBOOT_REQUIRED)) ||
+    { ((laptop)) && [[ "${PH_STATUS[P4]:-}" == "done" ]]; }; then
+    REBOOT_REQUIRED=1
+  fi
+  sumargs=(setup summary "${common[@]}" "${inv_args[@]}")
+  ((laptop)) && sumargs+=(--laptop)
+  ((REBOOT_REQUIRED)) && sumargs+=(--reboot-required)
+  [[ -z "$OPT_DESKTOP_USER" ]] || sumargs+=(--user "$OPT_DESKTOP_USER")
+  ((OPT_NO_TAILSCALE == 1)) && sumargs+=(--skip-tailscale)
+  i07_tailnet_joined && sumargs+=(--tailnet-joined)
+  [[ -z "$CONTENT_LINE" ]] || sumargs+=(--content "$CONTENT_LINE")
+  [[ -z "$BRAIN_LINE" ]] || sumargs+=(--brain "$BRAIN_LINE")
+  if [[ -n "$CLOUD_LINE" ]]; then
+    sumargs+=(--cloud "$CLOUD_LINE")
+  elif ((OPT_ENROLL)) || [[ -n "$OPT_ENROLL_FILE" ]]; then
+    sumargs+=(--cloud "enrollment requested at $OPT_CLOUD_URL   check: aictl cloud status")
+  fi
+  rc=0
+  out="$("$agent" "${sumargs[@]}" 2>&1)" || rc=$?
+  say ""
+  say "$out"
+  ((rc == 0)) || { say "Printing the summary failed (exit $rc); the install itself is complete. Run: sudo aiagent setup summary"; return 0; }
+
+  if ((OPT_REBOOT && REBOOT_REQUIRED)); then
+    local secs
+    secs="$(i07_dev LAI_INSTALLER_COUNTDOWN 10)"
+    say "Rebooting in $secs seconds. Press Ctrl-C to cancel."
+    if ((DRY_RUN)); then
+      say "[dry-run] would reboot after the countdown"
+    else
+      sleep "$secs"
+      run_or_say systemctl reboot
+    fi
+  fi
+  return 0
+}
+
 # Run only when executed, not when a test sources the file to call its functions.
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   set -Eeuo pipefail

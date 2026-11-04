@@ -100,7 +100,8 @@ Everything in overview.md §3.2, plus `/var/lib/localai/install/state.json`, `/v
 | `units` | writes all unit files from templates embedded in the binary (package `agent/internal/setup/units/`, one `*.service`/`*.timer` template per unit, [agent.md](agent.md) §3.2); `daemon-reload`; enable |
 | `api-key` | creates or reuses the llama key |
 | `migrate` | runs `aiagent migrate` (every pending migration; today `llama-qwen`, [llama-router.md](llama-router.md) §4.9) |
-| `verify` | post-install checks (all `LAI-INS` doctor checks) |
+| `serve-check` | P11: decides the Tailscale serve pattern from `--serve-pattern`, `node.yaml` and the inventory; prints `A`, `B` or `none`; a contradiction with the inventory prints `LAI-INS-050` and exits 1 (reads only) |
+| `verify` | post-install checks that can pass before a reboot: the agent answers (`LAI-INS-034`), the serve pattern matches the inventory (`LAI-INS-050`), the admin PIN exists (`LAI-INS-060`), a reboot is needed (`LAI-INS-070`); exit 1 on an error or critical result (reads only) |
 | `summary` | prints the summary and the VPS checklist |
 
 ### 3.6 Release stamping
@@ -315,7 +316,8 @@ Unless `--no-tailscale`:
   Open the URL it prints, sign in, and approve the machine "<hostname>".
   Check:  tailscale status      (shows this machine and the VPS "prod-server")
   ```
-- **Serve pattern.** Recorded in `node.yaml: tailscale.serve_pattern` (`A` = `--tcp=18080`, `B` = `--https=443`, overview.md §3.4). The installer never runs `tailscale serve`; the agent applies it when the mode is `online` ([modes.md](../architecture/modes.md) §2.3). After migration of an existing node, the pattern must match what the VPS vhost expects (ai-n1: A; ai-n2/ai-n3: B); a mismatch with the inventory is a hard error during install: the installer stops at P11 with `LAI-INS-050` (exit 1). When `aictl doctor` finds the same mismatch later, `LAI-INS-050` is reported as a warning (the node still works locally).
+  The same three lines are printed by the summary (§P15) right after the TO DO list, only when the node is not on the tailnet and `--no-tailscale` was not given. The installer finds out with `tailscale status --json` (read only).
+- **Serve pattern.** Recorded in `node.yaml: tailscale.serve_pattern` (`A` = `--tcp=18080`, `B` = `--https=443`, overview.md §3.4). The installer never runs `tailscale serve`; the agent applies it when the mode is `online` ([modes.md](../architecture/modes.md) §2.3). After migration of an existing node, the pattern must match what the VPS vhost expects (ai-n1: A; ai-n2/ai-n3: B); a mismatch with the inventory (the `--serve-pattern` flag or `node.yaml` against `nodes[].serve_pattern` of the inventory, checked by `aiagent setup serve-check`) is a hard error during install: the installer marks P11 failed and stops with `LAI-INS-050` (exit 1). When `aictl doctor` finds the same mismatch later, `LAI-INS-050` is reported as a warning (the node still works locally).
 
 #### P12. Admin PIN
 If `/etc/localai/admin-pin` is missing: read from `--pin-file`, or prompt on the TTY twice with `read -rs` ("Choose an admin PIN, 4 to 8 digits. You'll need it to delete things or leave survival mode."). Pass it to `aictl pin set --pin-stdin` (argon2id, security-model.md §2). No TTY and no file → skip with warning `LAI-INS-060` ("The PIN isn't set; run `sudo aictl pin set`"). Never logged.
@@ -325,12 +327,13 @@ If `--enroll`/`--enroll-file`: `aictl cloud enroll --url <cloud-url> --credentia
 
 #### P14. Initial content
 Unless `--no-sync`:
-- **Online:** `aictl ark sync --dry-run` (shown as a short summary: "Will download 186 GB over the next hours"), then `aictl ark sync` started in the background (the agent runs it; the installer doesn't wait).
-- **Offline:** `aictl ark import --from <drive root id> --catalog` started in the background.
+- **Online:** `aictl ark sync --dry-run` (shown as a short summary: "Will download 186 GB over the next hours"; the size is the last size on a line of the plan that mentions download, total or plan), then `aictl ark sync` started in the background (the agent runs it; the installer doesn't wait).
+- **Offline:** `aictl ark import --from <drive root id> --catalog` started in the background. The root id is `root_id` of `<mount>/localai/ROOT.json`.
+- A plan or start that fails (agent not ready, no network) never fails the install: the installer says why and prints the command to run later, and the summary's `Content:` line says "not started".
 - In both cases print "Check progress with: `aictl ark sync` (status) or the desktop app."
 
 #### P15. Verify and summary
-`aiagent setup verify` runs every `LAI-INS` doctor check (§8) that can pass before a reboot. Then `aiagent setup summary` prints:
+`aiagent setup verify` runs every `LAI-INS` doctor check (§8) that can pass before a reboot. Then `aiagent setup summary` prints (an error or critical result of `verify` stops the install: P15 fails and the summary is not printed; `--keep-inventory` first copies the inventory to `/etc/localai/inventory.local.yaml`, root:root 0600):
 ```
 Local AI node ai-n4 is installed.        (profile small-8gb, backend cuda, agent 0.4.0)
 
@@ -362,7 +365,9 @@ VPS CHECKLIST for ai-n4 (run on the VPS as root; details: docs/source/vps-ai-nod
   8. Commit the vhost in marin-server-infra; optionally add the node to Open WebUI.
 ```
 - Placeholders in the checklist are filled from `--inventory` (or `/etc/localai/inventory.local.yaml`) when available, because the terminal and the log are local. Without an inventory they are printed as placeholders. The same text, always **with placeholders**, is what this spec and the runbook show.
-- `<machine>` is `hostname -s`. The pattern shown is the one recorded in P11.
+- `<machine>` is `hostname -s`. The pattern shown is the one recorded in P11; only that pattern's `curl` line (step 3) and only its vhost template (step 6) are printed, and both are printed when no pattern is known. Placeholders for one node's values (`<TAILNET_IP_AI_N4>`) stay placeholders when the inventory has no entry for this node.
+- TO DO items are printed only when they apply: the reboot (laptop hardening applied or `/var/run/reboot-required`), the re-login (`--desktop-user`), the tailnet join, the BIOS note (laptops) and the VPS publication (not in phase 2). Laptops also get a "LAPTOP LID TEST" block after the tailnet text (heartbeat logger, 5 to 10 minutes with the lid closed, pass = no gaps and an unchanged `uptime -s`; source: [laptop-server-setup.md](../source/laptop-server-setup.md) §5.1) and the Ethernet note. The golden files `agent/internal/setup/summary/testdata/summary-ai-n4-{inventory,placeholders}.txt` show the exact text for a laptop with the reboot, the tailnet and the lid test pending.
+- With `--reboot` and a reboot needed, the summary is followed by "Rebooting in 10 seconds. Press Ctrl-C to cancel." and `systemctl reboot`.
 - In phase 2 the cloud automates steps 2–7 ([cloud-app.md](cloud-app.md)); the summary then says "The cloud will publish ai-n4.marin.cr automatically."
 
 ### 4.4 Uninstall
