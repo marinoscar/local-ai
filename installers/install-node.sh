@@ -399,6 +399,254 @@ define_phase_stubs() {
 }
 define_phase_stubs
 
+# ===============================================================================================================
+# INST-05 (issue #151): P7 llama.cpp build or reuse, P8 migration hand-off. Spec: installer.md section 4.3 P7/P8.
+# Dev hooks (LAI_INSTALLER_DEV=1 only): LAI_INSTALL_LLAMA_ROOT, LAI_INSTALL_NODE_YAML, LAI_INSTALL_PINS,
+# LAI_INSTALL_AICTL, LAI_INSTALL_AIAGENT, LAI_INSTALL_SYSTEMCTL, LAI_INSTALL_SS, LAI_INSTALL_CURL,
+# LAI_INSTALL_HOME_ROOT. P7 reads these variables if an earlier phase set them: OPT_BACKEND (or DETECTED_BACKEND)
+# and DETECTED_CUDA_ARCH.
+# ===============================================================================================================
+llama_init_paths() {
+  LLAMA_ROOT=/opt/localai/llama.cpp; NODE_YAML=/etc/localai/node.yaml; PINS_INSTALLED=/etc/localai/catalog/pins.json
+  AICTL=/usr/local/bin/aictl; AIAGENT=/opt/localai/bin/aiagent; SYSTEMCTL=systemctl; SS_BIN=ss; CURL_BIN=curl
+  HOME_ROOT=""
+  if ((DEV)); then
+    LLAMA_ROOT="${LAI_INSTALL_LLAMA_ROOT:-$LLAMA_ROOT}"; NODE_YAML="${LAI_INSTALL_NODE_YAML:-$NODE_YAML}"
+    PINS_INSTALLED="${LAI_INSTALL_PINS:-$PINS_INSTALLED}"; AICTL="${LAI_INSTALL_AICTL:-$AICTL}"
+    AIAGENT="${LAI_INSTALL_AIAGENT:-$AIAGENT}"; SYSTEMCTL="${LAI_INSTALL_SYSTEMCTL:-$SYSTEMCTL}"
+    SS_BIN="${LAI_INSTALL_SS:-$SS_BIN}"; CURL_BIN="${LAI_INSTALL_CURL:-$CURL_BIN}"; HOME_ROOT="${LAI_INSTALL_HOME_ROOT:-}"
+  fi
+}
+
+# llama_fail <exit> <code> <message>: record the phase as failed, then leave with the doctor code.
+llama_fail() {
+  local rc="$1" code="$2"
+  shift 2
+  [[ -z "$CUR_PHASE_ID" ]] || set_phase "$CUR_PHASE_ID" failed "$code" || true
+  fail "$rc" "$code" "$*"
+}
+
+# node_yaml_get <block> <key>: a scalar one level down in node.yaml ("llama:" then "  commit: abc"); empty if absent.
+node_yaml_get() {
+  [[ -r "$NODE_YAML" ]] || return 0
+  awk -v b="$1" -v k="$2" '
+    /^[^ #\t]/ { inb = ($0 ~ ("^" b ":")) }
+    inb && $1 == k ":" { v = $2; gsub(/^["\047]|["\047]$/, "", v); print v; exit }' "$NODE_YAML"
+}
+
+# pins_commit <pins.json> <node-id>: the llama_cpp commit pinned for this node (else the first entry); empty if none.
+# The entries of "llama_cpp" are flat objects, so no JSON tool is needed (jq is not installed on a fresh node).
+pins_commit() {
+  local file="$1" node="$2" flat obj c first=""
+  [[ -r "$file" ]] || return 0
+  flat="$(tr -d '\n' <"$file" | sed -n -E 's/.*"llama_cpp"[[:space:]]*:[[:space:]]*\[//p' | sed -E 's/\}[[:space:]]*\].*/}/')"
+  while IFS= read -r obj; do
+    c="$(sed -n -E 's/.*"commit"[[:space:]]*:[[:space:]]*"([0-9a-f]{7,40})".*/\1/p' <<<"$obj")"
+    [[ -n "$c" ]] || continue
+    [[ -n "$first" ]] || first="$c"
+    if [[ -n "$node" ]] && grep -q "\"$node\"" <<<"$obj"; then printf '%s\n' "$c"; return 0; fi
+  done < <(grep -o '{[^{}]*}' <<<"$flat")
+  printf '%s\n' "$first"
+}
+
+# llama_resolve: sets LLAMA_COMMIT, LLAMA_BACKEND, LLAMA_BUILD_DIR, LLAMA_SRC, LLAMA_COMMIT_FROM. Returns 1 when no commit.
+llama_resolve() {
+  llama_init_paths
+  local node="${OPT_NODE_ID:-}" c="" from="" kitpins=""
+  [[ -n "$node" ]] || node="$(sed -n -E 's/^node_id:[[:space:]]*"?([^"# ]*).*/\1/p' "$NODE_YAML" 2>/dev/null | head -n1)"
+  c="$(node_yaml_get llama commit)"; [[ -z "$c" ]] || from="node.yaml (llama.commit)"
+  if [[ -z "$c" && -n "$OPT_FROM_ARK" ]]; then
+    kitpins="$OPT_FROM_ARK/localai/kit/catalog/pins.json"
+    c="$(pins_commit "$kitpins" "$node")"; [[ -z "$c" ]] || from="the kit's pins.json"
+  fi
+  if [[ -z "$c" ]]; then c="$(pins_commit "$PINS_INSTALLED" "$node")"; [[ -z "$c" ]] || from="the installed catalog's pins.json"; fi
+  LLAMA_COMMIT="$c"; LLAMA_COMMIT_FROM="$from"
+  LLAMA_BACKEND="${OPT_BACKEND:-${DETECTED_BACKEND:-}}"
+  [[ -n "$LLAMA_BACKEND" ]] || LLAMA_BACKEND="$(node_yaml_get llama backend)"
+  case "$LLAMA_BACKEND" in cuda|vulkan|cpu) ;; *) LLAMA_BACKEND=cpu ;; esac
+  [[ -n "$c" ]] || return 1
+  LLAMA_BUILD_DIR="$LLAMA_ROOT/builds/${c:0:9}-$LLAMA_BACKEND"
+  LLAMA_SRC="$LLAMA_ROOT/src/$c"
+}
+
+# llama_build_ok <build-dir> <commit>: llama-server exists and its --version names the first 7 hex of the commit.
+llama_build_ok() {
+  local bin="$1/bin/llama-server" out
+  [[ -x "$bin" ]] || return 1
+  out="$(timeout 30 "$bin" --version 2>&1)" || true
+  grep -qF -- "${2:0:7}" <<<"$out"
+}
+
+check_llama() {
+  llama_resolve || return 1
+  llama_build_ok "$LLAMA_BUILD_DIR" "$LLAMA_COMMIT"
+}
+
+# llama_home_checkout: prints the desktop user's ~/llama.cpp when it holds the commit, else nothing.
+llama_home_checkout() {
+  local user="${OPT_DESKTOP_USER:-}" home="" repo
+  [[ -n "$user" ]] || return 0
+  if [[ -n "$HOME_ROOT" ]]; then home="$HOME_ROOT/$user"; else home="$(getent passwd "$user" | cut -d: -f6)"; fi
+  repo="$home/llama.cpp"
+  [[ -d "$repo" ]] || return 0
+  if "${LLAMA_AS_USER[@]}" git -C "$repo" cat-file -e "$LLAMA_COMMIT^{commit}" 2>/dev/null; then printf '%s\n' "$repo"; fi
+}
+
+# llama_flatten_src <extracted-dir> <final-dir>: drop a single top-level folder, set 0755, move into place.
+llama_flatten_src() {
+  local tmp="$1" dest="$2" n top
+  n="$(find "$tmp" -mindepth 1 -maxdepth 1 | wc -l)"
+  top="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+  rm -rf "$dest"
+  if [[ ! -f "$tmp/CMakeLists.txt" && "$n" -eq 1 && -n "$top" ]]; then mv "$top" "$dest"; rmdir "$tmp"; else mv "$tmp" "$dest"; fi
+  chmod 0755 "$dest"
+  [[ -f "$dest/CMakeLists.txt" ]] || { rm -rf "$dest"; return 1; }
+}
+
+# llama_prepare_source: put the source of $LLAMA_COMMIT into $LLAMA_SRC (the only source location, llama-router.md
+# section 4.10.1). Order: already there, the desktop user's ~/llama.cpp, the kit tarball, GitHub (online only).
+llama_prepare_source() {
+  local c="$LLAMA_COMMIT" src="$LLAMA_SRC" tmp repo tarball="" url sum
+  LLAMA_AS_USER=(); if ((!DEV)) && [[ -n "${OPT_DESKTOP_USER:-}" ]]; then LLAMA_AS_USER=(sudo -u "$OPT_DESKTOP_USER"); fi
+  if [[ -f "$src/CMakeLists.txt" ]]; then say "source already in place: $src"; return 0; fi
+  tmp="$src.tmp"
+  repo="$(llama_home_checkout)"
+  if [[ -n "$repo" ]]; then
+    say "source: your existing checkout $repo has commit ${c:0:9}; exporting it to $src (nothing in it is changed or deleted)"
+    if ((DRY_RUN)); then
+      say "[dry-run] would run: git -C $repo archive ${c:0:9} | tar -x -C $tmp, then move it to $src"
+      return 0
+    fi
+    rm -rf "$tmp"; mkdir -p "$tmp"
+    say "run: git -C $repo archive $c | tar -x -C $tmp"
+    # shellcheck disable=SC2310
+    if ! (umask 022; set -o pipefail; "${LLAMA_AS_USER[@]}" git -C "$repo" archive "$c" | tar -x -C "$tmp"); then
+      rm -rf "$tmp"
+      llama_fail 1 LAI-INS-032 "could not export commit ${c:0:9} from $repo. Re-run and the installer will try the kit or the internet instead; if it repeats, run 'sudo install-node.sh --repair'."
+    fi
+  else
+    if [[ -n "$OPT_FROM_ARK" ]]; then
+      tarball="$OPT_FROM_ARK/localai/kit/src/llama.cpp-$c.tar.gz"
+      if [[ ! -f "$tarball" ]]; then
+        llama_fail 1 LAI-INS-032 "the AI-ARK drive has no llama.cpp source for commit ${c:0:9} (looked for $tarball) and this is an offline install. Fix: run 'aictl kit verify' on a node that has internet, re-sync the drive, then re-run."
+      fi
+      say "source: kit tarball $tarball (offline)"
+      sum="$(sha256sum "$tarball" | cut -d' ' -f1)"; say "sha256 $(basename "$tarball") $sum"
+    else
+      url="https://github.com/ggml-org/llama.cpp/archive/$c.tar.gz"
+      say "source: downloading $url (online)"
+      if ((DRY_RUN)); then
+        say "[dry-run] would download $url, record its sha256, extract it to $src"
+        return 0
+      fi
+      mkdir -p "$LLAMA_ROOT/src"
+      tarball="$LLAMA_ROOT/src/.download-$c.tar.gz"
+      if ! run_or_say "$CURL_BIN" -fL --retry 3 --connect-timeout 15 -o "$tarball" "$url"; then
+        rm -f "$tarball"
+        llama_fail 1 LAI-INS-032 "downloading llama.cpp ${c:0:9} from GitHub failed. Check the internet connection and re-run, or use --from-ark with a drive that has the source."
+      fi
+      sum="$(sha256sum "$tarball" | cut -d' ' -f1)"; say "sha256 llama.cpp-$c.tar.gz $sum"
+    fi
+    if ((DRY_RUN)); then
+      say "[dry-run] would extract $tarball to $src"
+      return 0
+    fi
+    rm -rf "$tmp"; mkdir -p "$tmp"
+    say "run: tar -xzf $tarball -C $tmp"
+    # shellcheck disable=SC2310
+    if ! (umask 022; tar -xzf "$tarball" -C "$tmp"); then
+      rm -rf "$tmp"; [[ "$tarball" != "$LLAMA_ROOT"/src/.download-* ]] || rm -f "$tarball"
+      llama_fail 1 LAI-INS-032 "the llama.cpp source file is damaged and could not be unpacked. Re-sync the drive or re-run to download it again."
+    fi
+    [[ "$tarball" != "$LLAMA_ROOT"/src/.download-* ]] || rm -f "$tarball"
+  fi
+  # shellcheck disable=SC2310
+  llama_flatten_src "$tmp" "$src" || llama_fail 1 LAI-INS-032 "the unpacked source in $src has no CMakeLists.txt, so it is not llama.cpp. It was removed; re-run."
+  say "source ready: $src"
+}
+
+phase_llama() {
+  if ! llama_resolve && ((DRY_RUN)); then
+    # The catalog (and its pins.json) is installed in phase 2, which a dry run does not do.
+    say "[dry-run] cannot tell yet which llama.cpp commit this node needs (the catalog is installed in phase 2); a real run would reuse a good build or build it here"
+    return 0
+  fi
+  # shellcheck disable=SC2310
+  llama_resolve || llama_fail 1 LAI-INS-032 "no llama.cpp commit is known for this node: there is no llama.commit in $NODE_YAML and no pins.json in the kit or in $PINS_INSTALLED. Re-run after the catalog is installed (phase 2), or use --from-ark."
+  say "llama.cpp commit ${LLAMA_COMMIT:0:9} for backend $LLAMA_BACKEND (from $LLAMA_COMMIT_FROM)"
+  # shellcheck disable=SC2310
+  if llama_build_ok "$LLAMA_BUILD_DIR" "$LLAMA_COMMIT"; then
+    say "already built and working: $LLAMA_BUILD_DIR (nothing to rebuild)"
+    return 0
+  fi
+  [[ ! -e "$LLAMA_BUILD_DIR/bin/llama-server" ]] || say "the existing build in $LLAMA_BUILD_DIR does not pass its test; it will be rebuilt"
+  llama_prepare_source
+  local args=(rebuild-llama --commit "$LLAMA_COMMIT" --backend "$LLAMA_BACKEND" --source "$LLAMA_SRC" --no-activate --yes)
+  if [[ "$LLAMA_BACKEND" == cuda && -n "${DETECTED_CUDA_ARCH:-}" ]]; then args+=(--cuda-arch "$DETECTED_CUDA_ARCH"); fi
+  say "Building llama.cpp can take up to 3 hours on a slow computer. Please leave this window open."
+  if ! run_or_say "$AICTL" "${args[@]}"; then
+    llama_fail 1 LAI-INS-032 "building llama.cpp failed. Read $LLAMA_BUILD_DIR/build.log (or the newest failed folder under $LLAMA_ROOT/builds/); the old service, if any, keeps running; then run 'sudo install-node.sh --repair'."
+  fi
+  if ((!DRY_RUN)); then
+    say "build finished: $LLAMA_BUILD_DIR (it is switched on in phase 8 or 9, not here)"
+  fi
+}
+
+# ---- P8 migration ---------------------------------------------------------------------------------------------
+# llama-qwen.service is present as a real unit file (after the migration it is masked: a symlink to /dev/null).
+llama_qwen_present() {
+  [[ -f "$SYSTEMD_DIR/llama-qwen.service" && ! -L "$SYSTEMD_DIR/llama-qwen.service" ]]
+}
+
+# llama_qwen_holds_8080: the old service is running, or something listens on 8080 while the unit still exists.
+llama_qwen_holds_8080() {
+  llama_qwen_present || return 1
+  "$SYSTEMCTL" is-active --quiet llama-qwen 2>/dev/null && return 0
+  "$SS_BIN" -Hltn 'sport = :8080' 2>/dev/null | grep -q ':8080'
+}
+
+check_migration() {
+  llama_init_paths
+  ! llama_qwen_present
+}
+
+phase_migration() {
+  llama_init_paths
+  MIGRATION_RAN=0
+  if [[ "$OPT_MIGRATE" == no ]]; then
+    # shellcheck disable=SC2310
+    if llama_qwen_holds_8080; then
+      llama_fail 1 LAI-INS-031 "the old llama-qwen service is still using port 8080 and --no-migrate was given, so the new service cannot start. Re-run without --no-migrate."
+    fi
+    say "migration skipped (--no-migrate); llama-qwen is not using port 8080"
+    return 0
+  fi
+  # shellcheck disable=SC2310
+  if [[ "$OPT_MIGRATE" != yes ]] && ! llama_qwen_present; then
+    say "no old llama-qwen.service found: nothing to migrate"
+    return 0
+  fi
+  say "Migrating the old llama-qwen service to the new one. The port (8080), the key and the address stay the same."
+  if ((DRY_RUN)); then
+    if ((EUID == 0)) && [[ -x "$AIAGENT" ]]; then
+      run_logged "$AIAGENT" setup migrate --dry-run || llama_fail 1 LAI-INS-033 "the migration dry run found a problem (see the lines above). Nothing was changed."
+    else
+      say "[dry-run] would run: $(quote_cmd "$AIAGENT" setup migrate) (its own dry run needs root and the installed agent, so it was not run)"
+    fi
+    return 0
+  fi
+  confirm "Replace the old llama-qwen service with the new Local AI service now? (The old one is put back automatically if anything goes wrong.)"
+  local rc=0
+  run_or_say "$AIAGENT" setup migrate || rc=$?
+  case "$rc" in
+    0) MIGRATION_RAN=1; say "migration finished" ;;
+    20) llama_fail 1 LAI-INS-033 "the migration failed and was rolled back: the old llama-qwen service is running again, as before. Read the lines above and report them." ;;
+    77) llama_fail 3 LAI-INS-003 "aiagent setup migrate must run as root. Run the installer with sudo." ;;
+    *) llama_fail 1 LAI-INS-033 "the migration stopped (exit $rc) and could not be finished. Read the lines above: they say whether the old llama-qwen service was put back. Report them." ;;
+  esac
+}
+# ===============================================================================================================
+
 # run_phase <index 1..15> <table entry>
 run_phase() {
   local n="$1" entry="$2" id fn name rc=0 start=$SECONDS

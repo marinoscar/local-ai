@@ -22,10 +22,34 @@ fakehex="$(printf 'ab%.0s' $(seq 32))"             # 64 hex characters
 STAMPED="$w/install-node.fake-stamped.sh"
 sed -e 's|@@LAI_RELEASE_TAG@@|node-v9.9.9-test|g' -e 's|@@LAI_RELEASE_VERSION@@|9.9.9-test|g' \
     -e 's|@@LAI_MINISIGN_PUBKEY@@|RWTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST|g' "$INST" >"$STAMPED"; chmod +x "$STAMPED"
+
+# INST-05 fixtures: fake llama.cpp root, node.yaml, pins, and fake aictl/aiagent/systemctl/ss/curl (no root, no network).
+LL="$w/llama"; mkdir -p "$LL/builds" "$LL/src" "$w/llfake" "$w/homes" "$w/lsystemd"
+C40="f3586e66b$(printf '0%.0s' $(seq 31))"; C40B="a1b2c3d4e$(printf '1%.0s' $(seq 31))"
+printf 'node_id: ai-n4\nllama:\n  backend: cpu\n  commit: %s\n' "$C40" >"$w/node.yaml"
+mkdir -p "$w/fx/llama.cpp-$C40"; : >"$w/fx/llama.cpp-$C40/CMakeLists.txt"; tar -czf "$w/fx.tar.gz" -C "$w/fx" "llama.cpp-$C40"
+cat >"$w/llfake/aictl" <<'EOS'
+#!/bin/sh
+echo "aictl $*" >>"$FAKE_LOG"
+[ "${FAKE_AICTL_FAIL:-0}" = 1 ] && { echo "cmake: error: boom"; exit 1; }
+while [ $# -gt 0 ]; do case "$1" in --commit) c=$2;; --backend) b=$2;; --source) s=$2;; esac; shift; done
+[ -f "$s/CMakeLists.txt" ] || { echo "no source at $s"; exit 1; }
+d="$LAI_INSTALL_LLAMA_ROOT/builds/$(echo "$c" | cut -c1-9)-$b"; mkdir -p "$d/bin"
+printf '#!/bin/sh\necho "version: 1 (%s)"\n' "$(echo "$c" | cut -c1-7)" >"$d/bin/llama-server"; chmod +x "$d/bin/llama-server"
+EOS
+printf '#!/bin/sh\necho "aiagent $*" >>"$FAKE_LOG"\necho "migrating..."\nexit "${FAKE_AIAGENT_RC:-0}"\n' >"$w/llfake/aiagent"
+printf '#!/bin/sh\n[ "$1" = is-active ] && exit "${FAKE_QWEN_INACTIVE:-0}"\nexit 0\n' >"$w/llfake/systemctl"
+printf '#!/bin/sh\n[ -n "$FAKE_SS" ] && echo "LISTEN 0 4096 127.0.0.1:8080 0.0.0.0:*"\nexit 0\n' >"$w/llfake/ss"
+printf '#!/bin/sh\necho "curl $*" >>"$FAKE_LOG"\nwhile [ $# -gt 0 ]; do [ "$1" = -o ] && o=$2; shift; done\ncp "%s" "$o"\n' "$w/fx.tar.gz" >"$w/llfake/curl"
+chmod +x "$w/llfake/"*
+export FAKE_LOG="$w/fake.log"
+llhooks=(LAI_INSTALLER_DEV=1 LAI_INSTALL_LLAMA_ROOT="$LL" LAI_INSTALL_NODE_YAML="$w/node.yaml" LAI_INSTALL_PINS="$w/pins.json"
+  LAI_INSTALL_AICTL="$w/llfake/aictl" LAI_INSTALL_AIAGENT="$w/llfake/aiagent" LAI_INSTALL_SYSTEMCTL="$w/llfake/systemctl"
+  LAI_INSTALL_SS="$w/llfake/ss" LAI_INSTALL_CURL="$w/llfake/curl" LAI_INSTALL_HOME_ROOT="$w/homes")
 # dry <args...>: a dry run of the template in a throwaway folder
-dry() { LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$w/state" "$INST" --dry-run --log "$w/dry.log" "$@"; }
+dry() { env "${llhooks[@]}" LAI_INSTALL_NODE_YAML="$w/none.yaml" LAI_INSTALL_STATE_DIR="$w/state" "$INST" --dry-run --log "$w/dry.log" "$@"; }
 # real <args...>: a real run of the skeleton (dev hooks only: state and log in $w)
-real() { LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$w/rstate" LAI_INSTALL_SYSTEMD_DIR="$w/systemd" "$STAMPED" --log "$w/real.log" "$@"; }
+real() { env "${llhooks[@]}" LAI_INSTALL_STATE_DIR="$w/rstate" LAI_INSTALL_SYSTEMD_DIR="$w/systemd" "$STAMPED" --log "$w/real.log" "$@"; }
 
 echo "== arguments"
 t "help exits 0" 0 "Usage:" "$INST" --help
@@ -81,9 +105,10 @@ mkdir -p "$w/tmp"; before="$(find "$w" -mindepth 1 -not -path "$w/tmp*" -not -na
 dryout="$(dry --node-id ai-n9 2>&1)"; rc=$?
 t "dry run exits 0" 0 "" test $rc -eq 0
 t "prints all 15 phase headers" 0 "" bash -c 'for n in $(seq 1 15); do grep -q "^==> \[$n/15\]" <<<"$1" || exit 1; done' _ "$dryout"
-# In a dry run P11, P14 and P15 (INST-07) are implemented; 12 phases are still stubs. Lower this as items land.
-STUBS_IN_DRY_RUN=12
+# In a dry run P7, P8 (INST-05), P11, P14 and P15 (INST-07) are implemented; 10 phases are still stubs. Lower this as items land.
+STUBS_IN_DRY_RUN=10
 t "every phase that is not implemented says so" 0 "" test "$(grep -c '^NOT IMPLEMENTED YET: this phase' <<<"$dryout")" = "$STUBS_IN_DRY_RUN"
+t "phases 7 and 8 are implemented, not stubs" 0 "" bash -c '! sed -n "/^==> \[7\/15\]/,/^==> \[9\/15\]/p" <<<"$1" | grep -q "NOT IMPLEMENTED"' _ "$dryout"
 t "says the installer is incomplete" 0 "" grep -q "THIS INSTALLER IS INCOMPLETE" <<<"$dryout"
 t "uses the [dry-run] marker" 0 "" grep -q '^\[dry-run\] would record P1 as' <<<"$dryout"
 t "no state folder, state.json or lock was created" 0 "" test ! -e "$w/state"
@@ -108,7 +133,7 @@ t "state.json exists, 0600" 0 "" test "$(stat -c %a "$s")" = 600
 t "state.json is valid JSON when python is present" 0 "" bash -c 'command -v python3 >/dev/null || exit 0; python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); assert len(d[\"phases\"])==15" "$1"' _ "$s"
 # Phases whose real implementation has landed (INST-07: P11, P14 under the skeleton's defaults). Every other phase
 # is still a stub and must be recorded as not-implemented; add a phase id here when its item is merged.
-IMPLEMENTED="P11 P14"
+IMPLEMENTED="P7 P8 P11 P14"
 t "every phase has status, version, finished_at, details" 0 "" bash -c '[ "$(grep -cE "\"status\":\"(not-implemented|done)\",\"version\":\"9.9.9-test\",\"finished_at\":\"20[0-9-]*T[0-9:]*Z\",\"details\":" "$1")" = 15 ]' _ "$s"
 t "a stub is never recorded as done" 0 "" bash -c 'for i in $(seq 1 15); do case " $2 " in *" P$i "*) continue ;; esac; grep -q "\"P$i\": .*\"status\":\"done\"" "$1" && exit 1; done; exit 0' _ "$s" "$IMPLEMENTED"
 t "atomic: no temp file left behind" 0 "" test -z "$(find "$w/rstate" -name '.state.*')"
@@ -116,9 +141,9 @@ t "lock file exists after a real run" 0 "" test -f "$w/rstate/lock"
 rerun="$(real --node-id ai-n9 2>&1)"
 t "second run is a re-run" 0 "kind: re-run" grep -F "kind: re-run" <<<"$rerun"
 touch "$w/systemd/llama-qwen.service"
-t "legacy llama-qwen.service means migration" 0 "kind: migration" bash -c 'LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$2" LAI_INSTALL_SYSTEMD_DIR="$3" "$1" --log "$4" 2>&1' _ "$STAMPED" "$w/rstate" "$w/systemd" "$w/real.log"
+t "legacy llama-qwen.service means migration" 0 "kind: migration" bash -c 'env "${@:5}" LAI_INSTALL_STATE_DIR="$2" LAI_INSTALL_SYSTEMD_DIR="$3" "$1" --yes --log "$4" 2>&1' _ "$STAMPED" "$w/rstate" "$w/systemd" "$w/real.log" "${llhooks[@]}"
 rm -f "$w/systemd/llama-qwen.service"
-t "state load reads what state write wrote" 0 "" bash -c 'source "$1"; STATE_FILE="$2"; state_load; [ "${PH_STATUS[P6]}" = not-implemented ] && [ "${#PH_STATUS[@]}" = 15 ]' _ "$INST" "$s"
+t "state load reads what state write wrote" 0 "" bash -c 'source "$1"; STATE_FILE="$2"; state_load; [ "${PH_STATUS[P6]}" = not-implemented ] && [ "${PH_STATUS[P7]}" = done ] && [ "${#PH_STATUS[@]}" = 15 ]' _ "$INST" "$s"
 # A phase that is done and whose check passes reports "already done" (the hook later items use).
 t "idempotency: a done phase with a passing check says 'already done'" 0 "already done" bash -c '
   source "$1"; DRY_RUN=1; STATE_FILE="$2/none"; PH_STATUS[P1]=done; check_preflight() { return 0; }
@@ -199,7 +224,7 @@ mkroot() { # mkroot [legacy]
 }
 # unenv: the environment of a run on the fake root. un <answers...> -- <args...> feeds the prompts in order.
 unenv() { PATH="${UN_PATH:-$FB}:$PATH" LAI_INSTALLER_DEV=1 LAI_INSTALL_ROOT="$FR" LAI_INSTALL_ANSWERS="$w/answers" LAI_INSTALL_SELF="$STAMPED" \
-    LAI_INSTALL_STATE_DIR="$FR/var/lib/localai/install" LAI_INSTALL_SYSTEMD_DIR="$FR/etc/systemd/system" "$@"; }
+    LAI_INSTALL_STATE_DIR="$FR/var/lib/localai/install" LAI_INSTALL_SYSTEMD_DIR="$FR/etc/systemd/system" env "${llhooks[@]}" "$@"; }
 un() {
   local ans=()
   while [[ "$1" != "--" ]]; do ans+=("$1"); shift; done; shift
@@ -435,6 +460,94 @@ t "P15 no reboot happened" 0 "" bash -c '! grep -qx "systemctl reboot" "$1"' _ "
 t "P15 without the agent installed (dry run) says so" 0 "the agent is not installed yet" ph 'OPT_NODE_ID=ai-n4; DRY_RUN=1; rm -f "$fk/aiagent"; phase_verify' fk="$fk"
 t "P15 without the agent installed (real run) is not implemented, never done" 10 "so the checks and the summary cannot run" ph 'OPT_NODE_ID=ai-n4; rm -f "$fk/aiagent"; phase_verify; exit $?' fk="$fk"
 t "tailscale serve and funnel were never invoked in any INST-07 test" 0 "" nots
+echo "== INST-05: P7 llama.cpp build or reuse, P8 migration hand-off"
+# llrun <shell code>: source the installer with the fakes and run the code (state in $w/lstate, units in $w/lsystemd)
+llrun() { env "${llhooks[@]}" "${LLENV[@]}" bash -c 'source "$1"; STATE_DIR="$2"; SYSTEMD_DIR="$3"; STATE_FILE="$2/state.json"; shift 3; eval "$*"' _ "$INST" "$w/lstate" "$w/lsystemd" "$@"; }
+# llenvrun <VAR=val...> -- <shell code>: same, with extra environment for the fakes
+llenvrun() { local -a e=(); while [[ "$1" != -- ]]; do e+=("$1"); shift; done; shift; env "${llhooks[@]}" "${e[@]}" bash -c 'source "$1"; STATE_DIR="$2"; SYSTEMD_DIR="$3"; shift 3; eval "$*"' _ "$INST" "$w/lstate" "$w/lsystemd" "$@"; }
+LLENV=(); : >"$FAKE_LOG"
+printf '{\n  "schema_version": 1,\n  "llama_cpp": [\n    {"commit": "%s", "nodes": ["ai-n9"]},\n    {"commit": "%s", "nodes": ["ai-n1", "ai-n2"]}\n  ],\n  "other": [{"x": "%s"}]\n}\n' "$C40B" "$C40" "$C40B" >"$w/pins.json"
+NONE="$w/none.yaml"
+echo "-- commit resolution"
+t "node.yaml llama.commit wins" 0 "$C40" llrun 'llama_resolve && echo $LLAMA_COMMIT'
+t "pins.json: this node id picks its own entry" 0 "$C40B" llenvrun LAI_INSTALL_NODE_YAML="$NONE" -- 'OPT_NODE_ID=ai-n9; llama_resolve; echo $LLAMA_COMMIT'
+t "pins.json: node id in the second entry" 0 "$C40 pins" llenvrun LAI_INSTALL_NODE_YAML="$NONE" -- 'OPT_NODE_ID=ai-n2; llama_resolve; echo "$LLAMA_COMMIT ${LLAMA_COMMIT_FROM:24:4}"'
+t "pins.json: unknown node falls back to the first entry" 0 "$C40B" llenvrun LAI_INSTALL_NODE_YAML="$NONE" -- 'OPT_NODE_ID=ai-n7; llama_resolve; echo $LLAMA_COMMIT'
+t "no commit anywhere -> not resolved" 0 "unresolved" llenvrun LAI_INSTALL_NODE_YAML="$NONE" LAI_INSTALL_PINS="$w/nope.json" -- 'llama_resolve || echo unresolved'
+mkdir -p "$w/ark/localai/kit/catalog" "$w/ark/localai/kit/src"
+printf '{"llama_cpp": [{"commit": "%s", "nodes": ["ai-n4"]}]}' "$C40B" >"$w/ark/localai/kit/catalog/pins.json"
+t "offline: the kit's pins.json is read before the installed catalog" 0 "$C40B" llenvrun LAI_INSTALL_NODE_YAML="$NONE" -- "OPT_FROM_ARK='$w/ark'; OPT_NODE_ID=ai-n4; llama_resolve; echo \$LLAMA_COMMIT"
+t "backend: --backend wins" 0 "cuda" llrun 'OPT_BACKEND=cuda; llama_resolve; echo $LLAMA_BACKEND'
+t "backend: defaults to cpu" 0 "cpu" llrun 'llama_resolve; echo $LLAMA_BACKEND'
+echo "-- reuse"
+b9="$LL/builds/${C40:0:9}-cpu"; rm -rf "$LL/builds/"* "$LL/src/"*
+t "no commit, real run -> exit 1 LAI-INS-032" 1 "LAI-INS-032" llenvrun LAI_INSTALL_NODE_YAML="$NONE" LAI_INSTALL_PINS="$w/nope.json" -- 'phase_llama'
+t "first run builds with the shared builder" 0 "build finished" llrun 'OPT_YES=1; phase_llama'
+t "aictl got commit, backend, the one source folder, --no-activate" 0 "" grep -qF "aictl rebuild-llama --commit $C40 --backend cpu --source $LL/src/$C40 --no-activate" "$FAKE_LOG"
+t "source is in the one source location, tree is 0755" 0 "" bash -c '[ -f "$1/CMakeLists.txt" ] && [ "$(stat -c %a "$1")" = 755 ]' _ "$LL/src/$C40"
+t "nothing refers to /var/lib/localai/build" 0 "" bash -c '! grep -q "/var/lib/localai/build" "$1"' _ "$FAKE_LOG"
+t "current was not touched" 0 "" test ! -e "$LL/current"
+: >"$FAKE_LOG"
+t "a good existing build is reused: already built" 0 "already built and working" llrun 'phase_llama'
+t "reuse did not call the builder" 0 "" test ! -s "$FAKE_LOG"
+t "check_llama passes for a good build" 0 "" llrun 'check_llama'
+printf '#!/bin/sh\necho "version: 1 (deadbee)"\n' >"$b9/bin/llama-server"
+t "check_llama fails when the smoke test fails" 1 "" llrun 'check_llama'
+t "a build whose smoke test fails is rebuilt" 0 "it will be rebuilt" llrun 'OPT_YES=1; phase_llama'
+echo "-- source order"
+rm -rf "$LL/builds/"* "$LL/src/"*
+repo="$w/homes/lab/llama.cpp"; mkdir -p "$repo"
+g() { git -C "$repo" -c user.name=t -c user.email=t@example.test "$@"; }
+g init -q; echo 'cmake_minimum_required(VERSION 3.14)' >"$repo/CMakeLists.txt"; g add CMakeLists.txt; g commit -q -m x; HC="$(g rev-parse HEAD)"
+printf 'node_id: ai-n4\nllama:\n  commit: %s\n' "$HC" >"$w/node-home.yaml"
+LLENV=(LAI_INSTALL_NODE_YAML="$w/node-home.yaml")
+t "1. ~/llama.cpp with the commit is the source (log says so)" 0 "your existing checkout" llrun "OPT_DESKTOP_USER=lab; OPT_YES=1; OPT_FROM_ARK='$w/ark'; phase_llama"
+t "   exported to the one source location; the checkout is untouched" 0 "" bash -c '[ -f "$1/src/$2/CMakeLists.txt" ] && [ -d "$3/.git" ] && [ ! -e "$3/build-cuda" ]' _ "$LL" "$HC" "$repo"
+rm -rf "$LL/builds/"* "$LL/src/"*
+printf 'node_id: ai-n4\nllama:\n  commit: %s\n' "$C40" >"$w/node-home.yaml"
+cp "$w/fx.tar.gz" "$w/ark/localai/kit/src/llama.cpp-$C40.tar.gz"; : >"$FAKE_LOG"
+t "2. commit not in ~/llama.cpp: the kit tarball, offline" 0 "kit tarball" llrun "OPT_DESKTOP_USER=lab; OPT_YES=1; OPT_FROM_ARK='$w/ark'; phase_llama"
+t "   top folder dropped, source in the one location" 0 "" test -f "$LL/src/$C40/CMakeLists.txt"
+t "   offline never calls curl" 0 "" bash -c '! grep -q "^curl" "$1"' _ "$FAKE_LOG"
+rm -rf "$LL/builds/"* "$LL/src/"*
+t "3. online with no checkout and no kit: GitHub tarball, sha256 recorded" 0 "sha256 llama.cpp-$C40.tar.gz" llrun 'OPT_YES=1; phase_llama'
+t "   the URL is the pinned commit's archive" 0 "" grep -qF "https://github.com/ggml-org/llama.cpp/archive/$C40.tar.gz" "$FAKE_LOG"
+rm -rf "$LL/builds/"* "$LL/src/"*; rm -f "$w/ark/localai/kit/src/"*; : >"$FAKE_LOG"
+t "offline with no tarball -> exit 1 LAI-INS-032 and a fix" 1 "re-sync the drive" llrun "OPT_FROM_ARK='$w/ark'; phase_llama"
+t "   and no download was tried" 0 "" test ! -s "$FAKE_LOG"
+echo "-- build failure and dry run"
+rm -rf "$LL/builds/"* "$LL/src/"*
+t "build failure -> exit 1, LAI-INS-032" 1 "LAI-INS-032" llenvrun FAKE_AICTL_FAIL=1 LAI_INSTALL_NODE_YAML="$w/node-home.yaml" -- 'OPT_YES=1; phase_llama'
+t "   the message names build.log" 1 "build.log" llenvrun FAKE_AICTL_FAIL=1 LAI_INSTALL_NODE_YAML="$w/node-home.yaml" -- 'OPT_YES=1; phase_llama'
+t "   current untouched after a failed build" 0 "" test ! -e "$LL/current"
+rm -rf "$LL/builds/"* "$LL/src/"*; : >"$FAKE_LOG"; before="$(find "$LL" | sort | md5sum)"
+t "dry run says it would build with the shared builder" 0 "[dry-run] would run: $w/llfake/aictl rebuild-llama" llrun 'DRY_RUN=1; phase_llama'
+t "dry run created nothing and called nothing" 0 "" bash -c '[ "$(find "$1" | sort | md5sum)" = "$2" ] && [ ! -s "$3" ]' _ "$LL" "$before" "$FAKE_LOG"
+LLENV=()
+echo "-- P8 migration"
+llq="$w/lsystemd/llama-qwen.service"; rm -f "$llq"; : >"$FAKE_LOG"
+t "no llama-qwen.service: nothing to migrate" 0 "nothing to migrate" llrun 'phase_migration'
+t "   check_migration passes (already done)" 0 "" llrun 'check_migration'
+echo '[Service]' >"$llq"
+t "unit present: check_migration says not done" 1 "" llrun 'check_migration'
+t "unit present: runs 'aiagent setup migrate' and shows its output" 0 "migrating..." llrun 'OPT_YES=1; phase_migration'
+t "   called exactly as 'setup migrate'" 0 "" grep -qx "aiagent setup migrate" "$FAKE_LOG"
+t "rolled back (exit 20) -> exit 1 LAI-INS-033" 1 "LAI-INS-033" llenvrun FAKE_AIAGENT_RC=20 -- 'OPT_YES=1; phase_migration'
+t "   message says the old service is running again" 1 "running again" llenvrun FAKE_AIAGENT_RC=20 -- 'OPT_YES=1; phase_migration'
+t "other failure (exit 1) -> LAI-INS-033" 1 "LAI-INS-033" llenvrun FAKE_AIAGENT_RC=1 -- 'OPT_YES=1; phase_migration'
+t "not root (exit 77) -> exit 3, LAI-INS-003" 3 "LAI-INS-003" llenvrun FAKE_AIAGENT_RC=77 -- 'OPT_YES=1; phase_migration'
+: >"$FAKE_LOG"
+t "no confirmation -> exit 4 and nothing run" 4 "Not confirmed" llenvrun A=1 -- 'phase_migration </dev/null'
+t "   the migration was not started" 0 "" test ! -s "$FAKE_LOG"
+t "--no-migrate with llama-qwen active -> exit 1, LAI-INS-031" 1 "LAI-INS-031" llrun 'OPT_MIGRATE=no; phase_migration'
+t "--no-migrate, llama-qwen stopped and port free -> skipped" 0 "migration skipped" llenvrun FAKE_QWEN_INACTIVE=3 -- 'OPT_MIGRATE=no; phase_migration'
+t "--no-migrate, stopped but something listens on 8080 -> LAI-INS-031" 1 "LAI-INS-031" llenvrun FAKE_QWEN_INACTIVE=3 FAKE_SS=1 -- 'OPT_MIGRATE=no; phase_migration'
+t "dry run shows what it would run" 0 "[dry-run] would run: $w/llfake/aiagent setup migrate" llrun 'DRY_RUN=1; phase_migration'
+t "   and called nothing" 0 "" test ! -s "$FAKE_LOG"
+rm -f "$llq"; ln -s /dev/null "$llq"
+t "a masked llama-qwen (already migrated) is not migrated again" 0 "nothing to migrate" llrun 'phase_migration'
+t "--migrate forces the step even when the unit is gone" 0 "migration finished" llrun 'OPT_MIGRATE=yes; OPT_YES=1; phase_migration'
+rm -f "$llq"
 
 echo "== release stamping"
 if command -v minisign >/dev/null 2>&1; then
