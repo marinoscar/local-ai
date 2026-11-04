@@ -839,6 +839,80 @@ phase_packages() {
 # end of INST-04
 # ===============================================================================================================
 
+# =============================================================================================================
+# BEGIN P4 laptop hardening (INST-03, issue #116). Spec: installer.md section 4.3 P4.
+# All the work is `aiagent setup harden` (Go, tested with fakes); this block only calls it. It never restarts
+# systemd-logind: the lid settings apply after a reboot, which is why reboot_required is recorded.
+# =============================================================================================================
+REBOOT_REQUIRED=0
+
+# harden_bin: the agent binary (P2 puts it at /opt/localai/bin/aiagent). Dev hook: LAI_INSTALL_AIAGENT.
+harden_bin() {
+  # With the dev hooks on, the real binary is never used (a test must not harden the machine it runs on).
+  if ((DEV)); then printf '%s' "${LAI_INSTALL_AIAGENT:-/nonexistent/lai-dev-no-aiagent}"; else printf '%s' /opt/localai/bin/aiagent; fi
+}
+
+# harden_args <mode...>: the arguments shared by every call.
+harden_args() {
+  HARDEN_ARGS=(setup harden "$@" --state-dir "$STATE_DIR")
+  [[ "$OPT_HARDENING" != yes ]] || HARDEN_ARGS+=(--hardening)
+  ((!OPT_NO_SSH)) || HARDEN_ARGS+=(--no-ssh)
+  [[ -z "$OPT_DESKTOP_USER" ]] || HARDEN_ARGS+=(--desktop-user "$OPT_DESKTOP_USER")
+}
+
+# Satisfied when hardening is off, or the agent verifies every LAI-INS-040..044 check (a pending reboot is fine).
+check_hardening() {
+  [[ "$OPT_HARDENING" != no ]] && [[ -x "$(harden_bin)" ]] || return 1
+  harden_args --check
+  "$(harden_bin)" "${HARDEN_ARGS[@]}" >/dev/null 2>&1
+}
+
+phase_hardening() {
+  if [[ "$OPT_HARDENING" == no ]]; then
+    say "Laptop hardening is off (--no-hardening): nothing changed."
+    return 0
+  fi
+  local bin rc=0
+  bin="$(harden_bin)"
+  harden_args
+  ((!DRY_RUN)) || HARDEN_ARGS+=(--dry-run)
+  if [[ ! -x "$bin" ]]; then
+    ((!DRY_RUN)) || say "[dry-run] would run: $(quote_cmd "$bin" "${HARDEN_ARGS[@]}")"
+    # The agent is staged by P2 (INST-02, not implemented yet); until it is, say so loudly and never count this as done.
+    say "The agent program $bin is not installed yet, so the laptop cannot be hardened."
+    not_implemented "INST-02, issue #148 (stages the agent)"
+    return
+  fi
+  say "run: $(quote_cmd "$bin" "${HARDEN_ARGS[@]}")"
+  run_logged "$bin" "${HARDEN_ARGS[@]}" || rc=$?
+  if ((rc != 0)); then
+    say "Laptop hardening did not finish (see the LAI-INS-04x lines above). Fix the cause, then run: sudo install-node.sh --repair"
+    return "$rc"
+  fi
+  if ((!DRY_RUN)) && grep -q '"reboot_required": true' "$STATE_DIR/hardening.json" 2>/dev/null; then
+    REBOOT_REQUIRED=1
+    PHASE_DETAILS_OUT="reboot_required=true: logind settings apply after a reboot (LAI-INS-070); details in $STATE_DIR/hardening.json"
+    say "A reboot is needed to finish the lid settings (logind settings apply after a reboot). The installer does not restart logind."
+  fi
+}
+
+# revert_hardening: for --uninstall --revert-hardening (INST-08 calls it). SSH, packages, users stay.
+revert_hardening() {
+  local bin rc=0
+  bin="$(harden_bin)"
+  HARDEN_ARGS=(setup harden --revert --state-dir "$STATE_DIR")
+  ((!DRY_RUN)) || HARDEN_ARGS+=(--dry-run)
+  if [[ ! -x "$bin" ]]; then
+    say "Cannot revert the laptop hardening: $bin is missing."
+    return 1
+  fi
+  say "run: $(quote_cmd "$bin" "${HARDEN_ARGS[@]}")"
+  run_logged "$bin" "${HARDEN_ARGS[@]}" || rc=$?
+  return "$rc"
+}
+# END P4 laptop hardening
+# =============================================================================================================
+
 # run_phase <index 1..15> <table entry>
 run_phase() {
   local n="$1" entry="$2" id fn name rc=0 start=$SECONDS
@@ -850,12 +924,13 @@ run_phase() {
     CUR_PHASE_ID=""
     return 0
   fi
+  PHASE_DETAILS_OUT=""   # a phase may set this; it is recorded as the details of "done"
   set_phase "$id" running ""
   "phase_${fn}" || rc=$?
   local dur=$((SECONDS - start))
   case "$rc" in
     0)
-      set_phase "$id" "done" ""
+      set_phase "$id" "done" "${PHASE_DETAILS_OUT:-}"
       say "phase $id $name: done in ${dur}s" ;;
     "$PHASE_NOT_IMPLEMENTED")
       set_phase "$id" not-implemented "not implemented yet in installer $INSTALLER_VERSION"

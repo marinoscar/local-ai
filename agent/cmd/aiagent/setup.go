@@ -22,6 +22,7 @@ const setupUsage = `usage: aiagent setup <step> [flags]      (internal, root onl
   verify       post-install checks that can pass before a reboot (P15)
   summary      print the install summary and the VPS checklist (P15)
   migrate      run every pending migration (llama-qwen) with the installer's logging (P8)
+  harden       laptop hardening, --check, --revert (P4; never restarts systemd-logind)
 `
 
 // runSetup is `aiagent setup <step>`. Steps owned by other installer items register in setupSteps.

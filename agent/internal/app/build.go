@@ -26,6 +26,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/router"
 	"github.com/marinoscar/local-ai/agent/internal/router/migrate"
 	"github.com/marinoscar/local-ai/agent/internal/services"
+	"github.com/marinoscar/local-ai/agent/internal/setup/harden"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
@@ -288,6 +289,9 @@ func (d *Daemon) build(ctx context.Context) error {
 		return fmt.Errorf("connectivity prober: %w", err)
 	}
 	if err := doctor.RegisterNetChecks(c.Checks, doctor.NetSources{Serve: c.Tailscale, Reachable: c.Tailscale, Connectivity: c.Prober}); err != nil {
+		return err
+	}
+	if err := harden.RegisterChecks(c.Checks, harden.New(harden.Paths{Root: env.Root}, harden.Options{}, nil)); err != nil {
 		return err
 	}
 	if err := migrate.RegisterChecks(c.Checks, migrate.CheckSources{Systemd: c.Systemd, State: c.State, Paths: migrate.DefaultPaths(env.Root)}); err != nil {

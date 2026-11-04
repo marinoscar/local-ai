@@ -1,0 +1,6 @@
+#!/bin/sh
+# Keep Wi-Fi power save off (server use). Installed by Local AI.
+IFACE="$1"; ACTION="$2"
+case "$IFACE" in
+  wl*) case "$ACTION" in up|dhcp4-change|reapply) /usr/sbin/iw dev "$IFACE" set power_save off ;; esac ;;
+esac

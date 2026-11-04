@@ -29,6 +29,8 @@ Use this when a laptop must work like a server: stay on with the lid closed, nev
    ```
 
    - **What you should see:** no `LAI-HW-020` (lid will sleep), `LAI-NET-014` (Wi-Fi power saving), `LAI-HW-015` (power profile) or `LAI-INS-040` to `LAI-INS-044`.
+   - `LAI-INS-070` (info) means the installer changed the lid settings and a reboot is still needed; it goes away by itself after the next reboot, and `LAI-INS-040` is only checked after that.
+   - You can also run `sudo /opt/localai/bin/aiagent setup harden --check`: it prints every problem with its code and changes nothing.
    - **If it doesn't work:** run the repair, then **reboot**:
 
      ```
