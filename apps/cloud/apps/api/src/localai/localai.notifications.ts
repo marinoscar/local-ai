@@ -14,14 +14,17 @@
 // preferences can still mute either channel. Recipients are the holders of `lab:operate` (an organization permission; see
 // `lab-audience.ts`); `localai.node_enrolled` goes to the holders of `lab:admin`.
 //
-// `localai.command_failed` (the requester, browser) belongs to the command API issue (#83) and is added there.
+// `localai.command_failed` goes to the person who sent the command and nobody else (the settled-command listener names
+// the recipient), over the browser channel.
 import type { BrowserNotificationTemplate, NotificationRegistration } from '@marinoscar/platform-api/notifications';
 
 import type { AlertNotice } from './alerts/alert-ports';
+import type { LocalaiCommandFailedEvent } from './commands/command-notifier';
 
 export const NOTIFICATION_ALERT_RAISED = 'localai.alert_raised';
 export const NOTIFICATION_ALERT_CLEARED = 'localai.alert_cleared';
 export const NOTIFICATION_NODE_ENROLLED = 'localai.node_enrolled';
+export const NOTIFICATION_COMMAND_FAILED = 'localai.command_failed';
 
 /** The page every lab notification opens (a root-relative path, as the browser channel requires). */
 export const ALERTS_PAGE_LINK = '/lab/alerts';
@@ -44,6 +47,12 @@ export const nodeEnrolledBrowser: BrowserNotificationTemplate = (data: { node: s
   title: `${oneLine(data.node)} joined the lab`,
   body: `${oneLine(data.displayName)} contacted the cloud for the first time.`,
   link: `/lab/nodes/${encodeURIComponent(data.node)}`,
+});
+
+export const commandFailedBrowser: BrowserNotificationTemplate = (data: Omit<LocalaiCommandFailedEvent, 'recipientUserId'>) => ({
+  title: `${oneLine(data.type)} on ${oneLine(data.nodeName)} failed`,
+  body: oneLine(data.fix),
+  link: `/lab/nodes/${encodeURIComponent(data.nodeId)}`,
 });
 
 export const LOCALAI_NOTIFICATIONS: readonly NotificationRegistration[] = [
@@ -78,5 +87,15 @@ export const LOCALAI_NOTIFICATIONS: readonly NotificationRegistration[] = [
     },
     emailTemplate: 'localai-node-enrolled',
     browserTemplate: nodeEnrolledBrowser,
+  },
+  {
+    event: {
+      key: NOTIFICATION_COMMAND_FAILED,
+      label: 'A command you sent failed',
+      description: 'Sent to you when a command you sent to a node fails or expires before the node picks it up.',
+      channels: ['browser'],
+      defaultEnabled: true,
+    },
+    browserTemplate: commandFailedBrowser,
   },
 ];

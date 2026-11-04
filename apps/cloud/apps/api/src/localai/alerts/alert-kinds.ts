@@ -3,7 +3,10 @@
 // events, notification preferences): add a new one, never rename one.
 //
 // The fix text mirrors the "Plain-language fix" column of the `LAI-CLD` table in docs/specs/doctor-codes.md (section 2)
-// word for word; `alert-kinds.spec.ts` keeps the two in step.
+// word for word; `alert-kinds.spec.ts` keeps the two in step. The Doctor's shared map (`../doctor/codes.ts`, CLOUD-17)
+// holds only the codes the Doctor checks raise, so the other fixes are kept here and LAI-CLD-026 is taken from it.
+
+import { CLOUD_CODES } from '../doctor/codes';
 
 export type AlertSeverity = 'info' | 'warning' | 'critical';
 export type AlertState = 'active' | 'cleared';
@@ -61,16 +64,17 @@ export const KIND_CODES: Readonly<Record<EvaluatorKind | ExternalKind, string>> 
 
 /** The plain fix for each cloud-side code, as written in the doctor code registry. */
 export const CODE_FIXES: Readonly<Record<string, string>> = {
-  'LAI-CLD-020': 'Check the computer is on and connected. If it was moved to Offline mode on purpose, ignore this.',
-  'LAI-CLD-021': 'Turn the computer on or check its network. If it is retired, retire it in the cloud.',
-  'LAI-CLD-022': 'Plug the AI-ARK drive into the node and press "Sync now" (or run `aictl ark sync`).',
-  'LAI-CLD-023': "Open the node's Ark tab, read the sync error code and follow its fix, then press \"Sync now\".",
-  'LAI-CLD-024': "Open the node in the cloud or run `aictl drill` on it and follow the failed check's fix.",
-  'LAI-CLD-025': 'Press "Sync now" while online, or import from the AI-ARK drive (`aictl ark import`).',
-  'LAI-CLD-026': 'Press "Refresh status" on the node; if it persists run `sudo aictl cloud resend-key` on the node.',
-  'LAI-CLD-027': 'Check `tailscale serve status` on the node and the vhost on the VPS (runbook 05).',
-  'LAI-CLD-028': 'Press "Refresh catalog" on the node.',
-  'LAI-CLD-029': 'Admin: Lab → node → Update agent.',
+  'LAI-CLD-020': 'Check the computer is on and connected. If it was moved to Offline mode on purpose, ignore this',
+  'LAI-CLD-021': 'Turn the computer on or check its network. If it is retired, retire it in the cloud',
+  'LAI-CLD-022': 'Plug the AI-ARK drive into the node and press "Sync now" (or run `aictl ark sync`)',
+  'LAI-CLD-023': "Open the node's Ark tab, read the sync error code and follow its fix, then press \"Sync now\"",
+  'LAI-CLD-024': "Open the node in the cloud or run `aictl drill` on it and follow the failed check's fix",
+  'LAI-CLD-025': 'Press "Sync now" while online, or import from the AI-ARK drive (`aictl ark import`)',
+  // The Doctor checks (CLOUD-17) keep one map of the codes they use; the alert answers with the same words.
+  [CLOUD_CODES.nodeKeyMissing.code]: CLOUD_CODES.nodeKeyMissing.fix,
+  'LAI-CLD-027': 'Check `tailscale serve status` on the node and the vhost on the VPS (runbook 05)',
+  'LAI-CLD-028': 'Press "Refresh catalog" on the node',
+  'LAI-CLD-029': 'Admin: Lab → node → Update agent',
 };
 
 /** Shown for a code the cloud does not know the fix of (a node-reported code): the node's own title says what is wrong. */
