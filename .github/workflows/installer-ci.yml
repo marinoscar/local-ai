@@ -1,0 +1,20 @@
+name: installer-ci
+# installers/install-node.sh (INST-01): shellcheck and the offline shell tests (throwaway state and keys, nothing
+# is installed). Spec: docs/specs/installer.md.
+on:
+  pull_request:
+    paths: ['installers/**', 'scripts/tests/test-installer.sh', 'scripts/release/**', '.github/workflows/installer-ci.yml']
+  push:
+    branches: [main]
+    paths: ['installers/**', 'scripts/tests/test-installer.sh', 'scripts/release/**', '.github/workflows/installer-ci.yml']
+permissions:
+  contents: read
+jobs:
+  installer-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign shellcheck
+      - name: shellcheck the installer and its test
+        run: shellcheck -S style installers/install-node.sh && shellcheck -S warning scripts/tests/test-installer.sh
+      - run: scripts/tests/test-installer.sh
