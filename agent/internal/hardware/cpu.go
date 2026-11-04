@@ -15,6 +15,9 @@ type CPU struct {
 	Cores int     `json:"cores"`
 	Load1 float64 `json:"load1"`
 	Stale bool    `json:"stale,omitempty"`
+	// PhysicalCores counts distinct (physical id, core id) pairs of /proc/cpuinfo, so hyper-threads
+	// are not counted twice; it equals Cores where cpuinfo has no such ids (ARM). Not on the wire.
+	PhysicalCores int `json:"-"`
 }
 
 // Self is the agent's own footprint (agent.md section 4.4.4), used by the heartbeat vitals. It is
@@ -93,7 +96,44 @@ func (e *env) readCPU() (CPU, error) {
 	if err != nil {
 		return CPU{}, err
 	}
-	return CPU{Model: model, Cores: cores, Load1: load}, nil
+	return CPU{Model: model, Cores: cores, Load1: load, PhysicalCores: parsePhysicalCores(info, cores)}, nil
+}
+
+// parsePhysicalCores counts the distinct (physical id, core id) pairs of /proc/cpuinfo; when the file
+// has none (ARM) it returns logical.
+func parsePhysicalCores(b []byte, logical int) int {
+	seen := map[string]bool{}
+	phys, core := "", ""
+	flush := func() {
+		if core != "" {
+			seen[phys+"/"+core] = true
+		}
+		phys, core = "", ""
+	}
+	sc := bufio.NewScanner(bytes.NewReader(b))
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.TrimSpace(line) == "" {
+			flush()
+			continue
+		}
+		key, val, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(key) {
+		case "physical id":
+			phys = strings.TrimSpace(val)
+		case "core id":
+			core = strings.TrimSpace(val)
+		}
+	}
+	flush()
+	if len(seen) == 0 {
+		return logical
+	}
+	return len(seen)
 }
 
 // parseSelfStat returns utime+stime in clock ticks. The command name (field 2) may contain spaces

@@ -44,6 +44,10 @@ func (d *Daemon) applyConfigChange(ctx context.Context, c config.Change) {
 	if hasPath(c.Changed, "kiwix") && kiwixThreads(c.Old) != kiwixThreads(c.New) && blockEnabled(c.New, "kiwix") {
 		d.writeKiwixUnit(ctx, kiwixThreads(c.New))
 	}
+	if hasPrefix(c.Changed, "whisper") && blockEnabled(c.New, "whisper") {
+		d.writeWhisperUnit(ctx) // never starts or stops the unit; applyWhisper restarts it when whisper.env changed
+		d.applyWhisperAsync(ctx)
+	}
 	if hasPrefix(c.Changed, "sync") {
 		d.ark.applySettings() // the bandwidth limit moves the shared bucket at once; the rest is read per run
 	}
