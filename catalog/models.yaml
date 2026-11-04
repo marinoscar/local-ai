@@ -1,0 +1,37 @@
+schema_version: 1
+models:
+  - id: qwen3.6-35b-a3b-q4km
+    display_name: "Qwen 3.6 35B A3B"
+    summary: "Strong general assistant for chat, reasoning and code. Needs a 12 GB graphics card."
+    engine: llama
+    roles: [chat, reasoning, coder]
+    languages: [en, es, multi]
+    license: apache-2.0
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: ggml-org/Qwen3.6-35B-A3B-GGUF
+      revision: 7878dc9a905c7c9379e5e8d6a1aa9affdd6839c5
+    files:
+      - kind: weights
+        name: Qwen3.6-35B-A3B-Q4_K_M.gguf
+        url: null
+        size_bytes: 20419565568
+        sha256: "671e47e0ec53c665d048b98c3ecbfd5236b5ca9c3e02ed19fc8f81f7b85140c7"
+    requirements:
+      backends: [cuda]
+      min_vram_mib: 11250
+      min_ram_mib: 24576
+      min_disk_bytes: 20419565568
+    llama:
+      ctx: 65536
+      n_gpu_layers: 99
+      flash_attn: "on"
+      parallel: 1
+      mmproj_file_kind: null
+      chat_template: null
+      extra_args: ["--n-cpu-moe", "23"]
+      env: {}
+    client_hints:
+      max_output_tokens: 8192
+      reasoning: true
