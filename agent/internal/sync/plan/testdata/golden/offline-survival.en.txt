@@ -4,14 +4,14 @@ Budget 80.0 GB · planned 58.5 GB · free now 290.0 GB · keep free ≥ 25.0 GB
   #  ITEM                         TIER  ACTION    VERSION              SIZE      NOTE
   1  kit-llama-cpp                k     keep      tag-kit-llama-cpp    0.5 GB
   2  kit-debs-resolute-amd64      k     keep      closure-a            3.0 GB    kept; newest version unknown (offline)
-  3  docs-bundle                  k     skip      catalog-2026.11.02-1 0.1 GB    unresolved (offline)
+  3  docs-bundle                  k     skip      catalog-2026.11.02-1 0.1 GB    needs the network
   4  model-alpha-9b               1     keep      rev-alpha-0001       6.0 GB
-  5  model-beta-vision            1     skip      rev-beta-0002        5.0 GB    unresolved (offline)
+  5  model-beta-vision            1     skip      rev-beta-0002        5.0 GB    needs the network
   6  wiki-alpha-en                1     keep      2026-07              48.0 GB   kept; newest version unknown (offline)
   7  model-gamma-tiny             2     download  rev-gamma-0003       1.0 GB    from ark-3f9c0a12 (local copy)
-  8  stackexchange-alpha          2     skip      2026-09              4.0 GB    unresolved (offline)
-  9  books-alpha-en               3     skip      -                    30.0 GB   unresolved (offline)
- 10  maps-alpha                   3     skip      20261001             12.0 GB   unresolved (offline)
+  8  stackexchange-alpha          2     skip      2026-09              4.0 GB    needs the network
+  9  books-alpha-en               3     skip      -                    30.0 GB   needs the network
+ 10  maps-alpha                   3     skip      20261001             12.0 GB   needs the network
  --  osm-north-america            -     orphan    20260501             11.2 GB   not in profile; run `aictl ark prune --orphans`
 
 Notes:

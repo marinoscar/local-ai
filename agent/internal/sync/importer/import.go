@@ -243,6 +243,7 @@ func (p *Planner) Plan(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 	in.Offline = true
+	in.Import = true
 
 	// The drive's copies, the only others the planner may copy from.
 	onDrive := map[string]manifest.Manifest{}

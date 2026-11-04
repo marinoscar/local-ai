@@ -611,6 +611,9 @@ func (r *run) decide(c cand) ItemPlan {
 		if in.Root.ReadOnly {
 			return skip(ReasonReadOnly)
 		}
+		if r.offline && !in.Import {
+			return skip(ReasonNeedsNetwork)
+		}
 		return skip(ReasonUnresolved)
 	}
 	// Where the bytes would come from. Local copies work in every mode; the network does not offline.
@@ -629,7 +632,10 @@ func (r *run) decide(c cand) ItemPlan {
 		if in.Root.ReadOnly {
 			return skip(ReasonReadOnly)
 		}
-		return skip(ReasonUnresolved)
+		if in.Import {
+			return skip(ReasonUnresolved)
+		}
+		return skip(ReasonNeedsNetwork)
 	}
 	if in.Root.ReadOnly {
 		return skip(ReasonReadOnly)
