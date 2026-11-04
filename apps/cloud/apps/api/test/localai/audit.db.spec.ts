@@ -5,7 +5,7 @@
 //
 // The wizard and node routes (CLOUD-14, CLOUD-12) write node.created, credential_minted, credential_revoked, updated,
 // retired, tailnet_revealed and checklist.updated: they come from the REAL routes on a wizard node. The actions whose
-// writers have not landed on this branch (the alert acknowledgement, the gateway) are inserted with the exact
+// writers have not landed on this branch (the gateway) are inserted with the exact
 // `targetType` and `meta` shapes of the §3.5 table, so the page is proven against every action the table lists; when
 // those items land, their own flows can replace the inserts.
 //
@@ -26,6 +26,9 @@ import { createApp } from '../../src/main';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { repoCatalogFiles } from './helpers/tar-builder';
 import { ai3 } from './state-fixtures';
+
+// The node key is stored encrypted: the suite needs a key whatever the environment holds (CI sets none).
+process.env.SECRETS_ENCRYPTION_KEY ??= randomBytes(32).toString('base64');
 
 const run = `${Date.now()}`;
 const STARTED = new Date(Date.now() - 1000);
@@ -238,14 +241,19 @@ describe('the flows that write audit rows today', () => {
     expect((await ui('GET', `/nodes/${WIZARD_NODE}?reveal=tailnet`, 'admin')).statusCode).toBe(200);
     expect((await ui('POST', `/nodes/${WIZARD_NODE}/credential`, 'admin', {})).statusCode).toBe(201);
     expect((await ui('POST', `/nodes/${WIZARD_NODE}/retire`, 'admin', { confirm: WIZARD_NODE })).statusCode).toBe(200);
+
+    // The alerts (CLOUD-15): an active alert on the story node (its own row, so no other suite's alert can collide with
+    // the one-active-per-(node, kind) index), acknowledged through the real route.
+    const storyRow = await prisma.localaiNode.findUniqueOrThrow({ where: { nodeId: story.nodeId }, select: { id: true } });
+    const alert = await prisma.localaiAlert.create({ data: { nodeId: storyRow.id, kind: 'node.stale', code: 'LAI-CLD-020', severity: 'warning', title: 'Node is quiet' } });
+    const acked = await ui('POST', `/alerts/${alert.id}/ack`, 'admin');
+    expect(acked.statusCode).toBeLessThan(300);
   });
 
-  it('inserts the rows of the actions whose writers are not on this branch (alert acknowledgement and the gateway), in the §3.5 shapes', async () => {
-    const alertId = '4a1e5c2d-9b7f-4d3a-8c6e-1f2a3b4c5d6e';
-    seededTargetIds.push(alertId, 'gw-key-1', 'gw-policy-1');
+  it('inserts the rows of the actions whose writers are not on this branch (the gateway), in the §3.5 shapes', async () => {
+    seededTargetIds.push('gw-key-1', 'gw-policy-1');
     await prisma.auditEvent.createMany({
       data: [
-        { actorUserId: userIds.admin, action: 'localai.alert.acknowledged', targetType: 'localai_alert', targetId: alertId, meta: { kind: 'node.stale', nodeId: story.nodeId } },
         { actorUserId: userIds.admin, action: 'localai.gateway.key_created', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12', name: 'Desk laptop' } },
         { actorUserId: userIds.admin, action: 'localai.gateway.key_revoked', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12' } },
         { actorUserId: userIds.admin, action: 'localai.gateway.key_updated', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12', name: 'Desk' } },
