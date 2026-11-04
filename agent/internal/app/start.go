@@ -345,6 +345,9 @@ func (d *Daemon) stepSubsystems(ctx context.Context) error {
 	if d.ark != nil {
 		d.startWorker(d.ark.driveWorker()) // a drive that goes away stops the transfers writing to it
 		d.ark.startDrives()                // after it: the first pass publishes drive.mounted for a drive already plugged in
+		if d.ark.index != nil && d.ark.roots != nil {
+			d.startWorker(d.ark.kiwixLibraryWorker()) // the ark stack is up: build the Kiwix libraries now and on every change
+		}
 	}
 	// The drill reporter reads the kept documents (and stamps drill.watch_since on a node that never
 	// ran a drill), so the drill alerts are derived by the first pass below.
