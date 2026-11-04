@@ -153,6 +153,7 @@ cleanup() {
     wait "$XTRACE_PID" 2>/dev/null || true
   fi
   [[ -z "$STATE_TMP" ]] || rm -f "$STATE_TMP"
+  [[ -z "${P2_TMP:-}" ]] || rm -rf "$P2_TMP"
   return "$rc"
 }
 
@@ -171,8 +172,8 @@ run_logged() {
     LAST_OUTPUT+=("$line")
     ((${#LAST_OUTPUT[@]} <= 50)) || LAST_OUTPUT=("${LAST_OUTPUT[@]:1}")
   done < <(
-    "$@" 2>&1
-    echo "__LAI_RC__=$?"
+    # In an if: a failing command must not fire the ERR trap inside this subshell; its code is carried as a marker.
+    if "$@" 2>&1; then echo "__LAI_RC__=0"; else echo "__LAI_RC__=$?"; fi
   )
   ((seen)) || rc=1
   return "$rc"
@@ -932,6 +933,539 @@ phase_enroll() {
   return 0
 }
 # ===================================== end of INST-06 ==========================================================
+# INST-02 (issue #148): P1 preflight, P2 stage artifacts, P3 profile.  Spec: installer.md sections 3.3, 4.3.
+# These definitions replace the stubs above. Test hooks (honoured only with LAI_INSTALLER_DEV=1): LAI_FAKE_ROOT
+# (prefix for /etc/os-release, /proc/meminfo, /sys), LAI_FAKE_EUID, LAI_FAKE_YEAR, LAI_INSTALL_ROOT (prefix for
+# /opt/localai, /usr/local, /etc/localai), LAI_RELEASE_BASE_URL (the release download folder, file:// allowed),
+# LAI_INTERNET_URL (the internet probe).
+# ===============================================================================================================
+FAKE_ROOT=""; INSTALL_PFX=""; RELEASE_BASE_URL=""; INTERNET_URL="https://github.com"; FAKE_EUID=""; FAKE_YEAR=""
+if ((DEV)); then
+  FAKE_ROOT="${LAI_FAKE_ROOT:-}"; INSTALL_PFX="${LAI_INSTALL_ROOT:-}"; RELEASE_BASE_URL="${LAI_RELEASE_BASE_URL:-}"
+  INTERNET_URL="${LAI_INTERNET_URL:-$INTERNET_URL}"; FAKE_EUID="${LAI_FAKE_EUID:-}"; FAKE_YEAR="${LAI_FAKE_YEAR:-}"
+fi
+readonly REPO_RELEASES="https://github.com/marinoscar/local-ai/releases/download"
+readonly LOW_RAM_MIB=7629            # 8 GB (an "8 GB" computer reports about 7.6 GiB)
+readonly DISK_HEADROOM_BYTES=20000000000
+
+# Facts found by P1 and used by later phases (P4 reads IS_LAPTOP, P7 reads P1_BACKEND and P1_CUDA_CC).
+P1_FAILS=(); P1_REFUSE=0; P1_ARCH=""; P1_CODENAME=""; P1_VERSION_ID=""; P1_BACKEND="cpu"; P1_VRAM_MIB=0
+P1_GPU_NAME=""; P1_CUDA_CC=""; P1_DRIVER_BROKEN=0; P1_LEGACY_EXEC=""; P1_RAM_MIB=0; IS_LAPTOP=0; ON_BATTERY=0
+REBOOT_NEEDED=0; P2_TMP=""; AGENT_BIN=""; P3_PROFILE=""; P3_MIN_FREE_BYTES=0
+
+# p1_fix <code>: the one-sentence fix (installer.md section 5; kept equal to docs/specs/doctor-codes.md).
+p1_fix() {
+  case "$1" in
+    LAI-INS-001) echo "Install Ubuntu 24.04 or 26.04 LTS (amd64 or arm64)." ;;
+    LAI-INS-002) echo "Run the installer on the real machine." ;;
+    LAI-INS-003) echo "Run 'sudo bash install-node.sh ...' from the desktop user's terminal." ;;
+    LAI-INS-010) echo "Accept the driver install and reboot, or continue without GPU." ;;
+    LAI-INS-011) echo "At the next boot choose \"Enroll MOK\" and type the password you set." ;;
+    LAI-INS-012) echo "Only the cpu-only profile will work well." ;;
+    LAI-INS-013) echo "Free space or use --yes to accept a smaller budget." ;;
+    LAI-INS-014) echo "Stop the program shown, then re-run." ;;
+    LAI-INS-015) echo "Connect to the internet, or use --from-ark <drive>." ;;
+    LAI-INS-016) echo "Sync the drive on a computer with internet first." ;;
+    LAI-INS-017) echo "Set the date and time, then re-run." ;;
+    LAI-INS-021) echo "Download again; if it repeats, don't install and report it." ;;
+    *) echo "" ;;
+  esac
+}
+
+# p1_problem <code> <message> [refuse]: an error (the install cannot go on). All problems are listed together.
+p1_problem() {
+  P1_FAILS+=("$1")
+  say "  FAIL $1: $2"
+  say "       fix: $(p1_fix "$1")"
+  [[ "${3:-}" != refuse ]] || P1_REFUSE=1
+}
+# p1_warning <code|-> <message>: said, never blocks.
+p1_warning() {
+  if [[ "$1" == "-" ]]; then
+    say "  WARN: $2"
+  else
+    say "  WARN $1: $2"
+    say "       fix: $(p1_fix "$1")"
+  fi
+}
+p1_ok() { say "  ok   $1"; }
+
+fakeroot() { printf '%s%s' "$FAKE_ROOT" "$1"; }
+
+# os_field <file> <KEY>: value of KEY=value (quotes removed).
+os_field() { sed -n -E "s/^$2=[\"']?([^\"']*)[\"']?\$/\1/p" "$1" 2>/dev/null | head -n 1; }
+
+p1_check_root() {
+  local euid="${FAKE_EUID:-$EUID}"
+  if ((euid != 0)); then
+    if ((DRY_RUN)); then
+      p1_warning - "not run as root. [dry-run] a real run would stop here with LAI-INS-003 (run 'sudo bash install-node.sh ...')."
+    else
+      p1_problem LAI-INS-003 "this was not run with sudo." refuse
+    fi
+    return 0
+  fi
+  if [[ -z "$OPT_DESKTOP_USER" ]]; then
+    p1_problem LAI-INS-003 "run as root without a desktop user. Pass --desktop-user <name> (the person who normally uses this computer)." refuse
+  else
+    p1_ok "running as root for desktop user $OPT_DESKTOP_USER"
+  fi
+}
+
+p1_check_system() {
+  local osr id
+  osr="$(fakeroot /etc/os-release)"
+  id="$(os_field "$osr" ID)"; P1_VERSION_ID="$(os_field "$osr" VERSION_ID)"; P1_CODENAME="$(os_field "$osr" VERSION_CODENAME)"
+  if [[ "$id" == ubuntu && ( "$P1_VERSION_ID" == 24.04 || "$P1_VERSION_ID" == 26.04 ) ]]; then
+    p1_ok "Ubuntu $P1_VERSION_ID ($P1_CODENAME)"
+  else
+    p1_problem LAI-INS-001 "this is ${id:-unknown} ${P1_VERSION_ID:-unknown}. Only Ubuntu 24.04 and 26.04 LTS are supported." refuse
+  fi
+  P1_ARCH="$(dpkg --print-architecture 2>/dev/null || true)"
+  if [[ "$P1_ARCH" == amd64 || "$P1_ARCH" == arm64 ]]; then
+    p1_ok "processor type $P1_ARCH"
+  else
+    p1_problem LAI-INS-001 "the processor type '${P1_ARCH:-unknown}' is not supported. Only amd64 and arm64 are." refuse
+  fi
+  local virt
+  virt="$(systemd-detect-virt --container 2>/dev/null || true)"
+  if [[ -n "$virt" && "$virt" != none ]]; then
+    p1_problem LAI-INS-002 "this is running inside a container ($virt)." refuse
+  else
+    p1_ok "not a container"
+  fi
+}
+
+# p1_check_gpu: sets P1_BACKEND, P1_VRAM_MIB, P1_GPU_NAME, P1_CUDA_CC, P1_DRIVER_BROKEN.
+p1_check_gpu() {
+  P1_BACKEND=cpu; P1_VRAM_MIB=0; P1_DRIVER_BROKEN=0
+  local nvidia_pci=0 line smi
+  if lspci -nn 2>/dev/null | grep -Ei '\[(0300|0302)\].*\[10de:' >/dev/null; then nvidia_pci=1; fi
+  smi="$(nvidia-smi --query-gpu=name,memory.total,driver_version,compute_cap --format=csv,noheader 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$smi" ]]; then
+    local name mem drv cc
+    IFS=',' read -r name mem drv cc <<<"$smi"
+    mem="${mem// /}"; mem="${mem%MiB}"; cc="${cc// /}"; drv="${drv// /}"
+    P1_BACKEND=cuda; P1_VRAM_MIB="${mem:-0}"; P1_GPU_NAME="${name# }"; P1_CUDA_CC="$cc"
+    p1_ok "NVIDIA GPU: $P1_GPU_NAME, $P1_VRAM_MIB MiB, compute capability $cc, driver $drv"
+  elif ((nvidia_pci)); then
+    P1_DRIVER_BROKEN=1
+    p1_warning LAI-INS-010 "an NVIDIA graphics card is installed but its driver does not work. The installer can install the driver (a reboot is needed), or carry on without the GPU."
+  else
+    local card vendor v_mem g_mem
+    for card in "$FAKE_ROOT"/sys/class/drm/card*/device; do
+      [[ -r "$card/vendor" ]] || continue
+      vendor="$(tr -d '[:space:]' <"$card/vendor")"
+      [[ "$vendor" == 0x1002 || "$vendor" == 0x8086 ]] || continue
+      if command -v vulkaninfo >/dev/null 2>&1; then
+        line="$(vulkaninfo --summary 2>/dev/null | sed -n -E 's/^[[:space:]]*deviceName[[:space:]]*=[[:space:]]*//p' | grep -vi llvmpipe | head -n 1 || true)"
+        [[ -n "$line" ]] || continue
+        P1_GPU_NAME="$line"
+      fi
+      v_mem="$(cat "$card/mem_info_vram_total" 2>/dev/null || echo 0)"; g_mem="$(cat "$card/mem_info_gtt_total" 2>/dev/null || echo 0)"
+      ((g_mem > v_mem)) && v_mem="$g_mem"
+      P1_BACKEND=vulkan; P1_VRAM_MIB=$((v_mem / 1048576))
+      p1_ok "GPU (vulkan): ${P1_GPU_NAME:-vendor $vendor}, $P1_VRAM_MIB MiB usable"
+      break
+    done
+    [[ "$P1_BACKEND" != cpu ]] || p1_ok "no usable GPU: the cpu backend will be used"
+  fi
+  if [[ -n "$OPT_BACKEND" && "$OPT_BACKEND" != "$P1_BACKEND" ]]; then
+    p1_ok "backend forced to $OPT_BACKEND (detected $P1_BACKEND)"
+    P1_BACKEND="$OPT_BACKEND"
+  fi
+  local sb
+  sb="$(mokutil --sb-state 2>/dev/null || true)"
+  if [[ "$sb" == *"SecureBoot enabled"* ]] && ((nvidia_pci)) && ! grep -q '^nvidia ' "$(fakeroot /proc/modules)" 2>/dev/null; then
+    p1_warning LAI-INS-011 "Secure Boot is on and the NVIDIA driver is not loaded."
+  fi
+}
+
+p1_check_resources() {
+  local kb
+  kb="$(sed -n -E 's/^MemTotal:[[:space:]]*([0-9]+) kB.*/\1/p' "$(fakeroot /proc/meminfo)" 2>/dev/null | head -n 1 || true)"
+  P1_RAM_MIB=$(( ${kb:-0} / 1024 ))
+  if ((P1_RAM_MIB == 0)); then
+    say "  info memory size unknown"
+  elif ((P1_RAM_MIB < LOW_RAM_MIB)); then
+    p1_warning LAI-INS-012 "$P1_RAM_MIB MiB of RAM."
+  else
+    p1_ok "$P1_RAM_MIB MiB of RAM"
+  fi
+  # Disk: the 20 GB floor now; P3 repeats the check with the profile's min_free_bytes.
+  p1_check_disk 0
+}
+
+# p1_check_disk <profile min_free_bytes>
+p1_check_disk() {
+  local need=$(($1 + DISK_HEADROOM_BYTES)) path=/srv avail
+  [[ -d "$path" ]] || path=/
+  avail="$(df -B1 --output=avail "$path" 2>/dev/null | tail -n 1 | tr -d '[:space:]' || true)"
+  if [[ ! "$avail" =~ ^[0-9]+$ ]]; then say "  info free disk space unknown"; return 0; fi
+  if ((avail >= need)); then
+    p1_ok "$((avail / 1000000000)) GB free on $path (need $((need / 1000000000)) GB)"
+  elif ((OPT_YES)); then
+    p1_warning LAI-INS-013 "only $((avail / 1000000000)) GB free on $path, $((need / 1000000000)) GB wanted; --yes was given, so the content budget will be smaller."
+  else
+    p1_problem LAI-INS-013 "only $((avail / 1000000000)) GB free on $path, $((need / 1000000000)) GB needed."
+  fi
+}
+
+p1_check_ports() {
+  local out line addr port proc ours bad=0
+  out="$(ss -Hltnp 2>/dev/null || true)"
+  [[ -n "$out" ]] || { say "  ok   ports 7070, 8080, 8081 and 8888 are free"; return 0; }
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    addr="$(awk '{print $4}' <<<"$line")"; port="${addr##*:}"; addr="${addr%:*}"
+    case "$addr" in 127.0.0.1|0.0.0.0|\*|::|\[::\]|::1|\[::1\]) ;; *) continue ;; esac
+    case "$port" in
+      7070) ours="aiagent localai-agent" ;;
+      8888) ours="kiwix-serve localai-kiwix" ;;
+      8081) ours="whisper-server localai-whisper" ;;
+      8080) ours="llama-server llama-qwen localai-llama" ;;
+      *) continue ;;
+    esac
+    proc="$(sed -n -E 's/.*\(\("([^"]+)".*/\1/p' <<<"$line" | head -n 1)"
+    [[ " $ours " != *" ${proc:-?} "* ]] || continue
+    if [[ -z "$proc" ]] && ((${FAKE_EUID:-$EUID} != 0)); then
+      p1_warning LAI-INS-014 "port $port is in use; run as root to see which program (it may be our own service)."
+      continue
+    fi
+    p1_problem LAI-INS-014 "port $port is used by ${proc:-an unknown program}."
+    bad=1
+  done <<<"$out"
+  ((bad)) || p1_ok "ports 7070, 8080, 8081 and 8888 are free or ours"
+}
+
+p1_check_source() {
+  if [[ -z "$OPT_FROM_ARK" ]]; then
+    if curl -fsS --max-time 5 -o /dev/null "$INTERNET_URL" 2>/dev/null; then
+      p1_ok "internet reachable"
+    else
+      p1_problem LAI-INS-015 "no internet."
+    fi
+    return 0
+  fi
+  local kit="$OPT_FROM_ARK/localai/kit" missing=() f
+  [[ -f "$OPT_FROM_ARK/localai/ROOT.json" ]] || missing+=("localai/ROOT.json")
+  [[ -s "$kit/catalog/CATALOG_VERSION" ]] || missing+=("localai/kit/catalog/CATALOG_VERSION")
+  for f in "aiagent-linux-${P1_ARCH:-amd64}" SHA256SUMS SHA256SUMS.minisig; do
+    [[ -f "$kit/bin/$f" ]] || missing+=("localai/kit/bin/$f")
+  done
+  [[ -f "$kit/installers/install-node.sh" ]] || missing+=("localai/kit/installers/install-node.sh")
+  if [[ -n "$P1_CODENAME" && -n "$P1_ARCH" ]]; then
+    [[ -f "$kit/debs/$P1_CODENAME-$P1_ARCH/MANIFEST.json" ]] || missing+=("localai/kit/debs/$P1_CODENAME-$P1_ARCH/")
+    if [[ "$P1_BACKEND" == cuda || "$P1_DRIVER_BROKEN" == 1 ]]; then
+      compgen -G "$kit/nvidia/$P1_CODENAME-$P1_ARCH-*/MANIFEST.json" >/dev/null || missing+=("localai/kit/nvidia/$P1_CODENAME-$P1_ARCH-*/")
+    fi
+  fi
+  if ((${#missing[@]} > 0)); then
+    local list
+    list="$(printf '%s, ' "${missing[@]}")"
+    p1_problem LAI-INS-016 "the ark drive at $OPT_FROM_ARK is missing: ${list%, }."
+  else
+    p1_ok "ark drive $OPT_FROM_ARK has the kit for ${P1_CODENAME:-?}/${P1_ARCH:-?}"
+  fi
+}
+
+p1_check_clock_power() {
+  local year="${FAKE_YEAR:-$(date +%Y)}"
+  if ((year >= 2026)); then p1_ok "clock says year $year"; else
+    p1_warning LAI-INS-017 "the clock says year $year. The install carries on."
+  fi
+  local ct bat=0 mains=0 online=0 disch=0 d
+  IS_LAPTOP=0; ON_BATTERY=0
+  ct="$(tr -d '[:space:]' <"$(fakeroot /sys/class/dmi/id/chassis_type)" 2>/dev/null || true)"
+  case "$ct" in 8|9|10|14|31|32) IS_LAPTOP=1 ;; esac
+  for d in "$FAKE_ROOT"/sys/class/power_supply/*; do
+    [[ -d "$d" ]] || continue
+    case "$(tr -d '[:space:]' <"$d/type" 2>/dev/null || true)" in
+      Battery) bat=1; [[ "$(tr -d '[:space:]' <"$d/status" 2>/dev/null || true)" != Discharging ]] || disch=1 ;;
+      Mains) mains=1; [[ "$(tr -d '[:space:]' <"$d/online" 2>/dev/null || true)" != 1 ]] || online=1 ;;
+    esac
+  done
+  ((bat)) && IS_LAPTOP=1
+  if ((IS_LAPTOP && (disch || (mains && !online)))); then ON_BATTERY=1; fi
+  if ((ON_BATTERY)); then p1_warning - "this is a laptop running on battery. Plug in the charger before continuing."
+  elif ((IS_LAPTOP)); then say "  info laptop on mains power"; fi
+}
+
+# The NVIDIA driver offer (LAI-INS-010). Online: ubuntu-drivers. Offline: the kit's driver packages are installed
+# later by the packages phase (P6), so here the installer only records the wish and stops for the reboot.
+p1_offer_driver() {
+  ((P1_DRIVER_BROKEN)) || return 0
+  if ((DRY_RUN)); then
+    say "[dry-run] would ask: install the NVIDIA driver now? (online: ubuntu-drivers install --gpgpu, then reboot and re-run)"
+    P1_BACKEND=cpu
+    return 0
+  fi
+  local ask="Install the NVIDIA driver now? A reboot is needed afterwards. (No = carry on without the GPU, cpu only.)"
+  local answer=""
+  if ((OPT_YES)); then answer=y
+  elif { : </dev/tty; } 2>/dev/null; then printf '%s [y/N] ' "$ask" >/dev/tty; read -r answer </dev/tty || true; fi
+  if [[ "$answer" != [yY]* ]]; then
+    say "Carrying on without the GPU (backend cpu). Run this again after the driver works to use the GPU."
+    P1_BACKEND=cpu
+    return 0
+  fi
+  if [[ -n "$OPT_FROM_ARK" ]]; then
+    say "The driver packages are on the ark drive. They are installed by the packages step; this run cannot use the GPU yet."
+    say "After the install finishes: reboot, then run the same command again."
+    REBOOT_NEEDED=1; P1_BACKEND=cpu
+    return 0
+  fi
+  run_or_say env DEBIAN_FRONTEND=noninteractive ubuntu-drivers install --gpgpu || p_fail 1 LAI-INS-030 "installing the NVIDIA driver failed. Read the messages above."
+  REBOOT_NEEDED=1
+  set_phase P1 failed "NVIDIA driver installed: reboot, then run the installer again"
+  say "The NVIDIA driver is installed. REBOOT the computer now, then run the same install command again."
+  leave 0
+}
+
+# p_fail <exit> <code> <message>: a failure inside a phase: the phase is recorded as failed, then the script leaves.
+p_fail() {
+  local rc="$1" code="$2"
+  shift 2
+  [[ -z "$CUR_PHASE_ID" ]] || set_phase "$CUR_PHASE_ID" failed "$code"
+  fail "$rc" "$code" "$* $(p1_fix "$code")"
+}
+
+phase_preflight() {
+  P1_FAILS=(); P1_REFUSE=0
+  say "Checking this computer (nothing is changed yet)..."
+  p1_check_root
+  p1_check_system
+  p1_check_gpu
+  p1_check_resources
+  p1_check_ports
+  if [[ -e "$SYSTEMD_DIR/llama-qwen.service" ]]; then
+    P1_LEGACY_EXEC="$(sed -n -E 's/^ExecStart=(.*)$/\1/p' "$SYSTEMD_DIR/llama-qwen.service" | head -n 1)"
+    say "  info the old llama-qwen service is installed and will be migrated"
+  fi
+  p1_check_source
+  p1_check_clock_power
+  if ((${#P1_FAILS[@]} > 0)); then
+    say "Preflight found ${#P1_FAILS[@]} problem(s): ${P1_FAILS[*]}. Fix them and run again."
+    if ((P1_REFUSE)); then
+      set_phase P1 failed "refused: ${P1_FAILS[*]}"
+      say "This computer is not supported. NOTHING WAS CHANGED."
+      leave 3
+    fi
+    return 1
+  fi
+  p1_offer_driver
+  DETECTED_BACKEND="$P1_BACKEND"   # read by P6 and P7 (--backend wins there)
+  say "Preflight passed: backend $P1_BACKEND, $P1_RAM_MIB MiB RAM."
+}
+
+# ---- P2 ---------------------------------------------------------------------------------------------------------
+
+sha256_of() { sha256sum "$1" | awk '{print $1}'; }
+
+# sums_hash <SHA256SUMS> <name>: the hash listed for name (a leading * is the binary-mode marker), or nothing.
+sums_hash() { awk -v f="$2" '{n=$2; sub(/^\*/, "", n); if (n == f) {print $1; exit}}' "$1"; }
+
+# p2_minisign: 0 ready, 2 dry-run (would install it), else try to get it (online: apt; offline: the kit's deb).
+p2_minisign() {
+  command -v minisign >/dev/null 2>&1 && return 0
+  if [[ -z "$OPT_FROM_ARK" ]]; then
+    if ((DRY_RUN)); then say "[dry-run] would install the minisign package with apt-get"; return 2; fi
+    run_or_say env DEBIAN_FRONTEND=noninteractive apt-get update -qq || true
+    apt_or_say minisign || true
+  else
+    local deb dir
+    deb="$(compgen -G "$OPT_FROM_ARK/localai/kit/debs/$P1_CODENAME-$P1_ARCH/pool/minisign_*.deb" | head -n 1 || true)"
+    dir="$(dirname "${deb:-/nonexistent/x}")"
+    if [[ -n "$deb" ]] && grep -qs "$(sha256_of "$deb")" "$dir/../PACKAGES.lock"; then
+      if ((DRY_RUN)); then say "[dry-run] would install $(basename "$deb") from the ark drive"; return 2; fi
+      run_or_say dpkg -i "$deb" || true
+    fi
+  fi
+  command -v minisign >/dev/null 2>&1
+}
+
+# p2_fetch: put the agent, SHA256SUMS, its signature and the installer in $P2_TMP. Sets P2_FROM (a printable source).
+p2_fetch() {
+  local name="aiagent-linux-$P1_ARCH" f
+  if [[ -n "$OPT_FROM_ARK" ]]; then
+    local kit="$OPT_FROM_ARK/localai/kit"
+    P2_FROM="ark $OPT_FROM_ARK"
+    for f in "$name" SHA256SUMS SHA256SUMS.minisig; do
+      [[ -f "$kit/bin/$f" ]] || p_fail 1 LAI-INS-016 "the ark drive has no $kit/bin/$f."
+      cp "$kit/bin/$f" "$P2_TMP/$f"
+    done
+    [[ -f "$kit/installers/install-node.sh" ]] || p_fail 1 LAI-INS-016 "the ark drive has no $kit/installers/install-node.sh."
+    cp "$kit/installers/install-node.sh" "$P2_TMP/install-node.sh"
+    return 0
+  fi
+  local base="${RELEASE_BASE_URL:-$REPO_RELEASES/$INSTALLER_TAG}" proto='=https'
+  ((DEV)) && proto='=https,file'
+  P2_FROM="release $INSTALLER_TAG"
+  for f in "$name" SHA256SUMS SHA256SUMS.minisig install-node.sh; do
+    say "downloading $f"
+    curl -fsSL --proto "$proto" --max-time 900 -o "$P2_TMP/$f" "$base/$f" 2>/dev/null \
+      || p_fail 1 LAI-INS-015 "could not download $base/$f."
+  done
+}
+
+# p2_verify: minisign on SHA256SUMS, then the hash of the agent and of the installer against it (installer.md P2).
+# A failure is LAI-INS-021 and nothing has been placed yet.
+p2_verify() {
+  local name="aiagent-linux-$P1_ARCH" want got rc=0
+  p2_minisign || rc=$?
+  if ((rc == 0)); then
+    ( cd "$P2_TMP" && minisign -Vm SHA256SUMS -P "$INSTALLER_MINISIGN_PUBKEY" -x SHA256SUMS.minisig >/dev/null 2>&1 ) \
+      || p_fail 1 LAI-INS-021 "the signature of SHA256SUMS is wrong."
+    say "signature of SHA256SUMS is good"
+  elif ((rc == 2)); then
+    say "[dry-run] the signature cannot be checked until minisign is installed"
+  elif [[ -n "$OPT_AGENT_SHA256" && -z "$OPT_FROM_ARK" ]]; then
+    say "WARNING: minisign is not available; checking the agent against the sha256 you gave with --agent-sha256 instead."
+    got="$(sha256_of "$P2_TMP/$name")"
+    [[ "$got" == "$OPT_AGENT_SHA256" ]] || p_fail 1 LAI-INS-021 "the downloaded agent does not match --agent-sha256."
+    say "the agent matches --agent-sha256"
+    cp "${BASH_SOURCE[0]}" "$P2_TMP/install-node.sh"   # the running script is the only installer copy we can vouch for
+    return 0
+  else
+    p_fail 1 LAI-INS-021 "minisign is not available, so the download cannot be verified (online you may pass --agent-sha256)."
+  fi
+  want="$(sums_hash "$P2_TMP/SHA256SUMS" "$name")"
+  [[ -n "$want" ]] || p_fail 1 LAI-INS-021 "SHA256SUMS does not list $name."
+  got="$(sha256_of "$P2_TMP/$name")"
+  [[ "$got" == "$want" ]] || p_fail 1 LAI-INS-021 "$name does not match SHA256SUMS."
+  say "$name matches SHA256SUMS"
+  if [[ -n "$OPT_AGENT_SHA256" && -z "$OPT_FROM_ARK" && "$got" != "$OPT_AGENT_SHA256" ]]; then
+    p_fail 1 LAI-INS-021 "$name matches the release but not the --agent-sha256 you gave."
+  fi
+  want="$(sums_hash "$P2_TMP/SHA256SUMS" install-node.sh)"
+  if [[ -n "$want" ]]; then
+    [[ "$(sha256_of "$P2_TMP/install-node.sh")" == "$want" ]] || p_fail 1 LAI-INS-021 "install-node.sh does not match SHA256SUMS."
+    say "install-node.sh matches SHA256SUMS"
+  elif [[ -n "$OPT_FROM_ARK" ]]; then
+    say "WARNING: install-node.sh is not listed in SHA256SUMS on the drive; it is the copy the kit manifest records."
+  else
+    p_fail 1 LAI-INS-021 "SHA256SUMS does not list install-node.sh."
+  fi
+}
+
+# p2_link <target> <link>: idempotent symlink.
+p2_link() {
+  if [[ "$(readlink "$2" 2>/dev/null || true)" == "$1" ]]; then say "already linked: $2 -> $1"; return 0; fi
+  run_or_say mkdir -p "$(dirname "$2")"
+  run_or_say ln -sfn "$1" "$2"
+}
+
+p2_place() {
+  local bin="$INSTALL_PFX/opt/localai/bin" inst="$INSTALL_PFX/opt/localai/installers" own_args=()
+  ((EUID == 0)) && own_args=(-o root -g root)
+  local src="$P2_TMP/aiagent-linux-$P1_ARCH"
+  if [[ -x "$bin/aiagent" ]] && cmp -s "$src" "$bin/aiagent"; then
+    say "the agent in $bin/aiagent is already this version"
+  else
+    run_or_say mkdir -p "$bin"
+    run_or_say install -m 0755 "${own_args[@]}" "$src" "$bin/aiagent.new"
+    if ((!DRY_RUN)); then
+      "$bin/aiagent.new" version >/dev/null 2>&1 || { rm -f "$bin/aiagent.new"; p_fail 1 LAI-INS-021 "the downloaded agent does not run on this computer."; }
+      say "the new agent runs: $("$bin/aiagent.new" version 2>&1 | head -n 1)"
+    fi
+    if [[ -e "$bin/aiagent" ]]; then run_or_say cp -p "$bin/aiagent" "$bin/aiagent.prev"; fi
+    run_or_say mv -f "$bin/aiagent.new" "$bin/aiagent"
+  fi
+  p2_link /opt/localai/bin/aiagent "$INSTALL_PFX/usr/local/bin/aictl"
+  run_or_say mkdir -p "$inst"
+  if [[ -f "$inst/install-node.sh" ]] && cmp -s "$P2_TMP/install-node.sh" "$inst/install-node.sh"; then
+    say "the installer in $inst/install-node.sh is already this version"
+  else
+    run_or_say install -m 0755 "${own_args[@]}" "$P2_TMP/install-node.sh" "$inst/install-node.sh"
+  fi
+  p2_link /opt/localai/installers/install-node.sh "$INSTALL_PFX/usr/local/sbin/install-node.sh"
+}
+
+# check_stage: satisfied when the placed agent equals the verified one in the kit (offline) or reports this release.
+check_stage() {
+  local bin="$INSTALL_PFX/opt/localai/bin/aiagent"
+  [[ -x "$bin" && -L "$INSTALL_PFX/usr/local/bin/aictl" && -x "$INSTALL_PFX/opt/localai/installers/install-node.sh" \
+     && -L "$INSTALL_PFX/usr/local/sbin/install-node.sh" ]] || return 1
+  "$bin" version 2>/dev/null | grep -F "$INSTALLER_VERSION" >/dev/null || return 1
+  AGENT_BIN="$bin"
+}
+
+phase_stage() {
+  if ((DRY_RUN)) && [[ -z "$OPT_FROM_ARK" ]]; then
+    say "[dry-run] would download aiagent-linux-$P1_ARCH, SHA256SUMS, SHA256SUMS.minisig and install-node.sh from ${RELEASE_BASE_URL:-$REPO_RELEASES/$INSTALLER_TAG}"
+    say "[dry-run] would verify them with minisign and the embedded key, place the agent in /opt/localai/bin (keeping aiagent.prev), link aictl, install the installer, and install the catalog"
+    return 0
+  fi
+  P2_TMP="$(mktemp -d "${TMPDIR:-/tmp}/lai-stage.XXXXXX")"
+  p2_fetch
+  p2_verify
+  p2_place
+  if ((DRY_RUN)); then
+    AGENT_BIN="$P2_TMP/aiagent-linux-$P1_ARCH"; chmod 0755 "$AGENT_BIN"
+  else
+    AGENT_BIN="$INSTALL_PFX/opt/localai/bin/aiagent"
+  fi
+  local args=(setup catalog)
+  if [[ -n "$OPT_FROM_ARK" ]]; then args+=(--from ark --ark "$OPT_FROM_ARK"); else args+=(--from release); fi
+  ((DRY_RUN)) && args+=(--dry-run)
+  ((DEV)) && [[ -n "$INSTALL_PFX" ]] && args+=(--dir "$INSTALL_PFX/etc/localai/catalog")
+  run_logged "$AGENT_BIN" "${args[@]}" || p_fail 1 LAI-CAT-002 "installing the catalog failed. Read the messages above."
+  say "staged from $P2_FROM"
+}
+
+# ---- P3 ---------------------------------------------------------------------------------------------------------
+
+# json_str <file-text> <key>: the first scalar value of "key" in pretty-printed JSON (no jq on a fresh node).
+json_str() { sed -n -E "s/^[[:space:]]*\"$2\": *\"?([^\",]*)\"?,?\$/\1/p" <<<"$1" | head -n 1; }
+
+phase_profile() {
+  if [[ -z "$AGENT_BIN" || ! -x "$AGENT_BIN" ]]; then
+    if ((DRY_RUN)); then
+      say "[dry-run] would run: aiagent setup profile-suggest --json (after the agent is staged), then check the disk against the profile"
+      return 0
+    fi
+    p_fail 1 LAI-INS-021 "the agent was not staged, so the profile cannot be chosen."
+  fi
+  local args=(setup profile-suggest) json plain
+  [[ -z "$OPT_PROFILE" ]] || args+=(--profile "$OPT_PROFILE")
+  args+=(--backend "$P1_BACKEND")
+  [[ -z "$OPT_FROM_ARK" ]] || args+=(--from-ark "$OPT_FROM_ARK")
+  ((DEV)) && [[ -n "$INSTALL_PFX" ]] && args+=(--catalog "$INSTALL_PFX/etc/localai/catalog")
+  json="$("$AGENT_BIN" "${args[@]}" --json 2>&1)" || { say "$json"; p_fail 1 LAI-CAT-003 "the profile could not be chosen."; }
+  plain="$("$AGENT_BIN" "${args[@]}" 2>&1)" || true
+  say "Profile for this computer, in plain words:"
+  say "$plain"
+  P3_PROFILE="$(json_str "$json" profile)"
+  P3_MIN_FREE_BYTES="$(json_str "$json" min_free_bytes)"; P3_MIN_FREE_BYTES="${P3_MIN_FREE_BYTES:-0}"
+  if [[ "$(json_str "$json" mismatch)" == true ]]; then
+    p1_warning - "$(json_str "$json" mismatch_code): $(json_str "$json" mismatch_message)"
+    confirm "Use the profile '$P3_PROFILE' anyway?"
+  fi
+  local before=${#P1_FAILS[@]}
+  p1_check_disk "$P3_MIN_FREE_BYTES"
+  if ((${#P1_FAILS[@]} > before)); then
+    p_fail 1 LAI-INS-013 "the disk is too small for the profile '$P3_PROFILE'."
+  fi
+  # The agent's own preflight is the authority from here on (the same checks as P1 in Go, plus the kit check
+  # against the drive's MANIFESTs and the disk against the profile). In a dry run as a normal user it only warns.
+  local pf=(setup preflight --min-free-bytes "$P3_MIN_FREE_BYTES" --backend "$P1_BACKEND") prc=0
+  [[ -z "$OPT_DESKTOP_USER" ]] || pf+=(--desktop-user "$OPT_DESKTOP_USER")
+  [[ -z "$OPT_FROM_ARK" ]] || pf+=(--from-ark "$OPT_FROM_ARK")
+  ((OPT_YES)) && pf+=(--yes)
+  run_logged "$AGENT_BIN" "${pf[@]}" || prc=$?
+  if ((prc != 0)); then
+    if ((DRY_RUN && ${FAKE_EUID:-$EUID} != 0)); then
+      p1_warning - "the agent's preflight reported a problem (exit $prc); a dry run as a normal user goes on."
+    elif ((prc == 3)); then
+      set_phase P3 failed "refused by the agent preflight"
+      say "This computer is not supported. NOTHING WAS CHANGED beyond staging the agent."
+      leave 3
+    else
+      p_fail 1 LAI-INS-016 "the agent's preflight failed (exit $prc). Read the messages above."
+    fi
+  fi
+  say "Profile chosen: $P3_PROFILE (backend $P1_BACKEND)."
+}
 
 # INST-04 (issue #149): P5 users, groups and directories, P6 packages and companion programs.
 # Spec: docs/specs/installer.md section 4.3 P5 and P6. These definitions replace the stubs above.

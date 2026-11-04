@@ -26,6 +26,9 @@ const setupUsage = `usage: aiagent setup <step> [flags]      (internal, root onl
   summary      print the install summary and the VPS checklist (P15)
   migrate      run every pending migration (llama-qwen) with the installer's logging (P8)
   harden       laptop hardening, --check, --revert (P4; never restarts systemd-logind)
+  preflight       the P1 checks of this computer (INST-02; also runs as a normal user)
+  profile-suggest the hardware profile for this computer (P3; also runs as a normal user)
+  catalog         install the catalog from the release or the ark (P2; root unless --dry-run)
 `
 
 // runSetup is `aiagent setup <step>`. Steps owned by other installer items register in setupSteps.
@@ -39,7 +42,7 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "aiagent setup: unknown step %q\n%s", args[0], setupUsage)
 		return 2
 	}
-	if geteuid() != 0 {
+	if geteuid() != 0 && !setupAnyUser[args[0]] {
 		fmt.Fprintf(stderr, "aiagent setup %s: must run as root (use sudo)\n", args[0])
 		return 77
 	}

@@ -79,10 +79,80 @@ export FAKE_LOG="$w/fake.log"
 llhooks=(LAI_INSTALLER_DEV=1 LAI_INSTALL_LLAMA_ROOT="$LL" LAI_INSTALL_NODE_YAML="$w/node.yaml" LAI_INSTALL_PINS="$w/pins.json"
   LAI_INSTALL_AICTL="$w/llfake/aictl" LAI_INSTALL_AIAGENT="$w/llfake/aiagent" LAI_INSTALL_SYSTEMCTL="$w/llfake/systemctl"
   LAI_INSTALL_SS="$w/llfake/ss" LAI_INSTALL_CURL="$w/llfake/curl" LAI_INSTALL_HOME_ROOT="$w/homes")
+# ---- INST-02 fixtures: a fake machine (rootfs + fake commands), a fake release and a fake ark drive. No root needed.
+REAL_MS=0; command -v minisign >/dev/null 2>&1 && REAL_MS=1   # before the fake minisign is put on PATH
+I2_FX="$w/i2-fx"; I2_FB="$w/i2-fakebin"; I2_REL="$w/i2-rel"; I2_ARK="$w/i2-ark"; I2_IROOT="$w/i2-root"; mkdir -p "$I2_FB" "$I2_REL"
+i2_mkfx() { # i2_mkfx <dir> <os-release id> <version> <codename> [meminfo kB] [chassis]
+  mkdir -p "$1/etc" "$1/proc" "$1/sys/class/dmi/id"
+  printf 'ID=%s\nVERSION_ID="%s"\nVERSION_CODENAME=%s\n' "$2" "$3" "$4" >"$1/etc/os-release"
+  printf 'MemTotal:       %s kB\n' "${5:-16384000}" >"$1/proc/meminfo"; echo "${6:-3}" >"$1/sys/class/dmi/id/chassis_type"
+}
+i2_mkfx "$I2_FX" ubuntu 24.04 noble; i2_mkfx "$w/i2-fx-debian" debian 12 bookworm; i2_mkfx "$w/i2-fx-2510" ubuntu 25.10 questing
+i2_mkfx "$w/i2-fx-2604" ubuntu 26.04 resolute; i2_mkfx "$w/i2-fx-lowram" ubuntu 24.04 noble 4000000; i2_mkfx "$w/i2-fx-laptop" ubuntu 24.04 noble 16384000 10
+mkdir -p "$w/i2-fx-laptop/sys/class/power_supply/BAT0"; echo Battery >"$w/i2-fx-laptop/sys/class/power_supply/BAT0/type"
+echo Discharging >"$w/i2-fx-laptop/sys/class/power_supply/BAT0/status"
+i2_mkfx "$w/i2-fx-amd" ubuntu 24.04 noble; mkdir -p "$w/i2-fx-amd/sys/class/drm/card0/device"; echo 0x1002 >"$w/i2-fx-amd/sys/class/drm/card0/device/vendor"
+echo 536870912 >"$w/i2-fx-amd/sys/class/drm/card0/device/mem_info_vram_total"; echo 34359738368 >"$w/i2-fx-amd/sys/class/drm/card0/device/mem_info_gtt_total"
+i2_fake() { printf '#!/bin/bash\n%s\n' "$2" >"$I2_FB/$1"; chmod +x "$I2_FB/$1"; }
+i2_fake dpkg 'case "$1" in --print-architecture) echo "${FAKE_ARCH:-amd64}" ;; *) exec /usr/bin/dpkg "$@" ;; esac'
+i2_fake systemd-detect-virt 'echo "${FAKE_VIRT:-none}"; [ "${FAKE_VIRT:-none}" = none ] && exit 1 || exit 0'
+i2_fake lspci 'case "${FAKE_GPU:-none}" in nvidia|broken) echo "01:00.0 VGA compatible controller [0300]: NVIDIA Corporation TU104 [10de:1e84] (rev a1)" ;; esac'
+i2_fake nvidia-smi '[ "${FAKE_GPU:-none}" = nvidia ] || exit 9; echo "NVIDIA GeForce RTX 2080, 8192 MiB, 550.54, 7.5"'
+i2_fake ss 'printf "%s" "${FAKE_SS:-}"'
+i2_fake df 'echo "     Avail"; echo "${FAKE_AVAIL:-900000000000}"'
+i2_fake mokutil 'echo "SecureBoot disabled"'
+i2_fake ubuntu-drivers 'echo "ubuntu-drivers $*" >>"${FAKE_CALLS:-/dev/null}"'
+# The fake minisign accepts a signature file that holds "SIG:<public key>:<sha256 of the signed file>".
+i2_fake minisign '[ "$1" = -Vm ] || { PATH="${PATH#'"$I2_FB"':}"; exec minisign "$@"; }   # key generation and signing go to the real tool
+f=""; k=""; x=""; while [ $# -gt 0 ]; do case "$1" in -Vm) f="$2"; shift ;; -P) k="$2"; shift ;; -x) x="$2"; shift ;; esac; shift; done
+[ "$(cat "$x" 2>/dev/null)" = "SIG:$k:$(sha256sum "$f" | cut -d" " -f1)" ]'
+cat >"$w/i2-fake-agent" <<'AGENT'
+#!/bin/bash
+# fake aiagent: version, and the setup steps used by the installer. Calls are logged to $FAKE_CALLS.
+echo "aiagent $*" >>"${FAKE_CALLS:-/dev/null}"
+case "$1" in
+  version) echo "aiagent 9.9.9-test (fake)" ;;
+  setup) case "$2" in
+    preflight) exit "${FAKE_PREFLIGHT_RC:-0}" ;;
+    catalog) echo "installed catalog fake-1" ;;
+    profile-suggest)
+      p="small-8gb"; j=0; prev=""
+      for a in "$@"; do [ "$prev" = --profile ] && p="$a"; [ "$a" = --json ] && j=1; prev="$a"; done
+      if [ "$j" = 1 ]; then printf '{\n  "profile": "%s",\n  "mismatch": %s,\n  "mismatch_code": "LAI-CAT-005",\n  "mismatch_message": "Profile is meant for other hardware.",\n  "min_free_bytes": %s,\n  "budget_bytes": 100\n}\n' "$p" "${FAKE_MISMATCH:-false}" "${FAKE_MINFREE:-1000}"
+      else echo "Profile: Small GPU ($p)"; echo "  survival models (always kept for emergencies): Model A"; fi ;;
+    *) exit 2 ;; esac ;;
+  *) exit 2 ;;
+esac
+AGENT
+chmod +x "$w/i2-fake-agent"
+I2_PUBKEY="RWTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST"
+i2_mkrel() { # i2_mkrel <dir> [agent source]: agent files, SHA256SUMS, fake signature, installer
+  local d="$1" a="${2:-$w/i2-fake-agent}"; mkdir -p "$d"
+  cp "$a" "$d/aiagent-linux-amd64"; cp "$a" "$d/aiagent-linux-arm64"; cp "$STAMPED" "$d/install-node.sh"
+  (cd "$d" && sha256sum aiagent-linux-amd64 aiagent-linux-arm64 install-node.sh >SHA256SUMS \
+    && printf 'SIG:%s:%s' "$I2_PUBKEY" "$(sha256sum SHA256SUMS | cut -d' ' -f1)" >SHA256SUMS.minisig)
+}
+i2_mkrel "$I2_REL"
+i2_mkark() { # i2_mkark <dir>: a drive with the kit for noble/amd64
+  local k="$1/localai/kit"; mkdir -p "$k/bin" "$k/installers" "$k/catalog" "$k/debs/noble-amd64" "$k/nvidia/noble-amd64-595-open"
+  mkdir -p "$k/src"; cp "$w/fx.tar.gz" "$k/src/llama.cpp-$C40B.tar.gz"   # the llama.cpp source P7 looks for (INST-05 fixture)
+  echo '{}' >"$1/localai/ROOT.json"; echo 2026.11.02-1 >"$k/catalog/CATALOG_VERSION"; echo '{}' >"$k/debs/noble-amd64/MANIFEST.json"
+  echo '{}' >"$k/nvidia/noble-amd64-595-open/MANIFEST.json"
+  i2_mkrel "$1/rel-src"; cp "$1"/rel-src/aiagent-linux-* "$1"/rel-src/SHA256SUMS "$1"/rel-src/SHA256SUMS.minisig "$k/bin/"
+  cp "$1/rel-src/install-node.sh" "$k/installers/"; rm -rf "$1/rel-src"
+}
+i2_mkark "$I2_ARK"
+echo ok >"$w/i2-internet-ok"
+# Every run below sees the fake machine unless a test overrides a variable (the hooks are read only with LAI_INSTALLER_DEV=1).
+export PATH="$I2_FB:$PATH" SUDO_USER=tester LAI_FAKE_ROOT="$I2_FX" LAI_FAKE_EUID=0 LAI_FAKE_YEAR=2026 LAI_INSTALL_ROOT="$I2_IROOT" \
+  LAI_INTERNET_URL="file://$w/i2-internet-ok" LAI_RELEASE_BASE_URL="file://$I2_REL" FAKE_CALLS="$w/i2-calls.log"
 # dry <args...>: a dry run of the template in a throwaway folder
 dry() { env "${llhooks[@]}" LAI_INSTALL_NODE_YAML="$w/none.yaml" LAI_INSTALL_STATE_DIR="$w/state" "$INST" --dry-run --log "$w/dry.log" "$@"; }
 # real <args...>: a real run of the skeleton (dev hooks only: state and log in $w)
 real() { env "${llhooks[@]}" LAI_INSTALL_STATE_DIR="$w/rstate" LAI_INSTALL_SYSTEMD_DIR="$w/systemd" "$STAMPED" --log "$w/real.log" "$@"; }
+# dryv / realv VAR=value... -- <args...>: the same with extra environment (fake machine variants)
+dryv() { local e=(); while [[ $1 != -- ]]; do e+=("$1"); shift; done; shift; setsid -w env "${e[@]}" "${llhooks[@]}" LAI_INSTALL_NODE_YAML="$w/none.yaml" LAI_INSTALL_STATE_DIR="$w/state" "$STAMPED" --dry-run --log "$w/i2-dryv.log" "$@"; }
+realv() { local e=(); while [[ $1 != -- ]]; do e+=("$1"); shift; done; shift; setsid -w env "${e[@]}" "${llhooks[@]}" LAI_INSTALL_STATE_DIR="$w/i2-vstate" LAI_INSTALL_SYSTEMD_DIR="$w/i2-vsystemd" "$STAMPED" --log "$w/i2-realv.log" "$@"; }
 
 echo "== arguments"
 t "help exits 0" 0 "Usage:" "$INST" --help
@@ -91,7 +161,7 @@ t "valid flags are all accepted" 0 "==> [15/15]" dry --node-id ai-n4 --profile d
   --no-migrate --yes --pin-file "$INST" --inventory "$INST" --keep-inventory --no-hardening --no-ssh --no-polkit --no-tailscale \
   --no-sync --serve-pattern A --reboot --enroll-file "$INST"
 mkdir -p "$w/localai/kit"   # P6 offline needs a kit folder on the drive
-t "from-ark, desktop-user and agent-sha256" 0 "source: ark:$w" dry --from-ark "$w" --desktop-user root --agent-sha256 "$fakehex"
+t "from-ark, desktop-user and agent-sha256" 0 "source: ark:$I2_ARK" dryv -- --from-ark "$I2_ARK" --desktop-user root --agent-sha256 "$fakehex"
 t "repair is parsed (dry run)" 0 "[dry-run] would run: aictl doctor" dry --repair
 t "uninstall with its modifiers is parsed (dry run)" 0 "Summary:" dry --uninstall --purge-config --purge-content --revert-hardening
 t "unknown flag -> 2" 2 "unknown argument '--bogus'" dry --bogus
@@ -139,8 +209,8 @@ mkdir -p "$w/tmp"; before="$(find "$w" -mindepth 1 -not -path "$w/tmp*" -not -na
 dryout="$(dry --node-id ai-n9 2>&1)"; rc=$?
 t "dry run exits 0" 0 "" test $rc -eq 0
 t "prints all 15 phase headers" 0 "" bash -c 'for n in $(seq 1 15); do grep -q "^==> \[$n/15\]" <<<"$1" || exit 1; done' _ "$dryout"
-# Implemented so far: P5, P6 (INST-04), P7, P8 (INST-05), P9, P10, P12, P13 (INST-06), P11, P14, P15 (INST-07); 4 phases are still stubs. Lower this as items land.
-STUBS_IN_DRY_RUN=4
+# Implemented: P1-P3 (INST-02), P5, P6 (INST-04), P7, P8 (INST-05), P9, P10, P12, P13 (INST-06), P11, P14, P15 (INST-07); STUBS_IN_DRY_RUN phases are still stubs. Lower this as items land.
+STUBS_IN_DRY_RUN=1
 t "every phase that is not implemented says so" 0 "" test "$(grep -c '^NOT IMPLEMENTED YET: this phase' <<<"$dryout")" = "$STUBS_IN_DRY_RUN"
 t "phases 7 and 8 are implemented, not stubs" 0 "" bash -c '! sed -n "/^==> \[7\/15\]/,/^==> \[9\/15\]/p" <<<"$1" | grep -q "NOT IMPLEMENTED"' _ "$dryout"
 t "says the installer is incomplete" 0 "" grep -q "THIS INSTALLER IS INCOMPLETE" <<<"$dryout"
@@ -165,11 +235,12 @@ t "kind is fresh" 0 "kind: fresh" grep -F "kind: fresh" <<<"$realout"
 s="$w/rstate/state.json"
 t "state.json exists, 0600" 0 "" test "$(stat -c %a "$s")" = 600
 t "state.json is valid JSON when python is present" 0 "" bash -c 'command -v python3 >/dev/null || exit 0; python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); assert len(d[\"phases\"])==15" "$1"' _ "$s"
-# Phases whose real implementation has landed (INST-04: P5, P6; INST-07: P11, P14 under the skeleton's defaults). Every other phase
+# Phases whose real implementation has landed (INST-02: P1-P3; INST-04: P5, P6; INST-05: P7, P8; INST-07: P11, P14 under the skeleton's defaults). Every other phase
 # is still a stub and must be recorded as not-implemented; add a phase id here when its item is merged.
-IMPLEMENTED="P5 P6 P7 P8 P9 P10 P11 P12 P13 P14"
+IMPLEMENTED="P1 P2 P3 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14"
 t "every phase has status, version, finished_at, details" 0 "" bash -c '[ "$(grep -cE "\"status\":\"(not-implemented|done)\",\"version\":\"9.9.9-test\",\"finished_at\":\"20[0-9-]*T[0-9:]*Z\",\"details\":" "$1")" = 15 ]' _ "$s"
 t "a stub is never recorded as done" 0 "" bash -c 'for i in $(seq 1 15); do case " $2 " in *" P$i "*) continue ;; esac; grep -q "\"P$i\": .*\"status\":\"done\"" "$1" && exit 1; done; exit 0' _ "$s" "$IMPLEMENTED"
+t "P1, P2 and P3 are recorded as done" 0 "" bash -c 'for p in P1 P2 P3; do grep -q "\"$p\": {[^}]*\"status\":\"done\"" "$1" || exit 1; done' _ "$s"
 t "atomic: no temp file left behind" 0 "" test -z "$(find "$w/rstate" -name '.state.*')"
 t "lock file exists after a real run" 0 "" test -f "$w/rstate/lock"
 rerun="$(real --node-id ai-n9 2>&1)"
@@ -177,7 +248,7 @@ t "second run is a re-run" 0 "kind: re-run" grep -F "kind: re-run" <<<"$rerun"
 touch "$w/systemd/llama-qwen.service"
 t "legacy llama-qwen.service means migration" 0 "kind: migration" bash -c 'env "${@:5}" LAI_INSTALL_STATE_DIR="$2" LAI_INSTALL_SYSTEMD_DIR="$3" "$1" --yes --log "$4" 2>&1' _ "$STAMPED" "$w/rstate" "$w/systemd" "$w/real.log" "${llhooks[@]}"
 rm -f "$w/systemd/llama-qwen.service"
-t "state load reads what state write wrote" 0 "" bash -c 'source "$1"; STATE_FILE="$2"; state_load; [ "${PH_STATUS[P6]}" = done ] && [ "${PH_STATUS[P7]}" = done ] && [ "${PH_STATUS[P9]}" = done ] && [ "${#PH_STATUS[@]}" = 15 ]' _ "$INST" "$s"
+t "state load reads what state write wrote" 0 "" bash -c 'source "$1"; STATE_FILE="$2"; state_load; [ "${PH_STATUS[P1]}" = done ] && [ "${PH_STATUS[P6]}" = done ] && [ "${PH_STATUS[P7]}" = done ] && [ "${PH_STATUS[P9]}" = done ] && [ "${#PH_STATUS[@]}" = 15 ]' _ "$INST" "$s"
 # A phase that is done and whose check passes reports "already done" (the hook later items use).
 t "idempotency: a done phase with a passing check says 'already done'" 0 "already done" bash -c '
   source "$1"; DRY_RUN=1; STATE_FILE="$2/none"; PH_STATUS[P1]=done; check_preflight() { return 0; }
@@ -486,7 +557,8 @@ t "repair --dry-run shows the diff" 0 "[dry-run] would change" dryun --repair
 t "  ...and changed nothing" 0 "" test "$b" = "$(md5sum <"$FR/opt/localai/installers/install-node.sh")"
 cp "$STAMPED" "$FR/opt/localai/installers/install-node.sh"
 t "repair run from the installed copy itself says it cannot judge it" 0 "uses the installed copy itself" unenv env -u LAI_INSTALL_SELF "$FR/opt/localai/installers/install-node.sh" --log "$w/un.log" --repair
-mkdir -p "$w/ark/localai/kit/installers"; printf 'KITCOPY\n' >"$w/ark/localai/kit/installers/install-node.sh"
+i2_mkark "$w/ark"; printf 'KITCOPY\n' >"$w/ark/localai/kit/installers/install-node.sh"   # a full drive whose SHA256SUMS does not list the installer
+(cd "$w/ark/localai/kit/bin" && grep -v ' install-node.sh$' SHA256SUMS >s && mv s SHA256SUMS && printf 'SIG:%s:%s' "$I2_PUBKEY" "$(sha256sum SHA256SUMS | cut -d' ' -f1)" >SHA256SUMS.minisig)
 t "repair from the installed copy takes the kit copy with --from-ark" 0 "" unenv env -u LAI_INSTALL_SELF "$FR/opt/localai/installers/install-node.sh" --log "$w/un.log" --from-ark "$w/ark" --repair
 t "  ...and installed it" 0 "" grep -q KITCOPY "$FR/opt/localai/installers/install-node.sh"
 
@@ -744,7 +816,7 @@ t "  ... arguments" 0 "setup harden --revert" grep -F -- "setup harden --revert"
 t "the installer never restarts logind (CI grep)" 0 "ok" "$SRC/scripts/check-no-logind-restart.sh"
 
 echo "== release stamping"
-if command -v minisign >/dev/null 2>&1; then
+if [[ $REAL_MS == 1 ]]; then
   printf '%s\n%s\n' pw-test pw-test | minisign -G -p "$w/a.pub" -s "$w/a.key" -f >/dev/null 2>&1
   stamped="$w/install-node.stamped.sh"
   t "stamp-installer accepts the template" 0 "stamped" "$SRC/scripts/release/stamp-installer.sh" --in "$INST" --out "$stamped" --tag node-v1.2.3 --pubkey "$w/a.pub"
@@ -765,6 +837,169 @@ fi
 
 # shellcheck source=scripts/tests/test-installer-p5p6.sh
 source "$SRC/scripts/tests/test-installer-p5p6.sh"
+
+echo "== INST-02 P1 preflight (fake machine, no root)"
+I2_RA=(--node-id ai-n9 --desktop-user "$(id -un)")
+i2_fresh() { rm -rf "$w/i2-vstate" "$w/i2-vsystemd" "$I2_IROOT"; mkdir -p "$w/i2-vsystemd"; : >"$FAKE_CALLS"; }
+I2_SS_PY=$'LISTEN 0 1 127.0.0.1:7070 0.0.0.0:* users:(("python3",pid=1,fd=1))\n'
+I2_SS_OURS=$'LISTEN 0 1 127.0.0.1:7070 0.0.0.0:* users:(("aiagent",pid=1,fd=1))\nLISTEN 0 1 0.0.0.0:8080 0.0.0.0:* users:(("llama-qwen",pid=2,fd=1))\n'
+I2_SS_NGINX=$'LISTEN 0 1 0.0.0.0:8080 0.0.0.0:* users:(("nginx",pid=3,fd=1))\n'
+t "good machine: preflight passes (cpu)" 0 "Preflight passed: backend cpu, 16000 MiB RAM" dryv -- "${I2_RA[@]}"
+t "NVIDIA GPU: cuda with VRAM and compute capability" 0 "NVIDIA GPU: NVIDIA GeForce RTX 2080, 8192 MiB, compute capability 7.5" dryv FAKE_GPU=nvidia -- "${I2_RA[@]}"
+t "NVIDIA GPU: backend cuda" 0 "Preflight passed: backend cuda" dryv FAKE_GPU=nvidia -- "${I2_RA[@]}"
+t "AMD unified memory uses the GTT (vulkan)" 0 "GPU (vulkan): vendor 0x1002, 32768 MiB usable" dryv LAI_FAKE_ROOT="$w/i2-fx-amd" -- "${I2_RA[@]}"
+t "--backend overrides detection" 0 "backend forced to vulkan" dryv -- "${I2_RA[@]}" --backend vulkan
+t "Ubuntu 26.04 is supported" 0 "Ubuntu 26.04 (resolute)" dryv LAI_FAKE_ROOT="$w/i2-fx-2604" -- "${I2_RA[@]}"
+i2_fresh
+t "debian is refused: exit 3, LAI-INS-001" 3 "LAI-INS-001" realv LAI_FAKE_ROOT="$w/i2-fx-debian" -- "${I2_RA[@]}"
+t "a refusal changed nothing on the system" 0 "" test ! -e "$I2_IROOT"
+t "Ubuntu 25.10 (interim) is refused" 3 "Only Ubuntu 24.04 and 26.04 LTS are supported" realv LAI_FAKE_ROOT="$w/i2-fx-2510" -- "${I2_RA[@]}"
+t "refusal says NOTHING WAS CHANGED" 3 "NOTHING WAS CHANGED" realv LAI_FAKE_ROOT="$w/i2-fx-debian" -- "${I2_RA[@]}"
+t "unsupported architecture -> 3" 3 "LAI-INS-001" realv FAKE_ARCH=i386 -- "${I2_RA[@]}"
+t "container -> 3, LAI-INS-002" 3 "LAI-INS-002" realv FAKE_VIRT=docker -- "${I2_RA[@]}"
+t "not run with sudo -> 3, LAI-INS-003" 3 "LAI-INS-003" realv LAI_FAKE_EUID=1000 -- "${I2_RA[@]}"
+t "root without a desktop user -> 3, LAI-INS-003" 3 "Pass --desktop-user" realv SUDO_USER= -- --node-id ai-n9
+t "sudo from root without a desktop user -> 3" 3 "LAI-INS-003" realv SUDO_USER=root -- --node-id ai-n9
+t "a dry run as a normal user only warns" 0 "a real run would stop here with LAI-INS-003" dryv LAI_FAKE_EUID=1000 -- "${I2_RA[@]}"
+I2_allout="$(realv LAI_FAKE_ROOT="$w/i2-fx-debian" FAKE_VIRT=lxc FAKE_SS="$I2_SS_PY" -- "${I2_RA[@]}" 2>&1)"
+t "every problem is reported together (001, 002, 014)" 0 "" bash -c 'for c in LAI-INS-001 LAI-INS-002 LAI-INS-014; do grep -q "FAIL $c" <<<"$1" || exit 1; done' _ "$I2_allout"
+t "each problem carries a fix sentence" 0 "" bash -c 'grep -q "fix: Run the installer on the real machine." <<<"$1"' _ "$I2_allout"
+t "a foreign program on 7070 -> exit 1, LAI-INS-014 naming it" 1 "port 7070 is used by python3" dryv FAKE_SS="$I2_SS_PY" -- "${I2_RA[@]}"
+t "a holder a normal user cannot see only warns" 0 "run as root to see which program" dryv LAI_FAKE_EUID=1000 FAKE_SS=$'LISTEN 0 1 0.0.0.0:8080 0.0.0.0:*\n' -- "${I2_RA[@]}"
+t "our own services and llama-qwen on 8080 are fine" 0 "ports 7070, 8080, 8081 and 8888 are free or ours" dryv FAKE_SS="$I2_SS_OURS" -- "${I2_RA[@]}"
+t "a foreign program on 8080 -> exit 1" 1 "port 8080 is used by nginx" dryv FAKE_SS="$I2_SS_NGINX" -- "${I2_RA[@]}"
+t "too little disk -> exit 1, LAI-INS-013" 1 "LAI-INS-013" dryv FAKE_AVAIL=1000000000 -- "${I2_RA[@]}"
+t "too little disk with --yes only warns" 0 "WARN LAI-INS-013" dryv FAKE_AVAIL=1000000000 -- "${I2_RA[@]}" --yes
+t "low RAM only warns (LAI-INS-012)" 0 "WARN LAI-INS-012" dryv LAI_FAKE_ROOT="$w/i2-fx-lowram" -- "${I2_RA[@]}"
+t "no internet -> exit 1, LAI-INS-015 suggests --from-ark" 1 "Connect to the internet, or use --from-ark" dryv LAI_INTERNET_URL=file:///nonexistent-lai -- "${I2_RA[@]}"
+t "an ark install does not need the internet" 0 "ark drive $I2_ARK has the kit for noble/amd64" dryv LAI_INTERNET_URL=file:///nonexistent-lai -- "${I2_RA[@]}" --from-ark "$I2_ARK"
+I2_ARK2="$w/i2-ark2"; i2_mkark "$I2_ARK2"; rm -rf "$I2_ARK2/localai/kit/debs" "$I2_ARK2/localai/ROOT.json"
+t "ark missing parts -> exit 1, LAI-INS-016 lists them" 1 "missing: localai/ROOT.json, localai/kit/debs/noble-amd64/" dryv -- "${I2_RA[@]}" --from-ark "$I2_ARK2"
+t "a wrong clock only warns (LAI-INS-017) and the install goes on" 0 "WARN LAI-INS-017" dryv LAI_FAKE_YEAR=1970 -- "${I2_RA[@]}"
+t "laptop on battery warns about the charger" 0 "Plug in the charger before continuing" dryv LAI_FAKE_ROOT="$w/i2-fx-laptop" -- "${I2_RA[@]}"
+t "a legacy llama-qwen service is noticed" 0 "will be migrated" bash -c 'mkdir -p "$1"; printf "[Service]\nExecStart=/x/llama-server\n" >"$1/llama-qwen.service"; LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$2" LAI_INSTALL_SYSTEMD_DIR="$1" "$3" --dry-run --log "$4" --node-id ai-n9 --desktop-user "$(id -un)" 2>&1' _ "$w/i2-legsys" "$w/state" "$STAMPED" "$w/i2-leg.log"
+t "broken NVIDIA driver: dry run explains the offer" 0 "[dry-run] would ask: install the NVIDIA driver now?" dryv FAKE_GPU=broken -- "${I2_RA[@]}"
+t "broken NVIDIA driver: warning LAI-INS-010" 0 "WARN LAI-INS-010" dryv FAKE_GPU=broken -- "${I2_RA[@]}"
+i2_fresh
+t "driver offer accepted online: installs and asks for a reboot" 0 "REBOOT the computer now" realv FAKE_GPU=broken -- "${I2_RA[@]}" --yes
+t "ubuntu-drivers install --gpgpu was run" 0 "" grep -qx "ubuntu-drivers install --gpgpu" "$FAKE_CALLS"
+i2_fresh
+t "driver offer declined (no terminal): carries on as cpu" 0 "Carrying on without the GPU" realv FAKE_GPU=broken -- "${I2_RA[@]}"
+t "declining ran no driver install" 0 "" test ! -s "$FAKE_CALLS" -o "$(grep -c ubuntu-drivers "$FAKE_CALLS")" = 0
+i2_fresh
+t "offline driver offer: left to the packages step, no ubuntu-drivers" 0 "installed by the packages step" realv FAKE_GPU=broken -- "${I2_RA[@]}" --yes --from-ark "$I2_ARK"
+t "offline driver offer ran no ubuntu-drivers" 0 "" bash -c '! grep -q ubuntu-drivers "$1"' _ "$FAKE_CALLS"
+
+echo "== INST-02 P2 stage artifacts"
+i2_fresh
+t "online install stages the agent" 0 "staged from release node-v9.9.9-test" realv -- "${I2_RA[@]}"
+t "the agent is in place, 0755" 0 "" test "$(stat -c %a "$I2_IROOT/opt/localai/bin/aiagent")" = 755
+t "aictl links to the agent" 0 "" test "$(readlink "$I2_IROOT/usr/local/bin/aictl")" = /opt/localai/bin/aiagent
+t "the installer is copied, 0755, same bytes as the release" 0 "" bash -c 'test "$(stat -c %a "$1/opt/localai/installers/install-node.sh")" = 755 && cmp -s "$1/opt/localai/installers/install-node.sh" "$2/install-node.sh"' _ "$I2_IROOT" "$I2_REL"
+t "install-node.sh matches SHA256SUMS" 0 "" bash -c 'cd "$2" && grep " install-node.sh$" SHA256SUMS | sed "s| install-node.sh| $1/opt/localai/installers/install-node.sh|" | sha256sum -c --quiet' _ "$I2_IROOT" "$I2_REL"
+t "/usr/local/sbin/install-node.sh links to it" 0 "" test "$(readlink "$I2_IROOT/usr/local/sbin/install-node.sh")" = /opt/localai/installers/install-node.sh
+t "the catalog step ran against the release" 0 "" grep -q "^aiagent setup catalog --from release" "$FAKE_CALLS"
+t "the first install makes no aiagent.prev" 0 "" test ! -e "$I2_IROOT/opt/localai/bin/aiagent.prev"
+t "state records P2 done" 0 "" grep -q '"P2": {[^}]*"status":"done"' "$w/i2-vstate/state.json"
+t "re-run: stage is already done" 0 "already done" realv -- "${I2_RA[@]}"
+I2_REL2="$w/i2-rel2"; i2_mkrel "$I2_REL2"; echo "# a newer agent" >>"$I2_REL2/aiagent-linux-amd64"
+(cd "$I2_REL2" && sha256sum aiagent-linux-amd64 aiagent-linux-arm64 install-node.sh >SHA256SUMS && printf 'SIG:%s:%s' "$I2_PUBKEY" "$(sha256sum SHA256SUMS | cut -d' ' -f1)" >SHA256SUMS.minisig)
+rm -rf "$w/i2-vstate"
+t "a newer agent replaces it" 0 "staged from release" realv LAI_RELEASE_BASE_URL="file://$I2_REL2" -- "${I2_RA[@]}"
+t "aiagent.prev keeps the previous binary" 0 "" cmp -s "$I2_IROOT/opt/localai/bin/aiagent.prev" "$I2_REL/aiagent-linux-amd64"
+t "aiagent is the new binary and aictl is still linked" 0 "" bash -c 'cmp -s "$1/opt/localai/bin/aiagent" "$2/aiagent-linux-amd64" && test -L "$1/usr/local/bin/aictl"' _ "$I2_IROOT" "$I2_REL2"
+rm -rf "$w/i2-vstate"
+t "re-run with the same binary keeps aiagent.prev" 0 "is already this version" realv LAI_RELEASE_BASE_URL="file://$I2_REL2" -- "${I2_RA[@]}"
+t "aiagent.prev was not overwritten" 0 "" cmp -s "$I2_IROOT/opt/localai/bin/aiagent.prev" "$I2_REL/aiagent-linux-amd64"
+
+i2_resign() { (cd "$1" && printf 'SIG:%s:%s' "$I2_PUBKEY" "$(sha256sum SHA256SUMS | cut -d' ' -f1)" >SHA256SUMS.minisig); }
+I2_BADSIG="$w/i2-rel-badsig"; i2_mkrel "$I2_BADSIG"; echo "tampered" >>"$I2_BADSIG/SHA256SUMS"
+I2_BADBIN="$w/i2-rel-badbin"; i2_mkrel "$I2_BADBIN"; echo "tampered" >>"$I2_BADBIN/aiagent-linux-amd64"
+I2_BADINST="$w/i2-rel-badinst"; i2_mkrel "$I2_BADINST"; echo "# tampered" >>"$I2_BADINST/install-node.sh"
+I2_NOINST="$w/i2-rel-noinst"; i2_mkrel "$I2_NOINST"; grep -v " install-node.sh$" "$I2_NOINST/SHA256SUMS" >"$I2_NOINST/s" && mv "$I2_NOINST/s" "$I2_NOINST/SHA256SUMS"; i2_resign "$I2_NOINST"
+I2_NOAGENT="$w/i2-rel-noagent"; i2_mkrel "$I2_NOAGENT"; grep -v " aiagent-linux-amd64$" "$I2_NOAGENT/SHA256SUMS" >"$I2_NOAGENT/s" && mv "$I2_NOAGENT/s" "$I2_NOAGENT/SHA256SUMS"; i2_resign "$I2_NOAGENT"
+for v in badsig:"the signature of SHA256SUMS is wrong" badbin:"does not match SHA256SUMS" badinst:"install-node.sh does not match SHA256SUMS" \
+         noinst:"SHA256SUMS does not list install-node.sh" noagent:"SHA256SUMS does not list aiagent-linux-amd64"; do
+  i2_fresh
+  t "${v%%:*}: LAI-INS-021, exit 1" 1 "${v#*:}" realv LAI_RELEASE_BASE_URL="file://$w/i2-rel-${v%%:*}" -- "${I2_RA[@]}"
+  t "${v%%:*}: nothing placed in /opt/localai/bin" 0 "" test ! -e "$I2_IROOT/opt/localai/bin"
+done
+t "a failed stage is recorded as failed" 0 "" grep -q '"P2": {[^}]*"status":"failed"' "$w/i2-vstate/state.json"
+i2_fresh
+t "download failure -> LAI-INS-015" 1 "could not download" realv LAI_RELEASE_BASE_URL="file:///nonexistent-lai" -- "${I2_RA[@]}"
+
+i2_fresh
+t "offline install works with networking 'disabled'" 0 "staged from ark $I2_ARK" realv LAI_RELEASE_BASE_URL=file:///nonexistent-lai LAI_INTERNET_URL=file:///nonexistent-lai -- "${I2_RA[@]}" --from-ark "$I2_ARK"
+t "offline: agent and installer placed from the kit" 0 "" bash -c 'cmp -s "$1/opt/localai/bin/aiagent" "$2/localai/kit/bin/aiagent-linux-amd64" && cmp -s "$1/opt/localai/installers/install-node.sh" "$2/localai/kit/installers/install-node.sh" && test -L "$1/usr/local/sbin/install-node.sh"' _ "$I2_IROOT" "$I2_ARK"
+t "offline: the catalog step uses the ark" 0 "" grep -q "^aiagent setup catalog --from ark --ark $I2_ARK" "$FAKE_CALLS"
+I2_ARK3="$w/i2-ark3"; i2_mkark "$I2_ARK3"; echo tampered >>"$I2_ARK3/localai/kit/bin/aiagent-linux-amd64"
+i2_fresh
+t "offline: a tampered agent on the drive -> LAI-INS-021" 1 "LAI-INS-021" realv -- "${I2_RA[@]}" --from-ark "$I2_ARK3"
+t "offline: nothing placed" 0 "" test ! -e "$I2_IROOT/opt/localai/bin"
+I2_ARK4="$w/i2-ark4"; i2_mkark "$I2_ARK4"; echo "# x" >>"$I2_ARK4/localai/kit/bin/SHA256SUMS"
+t "offline: a tampered SHA256SUMS -> LAI-INS-021" 1 "the signature of SHA256SUMS is wrong" realv -- "${I2_RA[@]}" --from-ark "$I2_ARK4"
+i2_fresh
+t "dry run offline: verifies for real, places nothing" 0 "[dry-run] would run: install -m 0755" dryv -- "${I2_RA[@]}" --from-ark "$I2_ARK"
+t "dry run offline: nothing under the install root" 0 "" test ! -e "$I2_IROOT"
+t "dry run offline: the catalog step is a dry run" 0 "" grep -q "setup catalog --from ark --ark $I2_ARK --dry-run" "$FAKE_CALLS"
+t "dry run offline: a bad drive still fails" 1 "LAI-INS-021" dryv -- "${I2_RA[@]}" --from-ark "$I2_ARK3"
+t "dry run online: says what it would download" 0 "[dry-run] would download aiagent-linux-amd64" dryv -- "${I2_RA[@]}"
+i2_fresh
+t "arm64 uses the arm64 binary" 0 "aiagent-linux-arm64 matches SHA256SUMS" realv FAKE_ARCH=arm64 -- "${I2_RA[@]}"
+
+# minisign cannot be installed: the --agent-sha256 fallback (online only). PATH holds the fakes but no minisign.
+I2_LEAN="$w/i2-lean"; mkdir -p "$I2_LEAN"
+for c in bash sed awk cmp cp mkdir install ln mv rm mktemp tr cat date head tail readlink sha256sum curl dirname basename id stat flock sleep find cut grep sort wc env dpkg-query touch chmod chown diff uname setsid; do
+  pth="$(PATH=/usr/bin:/bin command -v "$c" || true)"; [[ -z "$pth" ]] || ln -sf "$pth" "$I2_LEAN/$c"
+done
+for f in dpkg systemd-detect-virt lspci nvidia-smi ss df mokutil; do ln -sf "$I2_FB/$f" "$I2_LEAN/$f"; done
+ln -sf "$w/llfake/systemctl" "$I2_LEAN/systemctl"   # the INST-05 fake systemctl (P9 restarts the agent)
+# shellcheck disable=SC2154  # p56 is assigned by the sourced test-installer-p5p6-fixtures.sh
+ln -sf "$p56/bin/apt-get" "$I2_LEAN/apt-get"   # the INST-04 fake apt-get
+I2_RELSHA="$(sha256sum "$I2_REL/aiagent-linux-amd64" | cut -d' ' -f1)"
+i2_fresh
+t "no minisign + --agent-sha256: the agent is checked against it" 0 "checking the agent against the sha256 you gave" realv PATH="$I2_LEAN" -- "${I2_RA[@]}" --agent-sha256 "$I2_RELSHA"
+t "fallback: the agent is placed" 0 "" test -x "$I2_IROOT/opt/localai/bin/aiagent"
+t "fallback: the installer copied is the running script" 0 "" cmp -s "$I2_IROOT/opt/localai/installers/install-node.sh" "$STAMPED"
+i2_fresh
+t "no minisign + wrong --agent-sha256 -> LAI-INS-021" 1 "does not match --agent-sha256" realv PATH="$I2_LEAN" -- "${I2_RA[@]}" --agent-sha256 "$fakehex"
+t "no minisign and no --agent-sha256 -> LAI-INS-021" 1 "minisign is not available" realv PATH="$I2_LEAN" -- "${I2_RA[@]}"
+t "no minisign: nothing placed" 0 "" test ! -e "$I2_IROOT/opt/localai/bin"
+
+if [[ $REAL_MS == 1 ]]; then
+  echo "== INST-02 P2 with the real minisign"
+  printf '%s\n%s\n' pw-test pw-test | minisign -G -p "$w/i2-r.pub" -s "$w/i2-r.key" -f >/dev/null 2>&1
+  I2_RK="$(sed -n 2p "$w/i2-r.pub")"
+  I2_RSTAMP="$w/i2-install-node.realkey.sh"; sed "s|$I2_PUBKEY|$I2_RK|g" "$STAMPED" >"$I2_RSTAMP"; chmod +x "$I2_RSTAMP"
+  I2_RELR="$w/i2-rel-real"; i2_mkrel "$I2_RELR"; cp "$I2_RSTAMP" "$I2_RELR/install-node.sh"
+  (cd "$I2_RELR" && sha256sum aiagent-linux-amd64 aiagent-linux-arm64 install-node.sh >SHA256SUMS && printf 'pw-test\n' | minisign -S -s "$w/i2-r.key" -m SHA256SUMS -x SHA256SUMS.minisig >/dev/null 2>&1)
+  mkdir -p "$w/i2-fakebin-real"; cp -a "$I2_FB"/. "$w/i2-fakebin-real/"; rm -f "$w/i2-fakebin-real/minisign"
+  I2_RPATH="$w/i2-fakebin-real:${PATH#"$I2_FB":}"
+  i2_realr() { env PATH="$I2_RPATH" "${llhooks[@]}" LAI_RELEASE_BASE_URL="file://$1" LAI_INSTALL_STATE_DIR="$w/i2-vstate" LAI_INSTALL_SYSTEMD_DIR="$w/i2-vsystemd" "$I2_RSTAMP" --log "$w/i2-realv.log" "${I2_RA[@]}"; }
+  i2_fresh
+  t "real minisign: a good signature installs" 0 "signature of SHA256SUMS is good" i2_realr "$I2_RELR"
+  I2_RELT="$w/i2-rel-real-bad"; cp -a "$I2_RELR" "$I2_RELT"; echo "tampered" >>"$I2_RELT/SHA256SUMS"
+  i2_fresh
+  t "real minisign: a tampered SHA256SUMS -> LAI-INS-021" 1 "LAI-INS-021" i2_realr "$I2_RELT"
+  t "real minisign: nothing placed" 0 "" test ! -e "$I2_IROOT/opt/localai/bin"
+fi
+
+echo "== INST-02 P3 profile"
+i2_fresh
+t "profile is chosen and printed in plain words" 0 "Profile chosen: small-8gb (backend cpu)" realv -- "${I2_RA[@]}"
+t "the survival models are shown" 0 "survival models (always kept for emergencies): Model A" realv -- "${I2_RA[@]}"
+t "--profile overrides the suggestion" 0 "Profile chosen: max-128gb" realv -- "${I2_RA[@]}" --profile max-128gb
+t "the catalog and backend are passed to the agent" 0 "" grep -q "^aiagent setup profile-suggest --backend cpu --catalog $I2_IROOT/etc/localai/catalog --json" "$FAKE_CALLS"
+t "a profile that does not fit asks (no terminal: not confirmed -> exit 4)" 4 "Not confirmed: Use the profile" realv FAKE_MISMATCH=true -- "${I2_RA[@]}" --profile max-128gb
+t "a profile that does not fit: warning LAI-CAT-005 is shown" 4 "LAI-CAT-005" realv FAKE_MISMATCH=true -- "${I2_RA[@]}" --profile max-128gb
+t "--yes confirms a mismatch" 0 "Profile chosen: max-128gb" realv FAKE_MISMATCH=true -- "${I2_RA[@]}" --profile max-128gb --yes
+t "profile needs more disk than there is -> LAI-INS-013, exit 1" 1 "the disk is too small for the profile 'small-8gb'" realv FAKE_MINFREE=900000000000 -- "${I2_RA[@]}"
+t "...but --yes caps the budget instead" 0 "Profile chosen: small-8gb" realv FAKE_MINFREE=900000000000 -- "${I2_RA[@]}" --yes
+t "the agent preflight runs with the profile's free space" 0 "" grep -q "^aiagent setup preflight --min-free-bytes 1000 --backend cpu --desktop-user " "$FAKE_CALLS"
+t "an agent preflight failure stops the install (exit 1)" 1 "the agent's preflight failed (exit 1)" realv FAKE_PREFLIGHT_RC=1 -- "${I2_RA[@]}"
+t "an agent preflight refusal exits 3" 3 "This computer is not supported" realv FAKE_PREFLIGHT_RC=3 -- "${I2_RA[@]}"
+t "dry run online: profile step says what it would do" 0 "[dry-run] would run: aiagent setup profile-suggest --json" dryv -- "${I2_RA[@]}"
+t "dry run offline: the staged agent really suggests a profile" 0 "Profile chosen: small-8gb" dryv -- "${I2_RA[@]}" --from-ark "$I2_ARK"
 
 echo; echo "passed: $pass  failed: $failn"
 [[ $failn -eq 0 ]]

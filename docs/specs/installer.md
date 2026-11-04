@@ -23,7 +23,7 @@ Non-goals:
 | Term | Meaning |
 |---|---|
 | **Driver** | The bash script. Small: argument parsing, logging, preflight, package installation, and calling `aiagent setup …` for everything else |
-| **Setup step** | A Go subcommand `aiagent setup <step> [--dry-run] [--json]`, run as root, idempotent, testable. The same binary later runs as the agent. This keeps logic out of bash |
+| **Setup step** | A Go subcommand `aiagent setup <step> [--dry-run] [--json]`, run as root (the read-only `preflight` and `profile-suggest` also run as a normal user), idempotent, testable. The same binary later runs as the agent. This keeps logic out of bash |
 | **Source** | Where artifacts come from: `online` (GitHub releases, Ubuntu archive, HF via sync) or `ark` (`--from-ark <mount>`) |
 | **Phase state** | `/var/lib/localai/install/state.json`: per phase `{status, version, finished_at, details}` |
 
@@ -87,7 +87,7 @@ Exit codes: `0` success (maybe with "reboot required"), `1` a phase failed (mess
 Everything in overview.md §3.2, plus `/var/lib/localai/install/state.json`, `/var/log/localai-install.log`, `/etc/systemd/logind.conf.d/99-server.conf`, `/etc/NetworkManager/conf.d/wifi-powersave-off.conf`, `/etc/NetworkManager/dispatcher.d/90-wifi-powersave-off`, and the units of overview.md §3.5. Backups of anything replaced go to `/var/lib/localai/install/backup/<UTC-ts>/<original path>`.
 
 ### 3.5 `aiagent setup` steps (internal CLI, owned here)
-`aiagent setup <step> [--dry-run] [--json] [step flags]`, root only (exits 77 otherwise). Not part of the public `aictl` surface ([aictl.md](aictl.md) should list it under "internal").
+`aiagent setup <step> [--dry-run] [--json] [step flags]`. Steps that change the system are root only (exit 77 otherwise); the read-only `preflight` and `profile-suggest` run as anyone (`preflight` reports `LAI-INS-003` itself when it is not root). Not part of the public `aictl` surface ([aictl.md](aictl.md) should list it under "internal").
 | Step | Does |
 |---|---|
 | `preflight` | system, GPU, RAM, disk, ports, legacy detection → JSON report |
@@ -136,7 +136,7 @@ A phase that a later item has not built yet is an **explicit named no-op**: `pha
 
 Refusals leave through `fail <exit> <doctor-code> <message>`; bad arguments through `usage_error` (exit 2, before anything is touched). `Ctrl-C` or `SIGTERM` exits 4. An unexpected command failure runs `on_error` (phase, line, command, exit code, last 50 output lines) and exits 1; no doctor code is registered for "unexpected", the message points at the log.
 
-Test hooks: with `LAI_INSTALLER_DEV=1` (never set on a node) the script reads `LAI_INSTALL_STATE_DIR` and `LAI_INSTALL_SYSTEMD_DIR` and, for the INST-06 phases (besides the INST-05 hooks for the program and llama paths), `LAI_ETC_DIR`, `LAI_HEALTH_URL` and `LAI_HEALTH_WAIT` (and `aiagent setup` reads `LAI_SETUP_ROOT` as the filesystem root), may run as non-root, and an unstamped template may do a `--dry-run`. Without it an unstamped copy refuses to run (exit 2, §3.6) and a real run needs root (exit 3, `LAI-INS-003`).
+Test hooks: with `LAI_INSTALLER_DEV=1` (never set on a node) the script reads `LAI_INSTALL_STATE_DIR` and `LAI_INSTALL_SYSTEMD_DIR` and, for the INST-06 phases (besides the INST-05 hooks for the program and llama paths), `LAI_ETC_DIR`, `LAI_HEALTH_URL` and `LAI_HEALTH_WAIT` (and `aiagent setup` reads `LAI_SETUP_ROOT` as the filesystem root), may run as non-root, and an unstamped template may do a `--dry-run`. Without it an unstamped copy refuses to run (exit 2, §3.6) and a real run needs root (exit 3, `LAI-INS-003`). P1 to P3 also read `LAI_FAKE_ROOT` (prefix for `/etc/os-release`, `/proc`, `/sys`), `LAI_FAKE_EUID`, `LAI_FAKE_YEAR`, `LAI_INSTALL_ROOT` (prefix for `/opt/localai`, `/usr/local`, `/etc/localai`), `LAI_RELEASE_BASE_URL` (the release download folder; `file://` allowed) and `LAI_INTERNET_URL`; with `LAI_INSTALL_ROOT` set the driver passes `--dir`/`--catalog` to `aiagent setup catalog`/`profile-suggest`. Without it an unstamped copy refuses to run (exit 2, §3.6) and a real run needs root (exit 3, `LAI-INS-003`).
 
 `state.json` (§4.1 of this spec, `schema: 1`) is rewritten atomically (temp file in the same folder, then `mv`), mode 0600, one phase per line so a shell can read it back without `jq`:
 ```json
@@ -178,7 +178,14 @@ Checks (all of them run; then the script reports every failure at once):
 | clock | `timedatectl show -p NTPSynchronized`; year ≥ 2026 | warning `LAI-INS-017` (TLS and ages depend on it) |
 | power | laptop on battery | warning: "Plug in the charger before continuing" |
 
-Laptop detection: `/sys/class/dmi/id/chassis_type` ∈ {8, 9, 10, 14, 31, 32} **or** a `/sys/class/power_supply/*` with `type=Battery`.
+Laptop detection: `/sys/class/dmi/id/chassis_type` ∈ {8, 9, 10, 14, 31, 32} **or** a `/sys/class/power_supply/*` with `type=Battery`. The driver sets `IS_LAPTOP` and `ON_BATTERY` for P4.
+
+How P1 is implemented (decisions of INST-02):
+- **The agent is not on the machine yet at P1**, so the driver runs these checks natively in bash (`phase_preflight`), with exactly the commands above, and lists every problem before it stops. The Go step `aiagent setup preflight [--json] [--from-ark <mount>] [--desktop-user <name>] [--yes] [--min-free-bytes <n>] [--backend <b>]` (package `agent/internal/setup/detect` plus `agent/cmd/aiagent/setup`) implements the same table. It exits 0, 1 (a check failed) or 3 (`LAI-INS-001/002/003`), prints a table or, with `--json`, the report (`schema localai.preflight/1`: `ok`, `exit`, `system`, `gpu`, one `checks[]` row of `id`, `status`, `code`, `message`, `fix` per check). P3 runs it once the agent is staged, as the authority: it adds the kit check (`kit.Verifier`, quick mode, the findings about this computer) and the disk check against the chosen profile's `min_free_bytes`. A dry run as a normal user only warns about it.
+- **Thresholds.** RAM below 8 GB means `MemTotal` under 7629 MiB (an 8 GB computer reports about 7.6 GiB). The disk need is `min_free_bytes` + 20 GB; P1 checks the 20 GB floor, P3 the profile.
+- **A refusal** (`LAI-INS-001/002/003`) exits 3 and records P1 as failed; nothing on the system was touched. Run as a normal user, a real run gets `LAI-INS-003`; a dry run only warns, so the plan can be previewed.
+- **The ark check** in bash is presence: `ROOT.json`, `kit/catalog/CATALOG_VERSION`, `kit/bin/{aiagent-linux-<arch>,SHA256SUMS,SHA256SUMS.minisig}`, `kit/installers/install-node.sh`, `kit/debs/<codename>-<arch>/MANIFEST.json`, and `kit/nvidia/<codename>-<arch>-*/` when the backend is cuda. The hash verification against the MANIFESTs is the Go check at P3, and P2 verifies the files it uses.
+- **The NVIDIA driver offer** (`LAI-INS-010`). Online, after the question, `ubuntu-drivers install --gpgpu` runs, the phase is recorded as failed ("reboot, then run again") and the installer exits 0 asking for the reboot. Offline, the kit's driver packages are installed by the packages step ([§4.3 P6](#p6-packages)); P1 only records the wish, the run continues as `cpu`, and the summary says to reboot and re-run. Declining always continues as `cpu`.
 
 #### P2. Stage artifacts
 Get the agent binary first (most later steps run it):
@@ -186,10 +193,17 @@ Get the agent binary first (most later steps run it):
 - **Offline:** copy from `<ark>/localai/kit/bin/` and verify against `kit/bin/SHA256SUMS` (and `SHA256SUMS.minisig` with the embedded key; `minisign` comes from the kit debs).
 - Place it at `/opt/localai/bin/aiagent.new`, check `aiagent.new version` runs, then atomically rename to `/opt/localai/bin/aiagent` (keeping `aiagent.prev`). Symlink `/usr/local/bin/aictl → /opt/localai/bin/aiagent`.
 - **Install the installer itself** (so doctor fixes like `sudo install-node.sh --repair` work verbatim): copy the running, verified `install-node.sh` of the same release (online: the release asset, checked against `SHA256SUMS`; offline: `<ark>/localai/kit/installers/install-node.sh`, [rebuild-kit.md](rebuild-kit.md) §3.1) to `/opt/localai/installers/install-node.sh` (root 0755) and symlink `/usr/local/sbin/install-node.sh → /opt/localai/installers/install-node.sh` (`/usr/local/sbin` is in sudo's `secure_path`). Paths: [overview.md](../architecture/overview.md) §3.2.
-- Install the catalog: `aiagent setup catalog --from <release|ark>`.
+- Install the catalog: `aiagent setup catalog --from <release|ark> [--ark <mount>] [--dir <folder>] [--dry-run]`: the catalog is linted, installed atomically with the previous one kept (`catalog.Install`), and a version that is already installed is left alone. In a dry run it still fetches and lints.
+
+How P2 is implemented (decisions of INST-02):
+- Files are copied or downloaded to a temporary folder, verified there, and only then placed. A tampered `SHA256SUMS` signature, an agent or installer whose hash differs, or a name that `SHA256SUMS` does not list is `LAI-INS-021` (exit 1) with nothing in `/opt/localai/bin`. The hash comparison reads the listed hash of the exact file name (equivalent to `sha256sum -c --ignore-missing`).
+- The installer copy must be listed in `SHA256SUMS` online. On the drive it is verified when listed; if the drive's `SHA256SUMS` does not list it (kit-agent-binaries does not ship the release's sums yet, [rebuild-kit.md](rebuild-kit.md) §3.2), a warning says so and the kit copy is used.
+- `minisign` offline comes from the kit's `minisign_*.deb` only if its sha256 appears in the repository's `PACKAGES.lock`; without it, offline fails with `LAI-INS-021`. Online, `--agent-sha256` is the fallback when `minisign` cannot be installed: the agent is checked against it and the installer copied is the running script.
+- `aiagent.prev` is made only when the binary changes, so a re-run with the same agent keeps the existing `.prev`. The smoke test (`aiagent.new version`) runs before the rename.
+- A dry run online only prints what it would download (no network); offline it copies and verifies for real into a temporary folder and runs `aiagent setup catalog --dry-run` with the verified copy.
 
 #### P3. Profile
-`aiagent setup profile-suggest --json` (catalog.md §4 `match`, `cpu-only` last). `--profile` overrides; a profile whose `match` doesn't fit the detected hardware asks for confirmation (`LAI-CAT-005` warning). Print the profile name, budget and survival models in plain words.
+`aiagent setup profile-suggest [--json] [--profile <id>] [--backend <b>] [--catalog <dir>] [--from-ark <mount>]` (catalog.md §4 `match`, `cpu-only` last; reads the installed catalog, or the kit's copy on the drive when none is installed yet). The JSON (`schema localai.profile-suggest/1`) carries `profile`, `display_name`, `suggested`, `reasons`, `override`, `mismatch`, `mismatch_code`, `mismatch_message`, `backend`, `vram_mib`, `ram_mib`, `budget_bytes`, `min_free_bytes`, `default_model`, `survival_models[]` and `catalog_version`. The driver prints the plain-words form, asks to confirm a mismatch (`--yes` confirms; no answer exits 4), checks the disk against `min_free_bytes` and then runs `aiagent setup preflight` (above). `--profile` overrides; a profile whose `match` doesn't fit the detected hardware asks for confirmation (`LAI-CAT-005` warning). Print the profile name, budget and survival models in plain words.
 
 #### P4. Laptop hardening (§Laptop hardening)
 Only for laptops (or `--hardening`). Each step is ported from [source/laptop-server-setup.md](../source/laptop-server-setup.md) §2, with an idempotency check and a verification from its §3.
