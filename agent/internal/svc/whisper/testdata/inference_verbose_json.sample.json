@@ -1,0 +1,1 @@
+{"task":"transcribe","language":"english","duration":3.2,"text":" How do I clean a deep cut?","segments":[{"id":0,"text":" How do I clean a deep cut?","start":0.0,"end":3.2,"tokens":[1012,360,314,3424,257,2769,2005,30],"temperature":0.0,"avg_logprob":-0.21,"no_speech_prob":0.01}],"detected_language":"english","detected_language_probability":0.97}

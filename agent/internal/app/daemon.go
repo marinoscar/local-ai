@@ -20,6 +20,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"github.com/marinoscar/local-ai/agent/internal/svc/kiwix"
 	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
+	"github.com/marinoscar/local-ai/agent/internal/svc/whisper"
 )
 
 // FatalError is a startup failure that ends the process: exit 1, and systemd restarts the agent
@@ -85,6 +86,7 @@ type Daemon struct {
 	syncEngine modelsapi.SyncEngine
 	ark        *arkStack // nil when the sync stack could not be built
 	piper      *piper.Service
+	whisperSTT *whisper.STTService
 	hooksSync  syncCanceller
 	reporter   *drill.Reporter
 	updater    *jobs.AgentUpdate

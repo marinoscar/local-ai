@@ -344,6 +344,16 @@ The exact field names must be confirmed against `examples/server/server.cpp` at 
 6. POST to `/inference` with a 60 s timeout. Map the result to the response of §3.4.
 7. Never log the transcript text (it may be private). Log only duration, language, elapsed time.
 
+*Implementation (SVC-07, `internal/svc/whisper`):*
+- **Route.** `whisper.STTService` (`NewSTT`, `Routes`), registered next to the piper routes; reads `whisper.enabled`, `whisper.model` and `whisper.max_audio_seconds` (default 120) from `node.yaml` live, the port from `ports.whisper`, and the model id for the answer from `WHISPER_MODEL_ID` in `whisper.env` (read only; `whisper.model` when the file has none; `whisper` as a last label).
+- **Queue.** A request enters the queue (1 in flight + 2 waiting = 3 admitted) *before* its body is read, so at most three recordings are in memory; a fourth gets `429 LAI-SVC-015` with `Retry-After: 3`. The in-flight slot is taken after decoding, so whisper is never idle behind a slow upload. A caller that leaves while waiting frees its place.
+- **Multipart.** Streamed with `mime/multipart` over `http.MaxBytesReader` (25 MiB); `audio` once, `language` and `prompt` (at most 4 KiB read, then 200 characters checked) and any other field ignored. Over the limit is `413 LAI-SVC-014` (`details.reason: too_large`). A malformed body, a second `audio`, a `language` outside `^[a-z]{2,3}$|^auto$` or a prompt over 200 characters is `400 LAI-AGT-020`; no `audio` or an empty one is `400 LAI-SVC-014`.
+- **WAV.** A declared `data` size larger than the body is **cut to the body** (a recorder that was stopped, or a streaming header) and a partial last frame is dropped; any other chunk larger than the body is `truncated`; `data` before `fmt ` is refused. `details.reason` of `LAI-SVC-014`: `not_wav`, `truncated`, `no_format_chunk`, `bad_format_chunk`, `unsupported_encoding` (8-bit, 24-bit, 64-bit float, mu-law, an extensible sub-format other than PCM or float), `unsupported_channels`, `unsupported_rate` (0 or above 384 kHz), `no_data_chunk`, `bad_block_align`, `empty`, `too_long`, `silent`. Duration is checked before the samples are converted.
+- **Errors from whisper-server.** Cannot connect, any status other than 200, a body that is not JSON, or `{"error": …}` in a 200: `503 LAI-SVC-011` (`details.reason: connect|status|bad_reply|error_field`), or `503 LAI-SVC-010` when no model id is known at all. `whisper.enabled: false` is `503 LAI-SVC-011` with `details.reason: disabled`. No answer within 60 s: `504 LAI-SVC-016`.
+- **Language names.** whisper-server's `language` is the English name (`english`); the agent answers with the ISO code (`en`) through the whisper.cpp language table.
+- **Messages.** Titles and fixes follow `X-LocalAI-UI-Language` (`en` or `es`); the silence sentence is `I couldn't hear anything. Try again closer to the microphone.` / `No pude oír nada. Intente otra vez más cerca del micrófono.`
+- **Contract test.** `testdata/inference_verbose_json.sample.json` is written by hand in the `verbose_json` shape of whisper.cpp; it is replaced by a recording from the pinned build when the round-trip CI of #106 lands.
+
 ### 4.3 Piper
 
 #### 4.3.1 Binary and voices
