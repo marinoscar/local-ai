@@ -362,3 +362,36 @@ func TestEffectiveDefault(t *testing.T) {
 }
 
 var _ = os.ErrNotExist
+
+// Speech models live under speech/<engine>/<id>, not models/<id> (overview.md section 3.3): a verified
+// whisper or piper copy must count as present, and the same manifest under models/ must not.
+func TestManifestPresenceFollowsTheEngineDirectory(t *testing.T) {
+	const root = "/srv/localai"
+	for _, tc := range []struct{ engine, dir string }{
+		{"llama", "/models/m1"},
+		{"whisper", "/speech/whisper/m1"},
+		{"piper", "/speech/piper/m1"},
+	} {
+		t.Run(tc.engine, func(t *testing.T) {
+			m := catalog.Model{ID: "m1", Engine: tc.engine, Files: []catalog.ModelFile{{Name: "f.bin", Kind: "weights", SHA256: sum("f")}}}
+			doc, _ := json.Marshal(map[string]any{
+				"item_id": "m1", "state": "verified", "verified_at": "2026-11-04T05:19:26Z",
+				"files": []any{map[string]any{"kind": "weights", "path": "f.bin", "sha256": sum("f")}},
+			})
+			fs := newMemFS()
+			fs.put(root+tc.dir+"/MANIFEST.json", doc, 0o644)
+			if !(ManifestPresence{FS: fs}).Present(root, &m) {
+				t.Errorf("a verified %s manifest in %s is not present", tc.engine, tc.dir)
+			}
+			other := newMemFS()
+			wrong := "/models/m1"
+			if tc.engine == "llama" {
+				wrong = "/speech/whisper/m1"
+			}
+			other.put(root+wrong+"/MANIFEST.json", doc, 0o644)
+			if (ManifestPresence{FS: other}).Present(root, &m) {
+				t.Errorf("a %s manifest in %s must not count", tc.engine, wrong)
+			}
+		})
+	}
+}
