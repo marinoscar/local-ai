@@ -1,0 +1,215 @@
+// A fake agent for the Playwright tests: it serves agent/ui/dist the way the real agent does
+// (/portal SPA fallback, /portal/assets, the Portal CSP) and a status body the tests can change.
+// Real agent behaviour is covered by the Go tests (agent/internal/api/spa_test.go); this only
+// gives the browser something to talk to. Listens on 127.0.0.1 only.
+import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
+import { dirname, extname, join, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const dist = join(here, "..", "dist");
+const port = Number(process.env.FAKE_AGENT_PORT || 7071);
+
+// Keep in step with PortalContentSecurityPolicy in agent/internal/api/spa.go (survival-portal.md section 4.11).
+export const CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-src 'self'; frame-ancestors 'self' localai://app; base-uri 'none'; form-action 'self'";
+
+const TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript",
+  ".css": "text/css",
+  ".woff2": "font/woff2",
+  ".json": "application/json",
+};
+
+function defaultStatus() {
+  return {
+    schema_version: 1,
+    generated_at: "2026-11-02T14:05:11Z",
+    node_id: "ai-n3",
+    mode: "survival",
+    language: "en",
+    emergency_number: "911",
+    session: "portal",
+    power: {
+      on_ac: false,
+      battery_pct: 72,
+      minutes_left: 145,
+      state: "discharging",
+      low: false,
+      critical: false,
+    },
+    clock_ok: true,
+    brain: {
+      loaded: [
+        {
+          id: "qwen3.5-9b-q4km",
+          display_name: "Qwen 3.5 9B",
+          roles: ["chat"],
+          vision: false,
+        },
+      ],
+      loading: null,
+      choices: [],
+    },
+    capabilities: {
+      chat: { state: "ready" },
+      photo: { state: "ready" },
+      talk: { state: "ready" },
+      library: { state: "ready" },
+      maps: { state: "ready" },
+      manuals: { state: "ready" },
+    },
+    first_aid: [
+      {
+        key: "cpr",
+        title: "CPR",
+        url: "/library/content/x/CPR",
+        available: true,
+      },
+      {
+        key: "choking",
+        title: "Choking",
+        url: "/library/content/x/Choking",
+        available: true,
+      },
+      {
+        key: "bleeding",
+        title: "Severe bleeding",
+        url: "/library/content/x/Bleeding",
+        available: true,
+      },
+      {
+        key: "burns",
+        title: "Burns",
+        url: "/library/content/x/Burns",
+        available: true,
+      },
+      {
+        key: "fracture",
+        title: "Broken bone",
+        url: "/library/content/x/Fracture",
+        available: true,
+      },
+      {
+        key: "snake",
+        title: "Snake bite",
+        url: "/library/content/x/Snake",
+        available: true,
+      },
+    ],
+    alerts: [],
+  };
+}
+
+let status = defaultStatus();
+let down = false;
+let seen = [];
+
+function send(res, code, body, headers = {}) {
+  res.writeHead(code, headers);
+  res.end(body);
+}
+
+async function file(res, path, type, extra = {}) {
+  try {
+    send(res, 200, await readFile(path), {
+      "Content-Type": type,
+      "X-Content-Type-Options": "nosniff",
+      ...extra,
+    });
+  } catch {
+    send(res, 404, "not found");
+  }
+}
+
+async function readBody(req) {
+  let s = "";
+  for await (const c of req) s += c;
+  return s;
+}
+
+createServer(async (req, res) => {
+  const url = new URL(req.url, "http://127.0.0.1");
+  const p = url.pathname;
+  if (p.startsWith("/__")) {
+    if (p === "/__reset") {
+      status = defaultStatus();
+      down = false;
+      seen = [];
+      return send(res, 200, "ok");
+    }
+    if (p === "/__status" && req.method === "POST") {
+      status = { ...status, ...JSON.parse(await readBody(req)) };
+      return send(res, 200, "ok");
+    }
+    if (p === "/__down") {
+      down = url.searchParams.get("on") === "1";
+      return send(res, 200, "ok");
+    }
+    if (p === "/__seen")
+      return send(res, 200, JSON.stringify(seen), {
+        "Content-Type": "application/json",
+      });
+    return send(res, 404, "not found");
+  }
+  if (p === "/api/v1/portal/status") {
+    seen.push({ path: p, lang: req.headers["x-localai-ui-language"] ?? null });
+    if (down)
+      return send(
+        res,
+        503,
+        JSON.stringify({ error: { code: "LAI-AGT-001" } }),
+        { "Content-Type": "application/json" },
+      );
+    return send(res, 200, JSON.stringify(status), {
+      "Content-Type": "application/json",
+    });
+  }
+  if (p === "/api/v1/mode/survival" && req.method === "POST") {
+    status = { ...status, mode: "survival", session: "portal" };
+    return send(res, 200, "{}", { "Content-Type": "application/json" });
+  }
+  if (p === "/api/v1/events") {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+    });
+    res.write(": open\n\n");
+    return;
+  }
+  if (
+    p === "/portal" ||
+    p === "/portal/" ||
+    (p.startsWith("/portal/") && !p.startsWith("/portal/assets/"))
+  ) {
+    return file(res, join(dist, "portal.html"), TYPES[".html"], {
+      "Content-Security-Policy": CSP,
+    });
+  }
+  if (p.startsWith("/portal/assets/")) {
+    const rel = normalize(p.slice("/portal/".length));
+    if (rel.includes("..")) return send(res, 400, "bad");
+    return file(
+      res,
+      join(dist, rel),
+      TYPES[extname(rel)] ?? "application/octet-stream",
+    );
+  }
+  if (p === "/") {
+    if (status.mode === "survival")
+      return send(res, 302, "", { Location: "/portal" });
+    return file(res, join(dist, "index.html"), TYPES[".html"]);
+  }
+  // Other areas of the real agent (chat, library, maps, docs): a page is enough.
+  if (/^\/(chat|library|maps|docs)(\/|$)/.test(p)) {
+    return send(res, 200, `<!doctype html><title>${p}</title><p>${p}</p>`, {
+      "Content-Type": TYPES[".html"],
+      "Content-Security-Policy": CSP,
+    });
+  }
+  send(res, 404, "not found");
+}).listen(port, "127.0.0.1", () =>
+  console.log(`fake agent on http://127.0.0.1:${port}`),
+);

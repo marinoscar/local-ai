@@ -1,0 +1,33 @@
+{
+  "name": "local-ai-ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Survival Portal SPA. Built to dist/ and embedded in the agent with go:embed.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src e2e",
+    "test": "vitest run",
+    "e2e": "npm run build && playwright test"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@eslint/js": "^9.39.5",
+    "@fontsource/atkinson-hyperlegible": "^5.3.0",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "^6.4.5",
+    "vitest": "^4.1.12"
+  }
+}

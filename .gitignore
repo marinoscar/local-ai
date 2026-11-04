@@ -34,3 +34,9 @@ node_modules/
 .vscode/
 *.swp
 worktrees/
+
+# UI build output (agent/ui): the folder is embedded with go:embed, so it must exist
+/agent/ui/dist/*
+!/agent/ui/dist/.gitkeep
+/agent/ui/test-results/
+/agent/ui/playwright-report/

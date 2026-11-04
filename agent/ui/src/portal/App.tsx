@@ -1,0 +1,96 @@
+import { useEffect, useRef } from "react";
+import { Shell } from "./components/Shell";
+import { t, useLang } from "./i18n/i18n";
+import { setScale, stepScale, useScale } from "./prefs";
+import { navigate, useScreen } from "./router";
+import { ChatInterstitial } from "./screens/ChatInterstitial";
+import { Home } from "./screens/Home";
+import { LockDialog } from "./screens/LockDialog";
+import { Stub } from "./screens/Stub";
+import { Unavailable } from "./screens/Unavailable";
+import { useStatus, type PortalStatus } from "./status";
+import { viewFor } from "./view";
+
+/** Esc always returns home; Ctrl +/- change the text scale (survival-portal.md section 4.10). */
+function useGlobalKeys() {
+  const scale = useScale();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        navigate("");
+      } else if (
+        e.ctrlKey &&
+        !e.altKey &&
+        !e.metaKey &&
+        (e.key === "+" || e.key === "=")
+      ) {
+        e.preventDefault();
+        setScale(stepScale(scale, 1));
+      } else if (
+        e.ctrlKey &&
+        !e.altKey &&
+        !e.metaKey &&
+        (e.key === "-" || e.key === "_")
+      ) {
+        e.preventDefault();
+        setScale(stepScale(scale, -1));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [scale]);
+}
+
+export function App() {
+  const lang = useLang();
+  useGlobalKeys();
+  const state = useStatus();
+  const screen = useScreen();
+  const status = state.status;
+  const view = viewFor(screen, status);
+
+  useEffect(() => {
+    document.title = t("app.title");
+  }, [lang]);
+
+  // After a screen change (not on first load) move focus to the content so keyboard and screen
+  // reader users start at the top of the new screen.
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    document.getElementById("main")?.focus({ preventScroll: true });
+  }, [screen]);
+
+  let body;
+  switch (view.kind) {
+    case "home":
+      body = <Home status={status} dialogOpen={false} />;
+      break;
+    case "lock":
+      body = (
+        <>
+          <Home status={status} dialogOpen />
+          <LockDialog />
+        </>
+      );
+      break;
+    case "unavailable":
+      body = <Unavailable cap={view.cap} status={status as PortalStatus} />;
+      break;
+    default:
+      body =
+        view.screen === "chat" ? (
+          <ChatInterstitial status={status} />
+        ) : (
+          <Stub screen={view.screen} />
+        );
+  }
+  return (
+    <Shell state={state} home={view.kind === "home" || view.kind === "lock"}>
+      {body}
+    </Shell>
+  );
+}

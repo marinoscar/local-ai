@@ -35,6 +35,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
 	"github.com/marinoscar/local-ai/agent/internal/sync/run/adapt"
 	"github.com/marinoscar/local-ai/agent/internal/update"
+	"github.com/marinoscar/local-ai/agent/ui"
 )
 
 // modeView is the statusapi.ModeView, drill.ModeView and router mode source that exists before the
@@ -505,6 +506,9 @@ func (d *Daemon) buildServer() error {
 				Settings: func() portal.Settings { return portal.SettingsFrom(c.Config.Get(), c.Catalog.Get().Catalog) },
 				Now:      env.Clock.Now,
 			})
+		}},
+		{"portal ui", func() error {
+			return reg.Add(api.SPARoutes(api.SPAOptions{FS: ui.Dist(), Mode: d.modeName})...)
 		}},
 		{"models", func() error { return d.models.Register(reg) }},
 		{"model operations", func() error {
