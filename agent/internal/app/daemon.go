@@ -14,6 +14,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/drill"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
+	"github.com/marinoscar/local-ai/agent/internal/maps"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/modes"
 	"github.com/marinoscar/local-ai/agent/internal/state"
@@ -87,6 +88,7 @@ type Daemon struct {
 	ark        *arkStack // nil when the sync stack could not be built
 	piper      *piper.Service
 	whisperSTT *whisper.STTService
+	maps       *maps.Maps
 	hooksSync  syncCanceller
 	reporter   *drill.Reporter
 	updater    *jobs.AgentUpdate
