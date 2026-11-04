@@ -255,7 +255,7 @@ Flow (§4.6). If the loaded brain has no vision: a box above the question: "The 
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 - Search: `GET /library/search?pattern=<q>&books.filter.lang=<eng|spa>&format=xml&pageLength=25` (OpenSearch RSS from kiwix-serve, parsed in the browser). The language filter defaults to the UI language with a toggle "All languages".
-- Opening a result or a book shows it inside the **reader** view: a Portal header bar ("◄ Back to results", "⌂ Home", text-size buttons) above a same-origin `<iframe src="/library/content/…">`. The iframe is same-origin through the agent proxy, so keyboard focus and the header work.
+- Opening a result or a book shows it inside the **reader** view: a Portal header bar ("◄ Back to results", "⌂ Home", text-size buttons) above a same-origin `<iframe src="/library/content/…">`. The iframe is same-origin through the agent proxy, so keyboard focus and the header work. The Portal route is `/portal/read?src=<path>&back=<portal route>`; `src` must start with `/library/`, `/maps/` or `/docs/` (anything else is ignored and the Portal goes Home), `back` must be a Portal route. `Esc` is handled on the Portal window and on the frame's document after each load. The RSS is parsed by a small tolerant scanner (no DOM, so it is unit-tested in Node); if kiwix answers HTML instead of XML, its results page opens in the reader.
 
 #### 4.1.6 Maps (button 5)
 Opens `/maps/` ([companion-services.md](companion-services.md) §4.4.3) inside the same reader frame with the Portal header, so Home is one key away. Big controls: search, **Where am I**, **Nearest: hospital · clinic · water · town**.
@@ -501,6 +501,9 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `library.allLanguages` | All languages | Todos los idiomas |
 | `library.backToResults` | Back to results | Volver a los resultados |
 | `library.none` | The library has no books. Plug in the AI-ARK drive and press Import from drive. | La biblioteca no tiene libros. Conecte el disco AI-ARK y presione Importar desde el disco. |
+| `library.searchButton` | Search | Buscar |
+| `library.failed` | The search did not work. Try again. | La búsqueda no funcionó. Intente de nuevo. |
+| `reader.frame` | Article | Artículo |
 | `maps.title` | Maps | Mapas |
 | `maps.whereami` | Where am I | Dónde estoy |
 | `maps.iAmHere` | I am here | Estoy aquí |

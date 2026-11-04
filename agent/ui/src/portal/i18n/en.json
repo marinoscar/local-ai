@@ -144,5 +144,8 @@
   "time.m": "{m} min",
   "status.noBrain": "none",
   "banner.startFailed": "Could not start survival mode. Try again.",
-  "manuals.none": "The manuals are not installed. Plug in the ark drive."
+  "manuals.none": "The manuals are not installed. Plug in the ark drive.",
+  "library.searchButton": "Search",
+  "library.failed": "The search did not work. Try again.",
+  "reader.frame": "Article"
 }

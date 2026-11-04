@@ -49,3 +49,23 @@ export function useScreen(): Screen | "" {
     useSyncExternalStore(subscribe, () => window.location.pathname),
   );
 }
+
+/**
+ * navigatePath pushes a full Portal path with a query (for /portal/read and /portal/library?q=).
+ * Used by the reader frame and the Library screen; plain screens keep using navigate().
+ */
+export function navigatePath(path: string): void {
+  const cur = window.location.pathname + window.location.search;
+  if (cur !== path) {
+    window.history.pushState(null, "", path);
+    listeners.forEach((l) => l());
+  }
+}
+
+/** useLocation is pathname + search, so a query-only change re-renders. */
+export function useLocation(): string {
+  return useSyncExternalStore(
+    subscribe,
+    () => window.location.pathname + window.location.search,
+  );
+}

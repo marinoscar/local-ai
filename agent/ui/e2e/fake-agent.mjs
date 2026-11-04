@@ -202,6 +202,30 @@ createServer(async (req, res) => {
       return send(res, 302, "", { Location: "/portal" });
     return file(res, join(dist, "index.html"), TYPES[".html"]);
   }
+  // kiwix-serve search: OpenSearch RSS, or its HTML page when format is not xml.
+  if (p === "/library/search") {
+    seen.push({
+      path: p + url.search,
+      lang: req.headers["x-localai-ui-language"] ?? null,
+    });
+    if (url.searchParams.get("format") !== "xml")
+      return send(res, 200, "<!doctype html><title>results</title><p>results</p>", {
+        "Content-Type": TYPES[".html"],
+        "Content-Security-Policy": CSP,
+      });
+    const rss = `<?xml version="1.0"?><rss version="2.0"><channel><totalResults>2</totalResults>
+<item><title>Water purification</title><link>/library/content/wikipedia_en_all/Water_purification</link><description>Boil it</description><book><title>Wikipedia</title></book></item>
+<item><title>Boiling water</title><link>/library/content/survival/Boiling</link><description>Rolling boil</description><book><title>Survival library</title></book></item>
+</channel></rss>`;
+    if (url.searchParams.get("pattern") === "nothing")
+      return send(
+        res,
+        200,
+        "<rss><channel><totalResults>0</totalResults></channel></rss>",
+        { "Content-Type": "application/rss+xml" },
+      );
+    return send(res, 200, rss, { "Content-Type": "application/rss+xml" });
+  }
   // Other areas of the real agent (chat, library, maps, docs): a page is enough.
   if (/^\/(chat|library|maps|docs)(\/|$)/.test(p)) {
     return send(res, 200, `<!doctype html><title>${p}</title><p>${p}</p>`, {

@@ -9,10 +9,20 @@ export type CapState = "ready" | "degraded" | "unavailable";
 export type CapName =
   "chat" | "photo" | "talk" | "library" | "maps" | "manuals";
 
+/** A book of capabilities.library.books; `book` is the undated kiwix name. */
+export interface LibraryBook {
+  content_id: string;
+  title: string;
+  book: string;
+  lang: string;
+}
+
 export interface Capability {
   state: CapState;
   code?: string;
   reason?: string;
+  /** Only on library. */
+  books?: LibraryBook[];
 }
 
 export interface Model {
