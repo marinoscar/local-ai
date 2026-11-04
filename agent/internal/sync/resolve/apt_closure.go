@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/execx"
+	"github.com/marinoscar/local-ai/agent/internal/kit/aptkeys"
 	"github.com/marinoscar/local-ai/agent/internal/sync/download"
 	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
@@ -268,6 +269,10 @@ func (a *AptClosure) unverifiedRepos(src *aptSource, allow bool) ([]string, erro
 	for _, r := range src.Extra {
 		if _, err := a.keyring(r.Key); err == nil {
 			continue
+		} else if errors.Is(err, aptkeys.ErrMismatch) {
+			// A keyring that is present but is not the pinned one is never a reason to fall back to an
+			// unverified repository, whatever sync.apt_unverified_repos says (issue #274).
+			return nil, fail(CodeApt, err, "the keyring %s does not match the fingerprint pinned in the agent, so the repository %s is refused (install the agent release that carries the vendor's current key)", r.Key, r.Name)
 		} else if !allow {
 			return nil, fail(CodeApt, err, "the keyring %s is not available (set sync.apt_unverified_repos to allow to take the repository %s without it)", r.Key, r.Name)
 		}

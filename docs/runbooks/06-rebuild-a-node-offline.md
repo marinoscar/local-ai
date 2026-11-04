@@ -246,3 +246,25 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
 33. Join the tailnet: `sudo tailscale up --ssh=false` ([05 Part 5](05-add-a-node.md)).
 34. If you restored the old settings (step 11), the cloud link comes back by itself. Otherwise enroll: create a new credential in the cloud and run `sudo aictl cloud enroll` ([05 Part 6](05-add-a-node.md)).
 35. Let the nightly sync bring everything up to date, or run `aictl ark sync --wait` ([08](08-scheduled-sync.md)).
+
+## Part 9. Rotate a vendor apt keyring (maintainer task, needs internet)
+
+The rebuild kit holds the Tailscale and NVIDIA CUDA package repositories. The agent carries their public signing keys and a written-down fingerprint for each one. If a vendor changes its key, the kit build stops with `LAI-SYN-060` ("does not match the fingerprint pinned") until the agent is updated. That is on purpose: the agent never accepts a key it was not told about. Do this on a normal computer with the repo, never on a node in an emergency.
+
+You need: this repo checked out, `gpg`, and internet.
+
+1. Get the vendor's new key and look at its fingerprint.
+   - Tailscale: `curl -fsSLo /tmp/ts.gpg https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg`
+   - NVIDIA: download `cuda-keyring_1.1-1_all.deb` from `https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/`, run `dpkg-deb -x cuda-keyring_1.1-1_all.deb /tmp/nv`, the key is `/tmp/nv/usr/share/keyrings/cuda-archive-keyring.gpg`.
+   - Then run `gpg --show-keys --with-colons --fingerprint <file> | grep '^fpr'`.
+   - What you should see: a 40-character fingerprint (the first `fpr` line is the main key).
+2. Confirm the fingerprint with two more places, not only the download: the vendor's own documentation or announcement, and `https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x<FINGERPRINT>` (run `gpg --show-keys` on the result). All three must agree. If they do not, stop and ask the owner; do not continue.
+3. Make an issue (`gh issue create --template runbook.yml`) and a branch `feat/<issue>-rotate-<vendor>-key`.
+4. Copy the new file over `agent/internal/kit/aptkeys/tailscale-archive-keyring.gpg` or `agent/internal/kit/aptkeys/nvidia-cuda-archive-keyring.gpg` (same file name).
+5. Put the new fingerprint in `agent/internal/kit/aptkeys/aptkeys.go` (`Pins`) and in the table in `docs/specs/rebuild-kit.md` §3.4. During the overlap, when the vendor signs with both keys, list both fingerprints in the `Pins` entry and say so in the table.
+6. Run `cd agent && go test ./internal/kit/aptkeys/ ./internal/sync/...`.
+   - What you should see: `ok` for each package. A `does not match its pinned fingerprint` failure means the file and the pin disagree: go back to step 1.
+7. Open the pull request, merge it, and let the release workflow publish a new agent. Update the nodes ([08](08-scheduled-sync.md)); the next sync rebuilds the kit packages with the new key.
+8. Keep the old key's fingerprint in the table, marked "retired", for 2 years so older kits can still be checked ([rebuild-kit.md](../specs/rebuild-kit.md) §3.4).
+
+If it doesn't work: [07 Troubleshooting](07-troubleshooting.md), the `LAI-SYN-060` entry.
