@@ -129,6 +129,7 @@ on:
     branches: [main]
     paths: ['apps/cloud/**', 'packages/ui/**', 'catalog/**', '.github/workflows/cloud-ci.yml']
   pull_request:
+    branches: [main]
     paths: ['apps/cloud/**', 'packages/ui/**', 'catalog/**', '.github/workflows/cloud-ci.yml']
 defaults:
   run:
@@ -139,12 +140,17 @@ jobs:
     #   POSTGRES_DB: local_ai_test
     #   INITIAL_ADMIN_EMAIL: admin@example.test        (never a real address)
     #   setup-node: cache-dependency-path: apps/cloud/package-lock.json
-    #   a step "Build aictl for catalog lint" before `npm test`:
-    #     uses actions/setup-go, runs `go build -o "$RUNNER_TEMP/aictl" ./cmd/aiagent` in ../../agent,
-    #     and exports LOCALAI_AICTL_PATH=$RUNNER_TEMP/aictl  (needed by the catalog lint tests, §4.6)
+    #   setup-go (go-version-file: agent/go.mod) and a step "Build aictl for catalog lint" before `npm ci`:
+    #     in agent/: CGO_ENABLED=0 go build -mod=vendor -o "$RUNNER_TEMP/aiagent" ./cmd/aiagent
+    #                ln -sf "$RUNNER_TEMP/aiagent" "$RUNNER_TEMP/aictl"
+    #                echo "LOCALAI_AICTL_PATH=$RUNNER_TEMP/aictl" >> "$GITHUB_ENV"
+    #     (needed by the catalog lint tests, §4.6), then a "Check aictl runs" step that
+    #     runs `"$LOCALAI_AICTL_PATH" --help` and `catalog lint --help`
 ```
 
 Rules:
+- `aiagent` is a multi-call binary that picks its role from `argv[0]` ([agent.md](agent.md) §3.1), so the file `LOCALAI_AICTL_PATH` points at must be named `aictl`: the build writes `aiagent` and a symlink named `aictl` points at it. The build uses the vendored modules (`-mod=vendor`), so it needs no network beyond the Go toolchain download by `setup-go`.
+- The root `renovate.json` carries the starter's platform group rule with `"matchFileNames": ["apps/cloud/**"]`, so every `@marinoscar/platform-*` package in `apps/cloud` moves in one pull request. The starter's own `apps/cloud/renovate.json` stays as the generated copy (Renovate reads only the repo root's), and the root file is what takes effect.
 - `paths` filters keep agent-only PRs from running the cloud suite, and the reverse. A PR that touches `catalog/**` runs the cloud suite because the catalog import parses those files.
 - The repo-wide `redaction` job (`scripts/check-redaction.sh`, gitleaks) runs on every PR regardless of paths. It already covers `apps/cloud/**`.
 - `apps/cloud/package-lock.json` is committed. The repo root has no npm workspace that includes `apps/cloud`; it is its own npm root.
