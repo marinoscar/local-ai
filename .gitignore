@@ -40,3 +40,7 @@ worktrees/
 !/agent/ui/dist/.gitkeep
 /agent/ui/test-results/
 /agent/ui/playwright-report/
+
+# Cloud app (apps/cloud): second guard for the generated environment file
+apps/cloud/infra/compose/.env*
+!apps/cloud/infra/compose/.env*.example

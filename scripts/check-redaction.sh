@@ -41,6 +41,8 @@ skip='^(scripts/check-redaction\.sh|\.gitleaks\.toml|agent/vendor/.*)$'
 # 64-hex value is allowed when it is the value of a `sha256:` key; nothing else changes there: a bare
 # 64-hex string, a token, an IP or an email in them is still a leak, and every other file stays strict.
 catalog_pins='^catalog/(ark|models)\.yaml$'
+cloud_locks='^apps/cloud/(apps/api/prisma/platform\.lock|infra/platform-infra\.lock\.json)$'   # generated lock files: sha256 digests of public files
+lockfiles='(^|/)package-lock\.json$'   # npm `deprecated` text is third-party prose (may carry an author's email)
 
 # Directory of must-fail fixtures: skipped in tree/staged scans, but only when the
 # marker file is present, and only for this one directory (a stray marker elsewhere
@@ -58,7 +60,7 @@ patterns=(
   '\b[0-9a-fA-F]{64}\b'                                                         # 64-hex strings (keys, hashes)
 )
 email_re='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
-email_ok='(noreply@.*|[^@]+@example\.test)'   # allowed: noreply@..., @example.test placeholders
+email_ok='(noreply@.*|[^@]+@example\.(test|com))'   # allowed: noreply@..., reserved example domains (RFC 2606)
 
 # Literal values from the local (git-ignored) inventory, if present.
 literals=()
@@ -92,6 +94,16 @@ for f in "${files[@]}"; do
   if [[ "$f" =~ $catalog_pins ]]; then
     sed -E -i 's/(sha256:[[:space:]]*"?)[0-9a-fA-F]{64}/\1<pin>/g' "$tmp"
   fi
+  if [[ "$f" =~ $lockfiles ]]; then
+    # Neutralise only the value of `"deprecated":` lines (line numbers are preserved).
+    sed -E -i 's/^([[:space:]]*"deprecated":).*/\1 "<third-party text>"/' "$tmp"
+  fi
+  if [[ "$f" =~ $cloud_locks ]]; then
+    # A quoted 64-hex value in the cloud app's generated lock files is a public digest, not a key.
+    sed -E -i 's/"[0-9a-fA-F]{64}"/"<digest>"/g' "$tmp"
+  fi
+  # The RFC 1918 range itself (a network, not a host) is not a LAN address.
+  sed -E -i 's#192\.168\.0\.0/16#<rfc1918-range>#g' "$tmp"
   scanned=$((scanned + 1))
   lines=""
   for p in "${patterns[@]}"; do

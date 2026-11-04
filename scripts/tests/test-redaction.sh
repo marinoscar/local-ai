@@ -105,6 +105,36 @@ mkdir -p "$repo/scripts" && cp scripts/check-redaction.sh scripts/install-hooks.
   printf 'sha256: "%s"\n' "$hex64" >other/pin.yaml
   scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL the allowance leaked outside catalog/"; rc=1; }
   rm -rf catalog other
+  # 2d. npm lockfile `deprecated` prose (third-party text, may carry an author's email) is not scanned;
+  #     every other line of a lockfile, and any other file, stays strict.
+  mkdir -p apps/x
+  printf '{\n  "deprecated": "Contact Person A <person-a%scorp.example> for support",\n  "version": "1.0.0"\n}\n' "$at" >apps/x/package-lock.json
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 0 ]] || { echo "  FAIL a lockfile deprecated message was rejected"; rc=1; }
+  printf '{\n  "name": "Person A <person-a%scorp.example>",\n  "deprecated": "x"\n}\n' "$at" >apps/x/package-lock.json
+  out="$(scripts/check-redaction.sh 2>&1)"; [[ $? -eq 1 ]] || { echo "  FAIL a non-deprecated lockfile email was accepted"; rc=1; }
+  grep -q 'package-lock.json:2' <<<"$out" || { echo "  FAIL the lockfile email line was not reported"; rc=1; }
+  printf '"deprecated": "Person A <person-a%scorp.example>"\n' "$at" >apps/x/notes.json
+  rm apps/x/package-lock.json
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL the deprecated allowance leaked to a non-lockfile"; rc=1; }
+  rm -rf apps
+  # 2e. generated cloud lock files: quoted digests are public data; bare hex, other files stay strict.
+  mkdir -p apps/cloud/infra apps/cloud/other
+  printf '{"files": {"a": "%s"}}\n' "$hex64" >apps/cloud/infra/platform-infra.lock.json
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 0 ]] || { echo "  FAIL a digest in the cloud infra lock was rejected"; rc=1; }
+  printf '{"note": %s}\n' "$hex64" >apps/cloud/infra/platform-infra.lock.json
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL a bare 64-hex string in the lock was accepted"; rc=1; }
+  printf '{"files": {"a": "%s"}}\n' "$hex64" >apps/cloud/other/x.lock.json
+  rm apps/cloud/infra/platform-infra.lock.json
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL the digest allowance leaked to another file"; rc=1; }
+  rm -rf apps
+  # 2f. the RFC 1918 range literal is not a LAN host; a host address and a real-looking email still leak.
+  printf 'allow 192.168.0.0/16;\n' >r.conf
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 0 ]] || { echo "  FAIL the RFC 1918 range was rejected"; rc=1; }
+  printf 'allow 192.168.%s;\n' "1.$((10 + 10))" >r.conf
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL a 192.168 host address was accepted"; rc=1; }
+  printf 'admin%sexample.com\n' "$at" >r.conf
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 0 ]] || { echo "  FAIL the reserved example.com domain was rejected"; rc=1; }
+  rm r.conf
   # 3. hook install: idempotent, rejects a leaking commit, accepts a clean one
   scripts/install-hooks.sh >/dev/null || { echo "  FAIL install-hooks"; rc=1; }
   second="$(scripts/install-hooks.sh)"; grep -q 'already installed' <<<"$second" || { echo "  FAIL install-hooks not idempotent"; rc=1; }
