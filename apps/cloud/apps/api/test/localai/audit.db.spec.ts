@@ -3,10 +3,11 @@
 // key, state with a mode change, a refused credential; the command plane: request, claim, result, cancel; the catalog:
 // draft, lint, approve), and the rows are then read back ONLY through `GET /api/localai/audit` as the lab admin.
 //
-// Seven families of §3.5 actions are written by items that have not landed on this branch (the node wizard CLOUD-14:
-// created/updated/retired/credential_*/checklist; the tailnet reveal CLOUD-12; the alert acknowledgement CLOUD-15; the
-// gateway GW-02). Their rows are inserted with the exact `targetType` and `meta` shapes of the §3.5 table, so the
-// page is proven against every action the table lists; when those items land, their own flows can replace the inserts.
+// The wizard (CLOUD-14) writes node.created, node.credential_minted and checklist.updated: they come from the REAL
+// `POST /api/localai/nodes` and checklist routes. The actions whose writers have not landed on this branch (node
+// updated/retired, credential revoked, the tailnet reveal, the alert acknowledgement, the gateway) are inserted with the
+// exact `targetType` and `meta` shapes of the §3.5 table, so the page is proven against every action the table lists;
+// when those items land, their own flows can replace the inserts.
 //
 // What only real SQL proves: the `LIKE` prefix with `_` taken literally, the JSON-path node filter, the time window
 // and offset paging order, and the count.
@@ -32,6 +33,7 @@ const LINT = 'localai.catalog.lint';
 const CATALOG_VERSION = '2097.05.01-1';
 const HEX64 = /\b[0-9a-f]{64}\b/;
 const NOD_TOKEN = /\bnod_[A-Za-z0-9_-]{20,}/;
+const WIZARD_NODE = 'ai-n9203';
 
 type Role = 'admin' | 'contributor' | 'viewer';
 interface Row {
@@ -154,8 +156,9 @@ beforeAll(async () => {
 
 /** Rows a crashed earlier run may have left on the fixed node ids. */
 async function removeLeftovers(): Promise<void> {
-  const ids = [9201, 9202].map((n) => `ai-n${n}`);
+  const ids = [9201, 9202, 9203].map((n) => `ai-n${n}`);
   await prisma.auditEvent.deleteMany({ where: { targetId: { in: ids } } });
+  await prisma.nodeCredential.deleteMany({ where: { name: { in: ids.map((id) => `localai-${id}`) } } });
   await prisma.localaiNode.deleteMany({ where: { nodeId: { in: ids } } });
   await prisma.workerNode.deleteMany({ where: { name: { in: ids } } });
 }
@@ -177,7 +180,7 @@ afterAll(async () => {
     await prisma.localaiCatalogVersion.deleteMany({ where: { version: CATALOG_VERSION } });
     await prisma.job.deleteMany({ where: { type: LINT, subjectId: CATALOG_VERSION } });
     await prisma.workerNode.deleteMany({ where: { createdById: userIds.admin } });
-    await prisma.nodeCredential.deleteMany({ where: { id: { in: credentialIds } } });
+    await prisma.nodeCredential.deleteMany({ where: { OR: [{ id: { in: credentialIds } }, { name: `localai-${WIZARD_NODE}` }] } });
   }
   await app?.close();
 });
@@ -224,21 +227,24 @@ describe('the flows that write audit rows today', () => {
 
     // The node later goes to Offline mode (the 'mode changed' row).
     expect((await nodeRoute(story, 'POST', 'state', snapshotFor(story.nodeId, 2, 'offline'))).statusCode).toBe(200);
+
+    // The wizard (CLOUD-14): create a node (created + credential_minted), then mark a checklist step (checklist.updated).
+    labNodeIds.push(WIZARD_NODE);
+    const created = await ui('POST', '/nodes', 'admin', { nodeId: WIZARD_NODE, displayName: 'Wizard node' });
+    expect(created.statusCode).toBe(201);
+    expect((await ui('POST', `/nodes/${WIZARD_NODE}/checklist/tailnet`, 'admin', { action: 'mark_done' })).statusCode).toBe(200);
   });
 
-  it('inserts the rows of the actions whose writers are not on this branch, in the §3.5 shapes', async () => {
+  it('inserts the rows of the actions whose writers are not on this branch (updated, retired, revoked, reveal, alert, gateway), in the §3.5 shapes', async () => {
     const alertId = '4a1e5c2d-9b7f-4d3a-8c6e-1f2a3b4c5d6e';
     seededTargetIds.push(alertId, 'gw-key-1', 'gw-policy-1');
     const node = (action: string, meta: Prisma.InputJsonObject) => ({ actorUserId: userIds.admin, action, targetType: 'localai_node', targetId: story.nodeId, meta });
     await prisma.auditEvent.createMany({
       data: [
-        node('localai.node.created', { displayName: 'Node 1', publicHost: '<set>' }),
         node('localai.node.updated', { displayName: 'Node One', tailnetIp: '<set>' }),
         node('localai.node.retired', {}),
-        node('localai.node.credential_minted', { credentialId: credentialIds[0], tokenPrefix: 'nod_ab12' }),
         node('localai.node.credential_revoked', { credentialId: credentialIds[0], tokenPrefix: 'nod_ab12' }),
         node('localai.node.tailnet_revealed', {}),
-        node('localai.checklist.updated', { step: 'dns', state: 'done' }),
         { actorUserId: userIds.admin, action: 'localai.alert.acknowledged', targetType: 'localai_alert', targetId: alertId, meta: { kind: 'node.stale', nodeId: story.nodeId } },
         { actorUserId: userIds.admin, action: 'localai.gateway.key_created', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12', name: 'Desk laptop' } },
         { actorUserId: userIds.admin, action: 'localai.gateway.key_revoked', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12' } },
@@ -270,7 +276,10 @@ describe('every action of the §3.5 table appears', () => {
     expect(actorOf('localai.node.binding_refused')).toEqual({ kind: 'node', label: `node ${story.nodeId}` });
     expect(actorOf('localai.command.requested')).toEqual({ kind: 'user', label: emails.contributor });
     expect(actorOf('localai.command.settled')).toEqual({ kind: 'user', label: emails.contributor });
-    expect(actorOf('localai.node.created')).toEqual({ kind: 'user', label: emails.admin });
+    expect(actorOf('localai.node.updated')).toEqual({ kind: 'user', label: emails.admin });
+    const wizard = await auditAll(`${since}&nodeId=${WIZARD_NODE}`);
+    expect(wizard.map((row) => row.action).sort()).toEqual(['localai.checklist.updated', 'localai.node.created', 'localai.node.credential_minted']);
+    for (const row of wizard) expect(row.actor).toEqual({ kind: 'user', label: emails.admin });
   });
 
   it('summaries and links of the real rows read as plain sentences pointing at the target', async () => {
@@ -289,6 +298,13 @@ describe('every action of the §3.5 table appears', () => {
     expect(one('localai.alert.acknowledged').link).toBe('/lab/alerts');
     expect(one('localai.alert.acknowledged').summary).toBe(`Acknowledged node.stale alert on ${story.nodeId}`);
     expect(one('localai.gateway.key_created').link).toBe('/gateway/keys');
+
+    const wizard = await auditAll(`${since}&nodeId=${WIZARD_NODE}`);
+    const wizardRow = (action: string) => wizard.find((row) => row.action === action)!;
+    expect(wizardRow('localai.node.created').summary).toBe(`Added node ${WIZARD_NODE} (${WIZARD_NODE}.marin.cr)`);
+    expect(wizardRow('localai.node.credential_minted').summary).toMatch(new RegExp(`^Created credential nod_[0-9a-f]{4} for ${WIZARD_NODE}$`));
+    expect(wizardRow('localai.checklist.updated').summary).toBe(`Checklist step tailnet of ${WIZARD_NODE} is now done (mark_done)`);
+    for (const row of wizard) expect(row.link).toBe(`/lab/nodes/${WIZARD_NODE}`);
 
     const catalog = (await auditAll(`${since}&action=localai.catalog.`)).filter((row) => row.targetId === CATALOG_VERSION);
     expect(catalog.map((row) => row.action).sort()).toEqual(['localai.catalog.approved', 'localai.catalog.imported', 'localai.catalog.linted']);

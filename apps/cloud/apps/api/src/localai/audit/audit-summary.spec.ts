@@ -1,3 +1,5 @@
+import { AUDIT_CHECKLIST_UPDATED } from '../wizard/checklist.service';
+import { AUDIT_NODE_CREATED, AUDIT_NODE_CREDENTIAL_MINTED } from '../wizard/wizard.service';
 import { AUDIT_NODE_BINDING_REFUSED, AUDIT_NODE_ENROLLED } from '../node-link/binding.guard';
 import { AUDIT_NODE_MODE_CHANGED } from '../node-link/state.service';
 import { AUDIT_NODE_KEY_REPORTED } from '../keys/node-key.service';
@@ -18,6 +20,9 @@ describe('the known audit actions', () => {
 
   it('lists every action the code writes today (their exported constants)', () => {
     const written = [
+      AUDIT_NODE_CREATED,
+      AUDIT_NODE_CREDENTIAL_MINTED,
+      AUDIT_CHECKLIST_UPDATED,
       AUDIT_NODE_ENROLLED,
       AUDIT_NODE_BINDING_REFUSED,
       AUDIT_NODE_MODE_CHANGED,
@@ -53,11 +58,13 @@ describe('the known audit actions', () => {
 describe('describeAudit: summary and link per action', () => {
   const ids = new Map([['eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5', 'ai-n5']]);
   const cases: Array<[string, ReturnType<typeof row>, string, string | null]> = [
-    ['node created', row('localai.node.created', 'localai_node', 'ai-n3', { displayName: 'Node 3' }), 'Added node ai-n3', '/lab/nodes/ai-n3'],
+    ['node created (the wizard shape: serve pattern, public host, tailnet as <set>)', row('localai.node.created', 'localai_node', 'ai-n3', { servePattern: 'B', publicHost: 'ai-n3.example.test', tailnetIp: '<set>' }), 'Added node ai-n3 (ai-n3.example.test)', '/lab/nodes/ai-n3'],
+    ['node created without a host', row('localai.node.created', 'localai_node', 'ai-n3', { servePattern: 'B' }), 'Added node ai-n3', '/lab/nodes/ai-n3'],
     ['node updated lists field names, never values', row('localai.node.updated', 'localai_node', 'ai-n3', { tailnetIp: '<set>', publicHost: 'ai-n3.example.test' }), 'Changed tailnetIp, publicHost on ai-n3', '/lab/nodes/ai-n3'],
     ['node updated without field names', row('localai.node.updated', 'localai_node', 'ai-n3', {}), 'Changed settings of ai-n3', '/lab/nodes/ai-n3'],
     ['node retired', row('localai.node.retired', 'localai_node', 'ai-n3', {}), 'Retired node ai-n3', '/lab/nodes/ai-n3'],
-    ['credential minted', row('localai.node.credential_minted', 'localai_node', 'ai-n3', { credentialId: CMD, tokenPrefix: 'nod_ab12cd34' }), 'Created credential nod_ab12cd34 for ai-n3', '/lab/nodes/ai-n3'],
+    ['credential minted (the spec name, tokenPrefix)', row('localai.node.credential_minted', 'localai_node', 'ai-n3', { credentialId: CMD, tokenPrefix: 'nod_ab12cd34' }), 'Created credential nod_ab12cd34 for ai-n3', '/lab/nodes/ai-n3'],
+    ['credential minted (the wizard name, credentialPrefix)', row('localai.node.credential_minted', 'localai_node', 'ai-n3', { credentialId: CMD, credentialPrefix: 'nod_ab12cd34' }), 'Created credential nod_ab12cd34 for ai-n3', '/lab/nodes/ai-n3'],
     ['credential revoked', row('localai.node.credential_revoked', 'localai_node', 'ai-n3', { tokenPrefix: 'nod_ab12cd34' }), 'Revoked credential nod_ab12cd34 of ai-n3', '/lab/nodes/ai-n3'],
     ['enrolled', row('localai.node.enrolled', 'localai_node', 'ai-n3', { workerNodeId: CMD, agentVersion: '0.4.1' }), 'ai-n3 enrolled with agent 0.4.1', '/lab/nodes/ai-n3'],
     ['binding refused names the claimed node', row('localai.node.binding_refused', 'localai_node', 'ai-n9', { credentialPrefix: 'nod_zz99yy88', claimedNodeId: 'ai-n9' }), 'Refused credential nod_zz99yy88 claiming ai-n9', '/lab/nodes/ai-n9'],
@@ -73,6 +80,7 @@ describe('describeAudit: summary and link per action', () => {
     ['catalog linted bad', row('localai.catalog.linted', 'localai_catalog', '2026.11.02-1', { valid: false }), 'Catalog 2026.11.02-1 failed the check', '/lab/catalog?version=2026.11.02-1'],
     ['catalog approved', row('localai.catalog.approved', 'localai_catalog', '2026.11.02-1', { nodesNotified: 2 }), 'Approved catalog 2026.11.02-1, 2 nodes told to refresh', '/lab/catalog?version=2026.11.02-1'],
     ['checklist updated', row('localai.checklist.updated', 'localai_node', 'ai-n4', { step: 'dns', state: 'done' }), 'Checklist step dns of ai-n4 is now done', '/lab/nodes/ai-n4'],
+    ['checklist updated (the wizard shape, with the action)', row('localai.checklist.updated', 'localai_node', 'ai-n4', { step: 'dns', action: 'check', state: 'done' }), 'Checklist step dns of ai-n4 is now done (check)', '/lab/nodes/ai-n4'],
     ['alert acknowledged', row('localai.alert.acknowledged', 'localai_alert', CMD, { kind: 'ark.drive_stale', nodeId: 'ai-n2' }), 'Acknowledged ark.drive_stale alert on ai-n2', '/lab/alerts'],
     ['gateway key created', row('localai.gateway.key_created', 'localai_gateway_key', CMD, { prefix: 'lai_ab12', name: 'Desk laptop' }), 'Gateway key lai_ab12 "Desk laptop" created', '/gateway/keys'],
     ['gateway key revoked', row('localai.gateway.key_revoked', 'localai_gateway_key', CMD, { prefix: 'lai_ab12' }), 'Gateway key lai_ab12 revoked', '/gateway/keys'],

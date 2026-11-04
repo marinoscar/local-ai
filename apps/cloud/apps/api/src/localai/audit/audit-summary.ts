@@ -44,6 +44,7 @@ const COMMAND_TYPE = /^(?:localai\.)?[a-z][a-z_]{0,31}\.[a-z][a-z_]{0,31}$/;
 const VERSION = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,39}$/;
 const SOURCE_REF = /^[A-Za-z0-9][A-Za-z0-9._/@+-]{0,79}$/;
 const TOKEN_PREFIX = /^(?:nod|pat|lat|lai)_[A-Za-z0-9]{0,12}$/;
+const PUBLIC_HOST = /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/;
 const KEY_HINT = /^[0-9a-f]{4}…[0-9a-f]{4}$/;
 const ERROR_CODE = /^LAI-[A-Z]{2,4}-\d{3}$/;
 const STEP = /^[a-z][a-z0-9_]{0,31}$/;
@@ -146,8 +147,11 @@ function linkOf(src: AuditRowSource, node: string | null): string | null {
 function summaryOf(src: AuditRowSource, meta: Record<string, unknown>, node: string | null, ids: NodeLabIds): string {
   const nodeLabel = node === null ? 'a node' : node;
   switch (src.action) {
-    case 'localai.node.created':
-      return `Added node ${nodeLabel}`;
+    case 'localai.node.created': {
+      // The wizard writes { servePattern, publicHost, tailnetIp: "<set>" | null }: only the public host is shown.
+      const host = safe(meta.publicHost, PUBLIC_HOST, 253);
+      return host === null ? `Added node ${nodeLabel}` : `Added node ${nodeLabel} (${host})`;
+    }
     case 'localai.node.updated': {
       const fields = changedFields(meta);
       return fields.length > 0 ? `Changed ${fields.join(', ')} on ${nodeLabel}` : `Changed settings of ${nodeLabel}`;
@@ -155,9 +159,10 @@ function summaryOf(src: AuditRowSource, meta: Record<string, unknown>, node: str
     case 'localai.node.retired':
       return `Retired node ${nodeLabel}`;
     case 'localai.node.credential_minted':
-      return join(['Created credential', safe(meta.tokenPrefix, TOKEN_PREFIX, 20), 'for', nodeLabel]);
+      // The wizard writes `credentialPrefix`; the spec's table says `tokenPrefix`: either is read.
+      return join(['Created credential', safe(meta.credentialPrefix, TOKEN_PREFIX, 20) ?? safe(meta.tokenPrefix, TOKEN_PREFIX, 20), 'for', nodeLabel]);
     case 'localai.node.credential_revoked':
-      return join(['Revoked credential', safe(meta.tokenPrefix, TOKEN_PREFIX, 20), 'of', nodeLabel]);
+      return join(['Revoked credential', safe(meta.credentialPrefix, TOKEN_PREFIX, 20) ?? safe(meta.tokenPrefix, TOKEN_PREFIX, 20), 'of', nodeLabel]);
     case 'localai.node.enrolled': {
       const version = safe(meta.agentVersion, VERSION, 32);
       return version === null ? `${nodeLabel} enrolled` : `${nodeLabel} enrolled with agent ${version}`;
@@ -202,7 +207,9 @@ function summaryOf(src: AuditRowSource, meta: Record<string, unknown>, node: str
     case 'localai.checklist.updated': {
       const step = safe(meta.step, STEP, 32);
       const state = safe(meta.state, STEP, 32);
-      return join(['Checklist step', step, 'of', nodeLabel, state === null ? 'updated' : `is now ${state}`]);
+      // The wizard writes { step, action, state }: the action (mark_done, check, ...) is shown after the state.
+      const how = safe(meta.action, STEP, 32);
+      return join(['Checklist step', step, 'of', nodeLabel, state === null ? 'updated' : `is now ${state}`, how === null ? null : `(${how})`]);
     }
     case 'localai.alert.acknowledged': {
       const kind = safe(meta.kind, ALERT_KIND, 48);
