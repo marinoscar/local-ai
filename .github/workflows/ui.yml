@@ -29,9 +29,20 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Offline asset scan of the real build (survival-portal.md section 4.11)
+        working-directory: .
+        run: node scripts/check-offline-assets.mjs agent/ui/dist
+      - name: Scanner self-test (unit cases, and the bad fixture must fail)
+        working-directory: .
+        run: |
+          node --test scripts/tests/check-offline-assets.test.mjs
+          if node scripts/check-offline-assets.mjs scripts/testdata/offline-assets/bad; then
+            echo "the scanner accepted the bad fixture" >&2
+            exit 1
+          fi
       - name: Playwright browser
         run: npx playwright install --with-deps chromium
-      - name: Playwright (no-scroll, axe-core, keyboard, banners)
+      - name: Playwright (no-scroll, axe-core, keyboard, banners, offline)
         run: npx playwright test
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
