@@ -954,6 +954,7 @@ for c in bash sed awk cmp cp mkdir install ln mv rm mktemp tr cat date head tail
 done
 for f in dpkg systemd-detect-virt lspci nvidia-smi ss df mokutil; do ln -sf "$I2_FB/$f" "$I2_LEAN/$f"; done
 ln -sf "$w/llfake/systemctl" "$I2_LEAN/systemctl"   # the INST-05 fake systemctl (P9 restarts the agent)
+# shellcheck disable=SC2154  # p56 is assigned by the sourced test-installer-p5p6-fixtures.sh
 ln -sf "$p56/bin/apt-get" "$I2_LEAN/apt-get"   # the INST-04 fake apt-get
 I2_RELSHA="$(sha256sum "$I2_REL/aiagent-linux-amd64" | cut -d' ' -f1)"
 i2_fresh
