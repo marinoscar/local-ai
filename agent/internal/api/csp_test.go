@@ -20,7 +20,7 @@ func mapsRoute(pattern string) Route {
 
 func TestPortalCSPHeader(t *testing.T) {
 	routes := append(SPARoutes(SPAOptions{FS: distFS(), Mode: func() string { return "survival" }}), testRoutes()...)
-	routes = append(routes, mapsRoute("/maps/"), mapsRoute("/maps/tiles/"))
+	routes = append(routes, mapsRoute("/maps/tiles/")) // /maps/ itself is the viewer in SPARoutes
 	s := pageServer(t, routes...)
 	h := s.Handler()
 
