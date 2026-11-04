@@ -91,6 +91,12 @@ The **rendered docs** are not duplicated in the kit: they are `<root>/docs/` (it
 | `kit-cuda-redist-<ver>-<arch>` | `url` set (optional, §CUDA option B) | when pinned | off by default |
 | `kit-ubuntu-iso-<ver>` | `url` + sidecar `SHA256SUMS` (tier 3) | each point release | ark-drive-full only |
 
+**What `catalog/ark.yaml` holds today (KIT-01).** Present and pinned: `kit-catalog`, `kit-llama-cpp`, `kit-whisper-cpp`, `kit-local-ai-repo`, `kit-go-toolchain` (go1.24.13), `kit-kiwix-tools` (3.8.2), `kit-pmtiles` (1.31.2), `kit-piper` (2023.11.14-2), `kit-debs-resolute-amd64`, `kit-nvidia-resolute-amd64-595-open` and `kit-ubuntu-iso-26.04` (the 26.04.1 desktop image, checked against the `SHA256SUMS` sidecar). Not yet present, because there is nothing to pin: `kit-agent-binaries`, `kit-agent-source` and `kit-desktop` (no release exists; they follow the first agent and desktop releases, INST-01 and the desktop release job) and `kit-cuda-redist-*` (off by default). Profile membership follows the Profiles column: every profile lists the all-profile items and `kit-debs-resolute-amd64`; the CUDA profiles (`cuda-12gb`, `small-8gb`) add `kit-nvidia-*`; `ark-drive-full` adds `kit-nvidia-*`, `kit-local-ai-repo` and the ISO. Three details differ from the table above:
+- `agent/go.mod` has a `go 1.24` line and no `toolchain` line, so the pin is the newest 1.24 patch release (go1.24.13); the sha256 values come from the `go.dev/dl` JSON.
+- The `git_mirror` pinned commits are not in the catalog: `also_tarball_of: pinned` takes them from `node.yaml` and, on a drive, from `pins.json` (ark-sync.md §4.9.6). The catalog only names the repositories.
+- A `kit` item is always survival tier 1 (catalog.md §3), so the ISO cannot carry tier 3 in the catalog. "Tier 3" here means "drive only, last to matter": the ISO is listed only by `ark-drive-full`, at the end of the kit group.
+`kit-kiwix-tools` and `kit-piper` hashes were computed from the downloaded files (kiwix's own `.md5` sidecar matched too); `kit-pmtiles` matches the GitHub release digests.
+
 The catalog sizes (`expected_size_bytes`) are approximate and only used for planning:
 
 | Part | Approx. size |
