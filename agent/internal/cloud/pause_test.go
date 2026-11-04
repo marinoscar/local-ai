@@ -74,7 +74,7 @@ func TestPauseDuringAHeartbeatLetsItFinishAndSendsNothingElse(t *testing.T) {
 
 func TestResumeAfterFailedHeartbeatsRecovers(t *testing.T) {
 	r := newRig(t)
-	r.srv.Forever(fake.RouteHeartbeat, fake.Err(500, "LAI-CLD-001", "boom"))
+	r.srv.Forever(fake.RouteHeartbeat, fake.Err(500, "LAI-CLD-054", "boom"))
 	r.enroll()
 	r.waitCount(fake.RouteHeartbeat, 1)
 	r.link.Pause()
