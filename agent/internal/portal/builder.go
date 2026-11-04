@@ -57,6 +57,12 @@ type DocsView interface {
 	Docs() DocsInfo
 }
 
+// FirstAidView resolves portal_links for the status. *FirstAidResolver implements it; it must answer
+// from a cache and never ask kiwix.
+type FirstAidView interface {
+	Resolve(cat *catalog.Catalog, kiwix health.Record, lang string) []FirstAid
+}
+
 // Sources are the read-only views the Builder assembles the body from. Every field is optional: a
 // missing view renders its documented empty state, so the endpoint answers on a node whose services
 // are down. No view runs a check.
@@ -75,6 +81,8 @@ type Sources struct {
 	Llama  statusapi.ServiceView
 	Ark    ArkView
 	Docs   DocsView
+	// FirstAid resolves the first_aid entries from its cached availability; nil leaves them empty.
+	FirstAid FirstAidView
 	// Settings resolves emergency_number; nil uses the defaults.
 	Settings func() Settings
 	// BuildTime is when the agent binary was built: a clock earlier than it is wrong (clock_ok false).
@@ -164,10 +172,21 @@ func (b *Builder) Build(ctx context.Context, req Request) (Status, error) {
 		SchemaVersion: SchemaVersion, GeneratedAt: req.Now.UTC().Format(time.RFC3339),
 		NodeID: cfg.Node.ID, Mode: b.mode(), Language: lang, EmergencyNumber: settings.EmergencyNumber,
 		Session: session, Power: power, ClockOK: clockOK(req.Now, s.BuildTime, ark),
-		Brain: brain, Capabilities: ComputeCapabilities(in), FirstAid: []FirstAid{},
+		Brain: brain, Capabilities: ComputeCapabilities(in), FirstAid: b.firstAid(cat, recs["kiwix"], lang),
 		Ark:    Ark{Overall: orUnknown(ark.Overall), SurvivalCapable: ark.SurvivalCapable, DriveConnected: ark.DriveConnected},
 		Alerts: b.alerts(lang, power, snap, cfg.Llama.Backend),
 	}, nil
+}
+
+func (b *Builder) firstAid(cat *catalog.Catalog, kiwix health.Record, lang string) []FirstAid {
+	if b.src.FirstAid == nil {
+		return []FirstAid{}
+	}
+	out := b.src.FirstAid.Resolve(cat, kiwix, lang)
+	if out == nil {
+		return []FirstAid{}
+	}
+	return out
 }
 
 func orUnknown(s string) string {

@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { BigButton } from "../components/BigButton";
+import { FirstAidRow } from "../components/FirstAidRow";
 import { powerText } from "../format";
 import { t, type Key } from "../i18n/i18n";
 import {
@@ -135,52 +136,6 @@ function useHomeKeys(enabled: boolean) {
   }, [enabled]);
 }
 
-function FirstAid({ status }: { status: PortalStatus | null }) {
-  const entries = (status?.first_aid ?? []).slice(0, 6);
-  return (
-    <div className="firstaid">
-      <nav aria-labelledby="firstaid-title" className="firstaid-row">
-        <h2 id="firstaid-title" className="firstaid-title">
-          {t("firstaid.title")}
-        </h2>
-        {entries.map((e, i) =>
-          e.available ? (
-            <a
-              key={e.key}
-              id={i === 0 ? "firstaid-first" : undefined}
-              className="chip"
-              href={e.url}
-            >
-              {e.title}
-            </a>
-          ) : (
-            <button
-              key={e.key}
-              id={i === 0 ? "firstaid-first" : undefined}
-              type="button"
-              className="chip"
-              onClick={() => navigate("first-aid")}
-            >
-              {e.title}
-            </button>
-          ),
-        )}
-        <button
-          type="button"
-          id={entries.length === 0 ? "firstaid-first" : undefined}
-          className="chip chip-more"
-          onClick={() => navigate("first-aid")}
-        >
-          {t("firstaid.more")}
-        </button>
-      </nav>
-      <p className="disclaimer">
-        {t("firstaid.disclaimer", { n: status?.emergency_number ?? "911" })}
-      </p>
-    </div>
-  );
-}
-
 /** Home: the eight big buttons and the first-aid row. Buttons are never hidden, whatever the status says. */
 export function Home({
   status,
@@ -224,7 +179,7 @@ export function Home({
           })}
         </ul>
       </nav>
-      <FirstAid status={status} />
+      <FirstAidRow status={status} />
     </>
   );
 }

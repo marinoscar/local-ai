@@ -3,6 +3,7 @@ import { Shell } from "./components/Shell";
 import { t, useLang } from "./i18n/i18n";
 import { setScale, stepScale, useScale } from "./prefs";
 import { navigate, useLocation, useScreen } from "./router";
+import { FirstAid } from "./screens/FirstAid";
 import { Library } from "./screens/Library";
 import { Reader } from "./screens/Reader";
 import { ChatInterstitial } from "./screens/ChatInterstitial";
@@ -95,6 +96,8 @@ export function App() {
           <ChatInterstitial status={status} />
         ) : view.screen === "library" ? (
           <Library status={status} />
+        ) : view.screen === "first-aid" ? (
+          <FirstAid status={status} />
         ) : (
           <Stub screen={view.screen} />
         );
