@@ -63,9 +63,9 @@ Do this once, on a computer you trust, **with no internet connection** if you ca
 
 | | |
 |---|---|
-| File | `agent/internal/kit/keys/minisign.pub` (not committed yet: owner action in §3) |
+| File | `agent/internal/kit/keys/minisign.pub` (committed) |
 | Embedded in | the agent (`internal/update/keys.go` embeds every `minisign*.pub` file of that folder, so a rotation's bridge key is a second file next to `minisign.pub`; with none committed the list is empty and every update fails closed with `LAI-AGT-010`, [agent.md §4.10](../specs/agent.md#410-self-update-internalupdate)) and the installer (stamped at release time, [installer.md §3.6](../specs/installer.md#36-release-stamping)); this file is the single source of both, and the workflow verifies the signature with it |
-| Key id and public key | _pending owner action_ |
+| Key id and public key | `947F84B6E9587262`, `RWRicljptoR/lC6hylzH+n2wr9Kh8no9x1gDBKGle8MJIX53xbzT8w3u` |
 
 ## 5. Rotation and compromise
 
