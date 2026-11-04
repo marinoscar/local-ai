@@ -81,7 +81,9 @@ mkdir -p "$w/tmp"; before="$(find "$w" -mindepth 1 -not -path "$w/tmp*" -not -na
 dryout="$(dry --node-id ai-n9 2>&1)"; rc=$?
 t "dry run exits 0" 0 "" test $rc -eq 0
 t "prints all 15 phase headers" 0 "" bash -c 'for n in $(seq 1 15); do grep -q "^==> \[$n/15\]" <<<"$1" || exit 1; done' _ "$dryout"
-t "every phase says it is not implemented" 0 "" test "$(grep -c '^NOT IMPLEMENTED YET: this phase' <<<"$dryout")" = 15
+# In a dry run P11, P14 and P15 (INST-07) are implemented; 12 phases are still stubs. Lower this as items land.
+STUBS_IN_DRY_RUN=12
+t "every phase that is not implemented says so" 0 "" test "$(grep -c '^NOT IMPLEMENTED YET: this phase' <<<"$dryout")" = "$STUBS_IN_DRY_RUN"
 t "says the installer is incomplete" 0 "" grep -q "THIS INSTALLER IS INCOMPLETE" <<<"$dryout"
 t "uses the [dry-run] marker" 0 "" grep -q '^\[dry-run\] would record P1 as' <<<"$dryout"
 t "no state folder, state.json or lock was created" 0 "" test ! -e "$w/state"
@@ -104,8 +106,11 @@ t "kind is fresh" 0 "kind: fresh" grep -F "kind: fresh" <<<"$realout"
 s="$w/rstate/state.json"
 t "state.json exists, 0600" 0 "" test "$(stat -c %a "$s")" = 600
 t "state.json is valid JSON when python is present" 0 "" bash -c 'command -v python3 >/dev/null || exit 0; python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); assert len(d[\"phases\"])==15" "$1"' _ "$s"
-t "every phase has status, version, finished_at, details" 0 "" bash -c '[ "$(grep -c "\"status\":\"not-implemented\",\"version\":\"9.9.9-test\",\"finished_at\":\"20[0-9-]*T[0-9:]*Z\",\"details\":\"not implemented" "$1")" = 15 ]' _ "$s"
-t "a stub is never recorded as done" 0 "" bash -c '! grep -q "\"status\":\"done\"" "$1"' _ "$s"
+# Phases whose real implementation has landed (INST-07: P11, P14 under the skeleton's defaults). Every other phase
+# is still a stub and must be recorded as not-implemented; add a phase id here when its item is merged.
+IMPLEMENTED="P11 P14"
+t "every phase has status, version, finished_at, details" 0 "" bash -c '[ "$(grep -cE "\"status\":\"(not-implemented|done)\",\"version\":\"9.9.9-test\",\"finished_at\":\"20[0-9-]*T[0-9:]*Z\",\"details\":" "$1")" = 15 ]' _ "$s"
+t "a stub is never recorded as done" 0 "" bash -c 'for i in $(seq 1 15); do case " $2 " in *" P$i "*) continue ;; esac; grep -q "\"P$i\": .*\"status\":\"done\"" "$1" && exit 1; done; exit 0' _ "$s" "$IMPLEMENTED"
 t "atomic: no temp file left behind" 0 "" test -z "$(find "$w/rstate" -name '.state.*')"
 t "lock file exists after a real run" 0 "" test -f "$w/rstate/lock"
 rerun="$(real --node-id ai-n9 2>&1)"
@@ -322,6 +327,114 @@ t "repair run from the installed copy itself says it cannot judge it" 0 "uses th
 mkdir -p "$w/ark/localai/kit/installers"; printf 'KITCOPY\n' >"$w/ark/localai/kit/installers/install-node.sh"
 t "repair from the installed copy takes the kit copy with --from-ark" 0 "" unenv env -u LAI_INSTALL_SELF "$FR/opt/localai/installers/install-node.sh" --log "$w/un.log" --from-ark "$w/ark" --repair
 t "  ...and installed it" 0 "" grep -q KITCOPY "$FR/opt/localai/installers/install-node.sh"
+
+echo "== INST-07: P11 tailscale, P14 content, P15 verify and summary (fakes only)"
+# A private PATH: symlinks to the few real tools the phases use plus fakes that only log. No real tailscale,
+# systemctl, apt, curl or aictl can ever run.
+tools="$w/tools"; fk="$w/fk"; mkdir -p "$tools" "$fk"
+for c in bash sed grep cat cmp mktemp date dirname basename tr tail head cut id stat mv chmod chown cp mkdir rm diff env sleep wc awk install ls true false; do
+  p="$(command -v "$c" 2>/dev/null)" && [[ -x "$p" ]] && ln -sf "$p" "$tools/$c"
+done
+mkfake() { printf '#!/bin/bash\n%s\n' "$2" >"$fk/$1"; chmod +x "$fk/$1"; }
+mkfake systemctl 'echo "systemctl $*" >>"$FAKELOG"; exit 0'
+mkfake curl 'echo "curl $*" >>"$FAKELOG"; out=""; while [ $# -gt 0 ]; do [ "$1" = --output ] && out="$2"; shift; done; [ -n "$out" ] && echo fake >"$out"; exit ${FAKE_CURL_RC:-0}'
+mkfake apt-get 'echo "apt-get $*" >>"$FAKELOG"; exit 0'
+mkfake dpkg-query 'exit 1'
+mkfake dpkg 'if [ "$1" = --print-architecture ]; then echo amd64; exit 0; fi; echo "dpkg $*" >>"$FAKELOG"; exit ${FAKE_DPKG_RC:-0}'
+mkfake aictl 'echo "aictl $*" >>"$FAKELOG"; if [ "$1 $2 $3" = "ark sync --dry-run" ]; then echo "Plan: 12 items"; echo "Total to download: 186 GB"; exit ${FAKE_PLAN_RC:-0}; fi; exit ${FAKE_AICTL_RC:-0}'
+mkfake aiagent 'echo "aiagent $*" >>"$FAKELOG"
+case "$2" in
+  serve-check) if [ "${FAKE_SERVE_MISMATCH:-0}" = 1 ]; then echo "ERROR LAI-INS-050: serve pattern A but inventory says B" >&2; exit 1; fi; echo "${FAKE_PATTERN:-B}" ;;
+  verify) echo "  ok       agent: fake"; exit ${FAKE_VERIFY_RC:-0} ;;
+  summary) echo "FAKE SUMMARY $*" ;;
+esac'
+printf '#!/bin/bash\necho "tailscale $*" >>"$FAKELOG"\nif [ "$1 $2" = "status --json" ]; then echo "{\\"BackendState\\": \\"${FAKE_TS_STATE:-NeedsLogin}\\"}"; fi\nexit 0\n' >"$fk/tailscale"; chmod +x "$fk/tailscale"
+cp "$fk/tailscale" "$w/tailscale.real"; rm -f "$fk/tailscale"       # tailscale is installed by the phase in these tests
+osrel="$w/os-release"; printf 'VERSION_CODENAME=noble\n' >"$osrel"
+FAKELOG="$w/fake.log"; export FAKELOG
+# ph <script> [VAR=value ...]: run a snippet with the installer sourced, fakes on PATH and state in $w/pstate.
+ph() {
+  local script="$1"; shift
+  : >"$FAKELOG"
+  env -i PATH="$tools:$fk" HOME="$w" TMPDIR="$TMPDIR" FAKELOG="$FAKELOG" LAI_INSTALLER_DEV=1 LAI_INSTALLER_AIAGENT="$fk/aiagent" LAI_INSTALLER_AICTL="$fk/aictl" LAI_INSTALLER_TAILSCALE="$fk/tailscale" \
+    LAI_INSTALL_NODE_YAML="$w/node.yaml" LAI_INSTALL_TS_KEYRING="$w/ts.gpg" LAI_INSTALL_TS_LIST="$w/ts.list" LAI_INSTALL_OS_RELEASE="$osrel" \
+    LAI_INSTALL_INVENTORY_DEST="$w/kept-inventory.yaml" LAI_INSTALLER_COUNTDOWN=0 LAI_INSTALLER_LAPTOP=1 w="$w" fk="$fk" "$@" \
+    bash -c 'source "$1"; set -Eeuo pipefail; STATE_DIR="$2/pstate"; STATE_FILE="$STATE_DIR/state.json"; CUR_PHASE_ID=P11; eval "$3"' _ "$INST" "$w" "$script"
+}
+nots() { ! grep -qE 'tailscale (serve|funnel)' "$FAKELOG"; }
+
+# P11
+t "P11 --no-tailscale is skipped, nothing runs" 0 "skipped: --no-tailscale" ph 'OPT_NO_TAILSCALE=1; phase_tailscale'
+t "P11 skipped ran no command" 0 "" test ! -s "$FAKELOG"
+t "P11 online: installs from the signed apt repo, enables tailscaled" 0 "This computer is not on the tailnet yet" ph 'OPT_NO_TAILSCALE=0; rm -f "$w/ts.gpg" "$w/ts.list"; phase_tailscale' w="$w"
+t "P11 key URL uses the codename and noarmor.gpg" 0 "" grep -qF "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg" "$FAKELOG"
+t "P11 list URL uses the codename and tailscale-keyring.list" 0 "" grep -qF "https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list" "$FAKELOG"
+t "P11 runs apt-get install -y tailscale" 0 "" grep -q 'apt-get install -y --no-install-recommends tailscale' "$FAKELOG"
+t "P11 runs systemctl enable --now tailscaled" 0 "" grep -qF "systemctl enable --now tailscaled" "$FAKELOG"
+t "P11 never pipes curl into a shell" 0 "" bash -c '! grep -qE "\| *(sh|bash)" "$1" && ! grep -qE "install.sh" "$1"' _ "$FAKELOG"
+cp "$w/tailscale.real" "$fk/tailscale"
+t "P11 already installed: no repo work" 0 "Tailscale is already installed" ph 'OPT_NO_TAILSCALE=0; phase_tailscale'
+t "P11 logged-out tailscale: not joined" 0 "not on the tailnet yet" ph 'OPT_NO_TAILSCALE=0; phase_tailscale'
+t "P11 running tailscale: joined" 0 "already on the tailnet" ph 'OPT_NO_TAILSCALE=0; phase_tailscale' FAKE_TS_STATE=Running
+t "P11 pattern from the agent is recorded" 0 "serve pattern: B" ph 'OPT_NO_TAILSCALE=0; phase_tailscale'
+ph 'OPT_NO_TAILSCALE=0; OPT_NODE_ID=ai-n4; OPT_SERVE_PATTERN=A; OPT_INVENTORY="$INST_PATH"; phase_tailscale' INST_PATH="$INST" >/dev/null 2>&1
+t "P11 serve-check got the node id, pattern and inventory" 0 "" bash -c 'grep -F "serve-check" "$1" | grep -qF -- "--node-id ai-n4" && grep -F serve-check "$1" | grep -qF -- "--serve-pattern A" && grep -F serve-check "$1" | grep -qF -- "--inventory $2"' _ "$FAKELOG" "$INST"
+mkdir -p "$w/pstate"
+t "P11 mismatch with the inventory: exit 1 with LAI-INS-050" 1 "LAI-INS-050" ph 'OPT_NO_TAILSCALE=0; phase_tailscale' FAKE_SERVE_MISMATCH=1
+t "P11 mismatch marks the phase failed in state.json" 0 "" grep -q '"P11": {"name":"tailscale","status":"failed"' "$w/pstate/state.json"
+ph 'OPT_NO_TAILSCALE=0; phase_tailscale' FAKE_TS_STATE=Running >/dev/null 2>&1
+t "P11 never ran tailscale serve or funnel" 0 "" nots
+t "P11 dry run: shows the commands, runs none of them" 0 "[dry-run] would run: systemctl enable --now tailscaled" ph 'OPT_NO_TAILSCALE=0; DRY_RUN=1; rm -f "$w/ts.gpg" "$w/ts.list"; rm -f "$fk/tailscale"; phase_tailscale' w="$w" fk="$fk"
+t "P11 dry run changed nothing (no curl, no systemctl, no apt, no dpkg)" 0 "" bash -c '! grep -qE "^(curl|systemctl|apt-get install|apt-get update|dpkg -i)" "$1"' _ "$FAKELOG"
+cp "$w/tailscale.real" "$fk/tailscale"
+mkdir -p "$w/ark1/localai/kit/debs/noble-amd64"
+t "P11 offline without the kit deb: LAI-INS-030, exit 1" 1 "LAI-INS-030" ph 'OPT_NO_TAILSCALE=0; OPT_FROM_ARK="$A"; rm -f "$fk/tailscale"; phase_tailscale' A="$w/ark1" fk="$fk"
+cp "$w/tailscale.real" "$fk/tailscale"
+: >"$w/ark1/localai/kit/debs/noble-amd64/tailscale_1.0_amd64.deb"
+t "P11 offline installs the kit deb with dpkg" 0 "Installing Tailscale from the ark drive" ph 'OPT_NO_TAILSCALE=0; OPT_FROM_ARK="$A"; rm -f "$fk/tailscale"; phase_tailscale' A="$w/ark1" fk="$fk"
+t "P11 offline used dpkg -i and no curl" 0 "" bash -c 'grep -q "^dpkg -i .*tailscale_1.0_amd64.deb" "$1" && ! grep -q "^curl" "$1"' _ "$FAKELOG"
+cp "$w/tailscale.real" "$fk/tailscale"
+t "P11 check hook: installed and active -> already satisfied" 0 "" ph 'OPT_NO_TAILSCALE=0; check_tailscale'
+t "P11 check hook: not installed -> not satisfied" 0 "" ph 'OPT_NO_TAILSCALE=0; rm -f "$fk/tailscale"; ! check_tailscale'
+cp "$w/tailscale.real" "$fk/tailscale"
+
+# P14
+t "P14 --no-sync is skipped" 0 "skipped: --no-sync" ph 'OPT_NO_SYNC=1; phase_content'
+t "P14 skipped started nothing" 0 "" test ! -s "$FAKELOG"
+t "P14 online: summary of the plan, then the sync" 0 "Will download 186 GB over the next hours" ph 'OPT_NO_SYNC=0; phase_content'
+t "P14 online ran the dry-run plan first and then the sync" 0 "" bash -c '[ "$(grep -n "^aictl ark sync" "$1" | head -1 | cut -d: -f2-)" = "aictl ark sync --dry-run" ] && grep -qx "aictl ark sync" "$1"' _ "$FAKELOG"
+t "P14 prints how to check progress" 0 "Check progress with: aictl ark sync (status) or the desktop app." ph 'OPT_NO_SYNC=0; phase_content'
+t "P14 content line carries the size" 0 "sync running (186 GB planned)   check: aictl ark sync" ph 'OPT_NO_SYNC=0; phase_content; say "LINE=$CONTENT_LINE"; echo "$CONTENT_LINE"'
+t "P14 a plan that fails does not fail the install" 0 "The download could not be planned now" ph 'OPT_NO_SYNC=0; phase_content' FAKE_PLAN_RC=1
+t "P14 a sync that cannot start does not fail the install" 0 "The sync could not be started now" ph 'OPT_NO_SYNC=0; phase_content' FAKE_AICTL_RC=1
+t "P14 dry run plans but does not start the sync" 0 "[dry-run] would run: $fk/aictl ark sync" ph 'OPT_NO_SYNC=0; DRY_RUN=1; phase_content'
+t "P14 dry run never ran the real sync" 0 "" bash -c '! grep -qx "aictl ark sync" "$1"' _ "$FAKELOG"
+mkdir -p "$w/ark2/localai"; printf '{"schema_version":1,"root_id":"ark-test0001","kind":"ark_drive"}\n' >"$w/ark2/localai/ROOT.json"
+t "P14 offline imports from the drive root id" 0 "Importing the content from the ark drive" ph 'OPT_NO_SYNC=0; OPT_FROM_ARK="$A"; phase_content' A="$w/ark2"
+t "P14 offline ran aictl ark import --from <id> --catalog" 0 "" grep -qx "aictl ark import --from ark-test0001 --catalog" "$FAKELOG"
+t "P14 offline never calls ark sync" 0 "" bash -c '! grep -q "ark sync" "$1"' _ "$FAKELOG"
+t "P14 offline without ROOT.json explains and goes on" 0 "no readable ROOT.json" ph 'OPT_NO_SYNC=0; OPT_FROM_ARK="$A"; phase_content' A="$w/ark1"
+
+# P15
+printf 'schema_version: 1\n' >"$w/inv.yaml"
+t "P15 --keep-inventory copies the inventory with mode 0600" 0 "" ph 'OPT_KEEP_INVENTORY=1; OPT_INVENTORY="$I"; STATE_DIR="$w/pstate"; i07_keep_inventory; [ "$(stat -c %a "$w/kept-inventory.yaml")" = 600 ] && cmp "$I" "$w/kept-inventory.yaml"' I="$w/inv.yaml" w="$w"
+t "P15 --keep-inventory again says already up to date" 0 "already up to date" ph 'OPT_KEEP_INVENTORY=1; OPT_INVENTORY="$I"; i07_keep_inventory' I="$w/inv.yaml"
+t "P15 --keep-inventory dry run copies nothing" 0 "[dry-run] would run: install" ph 'OPT_KEEP_INVENTORY=1; OPT_INVENTORY="$I"; DRY_RUN=1; rm -f "$w/kept-inventory.yaml"; i07_keep_inventory; [ ! -e "$w/kept-inventory.yaml" ]' I="$w/inv.yaml" w="$w"
+t "P15 runs verify, then prints the summary" 0 "FAKE SUMMARY setup summary" ph 'OPT_NODE_ID=ai-n4; OPT_HARDENING=auto; phase_verify'
+t "P15 summary gets laptop, user, skip and content flags" 0 "" bash -c 'grep "summary" "$1" | grep -qF -- "--laptop" && grep "summary" "$1" | grep -qF -- "--node-id ai-n4"' _ "$FAKELOG"
+t "P15 passes the desktop user and the cloud line" 0 "--user someone" ph 'OPT_NODE_ID=ai-n4; OPT_DESKTOP_USER=someone; OPT_ENROLL_FILE=x; CONTENT_LINE="sync running"; phase_verify'
+t "P15 no-tailscale is passed to the summary" 0 "--skip-tailscale" ph 'OPT_NODE_ID=ai-n4; OPT_NO_TAILSCALE=1; phase_verify'
+t "P15 a joined tailnet is passed to the summary" 0 "--tailnet-joined" ph 'OPT_NODE_ID=ai-n4; phase_verify' FAKE_TS_STATE=Running
+t "P15 a failing verify stops the install (exit 1)" 1 "The install is NOT finished" ph 'OPT_NODE_ID=ai-n4; phase_verify || exit 1' FAKE_VERIFY_RC=1
+t "P15 --reboot with a reboot needed counts down, then reboots" 0 "Rebooting in 0 seconds" ph 'OPT_NODE_ID=ai-n4; OPT_REBOOT=1; REBOOT_REQUIRED=1; phase_verify'
+t "P15 reboot ran systemctl reboot" 0 "" grep -qx "systemctl reboot" "$FAKELOG"
+t "P15 dry run never reboots" 0 "[dry-run] would reboot" ph 'OPT_NODE_ID=ai-n4; OPT_REBOOT=1; REBOOT_REQUIRED=1; DRY_RUN=1; phase_verify'
+t "P15 dry run ran no reboot" 0 "" bash -c '! grep -qx "systemctl reboot" "$1"' _ "$FAKELOG"
+t "P15 no --reboot means no reboot" 0 "" ph 'OPT_NODE_ID=ai-n4; OPT_REBOOT=0; REBOOT_REQUIRED=1; phase_verify'
+t "P15 no reboot happened" 0 "" bash -c '! grep -qx "systemctl reboot" "$1"' _ "$FAKELOG"
+t "P15 without the agent installed (dry run) says so" 0 "the agent is not installed yet" ph 'OPT_NODE_ID=ai-n4; DRY_RUN=1; rm -f "$fk/aiagent"; phase_verify' fk="$fk"
+t "P15 without the agent installed (real run) is not implemented, never done" 10 "so the checks and the summary cannot run" ph 'OPT_NODE_ID=ai-n4; rm -f "$fk/aiagent"; phase_verify; exit $?' fk="$fk"
+t "tailscale serve and funnel were never invoked in any INST-07 test" 0 "" nots
 
 echo "== release stamping"
 if command -v minisign >/dev/null 2>&1; then
