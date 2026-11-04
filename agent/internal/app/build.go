@@ -19,6 +19,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
 	"github.com/marinoscar/local-ai/agent/internal/maps"
+	"github.com/marinoscar/local-ai/agent/internal/maps/places"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/modes"
 	"github.com/marinoscar/local-ai/agent/internal/portal"
@@ -169,6 +170,8 @@ func (d *Daemon) build(ctx context.Context) error {
 	})
 	d.maps = maps.New(d.mapsDeps(metrics))
 	d.maps.SetGPS(lazyGPS{d})
+	d.places = &places.Manager{Copies: d.c.ArkIndex, Log: d.log}
+	d.maps.SetPlaces(d.places)
 	sup, err := health.New(health.Options{
 		Manager: c.Systemd, Publisher: c.Bus, Mode: d.modeName, Metrics: metrics, Clock: clock, Logger: log,
 		Specs: []health.Spec{

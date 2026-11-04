@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
+	"github.com/marinoscar/local-ai/agent/internal/maps/places"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 )
 
@@ -71,6 +72,9 @@ func (s *Maps) readiness(context.Context) health.Readiness {
 	}
 	if len(l.Damaged) > 0 {
 		r.Problems = append(r.Problems, problem(doctor.SVC034))
+	}
+	if m := s.places.Load(); m != nil && m.State() == places.StateAbsent {
+		r.Problems = append(r.Problems, problem(doctor.SVC032)) // the place index is not installed
 	}
 	return r
 }

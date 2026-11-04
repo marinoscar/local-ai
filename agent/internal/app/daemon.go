@@ -15,6 +15,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/drill"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
 	"github.com/marinoscar/local-ai/agent/internal/maps"
+	"github.com/marinoscar/local-ai/agent/internal/maps/places"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/modes"
 	"github.com/marinoscar/local-ai/agent/internal/state"
@@ -89,6 +90,7 @@ type Daemon struct {
 	piper      *piper.Service
 	whisperSTT *whisper.STTService
 	maps       *maps.Maps
+	places     *places.Manager
 	hooksSync  syncCanceller
 	reporter   *drill.Reporter
 	updater    *jobs.AgentUpdate
