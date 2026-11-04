@@ -52,8 +52,40 @@ function defaultStatus() {
         },
       ],
       loading: null,
-      choices: [],
+      choices: [
+        {
+          id: "qwen3.5-9b-q4km",
+          display_name: "Qwen 3.5 9B",
+          summary: "Fast general assistant.",
+          roles: ["chat"],
+          vision: false,
+          loadable: true,
+          survival: true,
+          speed_hint: "fast",
+        },
+        {
+          id: "vlm-4b",
+          display_name: "Vision 4B",
+          summary: "Understands photos. A bit slower.",
+          roles: ["vision"],
+          vision: true,
+          loadable: true,
+          survival: true,
+          speed_hint: "medium",
+        },
+        {
+          id: "huge-70b",
+          display_name: "Huge 70B",
+          summary: "Does not fit.",
+          roles: ["chat"],
+          vision: false,
+          loadable: false,
+          survival: false,
+          speed_hint: "slow",
+        },
+      ],
     },
+    ark: { overall: "yellow", survival_capable: true, drive_connected: true },
     capabilities: {
       chat: { state: "ready" },
       photo: { state: "ready" },
@@ -107,6 +139,8 @@ function defaultStatus() {
 let status = defaultStatus();
 let down = false;
 let seen = [];
+let streams = [];
+let loadAnswer = 202;
 
 function send(res, code, body, headers = {}) {
   res.writeHead(code, headers);
@@ -140,12 +174,26 @@ createServer(async (req, res) => {
       status = defaultStatus();
       down = false;
       seen = [];
+      loadAnswer = 202;
       return send(res, 200, "ok");
     }
     if (p === "/__status" && req.method === "POST") {
       status = { ...status, ...JSON.parse(await readBody(req)) };
       return send(res, 200, "ok");
     }
+    if (p === "/__emit" && req.method === "POST") {
+      // Push one event to every open /api/v1/events stream: {type, data}.
+      const { type, data } = JSON.parse(await readBody(req));
+      const frame = `event: ${type}\ndata: ${JSON.stringify({ type, data })}\n\n`;
+      for (const r of streams) r.write(frame);
+      return send(res, 200, "ok");
+    }
+    if (p === "/__load") {
+      loadAnswer = Number(url.searchParams.get("status") || 202);
+      return send(res, 200, "ok");
+    }
+    if (p === "/__streams")
+      return send(res, 200, String(streams.length));
     if (p === "/__down") {
       down = url.searchParams.get("on") === "1";
       return send(res, 200, "ok");
@@ -173,12 +221,33 @@ createServer(async (req, res) => {
     status = { ...status, mode: "survival", session: "portal" };
     return send(res, 200, "{}", { "Content-Type": "application/json" });
   }
+  if (/^\/api\/v1\/models\/[^/]+\/load$/.test(p) && req.method === "POST") {
+    seen.push({ path: p, body: await readBody(req) });
+    if (loadAnswer === 429)
+      return send(
+        res,
+        429,
+        JSON.stringify({
+          error: {
+            code: "LAI-SVC-114",
+            message: "Too many switches",
+            fix: "Wait one minute and try again.",
+          },
+        }),
+        { "Content-Type": "application/json" },
+      );
+    return send(res, loadAnswer, "{}", { "Content-Type": "application/json" });
+  }
   if (p === "/api/v1/events") {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
     });
     res.write(": open\n\n");
+    streams.push(res);
+    req.on("close", () => {
+      streams = streams.filter((r) => r !== res);
+    });
     return;
   }
   if (

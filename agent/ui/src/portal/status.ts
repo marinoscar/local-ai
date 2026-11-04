@@ -23,6 +23,9 @@ export interface Capability {
   reason?: string;
   /** Only on library. */
   books?: LibraryBook[];
+  /** maps */
+  search?: boolean;
+  gps?: boolean;
 }
 
 export interface Model {
@@ -30,6 +33,20 @@ export interface Model {
   display_name: string;
   vision?: boolean;
   roles?: string[];
+}
+
+/** A model the Switch brain screen can offer (survival-portal.md section 3.5, brain.choices). */
+export interface BrainChoice extends Model {
+  summary: string;
+  loadable: boolean;
+  survival: boolean;
+  speed_hint?: "fast" | "medium" | "slow";
+}
+
+export interface Ark {
+  overall: "green" | "yellow" | "red";
+  survival_capable: boolean;
+  drive_connected: boolean;
 }
 
 export interface Alert {
@@ -48,6 +65,7 @@ export interface FirstAidEntry {
 
 export interface PortalStatus {
   schema_version: number;
+  generated_at?: string;
   mode: string;
   language: string;
   emergency_number: string;
@@ -61,9 +79,10 @@ export interface PortalStatus {
     critical: boolean;
   };
   clock_ok: boolean;
-  brain: { loaded: Model[]; loading: Model | null };
+  brain: { loaded: Model[]; loading: Model | null; choices?: BrainChoice[] };
   capabilities: Partial<Record<CapName, Capability>>;
   first_aid: FirstAidEntry[];
+  ark?: Ark;
   alerts: Alert[];
 }
 
