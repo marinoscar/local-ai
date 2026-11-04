@@ -114,6 +114,9 @@ type Options struct {
 	// api.CodeRouterDown, the code for llama. Chat passes api.CodeChatDown, library
 	// api.CodeLibraryDown.
 	DownCode string
+	// DownLinks chooses the buttons of the page shown when the upstream is down or too slow (nil: the
+	// default back-to-the-Portal button). It sees the request, so the labels follow its language.
+	DownLinks func(r *http.Request) []api.PageLink
 	// Logger receives the warnings of failed exchanges. Nil: slog.Default.
 	Logger *slog.Logger
 }
@@ -144,6 +147,7 @@ type proxy struct {
 	total      time.Duration // 0: no cap
 	idle       time.Duration // 0: no limit
 	downCode   string
+	downLinks  func(r *http.Request) []api.PageLink
 	downStatus int
 	log        *slog.Logger
 	rp         *httputil.ReverseProxy
@@ -194,6 +198,7 @@ func New(opts Options) http.Handler {
 		p.downStatus = http.StatusBadGateway
 	}
 	p.downCode = opts.DownCode
+	p.downLinks = opts.DownLinks
 	if p.downCode == "" {
 		p.downCode = api.CodeRouterDown
 	}
@@ -490,13 +495,21 @@ func (p *proxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) 
 			reason = "upstream_idle"
 		}
 		p.logFailure(r, p.downCode, http.StatusGatewayTimeout, reason, err)
-		api.WriteErrorPage(w, r, api.NewError(p.downCode, http.StatusGatewayTimeout, map[string]any{"reason": reason}))
+		api.WriteErrorPageLinks(w, r, api.NewError(p.downCode, http.StatusGatewayTimeout, map[string]any{"reason": reason}), p.links(r))
 		return
 	case r.Context().Err() != nil:
 		return // the client went away; nobody is left to answer
 	}
 	p.logFailure(r, p.downCode, p.downStatus, "upstream_down", err)
-	api.WriteErrorPage(w, r, api.NewError(p.downCode, p.downStatus, map[string]any{"reason": "upstream_down"}))
+	api.WriteErrorPageLinks(w, r, api.NewError(p.downCode, p.downStatus, map[string]any{"reason": "upstream_down"}), p.links(r))
+}
+
+// links is the button list of a down page: the caller's, or nil for the default.
+func (p *proxy) links(r *http.Request) []api.PageLink {
+	if p.downLinks == nil {
+		return nil
+	}
+	return p.downLinks(r)
 }
 
 // logFailure writes one warning per failed exchange: the code, the request id, the method and the

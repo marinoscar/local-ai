@@ -75,6 +75,7 @@ func ChatRoutes(opts ChatOptions) []api.Route {
 		FrameHeaders:       true,
 		DownStatus:         http.StatusBadGateway,
 		DownCode:           api.CodeChatDown,
+		DownLinks:          downLinks,
 		Logger:             c.log,
 	})
 	var routes []api.Route
@@ -112,7 +113,7 @@ func (c *chat) enabled(r *http.Request) bool {
 
 func (c *chat) serve(w http.ResponseWriter, r *http.Request) {
 	if !c.enabled(r) {
-		api.WriteErrorPage(w, r, api.NewError(doctor.SVC101, http.StatusForbidden, nil))
+		api.WriteErrorPageLinks(w, r, api.NewError(doctor.SVC101, http.StatusForbidden, nil), lockedLinks(r))
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead && !sameOrigin(r) {
@@ -143,6 +144,31 @@ func (c *chat) inject(r *http.Request) {
 		return
 	}
 	r.Header.Set("Authorization", "Bearer "+key)
+}
+
+func pick(r *http.Request, en, es string) string {
+	if api.InfoFrom(r.Context()).Lang == "es" {
+		return es
+	}
+	return en
+}
+
+// lockedLinks are the buttons of the LAI-SVC-101 page. Both land on pages that already carry the
+// real controls (the Portal's Start survival mode banner and the login screen), so this page needs
+// no script and no POST form.
+func lockedLinks(r *http.Request) []api.PageLink {
+	return []api.PageLink{
+		{Href: "/portal", Label: pick(r, "Start survival mode", "Iniciar modo supervivencia")},
+		{Href: "/", Label: pick(r, "Log in", "Iniciar sesión")},
+	}
+}
+
+// downLinks are the buttons of the LAI-SVC-102 page: switch brain, then status.
+func downLinks(r *http.Request) []api.PageLink {
+	return []api.PageLink{
+		{Href: "/portal/brain", Label: pick(r, "Switch brain", "Cambiar de cerebro")},
+		{Href: "/portal/status", Label: pick(r, "Status", "Estado")},
+	}
 }
 
 func isGet(r *http.Request) bool { return r.Method == http.MethodGet || r.Method == http.MethodHead }
