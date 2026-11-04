@@ -334,6 +334,15 @@ The exact field names must be confirmed against `examples/server/server.cpp` at 
 6. POST to `/inference` with a 60 s timeout. Map the result to the response of §3.4.
 7. Never log the transcript text (it may be private). Log only duration, language, elapsed time.
 
+**What the code does (SVC-07).** `internal/svc/whisper` (`wav.go`, `resample.go`, `queue.go`, `client.go`, `handler.go`) serves `POST /speech/stt` with a 120 s handler timeout, a 25 MiB body limit and `multipart/form-data` only.
+- **Multipart.** `audio` is read into memory; `language` must match `^[a-z]{2,3}$|^auto$` and `prompt` must be at most 200 characters, otherwise `400 LAI-AGT-020`. A missing `audio` is `400 LAI-AGT-020`. A body over 25 MiB is `413 LAI-SVC-014`.
+- **WAV.** Every chunk size is checked against the bytes left, unknown chunks are skipped, and nothing is allocated from a declared size. A `data` chunk that declares more than the body holds is **truncated to the body** (a recorder that streamed to a pipe writes `0xFFFFFFFF`), not rejected. 8-bit, 24-bit, float64, other tags and more than 2 channels are `LAI-SVC-014`. The duration limit is checked before any sample is converted.
+- **Resampling.** Hann-windowed sinc, 32 taps at the lower of the two rates (widened when downsampling), normalised to unit gain; output length is `floor(frames * 16000 / rate)`. The silence test (RMS below -60 dBFS) runs on the 16 kHz mono signal. The silence message is "I couldn't hear anything. Try again closer to the microphone." (Spanish: "No se oyó nada. Intente otra vez más cerca del micrófono.") with the fix of `LAI-SVC-014`.
+- **Errors.** No model selected (`LAI-SVC-010`), `whisper.enabled: false`, a refused connection, a non-200 answer or an unparsable answer (`LAI-SVC-011`) are `503`. The queue (1 in flight, 2 waiting) answers `429 LAI-SVC-015` with `Retry-After: 3`. The 60 s call timeout starts when the request leaves the queue and is `504 LAI-SVC-016`.
+- **Metrics.** `localai_stt_requests_total{result}` with `ok`, `bad_audio`, `busy`, `timeout`, `error`, and `localai_stt_seconds`.
+- **Response.** `duration_s` is the length of the uploaded audio; `model` is the model id of the last applied selection.
+- **Not verified.** The `/inference` field names and the fixtures in `internal/svc/whisper/testdata` follow `examples/server/server.cpp` from memory; they have not been recorded from a build at the pinned commit yet, nor round-tripped against a real `tiny` model.
+
 ### 4.3 Piper
 
 #### 4.3.1 Binary and voices

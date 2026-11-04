@@ -42,6 +42,8 @@ type Config struct {
 	Model string `yaml:"model"`
 	// Threads is auto or a number (a string so that both decode).
 	Threads string `yaml:"threads"`
+	// MaxAudioSeconds is the longest recording POST /speech/stt takes (0 means 120).
+	MaxAudioSeconds int `yaml:"max_audio_seconds"`
 }
 
 // ConfigFromNode decodes the whisper block of node.yaml; an absent block gives the defaults.

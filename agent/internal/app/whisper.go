@@ -9,6 +9,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/services"
+	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 	"github.com/marinoscar/local-ai/agent/internal/svc/whisper"
 )
 
@@ -25,6 +26,8 @@ type whisperState struct {
 	// mu serializes applyWhisper; device is the device of the last applied selection (a string).
 	mu     sync.Mutex
 	device atomic.Value
+	// modelID is the id of the selected model (a string, "" when none is installed); POST /speech/stt reads it.
+	modelID atomic.Value
 }
 
 // writeWhisperUnit writes localai-whisper.service and reloads systemd (companion-services.md section
@@ -99,6 +102,7 @@ func (d *Daemon) applyWhisper(ctx context.Context) {
 		}
 	}
 	d.whisper.device.Store(sel.Device)
+	d.whisper.modelID.Store(sel.ModelID)
 	w := &whisper.EnvWriter{Path: d.c.Paths.WhisperEnv(), Units: d.c.Systemd, UID: -1, GID: -1}
 	if !d.env.Unprivileged && d.haveLocalAI {
 		w.UID, w.GID = 0, d.localaiGID
@@ -200,4 +204,18 @@ func (d *Daemon) startWhisper(ctx context.Context) {
 		d.applyWhisperAsync(d.rootCtx)
 	}
 	d.startWorker(&whisperWorker{d: d})
+}
+
+// sttDeps are the dependencies of POST /speech/stt: the whisper block as it is now, the model the
+// last applyWhisper selected and the whisper port.
+func (d *Daemon) sttDeps(m *health.Metrics) whisper.Deps {
+	return whisper.Deps{
+		Config: func() whisper.Config { return whisper.ConfigFromNode(d.c.Config.Get()) },
+		Model: func() string {
+			id, _ := d.whisper.modelID.Load().(string)
+			return id
+		},
+		Port:    func() int { return d.c.Config.Get().Ports.Whisper },
+		Metrics: m, Logger: d.log,
+	}
 }

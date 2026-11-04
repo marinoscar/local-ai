@@ -44,6 +44,10 @@ jobs:
         if: steps.detect.outputs.present == 'true'
         working-directory: agent
         run: go test ./api/... ./internal/api/...
+      - name: Fuzz the WAV decoder of POST /speech/stt for 60 s
+        if: steps.detect.outputs.present == 'true'
+        working-directory: agent
+        run: go test -run '^$' -fuzz '^FuzzDecodeWAV$' -fuzztime 60s ./internal/svc/whisper
       - name: Static builds for linux/amd64 and linux/arm64
         if: steps.detect.outputs.present == 'true'
         run: scripts/agent-ci.sh build

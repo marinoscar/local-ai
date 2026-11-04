@@ -1605,8 +1605,6 @@ paths:
         `multipart/form-data` (not JSON) and the limit is 25 MiB. agent.md section 3.8.25.
       x-localai-auth: [op, portal]
       x-localai-timeout: "120 s"
-      x-localai-status: planned
-      x-localai-issue: SVC-07
       requestBody:
         required: true
         content:

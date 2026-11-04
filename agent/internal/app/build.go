@@ -155,6 +155,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	})
 	metrics := health.NewMetrics()
 	d.piper = piper.New(d.piperDeps(metrics))
+	d.stt = whisper.NewSTT(d.sttDeps(metrics))
 	c.Piper = d.piper
 	sup, err := health.New(health.Options{
 		Manager: c.Systemd, Publisher: c.Bus, Mode: d.modeName, Metrics: metrics, Clock: clock, Logger: log,
@@ -553,7 +554,7 @@ func (d *Daemon) buildServer() error {
 			}
 			return api.RegisterArkImport(reg, api.ArkImportDeps{Importer: adapt.Importer{Engine: d.ark.engine, Planner: d.ark.importer}, Audit: d.audit, Logger: d.log})
 		}},
-		{"speech", func() error { return reg.Add(d.piper.Routes()...) }},
+		{"speech", func() error { return reg.Add(append(d.piper.Routes(), d.stt.Routes()...)...) }},
 	}
 	for _, r := range regs {
 		if err := r.add(); err != nil {
