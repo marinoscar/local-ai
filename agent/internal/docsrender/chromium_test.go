@@ -12,8 +12,17 @@ import (
 
 // TestRealChromiumPrintsTheCardOnOnePage runs a real browser. It is opt-in (LOCALAI_TEST_CHROMIUM=1)
 // because it needs Chromium in the fixed PATH and takes seconds; the manual test plan of AICTL-08
-// and a CI image with Chromium run it. It proves the committed card, with long values, is one page.
+// and a CI image with Chromium run it. It proves the committed card, with long values, is one page on Letter and on A4.
 func TestRealChromiumPrintsTheCardOnOnePage(t *testing.T) {
+	for _, paper := range []string{"Letter", "A4"} {
+		t.Run(paper, func(t *testing.T) { printCardOnOnePage(t, paper) })
+	}
+}
+
+// printCardOnOnePage prints the committed card on the given paper size (the card CSS says Letter; A4
+// swaps it, which is what a printer set to A4 does) and requires exactly one page.
+func printCardOnOnePage(t *testing.T, paper string) {
+	t.Helper()
 	if os.Getenv("LOCALAI_TEST_CHROMIUM") != "1" {
 		t.Skip("set LOCALAI_TEST_CHROMIUM=1 to run a real Chromium")
 	}
@@ -41,12 +50,12 @@ func TestRealChromiumPrintsTheCardOnOnePage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files := map[string][]byte{"card.html": html, "print.css": []byte(printCSS), "card.css": []byte(cardCSS)}
+	files := map[string][]byte{"card.html": html, "print.css": []byte(printCSS), "card.css": []byte(strings.Replace(cardCSS, "size: Letter;", "size: "+paper+";", 1))}
 	pdfs, failed, err := PrintAll(context.Background(), PDFMaker{Runner: execx.Exec{}, Bin: bin}, t.TempDir(), []string{"card.html"}, files)
 	if err != nil || len(failed) != 0 {
 		t.Fatalf("print: %v %v", err, failed)
 	}
 	if n := CountPages(pdfs["card.pdf"]); n != 1 {
-		t.Errorf("the card is %d pages, want 1", n)
+		t.Errorf("the card is %d pages on %s, want 1", n, paper)
 	}
 }
