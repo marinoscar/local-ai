@@ -45,9 +45,11 @@ apps/desktop/
   electron.vite.config.ts      main, preload, renderer (shell pages) builds
   tsconfig.json tsconfig.node.json tsconfig.web.json
   vitest.config.mts  playwright.config.ts
-  build/linux/icons/           16..512 PNG (generated from packages/ui/brand by `npm run icons`)
+  build/linux/icons/           16..512 PNG (generated from packages/ui/brand by `npm run icons`, committed)
+  build/linux/icon.png         512 px copy, shipped as the `icon.png` extraResource
   build/linux/ai-desktop.apparmor
   build/linux/tray/            tray-{green,blue,orange,amber,red,grey}.png (22 px and 44 px @2x)
+  scripts/icons.mjs            `npm run icons`: packages/ui/brand/icon.svg -> app and tray PNGs (sharp, offline)
   scripts/dist.mjs             wraps electron-builder --publish never
   scripts/packaged-app.mjs     verify (asar layout, fuses) | test-copy (re-enable inspect for e2e)
   src/main/
@@ -80,12 +82,17 @@ apps/desktop/
 ```
 The desktop builds its shell pages with `packages/ui` components, consumed through `"@localai/ui": "file:../../packages/ui"` (desktop CI, `.github/workflows/desktop-ci.yml` on PRs touching `apps/desktop/**` or `packages/ui/**`, builds from the repo root, so `file:` resolves; the release workflow is `desktop-release.yml`, §4.11).
 
-**Who creates `packages/ui`.** Whichever of AGENT-07, DSK-01 or CLOUD-01 lands first creates it if it is absent, with the minimum: `packages/ui/package.json` (`"name": "@localai/ui"`, private) and the brand source image `packages/ui/brand/icon.svg` (the input of `npm run icons`). CLOUD-11 owns the shared components (node card, status chips) that the desktop Lab view reuses.
+**Who creates `packages/ui`.** Whichever of AGENT-07, DSK-01 or CLOUD-01 lands first creates it if it is absent, with the minimum: `packages/ui/package.json` (`"name": "@localai/ui"`, private) and the brand source image `packages/ui/brand/icon.svg` (the input of `npm run icons`). CLOUD-11 owns the shared components (node card, status chips) that the desktop Lab view reuses. `packages/ui` already exists (created by the cloud and agent items), so DSK-01 adds only the `file:` dependency.
+
+**Build setup (DSK-01).** The package is CommonJS (no `"type": "module"`) because a sandboxed preload must be CommonJS; electron-vite writes `out/main/index.js`, `out/preload/{shell,agent}.js` and `out/renderer/<page>/index.html`. Every dependency is a `devDependency` (renderer libraries are bundled by Vite), so `app.asar` holds only `out/**` and `package.json`, and `dependencies` stays empty. All versions are exact (no `^` or `~`). Electron 44 has no install hook: run `node node_modules/electron/install.js` after `npm ci` (desktop CI does).
+
+**Shell pages and the `file://` fuse.** `grantFileProtocolExtraPrivileges` is off (section 3.3), and with it Electron no longer serves `file://` URLs out of `app.asar`. The shell pages therefore cannot be loaded from the packaged app until the `localai://app` protocol (section 3.7, DSK-02) exists. Until then the packaged DSK-01 window shows a static placeholder page (`data:` URL); in `npm run dev` it loads the Vite dev server's `topbar` page.
 
 ### 3.2 Electron version policy
 - `electron` is pinned to an **exact** version in `devDependencies` (no caret), like kvox-desktop. Start at the version kvox-desktop uses (44.x) and keep the bundled Node ≥ 24.
 - Stay on a major that Electron still supports (the newest three majors). Upgrade within two weeks of a security release of the pinned major, and move to a newer major before the pinned one leaves support. Renovate opens the PR (`apps/desktop/**` rule, `rangeStrategy: pin`); a PR that bumps Electron must pass the packaged e2e suite (§9).
 - `electron-builder`, `@electron/fuses`, `electron-vite` follow the versions kvox-desktop pins unless a security fix needs newer.
+- **Versions chosen in DSK-01 (2026-11-04).** kvox-desktop's `package.json` was not readable from the session that built the scaffold, so the pins are the newest releases that agree with each other and with Node 24: `electron` **44.10.2** (the newest 44.x; bundled Node is 24.x), `electron-builder` 26.18.0, `@electron/fuses` 2.1.3, `electron-vite` 6.0.0 (with `vite` 8.3.5, `@vitejs/plugin-react` 6.2.1, `vitest` 5.1.0, `typescript` 6.0.3). When kvox-desktop is next compared, a difference is a Renovate bump, not a bug. The first Renovate pass moves them forward within the policy above.
 
 ### 3.3 `electron-builder.yml`
 ```yaml
@@ -101,7 +108,6 @@ files:
 extraResources:
   - { from: build/linux/icon.png, to: icon.png }
   - { from: build/linux/tray, to: tray }
-  - { from: ../../LICENSE, to: LICENSE.txt }
 npmRebuild: false
 electronFuses:
   runAsNode: false
@@ -131,9 +137,10 @@ deb:
   appArmorProfile: build/linux/ai-desktop.apparmor
   depends: [libnotify4, libxtst6, libnss3, xdg-utils, libsecret-1-0, policykit-1]
   recommends: [gnome-shell-extension-appindicator]
-AppImage:
+appImage:
   artifactName: ai-desktop-${version}-x86_64.AppImage
 ```
+Two differences from the first draft of this block, both found when DSK-01 ran the build: the AppImage key is `appImage` (camelCase; `AppImage:` fails electron-builder's schema validation), and there is **no `LICENSE.txt` extraResource**: the repository has no license file yet (README section 12), so there is nothing to copy and no license is invented. Add `{ from: ../../LICENSE, to: LICENSE.txt }` back when the owner adds one.
 Only `deb` and `AppImage`. The deb installs to `/opt/ai-desktop/` with `/usr/bin/ai-desktop` → `/opt/ai-desktop/ai-desktop`, and `/usr/share/applications/ai-desktop.desktop`. The AppArmor profile is kvox-desktop's (`flags=(unconfined)`, `userns,`) for `/opt/ai-desktop/ai-desktop`, needed on Ubuntu 24.04+ for the Chromium sandbox.
 
 Process switches set in `index.ts` before `ready`: `app.commandLine.appendSwitch('disable-background-networking')`, `'no-pings'`, `'disable-component-update'`, `'disable-domain-reliability'`, `'disable-features', 'AutofillServerCommunication,MediaRouter,OptimizationHints,Translate'`. `spellcheck: false` on every webContents (dictionary downloads).
