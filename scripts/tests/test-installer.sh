@@ -572,6 +572,7 @@ exit "${FAKE_RC:-0}"
 FAKE
 chmod +x "$fakeagent"
 export FAKE_ARGS_LOG="$w/agent.args"
+# shellcheck disable=SC2120  # it is passed through t(), which shellcheck cannot see
 hphase() { # hphase <args...>: run only phase P4 of the installer with the fake agent
   bash -c 'source "$1"; shift; DEV=1; LAI_INSTALL_AIAGENT="$1"; shift; STATE_DIR="$1"; shift; STATE_FILE="$STATE_DIR/state.json"; LOG_OPEN=; mkdir -p "$STATE_DIR"
     parse_args "$@"; CUR_PHASE_ID=""; run_phase 4 "${PHASE_TABLE[3]}"; echo "REBOOT_REQUIRED=$REBOOT_REQUIRED"' _ "$INST" "$fakeagent" "$w/hstate" "$@"
