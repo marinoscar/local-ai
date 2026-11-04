@@ -81,14 +81,17 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
 
 The catalog says which models and content exist and how to verify them. Nodes only accept a catalog that passes lint, and enrolled nodes take the one the cloud has **approved**.
 
-25. **After a catalog PR is merged** and tagged `catalog-<version>`: **Lab → Catalog → Import release…**, type the tag (for example `catalog-2026.11.02-1`).
-    - **What you should see:** a new row with status **draft**, then the **Lint** column turns ✔ (valid) or ✖ with problems.
-    - **If it doesn't work:** `LAI-CLD-033`: the cloud's catalog checker is missing; redeploy the cloud app.
-26. Press **Diff** to compare with the approved version. Read the changes: new models (do they say a measured `min_vram_mib`?), removed items (nodes keep them as "orphans", never deleted automatically), profile changes.
-27. Press **Approve** and confirm "Approve <version> for all nodes?".
-28. Optional: **Push to nodes** so they refresh now; otherwise they take it at their next nightly sync.
-    - **What you should see:** within a day every node card shows the new catalog version.
-29. Small edits can be made in **New draft** (a plain text editor with a lint panel), but changes made only in the cloud are lost at the next import. Prefer a PR ([03 Part 5](03-swap-a-model.md)).
+25. **After a catalog PR is merged** and tagged `catalog-<version>`: **Lab → Catalog → Import release…**, type the tag (for example `catalog-2026.11.02-1`) and press **Import**.
+    - **What you should see:** "Importing catalog-…", then (within a few seconds) a new row with status **draft** and **checking…** in the Lint column, which turns **✔** (valid) or **✖ N errors**.
+    - **If it says "This version already exists."** the cloud already has that version; nothing was changed.
+    - **If it doesn't work:** `LAI-CLD-033` ("The catalog checker failed"): the cloud's catalog checker is missing; redeploy the cloud app.
+26. Press **Diff vs approved** on the new row to compare with the approved version. Read the changes: new models (do they say a measured `min_vram_mib`?), removed items (nodes keep them as "orphans", never deleted automatically), profile changes. Lines starting with `+` are new, lines starting with `-` are gone.
+    - **If the row says ✖ N errors:** press **Edit** on it. Each problem is listed under the text as `CODE file:path message`; click one to jump to its file and line. Fix the text and press **Save draft**: that makes a **new** version (old ones never change) and checks it again by itself.
+27. When the status is **valid**, press **Edit** on its row, then **Approve** under the text, and read the dialog: it lists the files changed and the lines added and removed, and asks "Approve <version> for all nodes?". **Push to nodes now** is ticked by default; clear it if the nodes should wait for their nightly sync. Press **Approve**.
+    - **What you should see:** "Approved <version>." The old approved row says **superseded**.
+28. Optional, later: **Push to nodes** on the approved row asks every Healthy or Degraded node to refresh now ("Sent to N nodes"); the others take it at their next nightly sync.
+    - **What you should see:** within a day the header says "N of N nodes on it" and every node card shows the new catalog version.
+29. Small edits can be made with **New draft** (a plain text editor with line numbers and a lint panel; it starts from the approved version), but changes made only in the cloud are lost at the next import. Prefer a PR ([03 Part 5](03-swap-a-model.md)). Only a lab administrator sees Import, New draft, Edit, Lint, Approve and Push to nodes; everyone else sees the table and the diffs.
 
 ---
 
