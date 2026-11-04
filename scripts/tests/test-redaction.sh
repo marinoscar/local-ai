@@ -84,6 +84,27 @@ mkdir -p "$repo/scripts" && cp scripts/check-redaction.sh scripts/install-hooks.
   printf 'Person A <person-a%scorp.example>\n' "$at" >agent/internal/MAINTAINERS
   scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL skip of agent/vendor leaks into agent/internal"; rc=1; }
   rm -rf agent
+  # 2c. catalog sha256 pins (issue #251): a 64-hex value is allowed only as the value of a `sha256:` key
+  #     in catalog/ark.yaml and catalog/models.yaml. Everything else stays a leak, in those files too.
+  hex64="$(printf 'ab%.0s' $(seq 1 32))"   # 64 hex characters, built at runtime
+  mkdir -p catalog other
+  printf 'files:\n  - {kind: weights, name: w.gguf, size_bytes: 7, sha256: "%s"}\n  - sha256: %s\n' "$hex64" "$hex64" >catalog/models.yaml
+  printf 'items:\n  - sha256: "%s"\n' "$hex64" >catalog/ark.yaml
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 0 ]] || { echo "  FAIL a sha256 pin in catalog/models.yaml or ark.yaml was rejected"; rc=1; }
+  printf 'files:\n  - sha256: "%s"\n  - note: %s\n' "$hex64" "$hex64" >catalog/models.yaml
+  out="$(scripts/check-redaction.sh 2>&1)"; [[ $? -eq 1 ]] || { echo "  FAIL a bare 64-hex string in catalog/models.yaml was accepted"; rc=1; }
+  grep -q 'catalog/models.yaml:3' <<<"$out" || { echo "  FAIL the bare 64-hex line was not reported"; rc=1; }
+  grep -q 'catalog/models.yaml:2' <<<"$out" && { echo "  FAIL the sha256 pin line was reported"; rc=1; }
+  printf 'items:\n  - sha256: "%s"\n  - ip: %s\n' "$hex64" "$fakeip" >catalog/ark.yaml
+  printf 'ok: true\n' >catalog/models.yaml
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL another pattern in catalog/ark.yaml was accepted"; rc=1; }
+  printf 'ok: true\n' >catalog/ark.yaml
+  printf 'sha256: "%s"\n' "$hex64" >catalog/profiles.yaml
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL the allowance leaked to another file in catalog/"; rc=1; }
+  rm catalog/profiles.yaml
+  printf 'sha256: "%s"\n' "$hex64" >other/pin.yaml
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL the allowance leaked outside catalog/"; rc=1; }
+  rm -rf catalog other
   # 3. hook install: idempotent, rejects a leaking commit, accepts a clean one
   scripts/install-hooks.sh >/dev/null || { echo "  FAIL install-hooks"; rc=1; }
   second="$(scripts/install-hooks.sh)"; grep -q 'already installed' <<<"$second" || { echo "  FAIL install-hooks not idempotent"; rc=1; }
