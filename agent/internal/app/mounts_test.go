@@ -131,15 +131,21 @@ func TestChatMountOnTheDaemon(t *testing.T) {
 		}
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		got := m.llama[len(m.llama)-1]
+		idx := -1
+		for i, p := range m.llamaPaths {
+			if p == "/props" {
+				idx = i
+			}
+		}
+		if idx < 0 {
+			t.Fatalf("llama never saw /props: %v", m.llamaPaths)
+		}
+		got := m.llama[idx]
 		if got.Get("Authorization") != "Bearer "+m.key {
 			t.Errorf("llama saw Authorization %q", got.Get("Authorization"))
 		}
 		if got.Get("Cookie") != "" || got.Get("X-Api-Key") != "" {
 			t.Errorf("client credentials reached llama: %v", got)
-		}
-		if m.llamaPaths[len(m.llamaPaths)-1] != "/props" {
-			t.Errorf("upstream path %q", m.llamaPaths[len(m.llamaPaths)-1])
 		}
 		if rp.header.Get("Set-Cookie") != "" || strings.Contains(string(rp.body)+rp.header.Get("Authorization"), m.key) {
 			t.Error("upstream cookie or key reached the browser")
