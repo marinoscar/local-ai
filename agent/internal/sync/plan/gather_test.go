@@ -704,3 +704,29 @@ func TestOSStatfs(t *testing.T) {
 		t.Error("a missing path must fail")
 	}
 }
+
+// A dry run must answer inside the API deadline although the node gives a real run's resolvers hours:
+// ResolveDeadline cuts every call off at once and the item is planned as unresolved.
+func TestGatherResolveDeadlineCutsLongResolvers(t *testing.T) {
+	r := newGatherRig(t)
+	r.timeout = 3 * time.Hour
+	if err := r.res.Register("kiwix", plan.ResolverFunc(func(ctx context.Context, _ plan.CatalogItem) (plan.Resolved, error) {
+		<-ctx.Done()
+		return plan.Resolved{}, ctx.Err()
+	})); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	in, err := r.gatherer().Gather(context.Background(), ark.InternalID, plan.GatherOptions{
+		Resolve: true, ResolveDeadline: time.Now().Add(100 * time.Millisecond),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("the gather took %v, the deadline was 100 ms", took)
+	}
+	if _, ok := in.Resolved["w-latest"]; ok {
+		t.Error("an item cut off by the deadline must stay unresolved")
+	}
+}

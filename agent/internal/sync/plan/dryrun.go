@@ -5,11 +5,16 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 )
+
+// DryRunResolveBudget is the total time a dry run lets the resolvers work (all roots together). It is
+// below the 10 s deadline of POST /ark/sync so the plan can still be built and sent.
+const DryRunResolveBudget = 6 * time.Second
 
 // DryRun is the adapter between POST /ark/sync with dry_run: true and the planner: it implements
 // api.ArkSyncPlanner (internal/api cannot import the planner, so the route holds the interface and this
@@ -38,7 +43,16 @@ func (d *DryRun) DryRun(ctx context.Context, req api.ArkSyncRequest) (any, error
 	// The same rule the engine's preflight follows, so a dry run plans what the run would: the internet
 	// is reachable and the mode allows it (the offline mode only with allow_offline_mode).
 	online := d.g.d.Network().MayUse(req.AllowOfflineMode)
-	inputs, err := d.g.GatherAll(ctx, rootIDs, GatherOptions{Resolve: true, Online: &online})
+	now := time.Now
+	if d.g.d.Now != nil {
+		now = d.g.d.Now
+	}
+	// The API answers a dry run within 10 s (agent.md section 3.8), but the node gives a real run's
+	// resolvers up to 30 minutes (apt_closure). A dry run therefore resolves only until DryRunResolveBudget;
+	// what is still unresolved then is planned as unresolved, exactly as when a resolver fails.
+	inputs, err := d.g.GatherAll(ctx, rootIDs, GatherOptions{
+		Resolve: true, Online: &online, ResolveDeadline: now().Add(DryRunResolveBudget),
+	})
 	if err != nil {
 		return nil, gatherError(err)
 	}

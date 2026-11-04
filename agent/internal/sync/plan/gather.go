@@ -253,6 +253,10 @@ type GatherOptions struct {
 	Online *bool
 	// ResolveTimeout bounds one resolver call; DefaultResolveTimeout when zero.
 	ResolveTimeout time.Duration
+	// ResolveDeadline, when set, is the moment after which every resolver call is cut off, whatever
+	// ResolveTimeout says: an item that has not resolved by then is planned as unresolved. A dry run
+	// sets it so the answer fits the API deadline even when many items resolve slowly.
+	ResolveDeadline time.Time
 }
 
 // GatherAll gathers the inputs of several roots, in the order given.
@@ -514,6 +518,11 @@ func (g *Gatherer) resolve(ctx context.Context, in *PlanInput, root ark.Root, op
 	}
 	if timeout <= 0 {
 		timeout = DefaultResolveTimeout
+	}
+	if !opt.ResolveDeadline.IsZero() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, opt.ResolveDeadline)
+		defer cancel()
 	}
 	var (
 		mu  sync.Mutex
