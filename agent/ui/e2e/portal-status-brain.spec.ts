@@ -168,7 +168,7 @@ test.describe("Switch brain", () => {
     await streamOpen(page);
     await emit(page, "model.failed", {
       model: "vlm-4b",
-      code: "LAI-RTR-005",
+      code: "LAI-SVC-107",
       message: "out of memory",
       rolled_back: true,
     });

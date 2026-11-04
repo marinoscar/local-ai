@@ -101,7 +101,7 @@ describe("BrainSwitchMachine", () => {
     await s.m.confirm();
     s.es.emit("model.failed", {
       model: "vlm",
-      code: "LAI-RTR-005",
+      code: "LAI-SVC-107",
       message: "out of memory",
       rolled_back: true,
     });
