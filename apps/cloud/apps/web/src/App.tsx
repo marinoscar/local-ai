@@ -30,6 +30,7 @@ import { AuditPage } from './localai/audit/AuditPage';
 import { CatalogPage } from './localai/catalog/CatalogPage';
 import { AlertsPage } from './localai/alerts/AlertsPage';
 import { KeysPage } from './localai/gateway/KeysPage';
+import { ModelsPage } from './localai/gateway/ModelsPage';
 import { LabOverviewPage } from './localai/lab/LabOverviewPage';
 import { Route53KeyPage } from './localai/vps/Route53KeyPage';
 import { AddNodeWizard } from './localai/wizard/AddNodeWizard';
@@ -178,6 +179,8 @@ export function AppRoutes() {
           <Route path="lab/audit" element={<Gate permission="lab:admin"><AuditPage /></Gate>} />
           {/* The gateway API keys (docs/specs/gateway.md section 3.8): gateway:use, the permission GET /api/localai/gateway/keys enforces. */}
           <Route path="gateway/keys" element={<Gate permission="gateway:use"><KeysPage /></Gate>} />
+          {/* The model policies (section 3.8): reads need gateway:use, the edits inside need gateway:admin, both enforced by /api/localai/gateway/models. */}
+          <Route path="gateway/models" element={<Gate permission="gateway:use"><ModelsPage /></Gate>} />
           <Route path="settings" element={<Hub sections={USER_SETTINGS_SECTIONS} hubKey="user-settings-hub" title="Settings" subtitle="Manage your account preferences." />} />
           <Route path="settings/tokens" element={<UserTokensPage />} />
           <Route path="admin/settings" element={<Hub sections={ADMIN_SECTIONS} hubKey="admin-settings-hub" title="Administration" subtitle="Users, background jobs and the health of this deployment." />} />

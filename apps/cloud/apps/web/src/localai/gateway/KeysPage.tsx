@@ -3,10 +3,12 @@
 // behind a confirmation. A gateway administrator can also list every user's keys. The page lays out what the API returned
 // and never sees a token except inside the Create dialog that the API just answered.
 import AddIcon from '@mui/icons-material/Add';
+import ModelsIcon from '@mui/icons-material/ViewList';
 import { Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import { usePermissions } from '@marinoscar/platform-web/identity/headless';
 import { formatAgo } from '@localai/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 
 import { ConfirmDialog } from '../node/ConfirmDialog';
 import { usePolledResource } from '../usePolledResource';
@@ -94,9 +96,15 @@ export function KeysPage({
         <Typography id="keys-title" variant="h4" component="h1">
           API keys
         </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => void openCreate()}>
-          Create key
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          {/* The other pages of the gateway destination (docs/specs/gateway.md section 3.8). */}
+          <Button component={RouterLink} to="/gateway/models" variant="outlined" startIcon={<ModelsIcon />}>
+            Models
+          </Button>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => void openCreate()}>
+            Create key
+          </Button>
+        </Box>
       </Box>
       <Typography color="text.secondary">
         A key lets a program use the lab's models at <code>/v1</code>. Make one key per program or computer, and revoke it when you stop using it.
