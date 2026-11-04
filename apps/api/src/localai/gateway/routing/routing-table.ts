@@ -340,6 +340,19 @@ export class RoutingTable implements OnModuleInit, OnApplicationBootstrap, OnMod
     return [...this.snapshot.routable.keys()].filter((nodeId) => this.nodes.get(nodeId)?.keyInvalid === true).sort();
   }
 
+  /**
+   * The candidates of `modelId` a request could use right now: not suspect and not `keyInvalid` (the filter of step 1 of
+   * the selection), each with its live state (a model marked unloaded counts as `loadable`, or is left out when it cannot
+   * be loaded). `/v1/models` (GW-05) lists exactly what this returns, so every listed id is requestable.
+   */
+  healthyCandidates(modelId: string): SelectedCandidate[] {
+    const now = this.clock.now().getTime();
+    return this.viewOf(modelId, now).filter((candidate) => {
+      const flags = this.flagsOf(candidate.nodeId, now);
+      return !flags.suspect && !flags.keyInvalid;
+    });
+  }
+
   isSuspect(nodeId: string): boolean {
     return this.flagsOf(nodeId, this.clock.now().getTime()).suspect;
   }
