@@ -18,6 +18,8 @@ include:
     - kit-catalog
     - kit-llama-cpp
     - kit-whisper-cpp
+    - kit-agent-binaries
+    - kit-agent-source
     - kit-go-toolchain
     - kit-kiwix-tools
     - kit-pmtiles

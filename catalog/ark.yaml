@@ -30,8 +30,8 @@ content:
     expected_size_bytes: 150000000
 
   # ---- Rebuild kit (rebuild-kit.md section 3.2). Kit items are always tier 1 (catalog.md section 3). ----
-  # Not here yet: kit-agent-binaries, kit-agent-source and kit-desktop need a published agent / desktop
-  # release to pin (INST-01 #115, #134); kit-cuda-redist is off by default. Pins below were computed from
+  # Not here yet: kit-desktop needs a published desktop release to pin (E8); kit-cuda-redist is off by default.
+  # kit-agent-binaries and kit-agent-source pin the pre-release node-v0.1.0-rc.1. Pins below were computed from
   # the downloaded release files (decision #251); nothing is copied from a mirror's listing unchecked.
 
   - id: kit-catalog
@@ -69,6 +69,40 @@ content:
       also_tarball_of: pinned
     expected_size_bytes: 1000000000
     refresh_days: 1
+
+  - id: kit-agent-binaries
+    kind: kit
+    display_name: "Agent node-v0.1.0-rc.1 (rebuild kit)"
+    summary: "The signed agent program for amd64 and arm64, its checksums and the installer, to rebuild a node offline."
+    summary_es: "El programa del agente firmado para amd64 y arm64, sus sumas y el instalador, para reconstruir un nodo sin internet."
+    survival_tier: 1
+    license: "Apache-2.0"
+    source:
+      type: url
+      files:
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.1/aiagent-linux-amd64", sha256: "5f911b029621196d56941acb4c1986a45c304db41674464001963f6296c53ae8"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.1/aiagent-linux-arm64", sha256: "2ea3a60b3ce5c64bf5ed39e34322edf728ebf8b484366ba17971c24f82f24e28"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.1/SHA256SUMS", sha256: "b8ba80d8387e38bcae8e7c47db969202af7f44f4ba98c89e8e01375e82fd9ff1"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.1/SHA256SUMS.minisig", sha256: "39b1e71cfa661132600dcc0ff93d80dc43ca27fe660701a1e30cb15c5df28c14"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.1/install-node.sh", sha256: "f5ed4e94b4a791a18ebdf915075451643571b6a9925f35ebff5a36e00664e6ed"}
+      version_policy: pinned
+      checksum: pinned
+    expected_size_bytes: 46000000
+
+  - id: kit-agent-source
+    kind: kit
+    display_name: "Agent source node-v0.1.0-rc.1 (rebuild kit)"
+    summary: "The agent source with its vendored libraries, to rebuild the agent offline with the Go toolchain of the kit."
+    summary_es: "El código fuente del agente con sus bibliotecas, para reconstruir el agente sin internet con el compilador de Go del kit."
+    survival_tier: 1
+    license: "Apache-2.0"
+    source:
+      type: url
+      files:
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.1/local-ai-node-v0.1.0-rc.1-src.tar.gz", sha256: "13032cc77cd419099df5adaa885eb7fcd575e440832b98fbb72d21bc4599e740"}
+      version_policy: pinned
+      checksum: pinned
+    expected_size_bytes: 6100000
 
   - id: kit-go-toolchain
     kind: kit
