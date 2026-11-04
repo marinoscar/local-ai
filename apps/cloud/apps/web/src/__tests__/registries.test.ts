@@ -40,7 +40,10 @@ describe('shell navigation', () => {
     expect(routedPaths.has(path.replace(/^\//, ''))).toBe(true);
   });
 
-  it('fit the bottom bar (four destinations at most)', () => {
-    expect(NAVIGATION.destinations.length).toBeLessThanOrEqual(4);
+  // The bottom bar draws four actions at most; with more destinations the platform's shell keeps the first three and
+  // puts the rest behind "More" (ShellBottomNav `maxItems`). Five is the most this app declares: the fifth (API keys,
+  // docs/specs/gateway.md section 3.8) is the first gateway destination.
+  it('are at most five, so the bottom bar overflows into "More" by one', () => {
+    expect(NAVIGATION.destinations.length).toBeLessThanOrEqual(5);
   });
 });

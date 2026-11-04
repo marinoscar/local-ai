@@ -20,12 +20,36 @@ export interface FakeAgent {
   readonly port: number;
   /** Every request the fake saw, in order (method and path only). */
   readonly requests: Array<{ method: string; path: string }>;
+  /** What the egress probe page (GET /egress-probe) reported back, once it finished. */
+  readonly probeResults: Array<Record<string, string>>;
   close(): Promise<void>;
 }
+
+/**
+ * A page that tries the three ways a renderer can reach the internet (fetch, <img>, WebSocket) and reports how each
+ * ended. It has no CSP on purpose: the test is about the egress guard, not about the agent's own policy.
+ */
+export const EGRESS_PROBE_HTML = `<!doctype html><meta charset="utf-8"><title>egress probe</title>
+<script>
+const results = {};
+const done = (name, value) => {
+  results[name] = value;
+  if (Object.keys(results).length === 3) fetch('/egress-result', { method: 'POST', body: JSON.stringify(results) });
+};
+fetch('https://example.com/probe.json').then(() => done('fetch', 'ok'), () => done('fetch', 'failed'));
+const img = new Image();
+img.onload = () => done('img', 'ok');
+img.onerror = () => done('img', 'failed');
+img.src = 'https://example.com/probe.png';
+const ws = new WebSocket('wss://example.com/probe');
+ws.onopen = () => done('ws', 'open');
+ws.onerror = () => done('ws', 'failed');
+</script>`;
 
 export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<FakeAgent> {
   const host = options.host ?? '127.0.0.1';
   const requests: FakeAgent['requests'] = [];
+  const probeResults: FakeAgent['probeResults'] = [];
   const server: Server = createServer((req: IncomingMessage, res) => {
     const path = (req.url ?? '/').split('?')[0] ?? '/';
     requests.push({ method: req.method ?? 'GET', path });
@@ -41,6 +65,21 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
       );
       return;
     }
+    if (req.method === 'GET' && path === '/egress-probe') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(EGRESS_PROBE_HTML);
+      return;
+    }
+    if (req.method === 'POST' && path === '/egress-result') {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        probeResults.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, string>);
+        res.writeHead(204);
+        res.end();
+      });
+      return;
+    }
     res.writeHead(404, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: 'not_found' }));
   });
@@ -53,6 +92,7 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     url: `http://${host}:${port}`,
     port,
     requests,
+    probeResults,
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));

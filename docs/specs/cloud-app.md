@@ -923,6 +923,8 @@ Registered before `SettingsModule.forRoot()` (`apps/api/src/localai/localai.sett
 | `vps.stagingSuffix` | `""` | Phase 2 (§4.10) only: appended to the node label of a published host for tests, e.g. `-staging` → `ai-n3-staging.marin.cr`. Empty in production |
 | `checklist.vpsPublicHostname` | `ai.marin.cr` | The name whose A record node hosts must match (§4.8 DNS check) |
 
+**As built (GW-02, #137).** The namespace is registered (`apps/cloud/apps/api/src/localai/localai.settings.ts`) with every key above and those of [gateway.md](gateway.md) §3.7, stored nested under `system_settings.global.value.localai`. The older readers (`alert-settings.ts`, `catalog-settings.ts`, `wizard-settings.ts`) keep reading that row and accept both the nested and the dotted form, so they need no change. `GET`/`PUT /api/localai/settings` and the per-prefix permission rule are described in [gateway.md](gateway.md) §3.8 "As built (GW-02)". The admin card of this namespace (gated on `lab:admin`) is not built yet; until it is, the route is the only way to change a setting. `gateway.tailnetSuffix` (the tailnet name) is left out of `GET` for a caller without `lab:admin` or `gateway:admin`.
+
 ### 3.11 UI pages (web, `apps/cloud/apps/web/src/localai/`)
 
 Routes added to `App.tsx` inside the packaged shell; navigation entries in `apps/web/src/config/navigation`. All pages poll their API every 5 s while visible (no SSE in v1). Colours use MUI palette tokens; colour is never the only signal (each colour has a word and an icon). Shared node-card and status-chip components come from `@localai/ui` (`packages/ui`).

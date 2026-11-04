@@ -98,17 +98,17 @@ Treat the key like a password. Don't paste it in chats, emails or screenshots.
 
 ## Part 3. Get a lab key (`lai_…`) for `https://ai.marin.cr/v1`
 
-> 🛠 Verify when implemented (Epics E6, E7).
+> 🛠 Verify when implemented (Epics E6, E7). The button and field names below are the ones in the page (GW-02); the steps have not been followed on a live deployment yet.
 
 10. Open `https://ai.marin.cr` and sign in with Google.
-11. Go to **API keys** → **Create key**. Give it a name you will recognise (for example `OpenCode laptop`), choose the models (empty = all) and an expiry date. Press **Create**.
-   - **What you should see:** the key, starting `lai_`, shown **once**, with **Copy** and ready snippets. "Store it now; it can't be shown again."
-   - **If it doesn't work:** no **Create key** button: your account doesn't have the `gateway:use` permission. Ask the lab owner.
+11. Go to **API keys** (in the side bar, or the bottom bar on a phone) → **Create key**. Type a **Name** you will recognise (for example `OpenCode laptop`), leave **Models** empty to allow every model (or type a model name and press **Enter** to allow only that one), and set **Expires in (days)**. Press **Create**.
+   - **What you should see:** a box with your key, starting `lai_`, shown **once**, with a **Copy** button and three tabs of ready snippets (**curl**, **OpenCode**, **Open WebUI**). "Store it now; it can't be shown again." Press **Copy**, store the key (next step), and only then press **I have stored it**. The window will not close any other way, because the key can never be shown again.
+   - **If it doesn't work:** no **API keys** entry: your account doesn't have the `gateway:use` permission. Ask the lab owner. The page says "Unknown model": you typed a model name the lab doesn't have; leave **Models** empty or use a name from the suggestions.
 12. Store it in a private file on your computer. Type this, paste the key, press **Enter**, then **Ctrl + D**:
 
    ```
-   mkdir -p ~/.config/localai
-   install -m 600 /dev/stdin ~/.config/localai/gateway-key
+   mkdir -p ~/.config/opencode
+   install -m 600 /dev/stdin ~/.config/opencode/localai-gateway-key
    ```
 
    - **What you should see:** nothing; the file now holds the key, readable only by you.
@@ -178,7 +178,7 @@ Treat the key like a password. Don't paste it in chats, emails or screenshots.
 19. **Through the lab gateway, with a `lai_` key:**
 
    ```
-   export LAI_KEY="$(cat ~/.config/localai/gateway-key)"
+   export LAI_KEY="$(cat ~/.config/opencode/localai-gateway-key)"
    curl -s https://ai.marin.cr/v1/models -H "Authorization: Bearer $LAI_KEY"
    curl -N https://ai.marin.cr/v1/chat/completions -H "Authorization: Bearer $LAI_KEY" \
      -H "Content-Type: application/json" \
@@ -198,7 +198,7 @@ Treat the key like a password. Don't paste it in chats, emails or screenshots.
    client = OpenAI(base_url="http://127.0.0.1:8080/v1", api_key=os.environ["LLAMA_API_KEY"])
    # Through the lab instead:
    # client = OpenAI(base_url="https://ai.marin.cr/v1",
-   #                 api_key=open(os.path.expanduser("~/.config/localai/gateway-key")).read().strip())
+   #                 api_key=open(os.path.expanduser("~/.config/opencode/localai-gateway-key")).read().strip())
 
    r = client.chat.completions.create(model="qwen3.5-9b-q4km",
                                       messages=[{"role": "user", "content": "Hola"}])
@@ -224,7 +224,7 @@ Rotate a key when it may have leaked (pasted somewhere, a laptop lost, a person 
    - **What keeps working by itself:** the cloud and the gateway (`https://ai.marin.cr/v1`) get the new key automatically. Clients using a `lai_` key need nothing.
    - **If it doesn't work:** exit with `LAI-LLM-001`: the key **was** rotated but the AI didn't restart; run `aictl restart llama`. Gateway errors `LAI-GW-043` afterwards: run `sudo aictl cloud resend-key` on the node.
 
-22. **Replace a lab key (`lai_…`).** At `https://ai.marin.cr` → **API keys**, press **Revoke** on the old key, then **Create key** (Part 3) and put the new key into the program. The old key stops working on the next request.
+22. **Replace a lab key (`lai_…`).** At `https://ai.marin.cr` → **API keys**, press **Revoke** on the old key and confirm with **Revoke** in the window that asks, then **Create key** (Part 3) and put the new key into the program. The old key stops working on the next request.
 
 23. **The agent token** (`lat_…`, used by the desktop app and `aictl` over the network fallback; not an AI key):
 
