@@ -129,6 +129,7 @@ func New(opts Options) (*Server, error) {
 	h = s.originCheck(h) // step 3
 	h = s.hostCheck(h)   // step 2
 	h = s.observe(h)     // access log, panic recovery
+	h = s.portalCSP(h)   // the one CSP of /portal* and /maps/ (survival-portal.md section 4.11)
 	h = s.requestID(h)   // step 1
 	s.handler = h
 	return s, nil
