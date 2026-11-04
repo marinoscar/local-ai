@@ -26,4 +26,12 @@ export const LOCALAI_RAW_SQL: readonly { readonly file: string; readonly why: st
       'from the node row, bound as a parameter and cast to uuid), never request text. localai_nodes has no row-level security ' +
       'and no user scope.',
   },
+  {
+    file: 'localai/gateway/policies/policy.store.ts',
+    why:
+      'A model policy write takes pg_advisory_xact_lock so two concurrent writes cannot both pass the "alias is unique across ' +
+      'policies" check, which is done in the service and not by a constraint (gateway.md section 3.6); Prisma cannot take an ' +
+      'advisory lock. The only value is a constant lock key bound as a parameter, never request text. localai_model_policies ' +
+      'has no row-level security and no user scope.',
+  },
 ];
