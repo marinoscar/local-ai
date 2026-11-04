@@ -89,6 +89,7 @@ export class GatewayService {
         connectMs: settings.timeouts.connectMs,
         firstByteMs: resolved.policy.firstByteTimeoutS !== null ? resolved.policy.firstByteTimeoutS * 1000 : settings.timeouts.firstByteMs,
         idleMs: settings.timeouts.idleMs,
+        totalMs: settings.timeouts.totalMs,
       };
       request.clientWantsUsageChunk = clientWantsUsageChunk(body);
       request.upstreamBody = serialiseBody(body, { modelId: resolved.modelId, stream, forceUsageChunk: spec.forceUsageChunk });
