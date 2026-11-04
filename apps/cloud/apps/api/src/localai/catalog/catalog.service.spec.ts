@@ -433,6 +433,22 @@ describe('CatalogService', () => {
       });
       expect((await service.get('2026.11.03-1')).diff).toBeUndefined();
     });
+
+    it("names the approver by display name in the list and in a version's detail, and by null when unknown", async () => {
+      const { service, table } = build();
+      table.rows.push(
+        draftRow('2026.11.02-1', 'approved', { approvedById: ACTOR, approvedBy: { displayName: 'Person A' } }),
+        draftRow('2026.11.01-1', 'superseded', { approvedById: ACTOR, approvedBy: { displayName: null } }),
+        draftRow('2026.11.03-1', 'draft'),
+      );
+      const list = await service.list();
+      expect(list.map((item) => [item.version, item.approvedByName])).toEqual([
+        ['2026.11.03-1', null],
+        ['2026.11.02-1', 'Person A'],
+        ['2026.11.01-1', null],
+      ]);
+      expect((await service.get('2026.11.02-1')).approvedByName).toBe('Person A');
+    });
   });
 
   describe('forNode (the node route)', () => {
