@@ -477,7 +477,14 @@ export interface paths {
         };
         /**
          * Detected AI-ARK drives
-         * @description Shape owned by ark-sync.md section 3.5. agent.md section 3.8.17.
+         * @description Shape owned by ark-sync.md section 3.5 and 4.1.2. agent.md section 3.8.17. Every drive whose
+         *     filesystem label is exactly `AI-ARK`, mounted or only plugged in: the mounted ones in mount
+         *     order (the best-copy order), then the ones that are not mounted. `problems[].title` and `.fix`
+         *     are in the language of the request (Accept-Language, else `ui.language`). `root_id` is null
+         *     only when there is no usable filesystem UUID (a drive that is not ext4); `mount` is null for a
+         *     drive that is not mounted; `ready` is null until a readiness report exists for the root. A node
+         *     with no AI-ARK drive answers an empty list.
+         *
          */
         get: operations["listArkDrives"];
         put?: never;
@@ -536,7 +543,14 @@ export interface paths {
         put?: never;
         /**
          * Re-verify content (bit rot)
-         * @description Runs as a run of trigger `verify`, sharing the run slot with sync. ark-sync.md section 3.5. agent.md section 3.8.19.
+         * @description Starts a run of trigger `verify` that re-hashes what is stored, oldest `last_reverified_at` first, and
+         *     shares the run slot with sync (`409 LAI-SYN-005`). It reads local disks only, so it is allowed in every
+         *     mode. Without `full` and `items` it checks the copies not checked in `sync.reverify_days`, within
+         *     `sync.reverify_budget_minutes`; `full: true` checks everything with no budget; a named item is checked
+         *     whatever its age. A copy that no longer matches its MANIFEST is `LAI-SYN-025`: on a writable root it is
+         *     moved to quarantine (an older version in `.trash` is put back first), on a read-only root it is excluded
+         *     in memory and nothing is written. ark-sync.md sections 3.5 and 4.13. agent.md section 3.8.19.
+         *
          */
         post: operations["verifyArk"];
         delete?: never;
@@ -556,9 +570,15 @@ export interface paths {
         put?: never;
         /**
          * Import content from another root
-         * @description Works in every mode (no network). With `dry_run: true` the answer is `200` with the plan. `from_root`
-         *     absent and several drives mounted is `409 LAI-ARK-015` with `details.roots`. ark-sync.md section 3.5
-         *     and 4.14. agent.md section 3.8.20.
+         * @description Copies verified items from an AI-ARK drive to the internal root. Works in every mode (no network is
+         *     used, and the downloader of an import refuses every dial). With `dry_run: true` the answer is `200`
+         *     with the plan (a list with the plan of the internal root; nothing is written) and no run slot is
+         *     taken. `from_root` absent and several drives mounted is `409 LAI-ARK-015` with `details.roots`.
+         *     `catalog: true` installs the drive's catalog first when it is newer and valid (an invalid one is
+         *     `LAI-CAT-002` in the run's `warnings` and the import goes on). An item the profile does not list is
+         *     refused (`not_in_profile`) unless `add_to_profile` is set, which needs `items` and admin* (`403`
+         *     with `details.pin_required` for an operator without the PIN; not needed for a dry run). The run has
+         *     trigger `import`. ark-sync.md sections 3.5 and 4.14. agent.md section 3.8.20.
          *
          */
         post: operations["importArk"];
@@ -582,9 +602,15 @@ export interface paths {
         put?: never;
         /**
          * Safely eject a drive
-         * @description Stops using the drive, syncs, flushes and unmounts. `force: true` unloads models whose only copy is on
-         *     the drive instead of refusing. The event `drive.unmounted` follows. ark-sync.md section 3.5 and 4.1.5.
-         *     agent.md section 3.8.20a.
+         * @description Stops using the drive, syncs, flushes and unmounts. The checks (the agent's own transfers, the drive
+         *     users such as the router, and a walk of `/proc/*\/fd` and `/proc/*\/cwd`) run before the answer: if
+         *     something still uses the drive the answer is `409 LAI-ARK-009` with the blockers and the drive goes back
+         *     to the state it had. Otherwise the answer is `202` and the unmount (`syncfs`, `umount`, power-off)
+         *     follows; the event `drive.unmounted` with `safe_to_unplug: true` says the drive can be unplugged. If that
+         *     unmount then fails, the drive goes back to its state, no event is published and `LAI-ARK-009` is raised
+         *     as an alert. `force: true` unloads models whose only copy is on the drive instead of refusing; it
+         *     never overrides a program that has a file open. A drive that is mounted but not set up (state
+         *     `uninitialized`) can be ejected too. ark-sync.md section 3.5 and 4.1.5. agent.md section 3.8.20a.
          *
          */
         post: operations["ejectArkDrive"];
@@ -608,9 +634,12 @@ export interface paths {
         put?: never;
         /**
          * Initialize an empty AI-ARK filesystem
-         * @description Creates `localai/` and `ROOT.json`. Only for a drive in state `uninitialized`; any other state is
-         *     `409 LAI-AGT-020` with `details.state`. Refused if `<mount>/localai` already exists. ark-sync.md
-         *     section 3.5. agent.md section 3.8.20a.
+         * @description Creates `localai/` with the full layout and a valid `ROOT.json` (kind `ark_drive`, the default drive
+         *     profile), then writes the drive extras (`START-HERE.html`, the inventory copy). Only for a drive in
+         *     state `uninitialized`; any other state is `409 LAI-AGT-020` with `details.state`. Refused (the same
+         *     code, `details.reason: localai_exists`) if `<mount>/localai` already holds anything; an empty
+         *     directory counts as none. It never formats and never removes anything. ark-sync.md section 3.5.
+         *     agent.md section 3.8.20a.
          *
          */
         post: operations["initArkDrive"];
@@ -634,7 +663,11 @@ export interface paths {
         put?: never;
         /**
          * Mount a detected but unmounted AI-ARK filesystem
-         * @description Only for state `not_mounted`; other states are `409 LAI-AGT-020` with `details.state`. ark-sync.md section 3.5. agent.md section 3.8.20a.
+         * @description Runs `udisksctl mount --no-user-interaction -b <device>` for a plugged-in AI-ARK filesystem that is not
+         *     mounted. Only for state `not_mounted`; other states are `409 LAI-AGT-020` with `details.state`. A mount
+         *     udisksctl refuses is `409 LAI-ARK-005` with `details.reason` and `details.error`. The agent never
+         *     mounts a drive on its own. ark-sync.md section 3.5. agent.md section 3.8.20a.
+         *
          */
         post: operations["mountArkDrive"];
         delete?: never;
@@ -656,7 +689,11 @@ export interface paths {
         get?: never;
         /**
          * Set the profile a drive follows
-         * @description ark-sync.md section 3.5. agent.md section 3.8.20a.
+         * @description Checks the profile id against the catalog and writes it into the drive's `ROOT.json`; keys the agent
+         *     does not know are kept. The drive must be mounted, set up and writable (`409 LAI-AGT-020` with
+         *     `details.state`, or `409 LAI-ARK-003` for a read-only drive). ark-sync.md section 3.5. agent.md section
+         *     3.8.20a.
+         *
          */
         put: operations["setArkDriveProfile"];
         post?: never;
@@ -1831,16 +1868,27 @@ export interface components {
             fs_errors?: number;
             initialized?: boolean;
             profile?: string | null;
-            ready?: {
+            ready?: ({
                 overall: string;
                 /** Format: date-time */
                 generated_at: string;
             } & {
                 [key: string]: unknown;
-            };
-            problems?: {
+            }) | null;
+            problems?: ({
+                code: string;
+                /** @enum {string} */
+                severity?: "info" | "warning" | "error" | "critical";
+                title: string;
+                fix?: string;
+                details?: {
+                    [key: string]: unknown;
+                };
+            } & {
                 [key: string]: unknown;
-            }[];
+            })[];
+            /** @description A plain-language note for a state that has no doctor code of its own (a damaged ROOT.json). Not translated. */
+            detail?: string;
         } & {
             [key: string]: unknown;
         };
@@ -1950,9 +1998,6 @@ export interface components {
              */
             state: "cancelling" | "idle";
         };
-        RunAccepted: {
-            run_id: string;
-        };
         VerifyRequest: {
             roots?: string[];
             items?: string[];
@@ -1960,10 +2005,14 @@ export interface components {
             full: boolean;
         };
         ImportRequest: {
-            /** @description A root id. Absent with several drives mounted is 409 LAI-ARK-015. */
+            /** @description A root id. Absent means the only mounted drive; with several mounted it is 409 LAI-ARK-015 (details.roots). */
             from_root?: string;
+            /** @description Catalog ids; empty means everything the profile wants that the drive holds. */
             items?: string[];
-            /** @default false */
+            /**
+             * @description Append the named items the profile does not list to node.yaml profile_overrides. Needs items and admin* (not for a dry run).
+             * @default false
+             */
             add_to_profile: boolean;
             /** @default false */
             catalog: boolean;
@@ -3397,13 +3446,13 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunAccepted"];
+                    "application/json": components["schemas"]["SyncAccepted"];
                 };
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            /** @description LAI-SYN-005: a run is already active. */
+            /** @description LAI-SYN-005: a run is already active (details.run_id). LAI-ARK-001: no root can be read. */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
@@ -3432,7 +3481,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SyncPlan"];
+                    "application/json": components["schemas"]["SyncPlan"][];
                 };
             };
             /** @description The run started. */
@@ -3443,17 +3492,18 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunAccepted"];
+                    "application/json": components["schemas"]["SyncAccepted"];
                 };
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            /** @description LAI-SYN-005 a run is already active; LAI-ARK-015 several drives are mounted and from_root is absent (details.roots). */
+            /** @description LAI-SYN-005 a run is already active (details.run_id); LAI-ARK-015 several drives are mounted and from_root is absent (details.roots); LAI-ARK-004 the drive is unclean; LAI-ARK-001 the internal root cannot be written. */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            /** @description LAI-CAT-003: the profile of the internal root is not in the catalog. */
+            422: components["responses"]["Unprocessable"];
             500: components["responses"]["Internal"];
             503: components["responses"]["Starting"];
         };
@@ -3489,7 +3539,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description LAI-ARK-009: something still uses the drive (details.blockers: kind process, model or sync, name, pid). */
+            /** @description LAI-ARK-009: something still uses the drive (details.blockers: kind process, model or sync, name, pid). LAI-AGT-020: the drive is not mounted, or is already ejecting (details.state). LAI-AGT-022: another action is running on the drive. */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
@@ -3528,7 +3578,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description LAI-AGT-020: the drive is not uninitialized (details.state), or localai/ already exists. */
+            /** @description LAI-AGT-020: the drive is not uninitialized (details.state), or localai/ already holds content (details.reason localai_exists). LAI-AGT-022: another action is running on the drive. LAI-ARK-003, LAI-ARK-014, LAI-SYN-040: the drive could not be written (read-only, I/O error, full). */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
@@ -3567,7 +3617,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description LAI-AGT-020: the drive is not in state not_mounted (details.state). */
+            /** @description LAI-AGT-020: the drive is not in state not_mounted (details.state). LAI-ARK-005: udisksctl could not mount it (details.reason, details.error). LAI-AGT-022: another action is running on the drive. */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
@@ -3606,6 +3656,8 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description LAI-AGT-020: the drive is not mounted, not set up or ejecting (details.state). LAI-ARK-003: the drive is read-only. LAI-CAT-001: no catalog is loaded (details.reason no_catalog). LAI-AGT-022: another action is running on the drive. */
+            409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             /** @description LAI-CAT-003: unknown profile id. */

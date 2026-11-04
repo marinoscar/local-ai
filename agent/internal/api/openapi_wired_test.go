@@ -38,7 +38,7 @@ func spec(t *testing.T) *apispec.Spec {
 // of the auth service (auth.Service.Routes), GET /doctor (api.DoctorRoute), the three /mode routes
 // (api.ModeRoutes), the five routes of statusapi.Routes, GET /portal/status (portal.Route), the three model
 // operation routes (api.ModelOpsRoutes), the four /cloud routes (api.CloudRoutes), POST, GET and
-// DELETE /ark/sync (api.ArkSyncRoutes) and GET /ark (api.ArkRoutes).
+// DELETE /ark/sync (api.ArkSyncRoutes), GET /ark (api.ArkRoutes) and GET /ark/drives (api.ArkDrivesRoutes).
 //
 // A later issue whose routes come from a constructor adds it HERE, with fakes for its dependencies, in
 // the PR that deletes the operations' x-localai-status: planned and x-localai-issue from openapi.yaml.
@@ -92,6 +92,16 @@ func implementedRoutes(t *testing.T) []api.Route {
 	routes = append(routes, api.ArkRoutes(api.ArkDeps{})...)
 	// POST /ark/prune (SYNC-08); the pruner is not called, so it stays nil.
 	routes = append(routes, api.ArkPruneRoutes(api.ArkPruneDeps{})...)
+
+	// GET /ark/drives (SYNC-02); the view is not called, so it stays nil.
+	routes = append(routes, api.ArkDrivesRoutes(api.ArkDrivesDeps{})...)
+
+	// POST eject, init and mount and PUT profile of /ark/drives/{root_id} (SYNC-03); the operations are
+	// not called, so they stay nil.
+	routes = append(routes, api.ArkDriveRoutes(api.ArkDriveDeps{})...)
+	// POST /ark/verify and POST /ark/import (SYNC-13); the starter and the importer are not called, so they stay nil.
+	routes = append(routes, api.ArkVerifyRoutes(api.ArkVerifyDeps{})...)
+	routes = append(routes, api.ArkImportRoutes(api.ArkImportDeps{})...)
 	return routes
 }
 
@@ -131,7 +141,7 @@ func TestPlannedOperations(t *testing.T) {
 		issue, _ := op.Raw["x-localai-issue"].(string)
 		byIssue[issue] = append(byIssue[issue], op.Key())
 	}
-	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs", "GET /doctor", "GET /mode", "POST /mode", "POST /mode/survival", "GET /status", "GET /portal/status", "GET /profile", "PUT /profile", "GET /catalog", "POST /catalog/refresh", "POST /models/{id}/load", "POST /models/{id}/unload", "PUT /models/default", "GET /models", "GET /models/{id}", "DELETE /models/{id}", "POST /models/{id}/download", "GET /key", "POST /key/rotate", "GET /cloud", "DELETE /cloud", "POST /cloud/enroll", "POST /cloud/resend-key", "POST /drill", "GET /drill", "DELETE /drill", "POST /drill/manual", "POST /ark/sync", "GET /ark/sync", "DELETE /ark/sync", "POST /speech/tts", "GET /speech/voices", "GET /ark", "POST /ark/prune"} {
+	for _, key := range []string{"GET /health", "GET /events", "POST /session", "POST /session/code", "DELETE /session", "POST /ui-code", "POST /pin/verify", "GET /hardware", "GET /services", "POST /services/{name}/{action}", "GET /logs", "GET /doctor", "GET /mode", "POST /mode", "POST /mode/survival", "GET /status", "GET /portal/status", "GET /profile", "PUT /profile", "GET /catalog", "POST /catalog/refresh", "POST /models/{id}/load", "POST /models/{id}/unload", "PUT /models/default", "GET /models", "GET /models/{id}", "DELETE /models/{id}", "POST /models/{id}/download", "GET /key", "POST /key/rotate", "GET /cloud", "DELETE /cloud", "POST /cloud/enroll", "POST /cloud/resend-key", "POST /drill", "GET /drill", "DELETE /drill", "POST /drill/manual", "POST /ark/sync", "GET /ark/sync", "DELETE /ark/sync", "POST /speech/tts", "GET /speech/voices", "GET /ark", "POST /ark/prune", "POST /ark/drives/{root_id}/eject", "POST /ark/drives/{root_id}/init", "POST /ark/drives/{root_id}/mount", "PUT /ark/drives/{root_id}/profile", "POST /ark/verify", "POST /ark/import"} {
 		if !implementedKeys[key] {
 			t.Errorf("%s must be implemented", key)
 		}

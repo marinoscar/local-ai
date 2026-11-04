@@ -1,0 +1,5 @@
+501 29 8:17 / /mnt/rw-both rw,relatime - ext4 /dev/sdb1 rw,errors=remount-ro
+502 29 8:33 / /mnt/ro-mount ro,relatime - ext4 /dev/sdc1 rw,errors=remount-ro
+503 29 8:49 / /mnt/ro-super rw,relatime - ext4 /dev/sdd1 ro,errors=remount-ro
+504 29 8:65 / /mnt/ro-both ro,nosuid,relatime - ext4 /dev/sde1 ro
+505 29 8:81 / /mnt/not-ro-despite-the-name rw,relatime - ext4 /dev/sdf1 rw,errors=remount-ro,usrquota

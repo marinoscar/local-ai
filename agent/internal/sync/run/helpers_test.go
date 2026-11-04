@@ -167,6 +167,8 @@ type fakePlanner struct {
 	items map[string]plan.CatalogItem
 	err   error
 	reqs  []PlanRequest
+	// warnings are handed back with every plan.
+	warnings []string
 }
 
 func (p *fakePlanner) Roots() []ark.Root {
@@ -182,7 +184,7 @@ func (p *fakePlanner) Plan(ctx context.Context, req PlanRequest) (Plans, error) 
 	if p.err != nil {
 		return Plans{}, p.err
 	}
-	out := Plans{CatalogVersion: "2026.11.02-1", MinFree: map[string]int64{}, Item: func(id string) (plan.CatalogItem, bool) {
+	out := Plans{CatalogVersion: "2026.11.02-1", MinFree: map[string]int64{}, Warnings: p.warnings, Item: func(id string) (plan.CatalogItem, bool) {
 		it, ok := p.items[id]
 		return it, ok
 	}}

@@ -155,6 +155,9 @@ const (
 	ReasonReadOnly    Reason = "read_only"
 	ReasonBackend     Reason = "backend"
 	ReasonCatalogPin  Reason = "catalog_pin"
+	// ReasonNotInProfile: an import was asked for an item the internal profile does not list, without
+	// add_to_profile (ark-sync.md section 4.14). The item is refused with a message.
+	ReasonNotInProfile Reason = "not_in_profile"
 )
 
 // Source says where the bytes of a download or update come from.

@@ -75,6 +75,15 @@ const (
 	ActionKitExportBuild = "kit.export_build"
 	// ActionArkPrune is a prune of orphans and trash (aictl ark prune, POST /ark/prune).
 	ActionArkPrune = "ark.prune"
+	// ActionArkEject, ActionArkInit and ActionArkMount are the drive actions (aictl ark eject, init and
+	// mount; POST /ark/drives/{root_id}/eject, init and mount). ActionArkProfileSet is the change of the
+	// profile a drive follows (aictl ark drives set-profile).
+	ActionArkEject      = "ark.eject"
+	ActionArkInit       = "ark.init"
+	ActionArkMount      = "ark.mount"
+	ActionArkProfileSet = "ark.profile.set"
+	// ActionArkImport is an import from an ark drive (aictl ark import, POST /ark/import).
+	ActionArkImport = "ark.import"
 )
 
 // Actor is the "actor" object of an audit line.

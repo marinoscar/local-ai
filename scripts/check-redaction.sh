@@ -37,6 +37,11 @@ esac
 # MAINTAINERS files name real people, which is not lab inventory).
 skip='^(scripts/check-redaction\.sh|\.gitleaks\.toml|agent/vendor/.*)$'
 
+# The catalog carries real upstream sha256 pins (decision for issue #251). In exactly these two files a
+# 64-hex value is allowed when it is the value of a `sha256:` key; nothing else changes there: a bare
+# 64-hex string, a token, an IP or an email in them is still a leak, and every other file stays strict.
+catalog_pins='^catalog/(ark|models)\.yaml$'
+
 # Directory of must-fail fixtures: skipped in tree/staged scans, but only when the
 # marker file is present, and only for this one directory (a stray marker elsewhere
 # must never disable scanning).
@@ -83,6 +88,9 @@ for f in "${files[@]}"; do
   else
     [[ -f "$f" ]] || continue
     cat -- "$f" >"$tmp"
+  fi
+  if [[ "$f" =~ $catalog_pins ]]; then
+    sed -E -i 's/(sha256:[[:space:]]*"?)[0-9a-fA-F]{64}/\1<pin>/g' "$tmp"
   fi
   scanned=$((scanned + 1))
   lines=""

@@ -512,6 +512,21 @@ func (d *Daemon) buildServer() error {
 			}
 			return api.RegisterArk(reg, api.ArkDeps{Ready: d.ark.ready})
 		}},
+		{"ark drives", func() error {
+			if d.ark == nil || d.ark.drives == nil { // no stack, no detector: 503, not an empty list
+				return api.RegisterArkDrives(reg, api.ArkDrivesDeps{Drives: noDrives{}})
+			}
+			return api.RegisterArkDrives(reg, api.ArkDrivesDeps{Drives: d.ark.drivesView()})
+		}},
+		{"ark drive actions", func() error {
+			deps := api.ArkDriveDeps{Audit: d.audit, Logger: d.log}
+			if d.ark == nil || d.ark.driveActions == nil { // no detector, nothing to act on: 503
+				deps.Ops = noDriveOps{}
+			} else {
+				deps.Ops = d.ark.driveOps()
+			}
+			return api.RegisterArkDrive(reg, deps)
+		}},
 		{"ark sync", func() error {
 			if d.ark == nil { // no Starter and no Control: a real start, GET and DELETE answer 503
 				return api.RegisterArkSync(reg, api.ArkSyncDeps{Planner: arkUnavailable{}})
@@ -525,6 +540,18 @@ func (d *Daemon) buildServer() error {
 				return api.RegisterArkPrune(reg, api.ArkPruneDeps{Pruner: arkUnavailable{}, Audit: d.audit, Logger: d.log})
 			}
 			return api.RegisterArkPrune(reg, api.ArkPruneDeps{Pruner: adapt.Pruner{Engine: d.ark.engine, Retention: d.ark.ret}, Audit: d.audit, Logger: d.log})
+		}},
+		{"ark verify", func() error {
+			if d.ark == nil { // the stack did not come up: the route answers 503
+				return api.RegisterArkVerify(reg, api.ArkVerifyDeps{Starter: arkUnavailable{}})
+			}
+			return api.RegisterArkVerify(reg, api.ArkVerifyDeps{Starter: adapt.VerifyStarter{Engine: d.ark.engine}})
+		}},
+		{"ark import", func() error {
+			if d.ark == nil {
+				return api.RegisterArkImport(reg, api.ArkImportDeps{Importer: arkUnavailable{}, Audit: d.audit, Logger: d.log})
+			}
+			return api.RegisterArkImport(reg, api.ArkImportDeps{Importer: adapt.Importer{Engine: d.ark.engine, Planner: d.ark.importer}, Audit: d.audit, Logger: d.log})
 		}},
 		{"speech", func() error { return reg.Add(d.piper.Routes()...) }},
 	}
@@ -574,7 +601,7 @@ func (d *Daemon) buildClaimPlane(sdeps statusapi.Deps) error {
 		State: c.State, Hardware: c.Hardware, Clock: d.env.CloudClock, AgentUpdate: d.updater,
 	}
 	if d.ark != nil {
-		jd.Ark = arkJobs{adapt.Jobs{Engine: d.ark.engine}}
+		jd.Ark = d.ark.jobsArk()
 	}
 	var recoverFn func(context.Context, cloud.InflightEntry) bool
 	if d.updater != nil {

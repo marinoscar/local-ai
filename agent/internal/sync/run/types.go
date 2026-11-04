@@ -166,13 +166,37 @@ type RunContext struct {
 	Roots   []string
 	// Run is the run's journal, for a hook that records events.
 	Run *journal.Run
+	// Begin tells a verify run how many copies and bytes it is about to read, for GET /ark/sync.
+	Begin func(items int, bytes int64)
+	// Record settles one checked copy: the run counts it, lists it in its items, publishes
+	// sync.item_done and refreshes READY of its root at the end. Result is verified, quarantined,
+	// skipped or failed. In a run that is not a verify run only the copies that are not fine
+	// (quarantined, failed) are recorded, so a nightly sync does not list every file it re-checked.
+	Record func(r ItemResult, bytes int64)
+}
+
+// VerifyRequest is what POST /ark/verify asks of the Verify hook.
+type VerifyRequest struct {
+	// Roots are the ids of the roots to check (every mounted root that can be read when the request
+	// named none).
+	Roots []string
+	// Items limits the check to these item ids; a named item is checked whatever its age.
+	Items []string
+	// Full ignores reverify_days and checks everything.
+	Full bool
+	// Settings are the sync: settings the run started with (reverify_days, reverify_budget_minutes).
+	Settings Settings
 }
 
 // Hooks are the run-lifecycle seams of later issues. All are optional, and none may panic the run: a
 // panic in a hook is recovered and logged.
 type Hooks struct {
 	// Reverify spends up to budget re-hashing the items with the oldest last_reverified_at (SYNC-13).
+	// A scheduled run calls it after its transfers; rc.Record reports the copies that turned out damaged.
 	Reverify func(ctx context.Context, rc RunContext, budget time.Duration)
+	// Verify is the body of a run started by POST /ark/verify (trigger verify): it checks the copies
+	// the request asks for and reports each through rc.Record. Without it such a run fails.
+	Verify func(ctx context.Context, rc RunContext, req VerifyRequest)
 	// Extras writes the drive extras (START-HERE, the inventory copy; SYNC-14).
 	Extras func(ctx context.Context, rc RunContext)
 	// Report sends the run to the cloud (SYNC-14).
@@ -196,6 +220,21 @@ type Plans struct {
 	// MinFree is min_free_bytes per root id (the profile's for the internal root, 2 % of the
 	// filesystem, at least 5 GB, for a drive).
 	MinFree map[string]int64
+	// Warnings are plain notes the plan has for the run (the catalog on a drive was not valid).
+	Warnings []string
+}
+
+// ImportSpec is what makes a run an import (trigger import): where it reads from and what it may
+// change before it plans (ark-sync.md section 4.14).
+type ImportSpec struct {
+	// From is the root id of the source drive.
+	From string
+	// Items are the catalog ids asked for; empty means the whole plan.
+	Items []string
+	// AddToProfile appends a named item that the profile does not list to node.yaml.
+	AddToProfile bool
+	// Catalog installs the drive's catalog first when it is newer and valid.
+	Catalog bool
 }
 
 // PlanRequest asks for plans.
@@ -203,6 +242,9 @@ type PlanRequest struct {
 	RootIDs []string
 	// Offline: the network may not be used (the planner then plans from what the catalog pins).
 	Offline bool
+	// Import, when set, asks for the plan of an import: RootIDs is the internal root, nothing is
+	// resolved over the network, and the items come from the drive named in the spec.
+	Import *ImportSpec
 }
 
 // Planner gathers and plans. *plan.Gatherer behind GathererPlanner implements it.
@@ -233,6 +275,10 @@ type StartRequest struct {
 	Trigger string
 	OpID    string
 	Actor   audit.Actor
+	// Full is for a verify run: ignore reverify_days and check everything.
+	Full bool
+	// Import is required for an import run and ignored by any other.
+	Import *ImportSpec
 }
 
 // Started is the answer of Start.

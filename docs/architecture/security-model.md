@@ -75,10 +75,11 @@
     - any `100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.\d+\.\d+` address,
     - `tail[0-9a-f]{6}`,
     - `Z0[0-9A-Z]{10,}`,
-    - 64-hex strings outside test fixtures,
+    - 64-hex strings outside test fixtures, except a catalog pin (next bullet),
     - `\b(lat|nod|lai|pat)_[A-Za-z0-9_-]{20,}` (word boundary, so `localai_*` metric names are fine),
     - and, if `inventory.local.yaml` exists locally, any of its literal values.
   - gitleaks runs in CI with the default ruleset plus the same patterns (`.gitleaks.toml`).
+  - **Catalog sha256 pins.** The catalog must carry real upstream digests, so in exactly `catalog/ark.yaml` and `catalog/models.yaml` a 64-hex value is allowed when it is the value of a `sha256:` key. A bare 64-hex string, a token, an IP or an email in those files is still a leak, and every other file (including other files in `catalog/`) stays strict. A digest is public integrity data, not a credential; the rule is path- and key-scoped so a real key pasted there is still caught. `scripts/tests/test-redaction.sh` proves the limits. The default gitleaks ruleset does not flag these pins, so `.gitleaks.toml` is unchanged. (Decision for issue #251.)
   - Modes: no argument scans the tree, `--staged` scans the git index (pre-commit, installed by `scripts/install-hooks.sh`), `--file <path>` scans one file (tests). Output is `LEAK <file>:<line>` and never the matched value. Email addresses are also forbidden, except `noreply@…` and `…@example.test`.
   - `agent/vendor/` (third-party Go source, byte-for-byte what `go mod vendor` writes and CI verifies) is not scanned: the license, AUTHORS and MAINTAINERS files of a dependency name real people, and nothing there is ours.
   - Must-fail test fixtures live in `scripts/tests/redaction/` and are skipped by tree and staged scans only while `scripts/tests/redaction/.redaction-fixtures` exists. `scripts/tests/test-redaction.sh` proves each fixture fails and each look-alike passes; CI runs it.

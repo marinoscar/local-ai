@@ -344,6 +344,7 @@ func (d *Daemon) stepSubsystems(ctx context.Context) error {
 	d.startWorker(c.Watcher)
 	if d.ark != nil {
 		d.startWorker(d.ark.driveWorker()) // a drive that goes away stops the transfers writing to it
+		d.ark.startDrives()                // after it: the first pass publishes drive.mounted for a drive already plugged in
 	}
 	// The drill reporter reads the kept documents (and stamps drill.watch_since on a node that never
 	// ran a drill), so the drill alerts are derived by the first pass below.
