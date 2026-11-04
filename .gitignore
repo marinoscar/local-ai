@@ -18,6 +18,7 @@ node_modules/
 *.AppImage
 *.deb
 /apps/desktop/release/
+/apps/desktop/out/
 
 # Content (models, ZIMs, maps never go in git)
 *.gguf
