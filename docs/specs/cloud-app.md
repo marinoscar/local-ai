@@ -155,7 +155,7 @@ Rules:
 Sign-in is EAB's Google OAuth only. Environment (§3.13): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL=https://ai.marin.cr/api/auth/google/callback`, `INITIAL_ADMIN_EMAIL=<ADMIN_EMAIL>`, `TENANCY_MODE=single`.
 
 - `<ADMIN_EMAIL>` bypasses the allowlist and becomes the system `admin` plus `org_admin` of the default organization (EAB behaviour).
-- Every other person must be on the **email allowlist** (`/admin/settings/allowlist`). Entries are individual addresses, never a whole domain (EAB security note on pre-hijack). A new user joins the default org with EAB's default role `viewer`.
+- Every other person must be on the **email allowlist** (the **Allowlist** tab of the packaged *Users & Allowlist* page, `/admin/settings/users`; the allowlist is content inside that page, not a route of its own). Entries are individual addresses, never a whole domain (EAB security note on pre-hijack). A new user joins the default org with EAB's default role `viewer`.
 - The Google OAuth client's authorised redirect URI is exactly `https://ai.marin.cr/api/auth/google/callback`. The OAuth consent screen stays in "Testing" with the allowed test users, or "Internal"; it is never public.
 
 **Local AI permissions** are declared in `apps/api/src/localai/localai.permissions.ts` and added to `app.permissions` in `apps/api/src/platform/permissions.ts`:
@@ -181,6 +181,10 @@ export const LOCALAI_PERMISSIONS = {
 | `org_admin` only | Trusted operator | ✓ | ✓ | | ✓ | |
 | `contributor` | Family member / power user | ✓ | ✓ | | ✓ | |
 | `viewer` (default) | Can look, cannot touch | ✓ | | | | |
+
+The five ids are permanent strings. They are exported by `LOCALAI_PERMISSIONS` and registered as the app's own batch in `PERMISSION_OPTIONS` (`app: { permissions: [LOCALAI_PERMISSIONS] }`), so the seed (`platformPermissionCatalog`) and the registries (`registerPlatformPermissions`) carry them and the EAB `identity` conformance suite checks every route's `@Auth` permission against them. Tests: `src/localai/localai.permissions.spec.ts` (ids, scopes and the 4 role rows by 5 permissions matrix against the seeded catalog) and `test/localai-rbac.spec.ts` (the real guards over HTTP through a test-only probe controller, one route per permission: a `viewer` gets 403 on a `lab:operate` route, a `contributor` gets 200). The probe lives in `test/`, never in `src/`; the real routes arrive with CLOUD-09, CLOUD-10 and GW-02.
+
+**Environment.** `TENANCY_MODE=single`, `GOOGLE_CALLBACK_URL` and `INITIAL_ADMIN_EMAIL` are already declared once by the platform's `.env.example` (generated, so the committed defaults are the platform's: `single`, a localhost callback and an example address). `app.env.example` therefore declares no second copy, which the deploy wizard would list twice; it documents the values this deployment sets (§3.13 table) as prose, and the wizard writes them into `.env` at deploy time (CLOUD-18). The operator steps (adding a person, which role does what, never a whole domain) are in [runbook 10, Part 8](../runbooks/10-lab-operations.md#part-8-give-someone-access).
 
 A `nod_` credential has no org, so it gets none of these (EAB: a node credential gets its owner's **system** grants only). Node routes therefore do not use these permissions; they use the binding guard (§4.2).
 
