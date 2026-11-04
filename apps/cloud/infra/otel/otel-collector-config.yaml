@@ -1,0 +1,416 @@
+# GENERATED from @marinoscar/platform-infra@0.1.0-next.21 (telemetry) — do not edit; extend through infra/otel/app-collector.yaml or a compose overlay
+# Source of truth: @marinoscar/platform-infra/telemetry/otel/otel-collector-config.yaml; re-materialise with `npx platform-infra sync`
+# =============================================================================
+# OpenTelemetry Collector Configuration
+# =============================================================================
+# Receives telemetry from the API, strips credential-bearing attributes, and
+# exports to GreptimeDB over OTLP/HTTP (protobuf) as the write-only account.
+#
+# Traces need their own exporter: GreptimeDB rejects OTLP traces (HTTP 400)
+# unless they name an ingest pipeline (x-greptime-pipeline-name). Logs and
+# metrics must NOT carry that header, so they share a second exporter.
+#
+# Besides what the API pushes, the collector scrapes six things itself
+# (issues #597, #598, #599): the host it runs on (hostmetrics, through the
+# read-only /hostfs bind mount in telemetry.compose.yml), its own pipeline
+# counters, GreptimeDB's /metrics, the application's PostgreSQL, uptime and
+# TLS expiry (httpcheck), and nginx's stub_status. Those travel in
+# their own pipeline, `metrics/local`, because only there is it TRUE that this
+# machine produced the data -- so only there is host.name stamped with the
+# host's real name. (For PostgreSQL it names the host that scraped, not the
+# database server; the server is in the `instance` column.)
+# =============================================================================
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # The HOST, not the container. root_path makes every scraper read
+  # /hostfs/proc, /hostfs/sys and the host's mount table instead of the
+  # container's own view, so no privileged mode, pid: host or Docker socket is
+  # needed. CPU, memory, load, paging and disk counters are kernel-global and
+  # therefore genuinely the host's.
+  #
+  # NETWORK IS THE EXCEPTION (verified live, collector 0.145): the scraper
+  # reads /hostfs/proc/net/dev, and /proc/net is a symlink to /proc/self/net,
+  # which resolves to the net namespace of the process reading it -- the
+  # collector's. So system.network.* describe the collector container's
+  # interfaces (eth0 on the compose network, lo), NOT the host's NICs. They
+  # still answer "is the telemetry path moving bytes", which is why they stay;
+  # host NIC throughput would need network_mode: host, which this stack refuses
+  # (the collector must sit on the compose network, unpublished).
+  hostmetrics:
+    collection_interval: 30s
+    root_path: /hostfs
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      load:
+      paging:
+      disk:
+      network:
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+        # Real disks only. Without these, every container's overlay root,
+        # every tmpfs and every kernel pseudo-filesystem becomes a series --
+        # dozens of rows that all say "fine" and bury the one disk filling up.
+        exclude_fs_types:
+          match_type: strict
+          fs_types:
+            - autofs
+            - binfmt_misc
+            - bpf
+            - cgroup
+            - cgroup2
+            - configfs
+            - debugfs
+            - devpts
+            - devtmpfs
+            - efivarfs
+            - fuse.lxcfs
+            - fusectl
+            - hugetlbfs
+            - mqueue
+            - nsfs
+            - overlay
+            - proc
+            - pstore
+            - ramfs
+            - rpc_pipefs
+            - securityfs
+            - selinuxfs
+            - squashfs
+            - sysfs
+            - tmpfs
+            - tracefs
+        # Container runtimes bind-mount and overlay-mount beneath these; the
+        # disk behind them is already reported once through its real mount.
+        exclude_mount_points:
+          match_type: regexp
+          mount_points:
+            - ^/(dev|proc|sys|run)(/.*)?$
+            - ^/var/lib/(docker|containerd|kubelet)/.*
+            - ^/snap/.*
+            - ^/hostfs(/.*)?$
+
+  # The telemetry pipeline watching itself: the collector's own counters
+  # (accepted/refused/sent/failed points, queue size) exposed on loopback by
+  # service.telemetry below, and GreptimeDB's /metrics. Without these, a
+  # stalled export looks exactly like a quiet application.
+  prometheus/self:
+    config:
+      scrape_configs:
+        # Stored as job/service_name `otelcol-contrib`, not this job_name: the
+        # collector's own exposition carries its service.name, which wins.
+        - job_name: otel-collector
+          scrape_interval: 30s
+          static_configs:
+            - targets: ["127.0.0.1:8888"]
+        # /metrics answers without credentials even with the static user
+        # provider on (verified live, GreptimeDB v1.2.1), so no basic_auth: a
+        # password in a scrape config is one more place it could leak from.
+        - job_name: greptimedb
+          scrape_interval: 30s
+          static_configs:
+            - targets: ["greptimedb:4000"]
+          # Every metric becomes its own table, and GreptimeDB exports ~130 of
+          # them (mito internals, opendal, metadata cache...) that would bury
+          # the explorer's table list. Kept: is it up and which version, what
+          # the HTTP/OTLP front door is doing (requests, latency, auth
+          # failures, rows ingested), whether writes are stalling or memory is
+          # at its limit, and the process's own CPU/RSS/fds.
+          metric_relabel_configs:
+            - source_labels: [__name__]
+              action: keep
+              regex: greptime_app_version|greptime_(servers|frontend)_.*|greptime_mito_(write_stalling_count|write_buffer_bytes|region_count|flush_requests_total|flush_bytes_total)|greptime_table_operator_ingest_rows_total|greptime_(memory|cpu)_limit_.*|process_.*
+
+  # The application's PostgreSQL (issue #598): the SAME server and database the
+  # API connects to (POSTGRES_HOST/PORT/DB, passed through by
+  # telemetry.compose.yml), read from the statistics views -- nothing here
+  # needs superuser, or even SELECT on an application table. It logs in as
+  # POSTGRES_MONITOR_USER, a role holding only pg_monitor (docs give the SQL);
+  # left blank, compose falls back to the API's own POSTGRES_USER, which works
+  # but hands a telemetry component the application's full credentials.
+  #
+  # Server-wide and per-database numbers (connections vs. max_connections,
+  # commits, size, checkpoints and the background writer, locks) come from a
+  # connection to the `postgres` maintenance database, which the receiver
+  # ALWAYS opens first, whatever `databases` says; the per-table and per-index
+  # numbers from a second one to POSTGRES_DB. A role that cannot CONNECT to
+  # `postgres` therefore yields no metrics at all, only scrape errors in the
+  # collector log every interval. An unreachable server is the same (verified
+  # live): the collector still starts, and every other pipeline carries on.
+  postgresql:
+    endpoint: ${env:POSTGRES_HOST}:${env:POSTGRES_PORT}
+    transport: tcp
+    username: ${env:POSTGRES_MONITOR_USER}
+    password: ${env:POSTGRES_MONITOR_PASSWORD}
+    databases:
+      - ${env:POSTGRES_DB}
+    collection_interval: 30s
+    # POSTGRES_SSL, with the API's own rule: exactly the string `true` means
+    # TLS (libpq sslmode=require: encrypted, certificate not verified -- what
+    # the API's `?sslmode=require` does too); ANYTHING else means plaintext
+    # (sslmode=disable). Compose cannot negate a variable, and the receiver's
+    # switch is the inverse (`insecure: true` = no TLS), so the value is
+    # looked up by NAME: telemetry.compose.yml defines exactly one constant,
+    # POSTGRES_TLS_INSECURE_WHEN_SSL_true=false, and every other spelling of
+    # POSTGRES_SSL names a variable that does not exist and takes the `true`
+    # default after `:-`.
+    tls:
+      insecure: ${env:POSTGRES_TLS_INSECURE_WHEN_SSL_${env:POSTGRES_SSL}:-true}
+      insecure_skip_verify: true
+    metrics:
+      # Off by default in 0.145 and worth their few series each: all of these
+      # are per-DATABASE or server-wide, so they add one series (or one per
+      # lock mode) rather than one per table.
+      postgresql.deadlocks:
+        enabled: true
+      # Held locks, grouped by relation x mode x lock_type, at the moment of
+      # the scrape. The series come and go with the workload; the collector's
+      # own scrape always shows up as a few AccessShareLocks on pg_class and
+      # pg_locks.
+      postgresql.database.locks:
+        enabled: true
+      postgresql.blks_hit:
+        enabled: true
+      postgresql.blks_read:
+        enabled: true
+      postgresql.temp.io:
+        enabled: true
+      postgresql.temp_files:
+        enabled: true
+      # Per TABLE, like postgresql.table.size and postgresql.operations: a
+      # large sequential-scan count on a big table is the missing-index signal.
+      postgresql.sequential_scans:
+        enabled: true
+      # On by default, and the one per-table metric that multiplies: eight
+      # series (heap/index/toast/toast-index x hit/read) for EVERY table.
+      # postgresql.blks_hit / blks_read above answer the same cache-hit
+      # question once per database.
+      postgresql.blocks_read:
+        enabled: false
+
+  # Uptime and TLS expiry (issue #599). Every 30 s, one GET per target:
+  # httpcheck.status (one row per status class, 1 on the class that matched),
+  # httpcheck.duration (ms) and, on failure, httpcheck.error with the Go error
+  # text. Three targets, so a failure says WHERE it is:
+  #
+  #   - http://nginx/api/health/live -- the application through the edge, as
+  #     a user's request travels once it is inside the stack.
+  #   - http://api:3000/api/health/live -- the API alone. Up here but down
+  #     through nginx means the proxy is the fault. Liveness, not readiness:
+  #     it touches no database, so a PostgreSQL outage does not read as "the
+  #     API is down" (the postgresql receiver already reports that), and a
+  #     maintenance window (readiness 503) does not either.
+  #   - ${env:UPTIME_PUBLIC_URL} -- the PUBLIC origin, through DNS, the host
+  #     proxy and its certificate. On a VPS vps.telemetry.compose.yml sets it
+  #     to <APP_URL>/api/health/live, and httpcheck.tls.cert_remaining then
+  #     reports the seconds until the served certificate expires. Elsewhere
+  #     there is no public origin the collector can reach (APP_URL is
+  #     http://localhost:3535, which inside the container is the collector
+  #     itself), so telemetry.compose.yml points it at nginx's own
+  #     /nginx-health: a harmless, true check of the edge alone, and no TLS
+  #     rows. The config cannot add a target conditionally, hence a default
+  #     rather than a blank.
+  #
+  # The certificate IS verified (the default): a check that skipped
+  # verification would report "up" while every browser refused the site. The
+  # flip side: once a certificate has actually EXPIRED (or does not match),
+  # the handshake fails, cert_remaining stops being written, and the failure
+  # shows up as an httpcheck.error row whose error_message names it.
+  httpcheck:
+    collection_interval: 30s
+    targets:
+      - endpoint: http://nginx/api/health/live
+        method: GET
+      - endpoint: http://api:3000/api/health/live
+        method: GET
+      - endpoint: ${env:UPTIME_PUBLIC_URL}
+        method: GET
+    metrics:
+      # Off by default in 0.145; written only for https:// targets.
+      httpcheck.tls.cert_remaining:
+        enabled: true
+
+  # nginx edge counters (issue #599) from stub_status on nginx's INTERNAL
+  # listener (:8081, published by no compose file, allow-listed to private
+  # ranges -- see infra/nginx/nginx.conf). Connections accepted, handled and
+  # currently open by state, and total requests.
+  nginx:
+    endpoint: http://nginx:8081/nginx_status
+    collection_interval: 30s
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 10000
+    send_batch_max_size: 11000
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  # Telemetry is readable by anyone holding the read-only account (explorer,
+  # AI assistant, BI tools), so credentials must never reach storage. A deleted
+  # attribute never becomes a GreptimeDB column at all.
+  attributes/redact:
+    actions:
+      - key: http.request.header.authorization
+        action: delete
+      - key: http.request.header.cookie
+        action: delete
+      - key: http.response.header.set-cookie
+        action: delete
+      # Query strings can carry OAuth codes, state and device codes.
+      - key: url.query
+        action: delete
+
+  # The host's real name, for metrics this collector scraped itself. Inside a
+  # container every in-process source of a hostname -- os.Hostname(), the
+  # resourcedetection `system` detector, even /hostfs/proc/sys/kernel/hostname
+  # (the UTS namespace is the reader's) -- returns the container id, which
+  # changes on every recreate. The host's /etc/hostname, read through the
+  # /hostfs mount by the config's file provider at startup, is the one source
+  # that is right with zero configuration. Embedded in an OTTL string literal
+  # it is always a string, even for an all-digit hostname -- but it arrives
+  # byte for byte, trailing newline included (verified live: "vm\n"), hence
+  # the replace_pattern.
+  #
+  # Every systemd distribution has /etc/hostname; on a host without one the
+  # collector refuses to start and names the file, rather than silently
+  # labelling the host with a container id.
+  transform/host_name:
+    error_mode: ignore
+    metric_statements:
+      - context: resource
+        statements:
+          - set(resource.attributes["host.name"], "${file:/hostfs/etc/hostname}")
+          - replace_pattern(resource.attributes["host.name"], "\\s", "")
+
+  # GreptimeDB turns DATA POINT attributes into metric-table label columns,
+  # but of the resource attributes it keeps only a fixed few (service.name as
+  # service_name and job, service.version, deployment.environment,
+  # service.instance.id) and silently drops host.name and app.instance.id
+  # (verified live, v1.2.1). Copying those two down is what makes host_name
+  # and app_instance_id filterable columns on every metric table; a table that
+  # predates them gains the columns, NULL for old rows. service.name is NOT
+  # copied: a data point `service.name` lands in the SAME service_name column
+  # (verified), so it would add nothing but a second writer to it.
+  # `where ... != nil` keeps a source that lacks the attribute from gaining
+  # an empty label.
+  transform/promote_labels:
+    error_mode: ignore
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(datapoint.attributes["app.instance.id"], resource.attributes["app.instance.id"]) where resource.attributes["app.instance.id"] != nil
+          - set(datapoint.attributes["host.name"], resource.attributes["host.name"]) where resource.attributes["host.name"] != nil
+
+  # Same GreptimeDB behaviour as above, for the postgresql receiver: it names
+  # the database, table and index only as RESOURCE attributes, which
+  # GreptimeDB drops. Without these copies every table's
+  # postgresql_table_size_bytes row would carry the same labels and each
+  # scrape's rows would overwrite one another, leaving one arbitrary table's
+  # value per timestamp. They land as postgresql_database_name,
+  # postgresql_table_name (`public.users` on table metrics; a bare `users` on
+  # index metrics, beside postgresql_index_name) -- verified live.
+  # postgresql.schema.name is only emitted under the receiver's
+  # separateSchemaAttr feature gate, which is off; the line costs nothing
+  # until then.
+  #
+  # WHICH SERVER needs no copy: the receiver sets service.instance.id to
+  # POSTGRES_HOST:POSTGRES_PORT, and GreptimeDB keeps it, as BOTH the
+  # `instance` and `service_instance_id` columns (`db:5432`). host_name stays
+  # the collector's host, stamped above: the machine that SCRAPED, which for a
+  # managed database (RDS) is not the machine that serves.
+  transform/postgresql_labels:
+    error_mode: ignore
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(datapoint.attributes["postgresql.database.name"], resource.attributes["postgresql.database.name"]) where resource.attributes["postgresql.database.name"] != nil
+          - set(datapoint.attributes["postgresql.schema.name"], resource.attributes["postgresql.schema.name"]) where resource.attributes["postgresql.schema.name"] != nil
+          - set(datapoint.attributes["postgresql.table.name"], resource.attributes["postgresql.table.name"]) where resource.attributes["postgresql.table.name"] != nil
+          - set(datapoint.attributes["postgresql.index.name"], resource.attributes["postgresql.index.name"]) where resource.attributes["postgresql.index.name"] != nil
+
+exporters:
+  # Logs and metrics
+  otlphttp/greptime:
+    endpoint: http://greptimedb:4000/v1/otlp
+    auth:
+      authenticator: basicauth/greptime
+    headers:
+      X-Greptime-DB-Name: ${env:GREPTIME_DB}
+
+  # Traces (need the trace pipeline header)
+  otlphttp/greptime_traces:
+    endpoint: http://greptimedb:4000/v1/otlp
+    auth:
+      authenticator: basicauth/greptime
+    headers:
+      X-Greptime-DB-Name: ${env:GREPTIME_DB}
+      x-greptime-pipeline-name: greptime_trace_v1
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  basicauth/greptime:
+    client_auth:
+      username: ${env:GREPTIME_WRITER_USER}
+      password: ${env:GREPTIME_WRITER_PASSWORD}
+
+service:
+  extensions: [health_check, basicauth/greptime]
+
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/redact, batch]
+      exporters: [otlphttp/greptime_traces]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/redact, transform/promote_labels, batch]
+      exporters: [otlphttp/greptime]
+
+    # Scraped by this collector, so host.name is stamped here and nowhere
+    # else: an OTLP sender keeps whatever host.name it reported itself.
+    metrics/local:
+      receivers: [hostmetrics, prometheus/self, postgresql, httpcheck, nginx]
+      processors: [memory_limiter, attributes/redact, transform/host_name, transform/promote_labels, transform/postgresql_labels, batch]
+      exporters: [otlphttp/greptime]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/redact, batch]
+      exporters: [otlphttp/greptime]
+
+  telemetry:
+    logs:
+      level: info
+    # Exposed on loopback only, for prometheus/self above: nothing else in the
+    # stack needs it, and on the compose network it would be one more
+    # unauthenticated endpoint.
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 127.0.0.1
+                port: 8888

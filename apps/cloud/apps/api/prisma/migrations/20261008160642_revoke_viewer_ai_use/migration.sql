@@ -1,0 +1,32 @@
+-- =============================================================================
+-- Revoke `ai:use` from the Viewer role on existing deployments (issue #499)
+-- =============================================================================
+-- Viewer is the DEFAULT role every new user lands in (see `ROLES` in
+-- `prisma/seed-data.ts` and the allowlist-driven signup path). Seeding
+-- `ai:use` onto it (issue #423, epic #419) meant every fresh signup could
+-- call AI with no explicit grant — harmless under the `byok` key policy (no
+-- key, no calls succeed), but wrong under `byok_with_org_fallback`: a
+-- brand-new Viewer would silently spend the deployment's own org key the
+-- first time they touched an AI surface, with no administrator having
+-- decided that person should be able to.
+--
+-- This migration is DATA-ONLY (no `schema.prisma` change — the shape of
+-- `role_permissions` is unchanged) and undoes exactly that one grant on
+-- deployments that already ran the old seed: it deletes the single
+-- `role_permissions` row joining the role named 'viewer' and the permission
+-- named 'ai:use', and touches nothing else — not Admin's or Contributor's
+-- grants, not any other Viewer permission.
+--
+-- IDEMPOTENT: a `DELETE ... WHERE` naming both rows by subquery is a no-op if
+-- the row is already gone, or if either the 'viewer' role or the 'ai:use'
+-- permission does not exist at all (a fork that renamed or removed either).
+-- Safe to run against a database that never had the row (a fresh install
+-- seeded from the already-updated `seed-data.ts`) and safe to re-run.
+--
+-- An administrator who wants a specific Viewer (or all of them) to use AI
+-- again grants it back explicitly — re-insert a `role_permissions` row for
+-- `('viewer', 'ai:use')` — or promotes the account to Contributor, which
+-- still carries the grant.
+DELETE FROM "role_permissions"
+WHERE "role_id" = (SELECT "id" FROM "roles" WHERE "name" = 'viewer')
+  AND "permission_id" = (SELECT "id" FROM "permissions" WHERE "name" = 'ai:use');

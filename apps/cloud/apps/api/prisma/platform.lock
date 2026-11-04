@@ -1,0 +1,258 @@
+{
+  "appMigrations": [
+    "20261008180000_add_notes",
+    "20261009205750_add_documents"
+  ],
+  "lockVersion": 1,
+  "migrations": [
+    {
+      "localDir": "20261008160626_initial",
+      "originId": "platform:0001_initial",
+      "sha256": "755688a7d01e70c97f497efdbd5a72adecf9404ba20fc5fc15c748c2bb7d0d2e",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160627_add_personal_access_tokens",
+      "originId": "platform:0002_add_personal_access_tokens",
+      "sha256": "696a7bc4a974a2b0142f7183fe795d98b21a353f402ad21b3d5a5e79c06800cd",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160628_add_credentials",
+      "originId": "platform:0003_add_credentials",
+      "sha256": "825d08352a40f595a16e3086862c7d0eeb0333c8643119a618666627e87bcb32",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160629_add_notification_deliveries",
+      "originId": "platform:0004_add_notification_deliveries",
+      "sha256": "242c3fc6a3a8c68c3515b0a5f19c819e48dd0b8ee3719007a24ffcbf2d8eacdc",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160630_drop_stale_uuid_defaults",
+      "originId": "platform:0005_drop_stale_uuid_defaults",
+      "sha256": "34e3ee9325646bd77d3123090826798c7c7fc7b57938ee7cee6584a03d24d6ad",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160631_add_notifications",
+      "originId": "platform:0006_add_notifications",
+      "sha256": "56a8156d13b09f0bdfdaa6033c5cf3f0adbd0191a53680eeb2376e13a637c383",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160632_add_push_subscriptions",
+      "originId": "platform:0007_add_push_subscriptions",
+      "sha256": "7bfd542911735beae1152c3584e4ae8e131e37413d6d59054a29e9d4ab967e85",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160633_add_jobs",
+      "originId": "platform:0008_add_jobs",
+      "sha256": "29ca499509b06bc8ee11c09ed86d8d5b2385bcc9aa48fe597c0efc1ccb40febf",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160634_add_worker_nodes",
+      "originId": "platform:0009_add_worker_nodes",
+      "sha256": "d26c1412c6e293f562422bbe292e9e833f1506cb1dc3466f78eacd7bc34ea398",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160635_add_database_backup_runs",
+      "originId": "platform:0010_add_database_backup_runs",
+      "sha256": "e6a2c130a155748768148a1993b7e47cabca09236a4eeb31f8793448b389077a",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160636_add_notification_broadcasts",
+      "originId": "platform:0011_add_notification_broadcasts",
+      "sha256": "d218ee33f855f575c6633cf0d9a709cb3e0db69a83ff2d38b48c501e730d4370",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160637_add_backup_run_job_link",
+      "originId": "platform:0012_add_backup_run_job_link",
+      "sha256": "1a11a1bed116e303136bd1f7ee5065f3b470cb2cb04bb33d0c083b3dfec37144",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160638_add_job_node_secrets",
+      "originId": "platform:0013_add_job_node_secrets",
+      "sha256": "309f4a371c0d5ed62b140a10acb28a705fc92c8a1412551fc07ac20b9cb77f0a",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160639_add_backup_run_pg_dump_version",
+      "originId": "platform:0014_add_backup_run_pg_dump_version",
+      "sha256": "966c2e2af657739d7e4e447761bf93635c7e8bd41dbc31494f7118ffb4e8a67c",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160640_add_job_claim_token",
+      "originId": "platform:0015_add_job_claim_token",
+      "sha256": "22815ddb2bd4fe39edb4ec6bb11709a15df887c46c261d8d567a3a2cae7f2047",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160641_add_ai_platform",
+      "originId": "platform:0016_add_ai_platform",
+      "sha256": "89bf4f29db08eb4261b10c5bd64faa61b65d73f524af70851e019fe264fe7617",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160642_revoke_viewer_ai_use",
+      "originId": "platform:0017_revoke_viewer_ai_use",
+      "sha256": "85b27bc2d52666f8a3babc5d0abfa9f589f1844869d79fbbdaa7935e6d49b3df",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160643_add_user_credentials",
+      "originId": "platform:0018_add_user_credentials",
+      "sha256": "360316e38bf4af727fc095c65e4cac246108b9e91fc3c184646161ce7a5859fb",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160644_add_device_session_credential_link",
+      "originId": "platform:0019_add_device_session_credential_link",
+      "sha256": "e2f26e504872850a0fe799151efdf1df4f153e51db3d686f5ad7e603b1796326",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160645_add_worker_node_vitals",
+      "originId": "platform:0020_add_worker_node_vitals",
+      "sha256": "978649d6700635017d22d08a492845307659b8a2f6fdb46e230a887d966a2fe4",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160646_add_job_trace_context",
+      "originId": "platform:0021_add_job_trace_context",
+      "sha256": "4d54077792406901812bb76d697e6708c9058245ec1003c49bc8983b53b01302",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160647_add_retention_created_at_indexes",
+      "originId": "platform:0022_add_retention_created_at_indexes",
+      "sha256": "f7bc4ab3ec81c55261752c61e48e750faf7affb7202635f8e051934a9410c32f",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160648_add_organizations",
+      "originId": "platform:0023_add_organizations",
+      "sha256": "68bed4bfebd7c94600546943bc66dd6245fd912d0cf5583f3485267c89e0faed",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160649_split_system_org_roles",
+      "originId": "platform:0024_split_system_org_roles",
+      "sha256": "11484b30fdabf64abb14ec99e4d218c1897f5692130bd5a04720d08b905e1332",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160650_org_scoped_rls",
+      "originId": "platform:0025_org_scoped_rls",
+      "sha256": "f6a0a61d07e5b91767b9bf18824ae1872e236f566877282c4cb2332f024dd636",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160651_add_groups",
+      "originId": "platform:0026_add_groups",
+      "sha256": "93e97e6b72578a89bf5232a036ecfe6a067c883c7f3c9f091bfdc00475c6e714",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160652_add_grants",
+      "originId": "platform:0027_add_grants",
+      "sha256": "2e2d5515f131c104ee7f4e5b2ee4d76fbf5409e500da0b412edd4bad0b71c6da",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160653_add_org_settings",
+      "originId": "platform:0028_add_org_settings",
+      "sha256": "e4d811ab7c5446d905e5e4fbb3ce2b94e06d82488f916352a2a413cdc55f94a4",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160654_add_org_credentials",
+      "originId": "platform:0029_add_org_credentials",
+      "sha256": "fa5db76f0081149b5716f763166d2099b134857f27f15f36f9a4ea33e1a0806e",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160655_add_jobs_org_id",
+      "originId": "platform:0030_add_jobs_org_id",
+      "sha256": "26556306864283a8feb2233692d5fcb66b9f38d2671cfeb66e2e094d4c8f84bb",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160656_add_jobs_org_id_status_index",
+      "originId": "platform:0031_add_jobs_org_id_status_index",
+      "sha256": "434d69d4112bcb429de609942a851e08c49793212a538adcc5a2481d1f8b0bb0",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008160657_add_broadcast_target_org",
+      "originId": "platform:0032_add_broadcast_target_org",
+      "sha256": "9f266799b1e3769233ea72873ce55394340da9f8ef1312a7e0b7b2ae410152e2",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261008170001_add_android_app",
+      "originId": "platform:0033_add_android_app",
+      "sha256": "7f343a96417825c1372388c199ad2dbecfcf8632a4ebc5080afb29c82109b719",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261013151042_open_job_reason",
+      "originId": "platform:0034_open_job_reason",
+      "sha256": "31b16d3aeddb81840ad34ec2df29aeaf065b1f5082c839bbc31c94c90a205d77",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261013160000_ai_usage_feature",
+      "originId": "platform:0035_ai_usage_feature",
+      "sha256": "ad7322539e971a2248cc2f73a12e188453a3312cc1a04d168bc4e7ddd68e5752",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261013200000_add_app_metadata",
+      "originId": "platform:0036_add_app_metadata",
+      "sha256": "17e727075b3d02d129f60cdebf156b9736113e3b689ff35513c474c520185f75",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261013220000_open_sharing_vocabularies",
+      "originId": "platform:0037_open_sharing_vocabularies",
+      "sha256": "4b7047703bacab08af629004ff569e250869355acd03795f17d1b1e5b277c5e6",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261101022812_add_worker_node_events",
+      "originId": "platform:0038_add_worker_node_events",
+      "sha256": "5775b304027a1cb77b30707093fd6be26290fd49df695f4d850e149fe265b196",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261101044724_add_webhooks",
+      "originId": "platform:0039_add_webhooks",
+      "sha256": "8f719dc380610f61133612a52921fa6d89ee21957635372c2bc4bdc69d4c0a92",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261101050047_add_alerts",
+      "originId": "platform:0040_add_alerts",
+      "sha256": "ec4af7e5123ecd8bb6faf3505893cb2efab4d793dae84a98d8b7f26f2dff3776",
+      "since": "1.0.0"
+    }
+  ],
+  "platformVersion": "0.1.0-next.19",
+  "rlsPolicies": [
+    {
+      "checkSha256": "83e7bb1689b1bd0427e7061bf085f69c35922ba56bedf6275925f52e58cb440b",
+      "name": "documents_org_isolation",
+      "table": "documents",
+      "usingSha256": "83e7bb1689b1bd0427e7061bf085f69c35922ba56bedf6275925f52e58cb440b"
+    }
+  ]
+}

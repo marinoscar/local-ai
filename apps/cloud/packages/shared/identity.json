@@ -1,0 +1,8 @@
+{
+  "productName": "Local AI",
+  "tagline": "Control room for the Local AI lab",
+  "repoSlug": "marinoscar/local-ai",
+  "themeColor": "#2e7d32",
+  "backgroundColor": "#ffffff",
+  "cliName": "laictl"
+}

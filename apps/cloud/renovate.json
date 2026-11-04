@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "description": "Upgrade the platform as one unit: every @marinoscar/platform-* package moves to the same version in one pull request.",
+      "matchPackageNames": ["@marinoscar/platform-*"],
+      "groupName": "platform packages",
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "The `next` pre-release channel is opt-in: set `followTag` to `next` here to receive pre-releases (see README, Upgrading).",
+      "matchPackageNames": ["@marinoscar/platform-*"],
+      "ignoreUnstable": true
+    }
+  ]
+}
