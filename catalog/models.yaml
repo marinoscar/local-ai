@@ -206,3 +206,80 @@ models:
       min_vram_mib: 0
       min_ram_mib: 1024
       min_disk_bytes: 63206172
+  - id: qwen3.5-4b-q4km
+    display_name: "Qwen 3.5 4B (text and photos)"
+    summary: "Small and fast. Chats, and looks at photos. Runs on any computer."
+    summary_es: "Pequeño y rápido. Conversa y mira fotos. Funciona en cualquier computadora."
+    engine: llama
+    roles: [chat, vision]
+    languages: [en, es, multi]
+    license: apache-2.0
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: unsloth/Qwen3.5-4B-GGUF
+      revision: e87f176479d0855a907a41277aca2f8ee7a09523
+    files:
+      - kind: weights
+        name: Qwen3.5-4B-Q4_K_M.gguf
+        url: null
+        size_bytes: 2740937888
+        sha256: "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
+      - kind: mmproj
+        name: mmproj-F16.gguf
+        url: null
+        size_bytes: 672423616
+        sha256: "cd88edcf8d031894960bb0c9c5b9b7e1fea6ebee02b9f7ce925a00d12891f864"
+    requirements:
+      backends: [cuda, vulkan, cpu]
+      min_vram_mib: 4517
+      min_ram_mib: 6144
+      min_disk_bytes: 3413361504
+    llama:
+      ctx: 8192
+      n_gpu_layers: 99
+      flash_attn: "on"
+      parallel: 1
+      mmproj_file_kind: mmproj
+      chat_template: null
+      extra_args: []
+      env: {}
+    client_hints:
+      max_output_tokens: 4096
+      reasoning: true
+  - id: embeddinggemma-300m-q8
+    display_name: "EmbeddingGemma 300M"
+    summary: "Turns text into numbers so documents can be searched by meaning."
+    summary_es: "Convierte texto en números para buscar documentos por significado."
+    engine: llama
+    roles: [embedding]
+    languages: [en, es, multi]
+    license: "custom:https://ai.google.dev/gemma/terms"
+    survival_tier: 3
+    source:
+      type: huggingface
+      repo: ggml-org/embeddinggemma-300M-GGUF
+      revision: 0f741b5a6585bd53aeb15cd1372c56f2a0f65e12
+    files:
+      - kind: weights
+        name: embeddinggemma-300M-Q8_0.gguf
+        url: null
+        size_bytes: 333590944
+        sha256: "b5ce9d77a3fc4b3b39ccb5643c36777911cc4eb46a66962eadfa3f5f60490d63"
+    requirements:
+      backends: [cuda, vulkan, cpu]
+      min_vram_mib: 614
+      min_ram_mib: 1024
+      min_disk_bytes: 333590944
+    llama:
+      ctx: 2048
+      n_gpu_layers: 99
+      flash_attn: "auto"
+      parallel: 1
+      mmproj_file_kind: null
+      chat_template: null
+      extra_args: ["--embedding"]
+      env: {}
+    client_hints:
+      max_output_tokens: 0
+      reasoning: false

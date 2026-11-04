@@ -15,7 +15,7 @@ storage:
   min_free_bytes: 100000000000
 include:
   # qwen3-coder-next-q4km and qwen3.8-27b-q4km are left out until they are measured with aictl bench (catalog.md section 2).
-  models: [qwen3.6-35b-a3b-q4km, whisper-large-v3-turbo, piper-en-medium, piper-es-medium]
+  models: [qwen3.6-35b-a3b-q4km, whisper-large-v3-turbo, piper-en-medium, piper-es-medium, qwen3.5-4b-q4km, embeddinggemma-300m-q8]
   content:
     # tier 1
     - docs-bundle
