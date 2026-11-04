@@ -1,5 +1,6 @@
 import type { EmailTemplate, EmailTemplateEntry } from '@marinoscar/platform-api/email';
 
+import { LOCALAI_EMAIL_TEMPLATES } from '../../../localai/email-templates';
 import { orgInvitationEmail, type OrgInvitationEmailData } from './org-invitation.email';
 
 // =============================================================================
@@ -23,6 +24,7 @@ declare module '@marinoscar/platform-api/email' {
 /** The templates the email slice registers, after the platform's nine. */
 export const EMAIL_SLICE_TEMPLATES: readonly EmailTemplateEntry[] = [
   { name: 'org-invitation', render: orgInvitationEmail as EmailTemplate<never>, registrant: 'identity' },
+  ...LOCALAI_EMAIL_TEMPLATES,
 ];
 
 export { orgInvitationEmail };
