@@ -60,6 +60,18 @@ describe('LabOverviewPage', () => {
     expect(add).toHaveAttribute('href', '/lab/nodes/new');
   });
 
+  it('offers the Audit trail link (/lab/audit) to lab:admin only, the permission GET /api/localai/audit enforces', async () => {
+    permissions = ['lab:read'];
+    const viewer = renderPage(async () => labFixture());
+    await screen.findByTestId('lab-summary');
+    expect(screen.queryByRole('link', { name: 'Audit trail' })).toBeNull();
+    viewer.unmount();
+
+    permissions = ['lab:read', 'lab:admin'];
+    renderPage(async () => labFixture());
+    expect(await screen.findByRole('link', { name: 'Audit trail' })).toHaveAttribute('href', '/lab/audit');
+  });
+
   it('says "No nodes yet" with an Add node button for an admin and a hint for a viewer', async () => {
     const empty = labFixture();
     empty.nodes = [];

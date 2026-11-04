@@ -3,6 +3,7 @@
 import { Module } from '@nestjs/common';
 
 import { AlertsModule } from './alerts/alerts.module';
+import { LocalaiAuditModule } from './audit/audit.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CommandsModule } from './commands/commands.module';
 import { LocalaiDoctorModule } from './doctor';
@@ -12,5 +13,5 @@ import { NodeLinkModule } from './node-link/node-link.module';
 import { VpsModule } from './vps/vps.module';
 import { WizardModule } from './wizard/wizard.module';
 
-@Module({ imports: [NodeLinkModule, LocalaiNodesModule, CatalogModule, CommandsModule, LabNodesModule, LocalaiDoctorModule, WizardModule, AlertsModule, VpsModule] })
+@Module({ imports: [NodeLinkModule, LocalaiNodesModule, CatalogModule, CommandsModule, LabNodesModule, LocalaiDoctorModule, WizardModule, AlertsModule, VpsModule, LocalaiAuditModule] })
 export class LocalaiModule {}
