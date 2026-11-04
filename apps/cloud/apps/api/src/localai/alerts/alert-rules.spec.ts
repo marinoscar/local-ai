@@ -261,10 +261,10 @@ describe('node.alerts.<code>: the node\'s own critical alerts', () => {
   const reported = (...alerts: { code: string; severity: string; title: string }[]) => node({ lastState: state({ alerts }) });
 
   it('one alert per critical code, with the node\'s code and title', () => {
-    const result = evaluateNodeAlerts(reported({ code: 'LAI-HW-020', severity: 'critical', title: 'The laptop will sleep when the lid is closed' }, { code: 'LAI-HW-021', severity: 'critical', title: 'Second' }), context());
+    const result = evaluateNodeAlerts(reported({ code: 'LAI-HW-020', severity: 'critical', title: 'The laptop will sleep when the lid is closed' }, { code: 'LAI-HW-001', severity: 'critical', title: 'Second' }), context());
     expect(result.map((alert) => [alert.kind, alert.code, alert.severity])).toEqual([
       ['node.alerts.LAI-HW-020', 'LAI-HW-020', 'critical'],
-      ['node.alerts.LAI-HW-021', 'LAI-HW-021', 'critical'],
+      ['node.alerts.LAI-HW-001', 'LAI-HW-001', 'critical'],
     ]);
     expect(result[0]!.title).toBe('The laptop will sleep when the lid is closed');
   });
@@ -273,14 +273,14 @@ describe('node.alerts.<code>: the node\'s own critical alerts', () => {
     const result = evaluateNodeAlerts(
       reported(
         { code: 'LAI-HW-020', severity: 'warning', title: 'w' },
-        { code: 'LAI-HW-021', severity: 'info', title: 'i' },
+        { code: 'LAI-HW-001', severity: 'info', title: 'i' },
         { code: 'not-a-code', severity: 'critical', title: 'x' },
-        { code: 'LAI-HW-022', severity: 'critical', title: 'first' },
-        { code: 'LAI-HW-022', severity: 'critical', title: 'again' },
+        { code: 'LAI-HW-002', severity: 'critical', title: 'first' },
+        { code: 'LAI-HW-002', severity: 'critical', title: 'again' },
       ),
       context(),
     );
-    expect(result.map((alert) => alert.kind)).toEqual(['node.alerts.LAI-HW-022']);
+    expect(result.map((alert) => alert.kind)).toEqual(['node.alerts.LAI-HW-002']);
     expect(result[0]!.title).toBe('first');
   });
 

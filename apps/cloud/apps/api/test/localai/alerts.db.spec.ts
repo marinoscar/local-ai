@@ -11,6 +11,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { NotificationsService } from '@marinoscar/platform-api/notifications';
 
 import { AlertsEvaluateHandler } from '../../src/localai/alerts/alerts-evaluate.job';
+import { CommandsAuditListener } from '../../src/localai/commands/commands-audit.listener';
 import { PrismaAlertStore } from '../../src/localai/alerts/prisma-alert.store';
 import { AlertsService } from '../../src/localai/alerts/alerts.service';
 import type { LocalaiStateSnapshotV1 } from '../../src/localai/contracts/state.schema';
@@ -20,7 +21,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { ai3 } from './state-fixtures';
 
 // Lab ids must look like ai-n<N>; a high range no real lab uses, cleaned up before and after.
-const IDS = Array.from({ length: 8 }, (_, index) => `ai-n${9300 + index}`);
+const IDS = Array.from({ length: 9 }, (_, index) => `ai-n${9300 + index}`);
 const run = `${Date.now()}`;
 const DAY = 86_400_000;
 const MIN = 60_000;
@@ -51,6 +52,8 @@ async function login(role: 'contributor' | 'viewer', label: string): Promise<{ t
 }
 
 async function cleanup(): Promise<void> {
+  // The bell rows of earlier runs: they name these nodes in the title or the link.
+  await prisma.notification.deleteMany({ where: { eventKey: { startsWith: 'localai.' }, OR: [...IDS.map((id) => ({ title: { startsWith: `${id}:` } })), ...IDS.map((id) => ({ link: `/lab/nodes/${id}` }))] } });
   await prisma.localaiAlert.deleteMany({ where: { node: { nodeId: { in: IDS } } } });
   await prisma.job.deleteMany({ where: { type: 'localai.alerts.evaluate', subjectId: { in: IDS } } });
   await prisma.auditEvent.deleteMany({ where: { targetId: { in: IDS }, action: { startsWith: 'localai.node.' } } });
@@ -366,5 +369,37 @@ describe('external alerts and retired nodes on real SQL', () => {
     await prisma.localaiNode.update({ where: { nodeId }, data: { phase: 'retired', retiredAt: new Date() } });
     await evaluate();
     expect(await activeOf(nodeId)).toHaveLength(0);
+  });
+});
+
+describe('the other Local AI notifications, on real SQL', () => {
+  it('a failed command tells the person who sent it, and a command nobody sent tells nobody', async () => {
+    const { nodeId } = await makeNode(8);
+    const node = await prisma.localaiNode.findUniqueOrThrow({ where: { nodeId } });
+    const failed = await prisma.localaiCommand.create({
+      data: {
+        nodeId: node.id,
+        type: 'localai.model.load',
+        params: {},
+        status: 'failed',
+        requestedById: operatorId,
+        expiresAt: new Date(Date.now() + 60_000),
+        finishedAt: new Date(),
+        error: { code: 'LAI-CLD-012', message: 'x' },
+      },
+    });
+    const unsent = await prisma.localaiCommand.create({
+      data: { nodeId: node.id, type: 'localai.status.refresh', params: {}, status: 'expired', expiresAt: new Date(), finishedAt: new Date() },
+    });
+    const listener = app.get(CommandsAuditListener);
+    await listener.handleSettled({ nodeId: node.id, commandId: failed.id, status: 'failed' });
+    await listener.handleSettled({ nodeId: node.id, commandId: unsent.id, status: 'expired' });
+    await notifications.flush();
+    const rows = await prisma.notification.findMany({ where: { eventKey: 'localai.command_failed', link: `/lab/nodes/${nodeId}` } });
+    expect(rows.map((row) => row.userId)).toEqual([operatorId]);
+    expect(rows[0]).toMatchObject({ title: 'model.load on Node 8 failed', link: `/lab/nodes/${nodeId}` });
+    expect(rows[0]!.body.length).toBeGreaterThan(5);
+    await prisma.localaiCommand.deleteMany({ where: { id: { in: [failed.id, unsent.id] } } });
+    await prisma.auditEvent.deleteMany({ where: { targetId: { in: [failed.id, unsent.id] } } });
   });
 });

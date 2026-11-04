@@ -104,7 +104,7 @@ describe('Alert routes over HTTP', () => {
           severity: 'critical',
           state: 'active',
           title: 'Ark drive not synced for 95 days',
-          fix: 'Plug the AI-ARK drive into the node and press "Sync now" (or run `aictl ark sync`).',
+          fix: 'Plug the AI-ARK drive into the node and press "Sync now" (or run `aictl ark sync`)',
           firstRaisedAt: '2026-11-01T10:00:00.000Z',
           lastSeenAt: '2026-11-04T10:00:00.000Z',
           clearedAt: null,

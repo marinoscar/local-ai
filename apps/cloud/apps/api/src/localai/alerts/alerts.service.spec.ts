@@ -64,9 +64,9 @@ describe('raising', () => {
 
   it('a node-reported critical alert gets its own row per code', async () => {
     const { store, service } = setup();
-    store.nodes = [evalNode({ lastState: state({ alerts: [{ code: 'LAI-HW-020', severity: 'critical', title: 'a' }, { code: 'LAI-HW-021', severity: 'critical', title: 'b' }] }) })];
+    store.nodes = [evalNode({ lastState: state({ alerts: [{ code: 'LAI-HW-020', severity: 'critical', title: 'a' }, { code: 'LAI-HW-001', severity: 'critical', title: 'b' }] }) })];
     await service.evaluateAll();
-    expect(store.rows.map((row) => row.kind).sort()).toEqual(['node.alerts.LAI-HW-020', 'node.alerts.LAI-HW-021']);
+    expect(store.rows.map((row) => row.kind).sort()).toEqual(['node.alerts.LAI-HW-001', 'node.alerts.LAI-HW-020']);
   });
 
   it('an unknown code gets the generic fix, never an empty one', async () => {
