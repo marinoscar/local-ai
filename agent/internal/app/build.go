@@ -505,7 +505,7 @@ func (d *Daemon) buildServer() error {
 			})
 		}},
 		{"portal ui", func() error {
-			return reg.Add(api.SPARoutes(api.SPAOptions{FS: ui.Dist(), Mode: d.modeName})...)
+			return reg.Add(api.SPARoutes(api.SPAOptions{FS: ui.Dist(), Mode: d.modeName, PortalHook: d.portalStore().Hook})...)
 		}},
 		{"models", func() error { return d.models.Register(reg) }},
 		{"model operations", func() error {
