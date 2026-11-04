@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 
 import { GatewayAuthenticator, type GatewayPrincipal } from './auth';
 import { GatewayError } from './errors';
+import { GatewayService } from './gateway.service';
 import { GatewaySettingsReader } from './gateway-settings';
 import { registerGatewayRoutes } from './routes';
 
@@ -46,6 +47,7 @@ describe('registerGatewayRoutes on a Nest application', () => {
           },
         },
         { provide: GatewaySettingsReader, useValue: { enabled: () => true, corsOrigins: async () => [] } },
+        { provide: GatewayService, useValue: { handle: async () => undefined } },
       ],
     }).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
