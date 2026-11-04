@@ -189,7 +189,21 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
 
 The installer printed this checklist with the right pattern. The wizard's step 3 shows the same steps with **Check** buttons and with the commands and files already filled in for this node (press **Show command** or **Show file**; the tailnet address in them is the one you gave in step 7, or a placeholder if you left it empty). Source: [source/vps-ai-nodes-setup.md §6](../source/vps-ai-nodes-setup.md#6-adding-a-new-node). Run the VPS commands **as root on the VPS**.
 
-> 🛠 Verify when implemented: phase 2 will automate steps 22 to 27 (**Publish automatically**, [cloud-app.md §4.10](../specs/cloud-app.md#410-later-automated-node-vhostcert-publishing-phase-2-not-in-v1)). Until then, do them by hand.
+> 🛠 Verify when implemented: the **VPS helper** (CLOUD-19) can do steps 22 to 27 for you (**Publish automatically**, [cloud-app.md §4.10](../specs/cloud-app.md#410-later-automated-node-vhostcert-publishing-phase-2-not-in-v1)). It only works after the lab owner has installed it once ([10-lab-operations.md Part 10](10-lab-operations.md#part-10-installing-the-vps-stack-agent)). If the button says it is not ready, do steps 22 to 27 by hand.
+
+**Shortcut: let the VPS helper do steps 22 to 27.** Do step 21, then:
+
+- **A. Check the node is ready.** In the wizard (**Lab → Add node**, or open `https://ai.marin.cr/lab/nodes/new?node=ai-n4`), go to step 3 (**Publish**). Under **Publish automatically**, the button must be enabled. Step 1 of the checklist (tailnet) is yours: do it first, and make sure the node's **tailnet IP** and **tailnet name** are saved in its Settings (Pattern B needs the full name such as `dell-linux.<TAILNET>.ts.net`).
+    - **What you should see:** an enabled **Publish automatically** button and no blue box.
+    - **If it doesn't work:** the blue box lists what is missing in plain words (for example "The Route53 key is not stored"). Fix it with [10-lab-operations.md Part 10](10-lab-operations.md#part-10-installing-the-vps-stack-agent), or use steps 22 to 27 by hand.
+- **B. Press Publish automatically.** Wait. It takes 2 to 10 minutes (DNS and the certificate are slow). The page checks every few seconds.
+    - **What you should see:** the status goes **Queued**, **Running**, **Finished**, and the list shows six steps with **Done** or **Skipped**; the checklist below shows steps 2 to 5 as **Done**.
+    - **If it doesn't work:** a step shows **Failed** with a sentence that says why (and the steps after it say **Not run**). Read the sentence, fix the cause, and press the button again: every step can be repeated safely. A failed vhost step always puts the old file back, so the other websites on the VPS keep working.
+- **C. Check it.** Do step 27 (validate) yourself. The helper checks `/health` and `/v1/models` too, but a second look costs a minute.
+- **D. To take a node off the internet again** (for example before you retire it), press **Unpublish…** in the same place and confirm. It removes the vhost and the DNS record and leaves the certificate to expire. The node itself keeps working on the tailnet.
+- Step 28 (commit the vhost in `marin-server-infra`) is still yours either way.
+
+To rehearse with a test name first, the lab owner can set the setting `vps.stagingSuffix` to `-staging`: the helper then publishes `ai-n4-staging.marin.cr` instead. Leave it empty for real nodes.
 
 **Rule:** the node must require its API key **before** it is published. The installer guarantees that (`LAI-SEC-014` would show otherwise).
 

@@ -1,6 +1,6 @@
 # 10. Running the lab
 
-Use this when you operate the whole lab from `https://ai.marin.cr`: checking node health and alerts, approving catalogs, managing gateway keys, reading the audit log, doing the weekly and monthly checks, and updating agents and llama.cpp on every node, and installing or updating the cloud app itself (Part 9).
+Use this when you operate the whole lab from `https://ai.marin.cr`: checking node health and alerts, approving catalogs, managing gateway keys, reading the audit log, doing the weekly and monthly checks, and updating agents and llama.cpp on every node, installing or updating the cloud app itself (Part 9), and installing the optional VPS stack-agent that publishes new nodes for you (Part 10).
 
 > **Before you start**
 > - You need: a Google account on the cloud's allowlist. What you can do depends on your role: **viewer** can look; **contributor** and **org admin** can also send everyday commands and create their own API keys; the **lab owner** (system admin) can add and retire nodes, approve catalogs, send destructive commands, manage every key and read the audit log ([cloud-app.md §3.4](../specs/cloud-app.md#34-identity-allowlist-and-permissions)).
@@ -329,5 +329,112 @@ An update is two parts: the code lands on `main` (a pull request, with `cloud-ci
     To move to a newer agent release first change `AIAGENT_VERSION` in the install folder's `.env` to the new `<AIAGENT_VERSION>`, then run the `deploy update` line.
     - **What you should see:** a green summary that names the same seven-character code as the branch's newest commit (step 69); `curl -s https://ai.marin.cr/api/health/ready` answers `ok`; the Lab page loads and the nodes' cards come back within a minute (they keep reporting by themselves).
     - **If it doesn't work:** the summary shows an older code: run `git pull --ff-only` in this folder and the `deploy update` line again. The build fails: the old cloud keeps running; read the error, fix it on `main`, wait for the branch (step 69) and run the update again. Nodes are not affected in the meantime. A restore of the whole cloud from a database copy needs the key from step 62.
+
+---
+
+## Part 10. Installing the VPS stack-agent
+
+Use this once, when you want the cloud to publish new nodes for you (the **Publish automatically** button in [05-add-a-node.md](05-add-a-node.md) Part 7). The **stack-agent** is a small program that runs on the VPS, next to the shared proxy. It asks the cloud for two kinds of jobs ("publish node N" and "unpublish node N"), and does the same steps as Part 7 of the add-a-node runbook: the DNS record in Route 53, the certificate, the nginx file. **It is optional and the cloud works without it.** Nodes never need their public name to work.
+
+> **Owner steps.** Every step here needs things only the lab owner has: your AWS login, the VPS and its root login. An assistant working in the repository cannot do them, and nothing here has been run against the real VPS yet. Replace every `<PLACEHOLDER>` from your private `inventory.local.yaml`; never write real values into this repository.
+
+> **Before you start**
+> - You need: the cloud already installed (Part 9), root on the VPS, an AWS login that can create an IAM user, and your `<ADMIN_EMAIL>` (the address Let's Encrypt writes to).
+> - On the VPS: Docker, Node 24, and the program `dig` (Ubuntu package `dnsutils`).
+> - **Time:** about 45 minutes. Do a rehearsal with a test name first (steps 78 to 81).
+> - **Safety:** the key you create here can change **one** DNS zone and read a change's status. Nothing else. The agent edits the shared proxy's files; every change keeps a `.bak` copy and is undone if nginx refuses it.
+
+> 🛠 Verify when implemented (Epic E6, CLOUD-19). The commands are the design of [cloud-app.md §4.10](../specs/cloud-app.md#410-later-automated-node-vhostcert-publishing-phase-2-not-in-v1); record in the issue what differed on the real VPS.
+
+71. **Make the AWS key.** In the AWS console open **IAM → Policies → Create policy → JSON** and paste this (replace `<ROUTE53_ZONE_ID>` with the id of the `marin.cr` zone from `inventory.local.yaml`):
+    ```json
+    { "Version": "2012-10-17", "Statement": [
+      { "Effect": "Allow", "Action": "route53:ChangeResourceRecordSets", "Resource": "arn:aws:route53:::hostedzone/<ROUTE53_ZONE_ID>" },
+      { "Effect": "Allow", "Action": "route53:GetChange", "Resource": "arn:aws:route53:::change/*" } ] }
+    ```
+    Name it `localai-vps-stack-agent`. Then **IAM → Users → Create user** (no console access), attach only that policy, and under **Security credentials** press **Create access key** (use case "Application running outside AWS"). Copy the **access key id** and the **secret access key** into your password manager. AWS shows the secret only once.
+    - **What you should see:** a user with exactly one policy and one access key.
+    - **If it doesn't work:** `not authorized to perform iam:CreatePolicy`: use an AWS login that can manage IAM.
+72. **Save the key in the cloud.** In `https://ai.marin.cr` open **Administration → VPS publishing**. Paste the access key id, the secret access key and the zone id, press **Save key**.
+    - **What you should see:** the chip **Key stored** and a masked hint such as `****WXYZ`. The three boxes are empty again; the key cannot be shown any more.
+    - **If it doesn't work:** "must be an AWS access key id": a character was lost when copying; copy it again. You do not see the card: you need the lab-owner role (`lab:admin`).
+73. **Let the cloud hand keys to the agent, and stop the server taking the jobs itself.** Two switches:
+    1. In the cloud's API reference (open `https://ai.marin.cr/api/docs`), find `PATCH /api/system-settings`, sign in if asked, and send the body `{ "nodes": { "jobSecretBrokerEnabled": true } }`. (This is the platform's switch that lets a worker node receive a job-specific credential. It is off by default. It stays off for everything except job types that declare a credential, which today is only this one.)
+    2. On the VPS, in the install folder (`/opt/infra/apps/local-ai-cloud-src`), open `infra/compose/.env` and change `JOBS_WORKER_MODE=all` to `JOBS_WORKER_MODE=system`. Then run `node apps/cli/dist/cli.js deploy update --name local-ai-cloud --no-version-bump`.
+    - **What you should see:** the update finishes green and `curl -s https://ai.marin.cr/api/health/ready` answers `ok`.
+    - **If it doesn't work:** the PATCH answers `403`: you are not the lab owner. After the change, the blue box under the button still says "The API server still runs every job type itself": the `.env` change was not applied; run the update again.
+74. **Link the agent to the cloud.** On the VPS, as root, in the install folder:
+    ```bash
+    cd /opt/infra/apps/local-ai-cloud-src
+    node apps/cli/dist/cli.js node enroll --server https://ai.marin.cr --no-browser --name vps-stack-agent
+    ```
+    It prints a web address and a short code. Open the address on your computer, sign in as the lab owner and enter the code.
+    - **What you should see:** `Enrolled. Credential "vps-stack-agent" (nod_…) stored in /root/.laictl/...`. The credential stays on the VPS, in root's private folder.
+    - **If it doesn't work:** the code expired: run the command again. `command not found`: the CLI is not built; run step 61 of Part 9 again.
+75. **Write the agent's settings file.** On the VPS, as root:
+    ```bash
+    install -m 600 /dev/null /etc/localai-vps-agent.env
+    cat > /etc/localai-vps-agent.env <<'EOF'
+    LAICTL_NODE_NAME=vps-stack-agent
+    LAICTL_ELIGIBLE_TYPES=localai.vps.publish_node,localai.vps.unpublish_node
+    LAICTL_CONCURRENCY=1
+    LOCALAI_VPS_CERTBOT_EMAIL=<ADMIN_EMAIL>
+    EOF
+    ```
+    (Optional lines, with their defaults: `LOCALAI_VPS_PROXY_DIR=/opt/infra/proxy`, `LOCALAI_VPS_PROXY_CONTAINER=proxy-nginx`, `LOCALAI_VPS_CERTBOT_IMAGE=certbot/certbot:latest`. Add them only if your proxy differs.)
+    - **What you should see:** `ls -l /etc/localai-vps-agent.env` shows `-rw-------`.
+    - **If it doesn't work:** `Permission denied`: you are not root; run `sudo -i` first. If the file shows leading spaces on its lines, remove them so each line starts at the left edge.
+76. **Install the service.** This is the unit file; it is also recorded in the private `marin-server-infra` repository as `localai-vps-agent.service`. As root:
+    ```bash
+    cat > /etc/systemd/system/localai-vps-agent.service <<'EOF'
+    [Unit]
+    Description=Local AI VPS stack-agent (publishes node DNS, vhost and certificate)
+    After=network-online.target docker.service
+    Wants=network-online.target
+    Requires=docker.service
+
+    [Service]
+    Type=simple
+    User=root
+    WorkingDirectory=/opt/infra/apps/local-ai-cloud-src
+    Environment=HOME=/root
+    EnvironmentFile=/etc/localai-vps-agent.env
+    ExecStart=/usr/bin/node apps/cli/dist/cli.js node start --headless
+    Restart=on-failure
+    RestartSec=10
+    NoNewPrivileges=true
+    PrivateTmp=true
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+    systemctl daemon-reload
+    systemctl enable --now localai-vps-agent.service
+    systemctl status localai-vps-agent.service --no-pager
+    ```
+    It runs as **root** because it edits `/opt/infra/proxy` and talks to Docker. Check the node path with `command -v node` and change `/usr/bin/node` if it differs.
+    - **What you should see:** `active (running)`. In the cloud, **Lab → Add node → Publish** (or any node's publish step) no longer says "The VPS stack-agent is not connected".
+    - **If it doesn't work:** `journalctl -u localai-vps-agent -n 50` shows why. `Worker … is running` is the good line. A line starting `LAICTL_` is a typo in the settings file.
+77. **Check what the cloud sees.** Open the publish step of a node whose tailnet IP and name are saved (a pending test node is fine).
+    - **What you should see:** the **Publish automatically** button is enabled and there is no blue box.
+    - **If it doesn't work:** the box lists each missing piece in plain words, one per line. They are: Route53 key (step 72), node job secrets or server worker (step 73), agent not connected (step 76), the node's tailnet IP or name (the node's Settings).
+78. **Choose a rehearsal name.** In the cloud set the setting `vps.stagingSuffix` to `-staging` with `PATCH /api/system-settings` and the body `{ "localai": { "vps": { "stagingSuffix": "-staging" } } }`. (If the API says the namespace is unknown, the settings page for the `localai` namespace has not shipped yet; ask in the CLOUD-12 issue.) With it set, node `ai-n3` is published as `ai-n3-staging.marin.cr`, a name nobody uses.
+    - **What you should see:** the publish step now names `ai-n3-staging.marin.cr`.
+    - **If it doesn't work:** the box says "vps.stagingSuffix is not valid": use a dash and up to 16 lower-case letters or digits, for example `-staging`.
+79. **Rehearse the publish.** Open the publish step of a test node and press **Publish automatically**.
+    - **What you should see:** within about ten minutes six steps, each **Done** or **Skipped**, and the checklist's steps 2 to 5 **Done**. Then, from any computer: `curl -s https://ai-n3-staging.marin.cr/health` answers `{"status":"ok"}`.
+    - **If it doesn't work:** read the failed step's sentence. Pressing the button again is safe. If nginx refused a file, the old file is already back and the other websites were never down; if you want to look, the saved copies are `<name>.conf.bak.<time>` next to the vhost.
+80. **Press it again (it must change nothing).** Press **Publish automatically** a second time.
+    - **What you should see:** every step **Skipped**, except the last (**Done**).
+81. **Rehearse the unpublish, then go live.** Press **Unpublish…**, confirm. Then set `vps.stagingSuffix` back to an empty value (`{ "localai": { "vps": { "stagingSuffix": "" } } }`).
+    - **What you should see:** three steps (**Done**, **Done**, **Skipped**), the checklist's steps 2 to 5 back to **To do**, and `curl -s https://ai-n3-staging.marin.cr/health` no longer answers. The certificate stays on the VPS until it expires on its own.
+    - **If it doesn't work:** the DNS step says "different value": someone changed the record; delete it by hand in Route 53.
+82. **Record it.** In the private `marin-server-infra` repository, add `/etc/systemd/system/localai-vps-agent.service` (without the settings file, which names your e-mail) and commit it, so a rebuilt VPS gets the agent back. Also note that the cloud's `.env` has `JOBS_WORKER_MODE=system`.
+
+**After a cloud update** (Part 9.2) restart the agent so it runs the new code: `systemctl restart localai-vps-agent`.
+
+**To turn it off:** `systemctl disable --now localai-vps-agent`, and in **Administration → VPS publishing** press **Remove key**. The button then says it is not ready; publishing by hand (Part 7 of the add-a-node runbook) keeps working.
+
+**What the agent never does:** it never touches a node; it never revokes a certificate; it never deletes a DNS record it did not create (a record with a different value is reported, not removed); it never keeps the AWS key or a node's tailnet address on disk (the cloud hands them over for one job and the agent forgets them); it never edits any other website's file on the proxy.
 
 When the cloud can't be reached at all, nodes show `LAI-CLD-053` and keep working; see [07-troubleshooting.md](07-troubleshooting.md#cloud-shows-node-offline).
