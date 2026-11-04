@@ -18,6 +18,9 @@ import (
 var geteuid = os.Geteuid
 
 const setupUsage = `usage: aiagent setup <step> [flags]      (internal, root only; run by install-node.sh)
+  node-yaml    write or complete /etc/localai/node.yaml (P9)
+  units        write, reload and enable the systemd units (P9)
+  api-key      create or keep the llama API key (P10)
   serve-check  decide the Tailscale serve pattern, LAI-INS-050 on a mismatch with the inventory (P11)
   verify       post-install checks that can pass before a reboot (P15)
   summary      print the install summary and the VPS checklist (P15)

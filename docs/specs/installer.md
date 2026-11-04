@@ -136,7 +136,7 @@ A phase that a later item has not built yet is an **explicit named no-op**: `pha
 
 Refusals leave through `fail <exit> <doctor-code> <message>`; bad arguments through `usage_error` (exit 2, before anything is touched). `Ctrl-C` or `SIGTERM` exits 4. An unexpected command failure runs `on_error` (phase, line, command, exit code, last 50 output lines) and exits 1; no doctor code is registered for "unexpected", the message points at the log.
 
-Test hooks: with `LAI_INSTALLER_DEV=1` (never set on a node) the script reads `LAI_INSTALL_STATE_DIR` and `LAI_INSTALL_SYSTEMD_DIR`, may run as non-root, and an unstamped template may do a `--dry-run`. Without it an unstamped copy refuses to run (exit 2, §3.6) and a real run needs root (exit 3, `LAI-INS-003`).
+Test hooks: with `LAI_INSTALLER_DEV=1` (never set on a node) the script reads `LAI_INSTALL_STATE_DIR` and `LAI_INSTALL_SYSTEMD_DIR` and, for the INST-06 phases (besides the INST-05 hooks for the program and llama paths), `LAI_ETC_DIR`, `LAI_HEALTH_URL` and `LAI_HEALTH_WAIT` (and `aiagent setup` reads `LAI_SETUP_ROOT` as the filesystem root), may run as non-root, and an unstamped template may do a `--dry-run`. Without it an unstamped copy refuses to run (exit 2, §3.6) and a real run needs root (exit 3, `LAI-INS-003`).
 
 `state.json` (§4.1 of this spec, `schema: 1`) is rewritten atomically (temp file in the same folder, then `mv`), mode 0600, one phase per line so a shell can read it back without `jq`:
 ```json
@@ -309,8 +309,12 @@ Runs if `llama-qwen.service` exists (or `--migrate`). The installer only calls `
 3. `systemctl restart localai-agent` (or `start` on a fresh install), then wait up to 30 s for `curl -fsS http://127.0.0.1:7070/api/v1/health` (`LAI-INS-034`). The agent creates `/etc/localai/agent-token` on first start.
 4. If no migration ran: activate the llama build (`current`) and start `localai-llama`.
 
+Details (INST-06, `installers/install-node.sh` and `agent/cmd/aiagent/setup/`): `aiagent setup node-yaml` fills only the keys that are missing (`schema_version`, `node.id`, `node.public_host`, `profile`, `llama.backend`, `tailscale.serve_pattern`), keeps comments and `node.yaml.bak`, and refuses a different `--node-id` with `LAI-INS-020` (exit 1; the installer re-raises it). `--inventory` fills the profile, backend, serve pattern and public host of the matching node entry when the flag is absent; a flag always wins. `aiagent setup units` renders the llama unit in router mode from the profile's `router` block in `/etc/localai/catalog` (default router settings when the catalog is not installed yet; the agent regenerates the unit from the live profile later), writes `50-env.conf` only when `llama.extra_env` is not empty, and takes the kiwix thread count from `kiwix.threads`. Unchanged files are left alone and changed files are copied to `<state>/backup/<UTC-ts>/<path>`; `daemon-reload` runs only when a file changed. The agent is always restarted (`systemctl restart` also starts a stopped unit). "No migration ran" means P8 did not migrate (`MIGRATION_RAN` is not 1); P9 then points `current` at the build P7 made for this node's commit (else the newest finished build under `/opt/localai/llama.cpp/builds/`) when it points nowhere, and starts `localai-llama`; with no finished build it only warns. Every step is dry-run capable: the installer passes `--dry-run` on, and when the installed `aiagent` has no `setup` command (or none is installed) a dry run prints `[dry-run] would run: …` instead.
+
 #### P10. API key
 `aiagent setup api-key`: if `/etc/localai/api-key` exists (64 lowercase hex, root 0600), keep it. Else if `/etc/llama-qwen/api-key` exists (migration), it was already moved by P8. Else generate with `openssl rand -hex 32` under `umask 077`. Print only the masked form (`ab12…ef90`) and "`aictl key show` prints the full key."
+
+Details: the key is 32 random bytes from the operating system (`crypto/rand`, the same strength as `openssl rand -hex 32`) written atomically as 64 lowercase hex plus a newline, root 0600. If `/etc/localai/api-key` exists it is kept (its mode is tightened to 0600); if it exists but is not 64 lowercase hex it is **left alone** and the step fails with a message to run `sudo aictl key rotate`. If only a valid `/etc/llama-qwen/api-key` exists, it is reused (copied), never regenerated.
 
 #### P11. Tailscale
 Unless `--no-tailscale`:
@@ -328,8 +332,12 @@ Unless `--no-tailscale`:
 #### P12. Admin PIN
 If `/etc/localai/admin-pin` is missing: read from `--pin-file`, or prompt on the TTY twice with `read -rs` ("Choose an admin PIN, 4 to 8 digits. You'll need it to delete things or leave survival mode."). Pass it to `aictl pin set --pin-stdin` (argon2id, security-model.md §2). No TTY and no file → skip with warning `LAI-INS-060` ("The PIN isn't set; run `sudo aictl pin set`"). Never logged.
 
+Details: the prompt allows three tries (4 to 8 digits, the same twice); a `--pin-file` whose first line is not 4 to 8 digits, three bad tries, a missing `aictl`, or a failing `aictl pin set` all end as the `LAI-INS-060` warning (the install continues; the summary of INST-07 reads `PIN_SKIPPED=1`). The PIN lives only in a local shell variable, reaches `aictl` on its stdin, is masked as `<pin>` if `aictl` ever echoes it, and `set -x` (`-v`) is switched off around it so it cannot reach the log. A dry run never prompts and never reads the PIN.
+
 #### P13. Cloud enrollment
 If `--enroll`/`--enroll-file`: `aictl cloud enroll --url <cloud-url> --credential-stdin` with the credential on stdin (read earlier from `/dev/tty` or the file, held only in a shell variable, never written to the log). Failure (`LAI-CLD-051`/`053`/`054`/`062`, [agent.md](agent.md) §8.5) doesn't fail the install; the summary shows the error and the retry command. Already enrolled → skipped.
+
+Details: without `--enroll`/`--enroll-file` the phase does nothing (and says so). A credential that does not match `nod_…`, a missing `aictl`, or a failed `aictl cloud enroll` all leave the install going: the shell variables `ENROLL_FAILED` (`LAI-CLD-nnn: message`; `LAI-CLD-051` when no valid credential was given, `LAI-CLD-054` for a missing `aictl`, else the code `aictl` printed) and `ENROLL_RETRY` (`sudo aictl cloud enroll --url <cloud-url> --credential-stdin`, never containing the credential) are set for the summary of INST-07. The credential is masked as `<credential>` if echoed and `set -x` is off around it.
 
 #### P14. Initial content
 Unless `--no-sync`:
