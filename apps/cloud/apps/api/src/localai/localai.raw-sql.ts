@@ -17,4 +17,13 @@ export const LOCALAI_RAW_SQL: readonly { readonly file: string; readonly why: st
       'row id (a uuid read from the node row, bound as a parameter and cast to uuid), never request text. localai_nodes ' +
       'has no row-level security and no user scope.',
   },
+  {
+    file: 'localai/vps/vps-state.service.ts',
+    why:
+      'Storing a finished publish/unpublish run merges the journal and the checklist steps into the node row\'s ' +
+      'publish_checklist JSON under SELECT ... FOR UPDATE, so a checklist action made at the same time is not lost (the same ' +
+      'merge as the wizard\'s checklist service); Prisma cannot express the row lock. The only value is the row id (a uuid read ' +
+      'from the node row, bound as a parameter and cast to uuid), never request text. localai_nodes has no row-level security ' +
+      'and no user scope.',
+  },
 ];
