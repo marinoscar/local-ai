@@ -558,6 +558,7 @@ func (d *Daemon) stepPeriodic(ctx context.Context) error {
 		defer d.bg.Done()
 		c.Drill.StartRetries(d.rootCtx, time.Minute)
 	}()
+	d.startWhisper(ctx)
 	d.watchConfig(d.rootCtx)
 	for _, w := range d.hooks.workers {
 		wk, err := w.build(c)

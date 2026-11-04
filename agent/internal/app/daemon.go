@@ -112,6 +112,8 @@ type Daemon struct {
 	localaiGID  int
 	haveLocalAI bool
 
+	whisper whisperState
+
 	shutdown1 sync.Once
 }
 
