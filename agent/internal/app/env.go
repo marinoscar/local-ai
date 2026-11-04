@@ -145,6 +145,9 @@ func (e *Env) defaults() {
 	if e.Runner == nil {
 		e.Runner = execx.Exec{}
 	}
+	if e.Lookup == nil {
+		e.Lookup = execx.Lookup
+	}
 	if e.Notifier == nil {
 		e.Notifier = NewNotifier(e.Getenv(EnvNotifySocket))
 	}
