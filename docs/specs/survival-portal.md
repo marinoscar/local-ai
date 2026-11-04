@@ -393,7 +393,7 @@ If the agent's API stops responding while the Portal is open, the SPA shows a fu
 ### 4.6 Photo flow
 1. **Get a photo.** `<input type="file" accept="image/*" capture="environment">` ("Take photo": opens the webcam on laptops via the browser's capture UI where supported; otherwise the file chooser) and a plain file chooser ("Choose file"). Drag and drop also works.
 2. **Prepare (browser).** Decode with `createImageBitmap(file, {imageOrientation: "from-image"})` (respects EXIF rotation), downscale so the long side is ≤ 1024 px, encode JPEG at quality 0.85 with `canvas.toBlob`. Strip all metadata by construction (canvas re-encode drops EXIF, including GPS). Reject files over 30 MB or that fail to decode (`LAI-SVC-108`).
-3. **Pick a brain.** If no loaded brain has vision: if `photo.reason == "needs_switch"`, offer the switch (Portal session → `POST /api/v1/models/{vision_model}/load`); wait for `model.loaded`.
+3. **Pick a brain.** If no loaded brain has vision: if `photo.reason == "needs_switch"`, offer the switch (Portal session → `POST /api/v1/models/{vision_model}/load`); wait for `model.loaded` (the screen watches `/portal/status` and refetches it every 3 s until the vision model is in `brain.loaded`; after 300 s it shows `brain.failed`). The load is sent with `{"wait": false}`, the form a Portal session is forced to use. The follow-up cap is 4 questions; the question box is then disabled with `photo.limit` until **Ask another question** starts over (the photo stays).
 4. **Ask.** `POST /chat/v1/chat/completions` with `model` = the id of the first loaded brain with `vision: true` (after a switch, `capabilities.photo.vision_model`), the format of [companion-services.md](companion-services.md) §4.5, the Photo system prompt (§4.7), `stream: true`. Show the answer streaming; **Read aloud** sends it to TTS in sentence chunks (as in Talk step 5).
 5. Follow-up questions keep the same image in the conversation (sent again in the first user message), up to 4 turns.
 
@@ -480,6 +480,10 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `photo.switch` | Switch | Cambiar |
 | `photo.none` | No brain that understands photos is installed on this computer. | En esta computadora no hay un cerebro que entienda fotos. |
 | `photo.bad` | This photo can't be opened. Try another one. | No se puede abrir esta foto. Pruebe con otra. |
+| `photo.empty` | No photo yet. Take a photo, choose a file, or drop one here. | Aún no hay foto. Tome una foto, elija un archivo o suéltela aquí. |
+| `photo.yourPhoto` | Your photo | Su foto |
+| `photo.limit` | That is enough questions about this photo. Press “Ask another question” to start again. | Ya son suficientes preguntas sobre esta foto. Presione «Hacer otra pregunta» para empezar de nuevo. |
+| `photo.failed` | The answer could not be completed. Try again. | No se pudo completar la respuesta. Intente otra vez. |
 | `talk.title` | Talk | Hablar |
 | `talk.press` | Press SPACE or click to talk | Presione ESPACIO o haga clic para hablar |
 | `talk.listening` | Listening … | Escuchando … |
