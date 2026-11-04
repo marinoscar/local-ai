@@ -14,13 +14,15 @@
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, PayloadTooLargeException } from '@nestjs/common';
 import { AUDIT_SINK, type AuditSink } from '@marinoscar/platform-api/core';
 import { JobsService } from '@marinoscar/platform-api/jobs';
+import { SystemSettingsService } from '@marinoscar/platform-api/settings';
 import type { LocalaiCatalogVersion, LocalaiNode, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { ArchiveFetchError, archiveUrlFor, CATALOG_ARCHIVE_FETCHER, type CatalogArchiveFetcher } from './archive-fetcher';
 import { bundleSha256 } from './bundle-hash';
-import { CatalogRefreshQueue, type RefreshQueueResult } from './catalog-refresh.queue';
+import { LOCALAI_COMMAND_ENQUEUER, type LocalaiCommandEnqueuer } from '../commands/command-enqueuer';
 import { CatalogSettings } from './catalog-settings';
+import { isCatalogNotifyEligible } from './node-eligibility';
 import { diffCatalogs, type FileDiff } from './catalog-diff';
 import { CatalogValidationError, editorPayloadBytes, filesFromArchive, filesFromEditor } from './catalog-files';
 import { CATALOG_LINTER, type CatalogLinter } from './catalog-linter';
@@ -29,6 +31,7 @@ import {
   AUDIT_CATALOG_IMPORTED,
   AUDIT_CATALOG_LINTED,
   AUDIT_CATALOG_TARGET,
+  COMMAND_CATALOG_REFRESH,
   CATALOG_JOB_SUBJECT,
   JOB_CATALOG_IMPORT,
   JOB_CATALOG_LINT,
@@ -107,6 +110,16 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.name : 'unknown error';
 }
 
+/** What `notifyNodes` did, per node (lab node ids). */
+export interface RefreshQueueResult {
+  /** Nodes a new command was queued for. */
+  queued: string[];
+  /** Nodes that already had an active `catalog.refresh` (nothing new was queued). */
+  alreadyQueued: string[];
+  /** Enrolled nodes left out because they are quiet, down or offline. */
+  skipped: number;
+}
+
 @Injectable()
 export class CatalogService {
   private readonly logger = new Logger(CatalogService.name);
@@ -115,7 +128,8 @@ export class CatalogService {
     private readonly prisma: PrismaService,
     private readonly jobs: JobsService,
     private readonly settings: CatalogSettings,
-    private readonly refreshQueue: CatalogRefreshQueue,
+    @Inject(LOCALAI_COMMAND_ENQUEUER) private readonly commands: LocalaiCommandEnqueuer,
+    private readonly systemSettings: SystemSettingsService,
     @Inject(AUDIT_SINK) private readonly audit: AuditSink,
     @Inject(CATALOG_ARCHIVE_FETCHER) private readonly fetcher: CatalogArchiveFetcher,
     @Inject(CATALOG_LINTER) private readonly linter: CatalogLinter,
@@ -373,7 +387,7 @@ export class CatalogService {
     }
 
     // After the commit and outside the transaction: the audit row and the node commands.
-    const notified = body.notifyNodes ? await this.refreshQueue.queueForEligibleNodes(actorUserId) : null;
+    const notified = body.notifyNodes ? await this.queueRefreshOnEligibleNodes(actorUserId) : null;
     await this.auditEvent(AUDIT_CATALOG_APPROVED, actorUserId, version, {
       source: approved.source,
       sourceRef: approved.sourceRef,
@@ -382,6 +396,54 @@ export class CatalogService {
       nodesNotified: notified ? notified.queued.length : 0,
     });
     return { version: this.summarize(approved), supersedes, notified };
+  }
+
+  /**
+   * `catalog.refresh` on each enrolled node that is `healthy` or `degraded` right now, through the command plane
+   * (params validated, deduplicated by the active-dedup index, the policy table's queued TTL, and the
+   * `localai.command.enqueued` wake-up for the node's held claim). One command per node; a node that already has an
+   * active one is reported in `alreadyQueued`. Quiet and down nodes are skipped: the command would only expire.
+   */
+  private async queueRefreshOnEligibleNodes(actorUserId: string | null, now: Date = new Date()): Promise<RefreshQueueResult> {
+    const nodes = await this.prisma.localaiNode.findMany({ where: { phase: 'enrolled' } });
+    const workerIds = nodes.flatMap((node) => (node.workerNodeId ? [node.workerNodeId] : []));
+    const workers = workerIds.length
+      ? await this.prisma.workerNode.findMany({ where: { id: { in: workerIds } }, select: { id: true, status: true, lastHeartbeatAt: true } })
+      : [];
+    const workerById = new Map(workers.map((worker) => [worker.id, worker]));
+    const { staleHeartbeatSeconds } = await this.systemSettings.getNodesPolicy();
+
+    const result: RefreshQueueResult = { queued: [], alreadyQueued: [], skipped: 0 };
+    for (const node of nodes) {
+      const worker = node.workerNodeId ? (workerById.get(node.workerNodeId) ?? null) : null;
+      if (!isCatalogNotifyEligible(node, worker, staleHeartbeatSeconds, now)) {
+        result.skipped += 1;
+        continue;
+      }
+      const command = await this.commands.enqueue(node.nodeId, COMMAND_CATALOG_REFRESH, {}, { userId: actorUserId }, 'catalog_approve');
+      if (!command.created) {
+        result.alreadyQueued.push(node.nodeId);
+        continue;
+      }
+      result.queued.push(node.nodeId);
+      await this.auditCommandRequested(actorUserId, command.id, node.nodeId);
+    }
+    return result;
+  }
+
+  /** After the command is stored: the audit row. It cannot fail the approval, which is already committed. */
+  private async auditCommandRequested(actorUserId: string | null, commandId: string, nodeId: string): Promise<void> {
+    try {
+      await this.audit.record({
+        action: 'localai.command.requested',
+        actorUserId,
+        targetType: 'localai_command',
+        targetId: commandId,
+        meta: { nodeId, type: `localai.${COMMAND_CATALOG_REFRESH}` },
+      });
+    } catch (error) {
+      this.logger.error(`audit localai.command.requested failed for node_id=${nodeId}: ${describe(error)}`);
+    }
   }
 
   // -------------------------------------------------------------------------------------------------------------

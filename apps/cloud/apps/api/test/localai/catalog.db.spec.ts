@@ -507,6 +507,32 @@ describe('serving nodes', () => {
     expect(session.statusCode).toBe(403);
   });
 
+  it('notifyNodes goes through the command plane: a claim held by the node wakes at once with the catalog.refresh job', async () => {
+    const node = await enrolledNode(36, { stateAgeS: 5 });
+    const claim = (waitMs: number) =>
+      app.inject({
+        method: 'POST',
+        url: `/api/nodes/${node.workerId}/localai/commands/claim`,
+        headers: { authorization: `Bearer ${node.token}` },
+        payload: { types: ['catalog.refresh', 'status.refresh'], limit: 1, waitMs },
+      });
+    const held = claim(10_000);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const version = await insertVersion('2099.11.05-1', 'valid', 'notify-wake');
+    const start = Date.now();
+    expect((await admin('POST', `/versions/${version.version}/approve`, { notifyNodes: true })).statusCode).toBe(200);
+    const answer = await held;
+    expect(Date.now() - start).toBeLessThan(1500);
+    expect(answer.statusCode).toBe(200);
+    const [job] = (answer.json() as { data: { jobs: Array<{ job: { type: string; attempts: number }; params: unknown; renewIntervalMs: number }> } }).data.jobs;
+    expect(job).toMatchObject({ job: { type: 'localai.catalog.refresh', attempts: 1 }, params: {}, renewIntervalMs: 20_000 });
+    // The command row is the one the policy table describes: 1 h TTL, source and requester recorded.
+    const row = await prisma.localaiCommand.findFirstOrThrow({ where: { node: { nodeId: node.nodeId }, type: 'localai.catalog.refresh' } });
+    expect(row).toMatchObject({ status: 'running', source: 'catalog_approve', requestedById: ownerId, dedupKey: 'catalog.refresh:-' });
+    expect(Math.abs(row.expiresAt.getTime() - row.createdAt.getTime() - 60 * 60 * 1000)).toBeLessThan(2_000); // created_at is the database's clock
+  });
+
   it('notifyNodes queues one catalog.refresh per healthy or degraded enrolled node, none for quiet or down nodes, and never stacks a second', async () => {
     const healthy = await enrolledNode(31, { stateAgeS: 5 });
     const degraded = await enrolledNode(32, { stateAgeS: 300 });
@@ -526,7 +552,7 @@ describe('serving nodes', () => {
     for (const node of [healthy, degraded]) {
       const commands = await commandsOf(node.nodeId);
       expect(commands).toHaveLength(1);
-      expect(commands[0]).toMatchObject({ status: 'queued', params: {}, dedupKey: 'localai.catalog.refresh:-', requestedById: ownerId, attempts: 0 });
+      expect(commands[0]).toMatchObject({ status: 'queued', params: {}, dedupKey: 'catalog.refresh:-', source: 'catalog_approve', requestedById: ownerId, attempts: 0 });
       expect(commands[0].expiresAt.getTime()).toBeGreaterThan(Date.now() + 50 * 60 * 1000);
     }
     for (const node of [down, quiet, silent]) expect(await commandsOf(node.nodeId)).toHaveLength(0);

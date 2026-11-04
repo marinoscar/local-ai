@@ -7,7 +7,7 @@
 // A type string is a PERMANENT wire name: it is stored in `localai_commands.type` and sent to every agent.
 import { z } from 'zod';
 
-import { ContentId, ModelId, RootId } from './command-ids';
+import { ContentId, ModelId, RootId } from './state.schema';
 
 const Iso = z.string().datetime({ offset: true });
 const KeyHint = z.string().regex(/^[0-9a-f]{4}…[0-9a-f]{4}$/);

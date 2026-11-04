@@ -50,11 +50,11 @@ export const AUDIT_CATALOG_TARGET = 'localai_catalog';
 export const LAI_CLD_CATALOG_UNAVAILABLE = 'LAI-CLD-013';
 export const LAI_CLD_AICTL_MISSING = 'LAI-CLD-033';
 
-/** The command a notified node runs (cloud-app.md section 3.7) and its dedup key (one active per node). */
-export const COMMAND_CATALOG_REFRESH = 'localai.catalog.refresh';
-export const COMMAND_CATALOG_REFRESH_DEDUP = 'localai.catalog.refresh:-';
-/** How long a queued `catalog.refresh` waits for a node to claim it (cloud-app.md section 3.7 table: 1 h). */
-export const COMMAND_CATALOG_REFRESH_TTL_MS = 60 * 60 * 1000;
+/**
+ * The command a notified node runs (cloud-app.md section 3.7), by the name the command plane's enqueuer port takes.
+ * Its dedup key, queued TTL (1 h) and params schema are the command plane's policy table, not repeated here.
+ */
+export const COMMAND_CATALOG_REFRESH = 'catalog.refresh';
 
 /** One file of a stored catalog: the unit of the `files` JSON column and of the node-facing body. */
 export interface CatalogFile {
