@@ -85,7 +85,7 @@ Notes:
 
 - Generation facts found when CLOUD-01 was done (#75): the generator and `npm install` need **Node 24** (`engines`); Node 22's npm fails with `Cannot read properties of null (reading 'edgesOut')`. `npm test` needs the environment block of `cloud-ci.yml` exported (`JWT_SECRET`, `COOKIE_SECRET`, `POSTGRES_*`, `GOOGLE_*`, `INITIAL_ADMIN_EMAIL=admin@example.test`, `OTEL_ENABLED=false`). The generated `infra/compose/.env.example` carries `INITIAL_ADMIN_EMAIL=admin@example.com` (rendered and locked by `platform-infra`, so not edited); `check-redaction.sh` allows the reserved `example.com` domain, the digests of the two generated lock files and the literal `192.168.0.0/16` range ([security-model.md §5](../architecture/security-model.md)).
 - The `cron-enqueue-only` conformance suite is skipped in `apps/cloud/apps/api/test/conformance.spec.ts` with a written reason, because the deleted notes archive job held the app's only `@Cron`. Re-enable it with `{ exempt: [], minCronFiles: 1 }` in the change that adds the first app `@Cron` (the alert evaluator, CLOUD-15).
-- The installed migrations `add_notes`, `add_documents` and `add_android_app` stay (an installed migration is never edited). The first app migration, `add_localai` (CLOUD-04), must also drop the `notes` and `documents` tables.
+- The installed migrations `add_notes`, `add_documents` and `add_android_app` stay (an installed migration is never edited). The first app migration, `add_localai` (CLOUD-04), also drops the `notes` and `documents` tables (done, #78).
 
 **Remove the starter's samples** (same PR):
 - `apps/api/src/notes/` (all files), `apps/api/prisma/fragments/notes.prisma`, the `NOTES_PERMISSIONS` entry in `apps/api/src/platform/permissions.ts`, the notes registrations in `apps/api/src/platform/registrations.ts`, `NotesModule` in `app.module.ts`, the notes pages and routes in `apps/web/src`, the notes tests.
@@ -198,6 +198,14 @@ A `nod_` credential has no org, so it gets none of these (EAB: a node credential
 
 File: `apps/cloud/apps/api/prisma/fragments/localai.prisma`. Then `npm run db:compose && npm run prisma:generate && npm run prisma:migrate:dev -- --name add_localai`. Every model is classified in `apps/api/src/localai/localai.ownership.ts` (EAB model-ownership registry) as app-owned; `localai_gateway_keys` (gateway.md) is user-owned and registered in the user-owned data registry with purge-on-user-delete.
 
+**As built (CLOUD-04, #78).** The fragment is `apps/cloud/apps/api/prisma/fragments/localai.prisma`; the migration is `20261104120542_add_localai`. Differences from the listing below:
+
+- **No relation to `WorkerNode` or `NodeCredential`.** `@marinoscar/platform-db@0.1.0-next.21` does not mark either model `// @extensible`, so `extend model WorkerNode` / `extend model NodeCredential` is refused by `platform db compose` (`NOT_EXTENSIBLE`) and Prisma cannot declare the relation. `workerNodeId` and `nodeCredentialId` are plain unique `uuid` columns with **no foreign key** (a hand-written constraint would be schema drift that `prisma migrate diff` reports). The binding guard (§4.2) re-derives and re-links both on every node contact, which is already how a pruned worker node heals (§5). When the platform marks the two models extensible (an EAB seam request, template `seam_request.yml`), a later migration adds the two `extend model` back-relations and the `onDelete: SetNull` foreign keys.
+- **Ownership.** All five models are classified `system` (deployment-wide: no `org_id`, no row-level security) in `apps/cloud/apps/api/src/localai/localai.ownership.ts`, registered from `src/platform/registrations.ts`. The user columns (`created_by_id`, `approved_by_id`, `requested_by_id`) are registered as actor fields (`purge: 'detach'`, `export: 'exclude'`, matching `onDelete: SetNull`) and carry a `keep` decision in `src/platform/user-data/user-data.manifest.ts`. `acknowledged_by_id` on `localai_alerts` is a plain column with no foreign key, as listed.
+- **Raw-SQL indexes.** The three partial unique indexes are appended to the migration SQL and listed in `apps/cloud/apps/api/prisma/platform.lock` under `rawSqlIndexes` (name plus the `pg_indexes.indexdef` text), which is this app's allowlist; `test/prisma/platform-db-conformance.spec.ts` (`runDbConformance`) checks it offline and `platform db drift` against a database.
+- **Dropped starter tables.** The same migration drops `notes` and `documents` (the models left the composed schema in CLOUD-01) and runs inside the `app.rls_bypass` transaction form because `documents` is a row-level-security table; the `documents_org_isolation` entry left `platform.lock` `rlsPolicies` with it. `android_app_releases` stays (the `android-app` fragment is still composed).
+- **Tests.** `test/localai/indexes.db.spec.ts` (the three indexes and the settings seed, in rolled-back transactions) and `test/localai/ownership.spec.ts`.
+
 ```prisma
 // ---------------------------------------------------------------------------
 // Local AI nodes. One row per lab node id (ai-n<N>). Extends EAB worker_nodes.
@@ -233,8 +241,8 @@ model LocalaiNode {
   gatewayEnabled    Boolean              @default(true) @map("gateway_enabled")   // false = drained from /v1 routing
   gatewayPriority   Int                  @default(100) @map("gateway_priority")   // lower is preferred
   phase             LocalaiNodePhase     @default(pending)
-  workerNodeId      String?              @unique @map("worker_node_id") @db.Uuid
-  nodeCredentialId  String?              @unique @map("node_credential_id") @db.Uuid  // the ONE credential bound to this node
+  workerNodeId      String?              @unique @map("worker_node_id") @db.Uuid      // EAB worker_nodes.id; plain column, NO foreign key (see "As built" below)
+  nodeCredentialId  String?              @unique @map("node_credential_id") @db.Uuid  // the ONE credential bound to this node; plain column, NO foreign key
   lastState         Json?                @map("last_state") @db.JsonB       // last accepted snapshot (§3.6), verbatim
   lastStateAt       DateTime?            @map("last_state_at") @db.Timestamptz       // server receive time
   lastStateSeq      BigInt?              @map("last_state_seq")             // snapshot seq, monotonic per agent boot+counter
@@ -246,8 +254,6 @@ model LocalaiNode {
   updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz
   retiredAt         DateTime?            @map("retired_at") @db.Timestamptz
 
-  workerNode        WorkerNode?          @relation(fields: [workerNodeId], references: [id], onDelete: SetNull)
-  nodeCredential    NodeCredential?      @relation(fields: [nodeCredentialId], references: [id], onDelete: SetNull)
   createdBy         User?                @relation("LocalaiNodeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   models            LocalaiNodeModel[]
   commands          LocalaiCommand[]
@@ -256,8 +262,6 @@ model LocalaiNode {
   @@map("localai_nodes")
 }
 
-extend model WorkerNode     { localaiNode LocalaiNode? }
-extend model NodeCredential { localaiNode LocalaiNode? }
 extend model User {
   localaiNodesCreated   LocalaiNode[]           @relation("LocalaiNodeCreatedBy")
   localaiCommands       LocalaiCommand[]        @relation("LocalaiCommandRequestedBy")
@@ -418,6 +422,8 @@ The agent also uses EAB's own node routes unchanged ([EAB worker-nodes.md](https
 | `POST /api/nodes/{id}/deregister` | On `→ offline`/`→ survival` (3 s timeout, errors ignored, [modes.md](../architecture/modes.md) §2.1 step 2) |
 
 EAB settings changed at first deploy (`/admin/settings/workers`, or seed): `nodes.staleHeartbeatSeconds = 45`, `nodes.offlineStaleMultiplier = 4` (offline after 3 min), `nodes.offlineRetentionDays = 3650` (a laptop offline for months must not be pruned; pruning would orphan `workerNodeId`, which the guard heals on the next contact anyway).
+
+As built (CLOUD-04): `npm run prisma:seed` runs the app seed step `localai.node-settings` (`src/localai/localai.seed.ts`, passed to `seedPlatform` as an `extras` step). It writes these three keys into `system_settings.global.value.nodes` **only where the key is absent**, so a value an administrator set on `/admin/settings/workers` is never overwritten and a second run changes nothing. Stored keys win over the platform defaults (90 s, 4, 30 days) when settings are read, key by key, so existing deployments get the values on their next seed. `jobSecretBrokerEnabled` is not touched (the platform default, off, stays).
 
 #### `GET /api/nodes/{id}/localai/config`
 Handshake. The agent calls it after `register` and whenever it gets a 404 on another `/localai/` route.
