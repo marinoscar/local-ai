@@ -1,10 +1,10 @@
 // Wizard step 3: the VPS publish checklist (docs/specs/cloud-app.md section 4.8). Phase 1 publishing is manual: the
 // rows mirror runbook 05 part 7, with the commands and files the server rendered for this node. "Publish automatically"
-// is here and disabled until the VPS helper exists (section 4.10).
+// runs the VPS helper's publish job (section 4.10) and lets the checklist below show steps 2 to 5 as it left them.
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
-import { Alert, Box, Button, Chip, CircularProgress, Collapse, List, ListItem, Stack, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, Collapse, List, ListItem, Stack, Typography } from '@mui/material';
 import { useState, type ReactElement } from 'react';
 
 import { CodeBlock } from './CodeBlock';
@@ -12,9 +12,9 @@ import { CopyButton } from './CopyButton';
 import { messageOf, reasonOf, type WizardClient } from './wizardApi';
 import type { Checklist, ChecklistStep, StepState } from './wizardTypes';
 import { usePolled } from './usePolled';
+import { VpsPublishPanel } from './VpsPublishPanel';
 
 export const CHECKLIST_POLL_MS = 5000;
-export const PUBLISH_AUTOMATICALLY_TOOLTIP = 'Coming later: needs the VPS helper (§4.10)';
 
 const STATE_CHIP: Record<StepState, { label: string; color: 'default' | 'success' | 'error'; icon: ReactElement }> = {
   todo: { label: 'To do', color: 'default', icon: <RadioButtonUncheckedIcon /> },
@@ -148,18 +148,11 @@ export function StepPublish({ client, nodeId }: StepPublishProps) {
 
   return (
     <Stack spacing={2} sx={{ maxWidth: 900 }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ justifyContent: 'space-between', alignItems: { sm: 'flex-start' } }}>
-        <Typography color="text.secondary" sx={{ maxWidth: 560 }}>
-          Make {nodeId} reachable from the internet through the VPS. These are the steps of the &ldquo;Add a node&rdquo; runbook (Part 7); run the VPS commands as root on the VPS.
-        </Typography>
-        <Tooltip title={PUBLISH_AUTOMATICALLY_TOOLTIP} describeChild>
-          <span tabIndex={0}>
-            <Button variant="outlined" disabled>
-              Publish automatically
-            </Button>
-          </span>
-        </Tooltip>
-      </Stack>
+      <Typography color="text.secondary" sx={{ maxWidth: 560 }}>
+        Make {nodeId} reachable from the internet through the VPS. These are the steps of the &ldquo;Add a node&rdquo; runbook (Part 7); run the VPS commands as root on the VPS, or let the VPS helper do steps 2 to 5.
+      </Typography>
+
+      <VpsPublishPanel client={client} nodeId={nodeId} onSettled={poll.refresh} />
 
       {checklist?.complete ? (
         <Alert severity="success" role="status" data-testid="lab-banner">

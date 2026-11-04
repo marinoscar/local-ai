@@ -23,6 +23,7 @@ import {
   type StoredChecklist,
 } from './checklist.state';
 import { NETWORK_PROBE, type NetworkProbe } from './network-probe.port';
+import { reservedEntries } from '../vps/vps-journal';
 import { PUBLIC_HOST_RE } from './node-id';
 import { renderStepSnippets, type MissingValue, type Snippet } from './snippets';
 import { WizardSettingsService } from './wizard-settings';
@@ -158,7 +159,8 @@ export class ChecklistService {
     await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM localai_nodes WHERE id = ${rowId}::uuid FOR UPDATE`;
       const current = await tx.localaiNode.findUniqueOrThrow({ where: { id: rowId }, select: { publishChecklist: true } });
-      const merged = { ...parseStoredChecklist(current.publishChecklist), [step]: entry };
+      // The stack-agent's journal lives beside the steps (key `vps`) and must survive a manual action.
+      const merged = { ...reservedEntries(current.publishChecklist), ...parseStoredChecklist(current.publishChecklist), [step]: entry };
       await tx.localaiNode.update({ where: { id: rowId }, data: { publishChecklist: merged as unknown as Prisma.InputJsonObject } });
     });
   }

@@ -69,3 +69,39 @@ export interface NodeStatus {
 }
 
 export type ChecklistAction = 'mark_done' | 'mark_todo' | 'check';
+
+// ------------------------------------------------------------------------------------------------------------------
+// Automatic publishing by the VPS stack-agent (docs/specs/cloud-app.md section 4.10). Mirrors
+// apps/api/src/localai/vps/vps.service.ts.
+// ------------------------------------------------------------------------------------------------------------------
+
+export interface VpsBlocker {
+  code: string;
+  /** One plain sentence for the administrator. */
+  message: string;
+}
+
+export type VpsRunState = 'idle' | 'queued' | 'running' | 'succeeded' | 'failed';
+
+export interface VpsJournalStep {
+  name: string;
+  status: 'done' | 'skipped' | 'failed';
+  detail: string;
+}
+
+export interface VpsStatus {
+  nodeId: string;
+  host: string | null;
+  publish: { available: boolean; blockers: VpsBlocker[] };
+  unpublish: { available: boolean; blockers: VpsBlocker[] };
+  run: {
+    state: VpsRunState;
+    action: 'publish' | 'unpublish' | null;
+    jobId: string | null;
+    enqueuedAt: string | null;
+    finishedAt: string | null;
+    steps: VpsJournalStep[];
+    certificateExpiresAt: string | null;
+    error: string | null;
+  };
+}
