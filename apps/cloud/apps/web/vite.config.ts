@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import react from '@vitejs/plugin-react';
-import { build as viteBuild, defineConfig, type Plugin } from 'vite';
+import { build as viteBuild, defineConfig, searchForWorkspaceRoot, type Plugin } from 'vite';
 
 /** The identity fields the page shell and the manifest show (packages/shared/identity.json). */
 export interface WebIdentity {
@@ -112,14 +112,23 @@ export default defineConfig({
   plugins: [react(), identityPlugin(), serviceWorkerPlugin()],
   // The packaged pages are one chunk until the app splits its routes.
   build: { chunkSizeWarningLimit: 2000 },
+  resolve: {
+    // @localai/ui (packages/ui at the repository root, outside this npm workspace tree) is a symlink to source. Resolving
+    // its imports from the link, not from its real path, finds React and MUI in this app's node_modules, one copy each.
+    preserveSymlinks: true,
+  },
   server: {
     host: true,
     port: 5173,
+    // The dev server may also serve the shared package's real directory (the symlink target, outside the workspace root).
+    fs: { allow: [searchForWorkspaceRoot(HERE), join(HERE, '..', '..', '..', '..', 'packages', 'ui')] },
     proxy: { '/api': { target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3000', changeOrigin: false } },
   },
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/__tests__/setup.ts'],
+    // The shared package is TypeScript source behind a node_modules link: transform it like the app's own code.
+    server: { deps: { inline: ['@localai/ui'] } },
   },
 });

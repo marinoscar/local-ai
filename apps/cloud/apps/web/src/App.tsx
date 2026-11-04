@@ -26,6 +26,7 @@ import { api, platformApi } from './api';
 import { ADMIN_SECTIONS } from './config/adminSections';
 import { NAVIGATION } from './config/navigation';
 import { USER_SETTINGS_SECTIONS } from './config/userSettingsSections';
+import { LabOverviewPage } from './localai/lab/LabOverviewPage';
 import { AppPlatformHost } from './platformHost';
 import {
   beforeLogout,
@@ -157,6 +158,8 @@ export function AppRoutes() {
       <Route element={<RequireAuth loading={spinner} />}>
         <Route element={shell}>
           <Route index element={<Home />} />
+          {/* The Local AI lab (docs/specs/cloud-app.md section 3.11). The permission is the string GET /api/localai/nodes enforces. */}
+          <Route path="lab" element={<Gate permission="lab:read"><LabOverviewPage /></Gate>} />
           <Route path="settings" element={<Hub sections={USER_SETTINGS_SECTIONS} hubKey="user-settings-hub" title="Settings" subtitle="Manage your account preferences." />} />
           <Route path="settings/tokens" element={<UserTokensPage />} />
           <Route path="admin/settings" element={<Hub sections={ADMIN_SECTIONS} hubKey="admin-settings-hub" title="Administration" subtitle="Users, background jobs and the health of this deployment." />} />

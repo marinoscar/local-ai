@@ -1,0 +1,166 @@
+{
+  "summary": {
+    "nodes": 3,
+    "online": 2,
+    "offlineMode": 1,
+    "activeAlerts": 2,
+    "routable": 2
+  },
+  "nodes": [
+    {
+      "nodeId": "ai-n1",
+      "displayName": "MS-S1 Max",
+      "hardware": "128 GB unified",
+      "backend": "vulkan",
+      "phase": "enrolled",
+      "mode": "online",
+      "health": "healthy",
+      "routable": true,
+      "lastStateAt": "2026-11-03T11:59:52.000Z",
+      "loadedModels": [
+        {
+          "id": "qwen3-coder-next-q4km",
+          "isDefault": true
+        }
+      ],
+      "lastDefault": "qwen3-coder-next-q4km",
+      "vram": {
+        "usedMib": 62464,
+        "totalMib": 98304
+      },
+      "ark": [
+        {
+          "rootId": "internal",
+          "kind": "internal",
+          "present": true,
+          "colour": "green",
+          "label": "ready",
+          "driveAgeDays": null
+        }
+      ],
+      "sync": {
+        "result": "ok",
+        "finishedAt": "2026-11-03T02:14:00.000Z",
+        "skipReason": null
+      },
+      "drill": {
+        "result": "pass"
+      },
+      "agentVersion": "0.4.1",
+      "agentBehind": false,
+      "catalogVersion": "2026.11.02-1",
+      "catalogBehind": false,
+      "alerts": {
+        "active": 0,
+        "critical": 0
+      }
+    },
+    {
+      "nodeId": "ai-n2",
+      "displayName": "MSI Stealth",
+      "hardware": "RTX 4080 12 GB",
+      "backend": "cuda",
+      "phase": "enrolled",
+      "mode": "online",
+      "health": "healthy",
+      "routable": true,
+      "lastStateAt": "2026-11-03T11:59:39.000Z",
+      "loadedModels": [
+        {
+          "id": "qwen3.6-35b-a3b-q4km",
+          "isDefault": true
+        }
+      ],
+      "lastDefault": "qwen3.6-35b-a3b-q4km",
+      "vram": {
+        "usedMib": 11469,
+        "totalMib": 12288
+      },
+      "ark": [
+        {
+          "rootId": "internal",
+          "kind": "internal",
+          "present": true,
+          "colour": "red",
+          "label": "sync failed",
+          "driveAgeDays": null
+        },
+        {
+          "rootId": "ark-1a2b3c4d",
+          "kind": "ark_drive",
+          "present": true,
+          "colour": "red",
+          "label": "41 days",
+          "driveAgeDays": 41
+        }
+      ],
+      "sync": {
+        "result": "failed",
+        "finishedAt": "2026-11-03T02:14:00.000Z",
+        "skipReason": null
+      },
+      "drill": {
+        "result": "pass"
+      },
+      "agentVersion": "0.4.1",
+      "agentBehind": false,
+      "catalogVersion": "2026.11.02-1",
+      "catalogBehind": false,
+      "alerts": {
+        "active": 2,
+        "critical": 1
+      }
+    },
+    {
+      "nodeId": "ai-n3",
+      "displayName": "HP ZBook",
+      "hardware": "RTX 2070 8 GB",
+      "backend": "cuda",
+      "phase": "enrolled",
+      "mode": "offline",
+      "health": "quiet",
+      "routable": false,
+      "lastStateAt": "2026-11-03T09:00:00.000Z",
+      "loadedModels": [],
+      "lastDefault": "qwen3.5-9b-q4km",
+      "vram": {
+        "usedMib": 0,
+        "totalMib": 8192
+      },
+      "ark": [
+        {
+          "rootId": "internal",
+          "kind": "internal",
+          "present": true,
+          "colour": "green",
+          "label": "ready",
+          "driveAgeDays": null
+        },
+        {
+          "rootId": "ark-1a2b3c4d",
+          "kind": "ark_drive",
+          "present": false,
+          "colour": "green",
+          "label": "Drive not plugged in · last synced 6 days ago",
+          "driveAgeDays": 6
+        }
+      ],
+      "sync": {
+        "result": "skipped",
+        "finishedAt": "2026-11-03T08:50:00.000Z",
+        "skipReason": "mode"
+      },
+      "drill": {
+        "result": "pass"
+      },
+      "agentVersion": "0.4.0",
+      "agentBehind": true,
+      "catalogVersion": "2026.10.28-2",
+      "catalogBehind": true,
+      "alerts": {
+        "active": 0,
+        "critical": 0
+      }
+    }
+  ]
+}
