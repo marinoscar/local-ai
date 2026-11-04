@@ -1,0 +1,174 @@
+{
+  "localai.status.refresh": {
+    "params": {},
+    "result": {
+      "seq": 42,
+      "reported_at": "2026-11-02T15:04:10.000Z"
+    }
+  },
+  "localai.model.load": {
+    "params": {
+      "model_id": "qwen3.6-35b-a3b-q4km",
+      "wait": true,
+      "unload_others": true,
+      "set_default": false
+    },
+    "result": {
+      "model_id": "qwen3.6-35b-a3b-q4km",
+      "status": "loaded",
+      "load_ms": 41250,
+      "unloaded": [
+        "gemma-4-26b-q4km"
+      ],
+      "vram_used_mib": 21480,
+      "is_default": false
+    }
+  },
+  "localai.model.unload": {
+    "params": {
+      "model_id": "gemma-4-26b-q4km"
+    },
+    "result": {
+      "model_id": "gemma-4-26b-q4km",
+      "status": "unloaded",
+      "was_loaded": true
+    }
+  },
+  "localai.model.set_default": {
+    "params": {
+      "model_id": "qwen3.6-35b-a3b-q4km"
+    },
+    "result": {
+      "model_id": "qwen3.6-35b-a3b-q4km",
+      "previous": "gemma-4-26b-q4km"
+    }
+  },
+  "localai.model.download": {
+    "params": {
+      "model_id": "qwen3.6-35b-a3b-q4km",
+      "roots": [
+        "internal"
+      ]
+    },
+    "result": {
+      "model_id": "qwen3.6-35b-a3b-q4km",
+      "already_present": false,
+      "sync_run_id": "run-0001",
+      "bytes_planned": 21474836480
+    }
+  },
+  "localai.model.delete": {
+    "params": {
+      "model_id": "gemma-4-26b-q4km",
+      "roots": [
+        "internal"
+      ],
+      "confirm": "gemma-4-26b-q4km"
+    },
+    "result": {
+      "model_id": "gemma-4-26b-q4km",
+      "deleted_roots": [
+        "internal"
+      ],
+      "kept_roots": [
+        {
+          "root": "ark-0a1b2c3d",
+          "reason": "last_verified_copy"
+        }
+      ],
+      "freed_bytes": 17179869184
+    }
+  },
+  "localai.ark.sync": {
+    "params": {
+      "roots": [
+        "ark-0a1b2c3d"
+      ],
+      "items": [
+        "qwen3.6-35b-a3b-q4km"
+      ],
+      "dry_run": true
+    },
+    "result": {
+      "sync_run_id": "run-0002",
+      "started": true,
+      "plan": {
+        "items_to_download": 1,
+        "bytes_to_download": 21474836480,
+        "items_skipped_budget": 0
+      }
+    }
+  },
+  "localai.ark.verify": {
+    "params": {
+      "roots": [
+        "internal"
+      ]
+    },
+    "result": {
+      "verify_run_id": "run-0003",
+      "started": true,
+      "items_planned": 12
+    }
+  },
+  "localai.mode.offline": {
+    "params": {
+      "reason": "Moving the laptop"
+    },
+    "result": {
+      "previous_mode": "online",
+      "mode": "offline"
+    }
+  },
+  "localai.key.rotate": {
+    "params": {},
+    "result": {
+      "fingerprint": "a1b2…c3d4",
+      "rotated_at": "2026-11-02T15:04:20.000Z",
+      "cloud_synced": true
+    }
+  },
+  "localai.service.restart": {
+    "params": {
+      "service": "llama"
+    },
+    "result": {
+      "service": "llama",
+      "active_state": "active",
+      "restarted_at": "2026-11-02T15:04:30.000Z"
+    }
+  },
+  "localai.logs.tail": {
+    "params": {
+      "unit": "agent",
+      "lines": 200
+    },
+    "result": {
+      "unit": "agent",
+      "lines": [
+        "2026-11-02T15:04:00Z agent started",
+        "2026-11-02T15:04:01Z link up"
+      ],
+      "truncated": false
+    }
+  },
+  "localai.catalog.refresh": {
+    "params": {},
+    "result": {
+      "catalog_version": "2026.11.02-1",
+      "changed": true,
+      "accepted": true,
+      "rejected_code": null
+    }
+  },
+  "localai.agent.update": {
+    "params": {
+      "version": "0.2.0"
+    },
+    "result": {
+      "from_version": "0.1.0",
+      "to_version": "0.2.0",
+      "status": "updated"
+    }
+  }
+}

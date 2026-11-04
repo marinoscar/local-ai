@@ -41,9 +41,24 @@ class FakeTable {
   };
 }
 
-function build(options: { linter?: CatalogLinter; fetch?: (url: string) => Promise<Buffer>; refresh?: () => Promise<unknown> } = {}) {
+function build(options: { linter?: CatalogLinter; fetch?: (url: string) => Promise<Buffer>; enqueue?: (nodeId: string) => Promise<{ id: string; created: boolean }> } = {}) {
   const table = new FakeTable();
-  const prisma = { localaiCatalogVersion: table, $transaction: async (fn: (tx: unknown) => unknown) => fn(prisma) };
+  // Two enrolled nodes: ai-n1 is in Offline mode (quiet, skipped), ai-n2 is healthy (gets the refresh).
+  const recent = new Date();
+  const nodes = [
+    { id: 'row-1', nodeId: 'ai-n1', phase: 'enrolled', mode: 'offline', lastState: null, lastStateAt: recent, workerNodeId: 'w1' },
+    { id: 'row-2', nodeId: 'ai-n2', phase: 'enrolled', mode: 'online', lastState: null, lastStateAt: recent, workerNodeId: 'w2' },
+  ];
+  const workers = [
+    { id: 'w1', status: 'online', lastHeartbeatAt: recent },
+    { id: 'w2', status: 'online', lastHeartbeatAt: recent },
+  ];
+  const prisma = {
+    localaiCatalogVersion: table,
+    localaiNode: { findMany: async () => nodes },
+    workerNode: { findMany: async () => workers },
+    $transaction: async (fn: (tx: unknown) => unknown) => fn(prisma),
+  };
   const jobs = { enqueue: jest.fn(async (input: Row) => ({ id: `job-${input.type}-${input.subjectId}` })) };
   const audits: Row[] = [];
   const audit = { record: jest.fn(async (event: Row) => void audits.push(event)) };
@@ -55,10 +70,12 @@ function build(options: { linter?: CatalogLinter; fetch?: (url: string) => Promi
     }),
   };
   const linter: CatalogLinter = options.linter ?? { lint: async () => ({ status: 'valid', result: { valid: true, problems: [], exitCode: 0 } }) };
-  const refresh = { queueForEligibleNodes: jest.fn(options.refresh ?? (async () => ({ queued: ['ai-n2'], alreadyQueued: [], skipped: 1 }))) };
+  let commandCount = 0;
+  const enqueuer = { enqueue: jest.fn(async (nodeId: string, ..._rest: unknown[]) => (options.enqueue ? options.enqueue(nodeId) : { id: `cmd-${(commandCount += 1)}`, created: true })) };
+  const systemSettings = { getNodesPolicy: async () => ({ staleHeartbeatSeconds: 45 }) };
   const settings = { githubRepo: async () => 'org-alpha/lab-catalog' };
-  const service = new CatalogService(prisma as never, jobs as never, settings as never, refresh as never, audit as never, fetcher as never, linter);
-  return { service, table, jobs, audits, requests, refresh, fetcher };
+  const service = new CatalogService(prisma as never, jobs as never, settings as never, enqueuer as never, systemSettings as never, audit as never, fetcher as never, linter);
+  return { service, table, jobs, audits, requests, enqueuer, fetcher };
 }
 
 function draftRow(version: string, status: string, over: Row = {}): Row {
@@ -307,15 +324,15 @@ describe('CatalogService', () => {
 
   describe('approve', () => {
     it.each(['draft', 'invalid', 'approved', 'superseded'])('refuses a %s version with 409', async (current) => {
-      const { service, table, refresh } = build();
+      const { service, table, enqueuer } = build();
       table.rows.push(draftRow('2026.11.03-1', current));
       expect(await status(service.approve('2026.11.03-1', { notifyNodes: true }, ACTOR))).toBe(409);
       expect(table.rows[0].status).toBe(current);
-      expect(refresh.queueForEligibleNodes).not.toHaveBeenCalled();
+      expect(enqueuer.enqueue).not.toHaveBeenCalled();
     });
 
     it('approves a valid version, supersedes the previous approved one and records who and when', async () => {
-      const { service, table, audits, refresh } = build();
+      const { service, table, audits, enqueuer } = build();
       table.rows.push(draftRow('2026.11.02-1', 'approved'), draftRow('2026.11.03-1', 'valid', { source: 'editor', sourceRef: '2026.11.02-1' }));
       const result = await service.approve('2026.11.03-1', { notifyNodes: false }, ACTOR);
       expect(result.supersedes).toBe('2026.11.02-1');
@@ -335,7 +352,7 @@ describe('CatalogService', () => {
           meta: { source: 'editor', sourceRef: '2026.11.02-1', supersedes: '2026.11.02-1', notifyNodes: false, nodesNotified: 0 },
         },
       ]);
-      expect(refresh.queueForEligibleNodes).not.toHaveBeenCalled();
+      expect(enqueuer.enqueue).not.toHaveBeenCalled();
     });
 
     it('approves with nothing previously approved', async () => {
@@ -344,13 +361,26 @@ describe('CatalogService', () => {
       expect((await service.approve('2026.11.03-1', { notifyNodes: false }, ACTOR)).supersedes).toBeNull();
     });
 
-    it('with notifyNodes queues the refresh once the approval is done, and a failure there does not undo it', async () => {
-      const { service, table, refresh } = build();
+    it('with notifyNodes queues catalog.refresh through the command plane on the eligible nodes only, once the approval is done', async () => {
+      const { service, table, enqueuer, audits } = build();
       table.rows.push(draftRow('2026.11.03-1', 'valid'));
       const result = await service.approve('2026.11.03-1', { notifyNodes: true }, ACTOR);
-      expect(refresh.queueForEligibleNodes).toHaveBeenCalledWith(ACTOR);
+      // ai-n1 is in Offline mode (quiet): skipped. ai-n2 is healthy: one command, by lab node id and unprefixed type.
+      expect(enqueuer.enqueue).toHaveBeenCalledTimes(1);
+      expect(enqueuer.enqueue).toHaveBeenCalledWith('ai-n2', 'catalog.refresh', {}, { userId: ACTOR }, 'catalog_approve');
       expect(result.notified).toEqual({ queued: ['ai-n2'], alreadyQueued: [], skipped: 1 });
       expect(table.rows[0].status).toBe('approved');
+      expect(audits.map((a) => a.action)).toEqual(['localai.command.requested', 'localai.catalog.approved']);
+      expect(audits[0]).toMatchObject({ actorUserId: ACTOR, targetType: 'localai_command', targetId: 'cmd-1', meta: { nodeId: 'ai-n2', type: 'localai.catalog.refresh' } });
+      expect(audits[1].meta).toMatchObject({ notifyNodes: true, nodesNotified: 1 });
+    });
+
+    it('reports a node that already has an active catalog.refresh as alreadyQueued and audits nothing for it', async () => {
+      const { service, table, audits } = build({ enqueue: async () => ({ id: 'cmd-active', created: false }) });
+      table.rows.push(draftRow('2026.11.03-1', 'valid'));
+      const result = await service.approve('2026.11.03-1', { notifyNodes: true }, ACTOR);
+      expect(result.notified).toEqual({ queued: [], alreadyQueued: ['ai-n2'], skipped: 1 });
+      expect(audits.map((a) => a.action)).toEqual(['localai.catalog.approved']);
     });
 
     it('answers 409 when two approvals race and the loser meets the unique index', async () => {

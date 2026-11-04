@@ -26,5 +26,10 @@ regex = '''\bZ0[0-9A-Z]{10,}\b'''
 # The redaction self-test fixtures contain deliberately fake, forbidden-looking values.
 # scripts/check-redaction.sh --file proves they are caught; gitleaks must not fail on them.
 [allowlist]
-description = "redaction test fixtures"
+description = "redaction test fixtures and one invented placeholder claim token"
 paths = ['''scripts/tests/redaction/.*''']
+# One invented placeholder claim token shared by the cloud command-plane fixtures and their specs
+# (apps/cloud/apps/api/test/fixtures/localai/*.json and the localai specs). It is a UUID with no
+# meaning; the wire contract requires a UUID there, so a shared JSON fixture cannot generate it.
+# Exact value only: any other high-entropy value in those files is still a finding.
+regexes = ['''1f0e8b7a-3c2d-4e9f-8a6b-5d4c3b2a1f0e''']

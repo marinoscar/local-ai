@@ -29,6 +29,7 @@ import { readSchemaDatamodel, runPlatformConformance } from '@marinoscar/platfor
 // Fills the registries: the platform's entries, then the app's.
 import '../src/platform/registrations';
 import { AppModule } from '../src/app.module';
+import { LOCALAI_RAW_SQL } from '../src/localai/localai.raw-sql';
 import { PERMISSION_OPTIONS } from '../src/platform/permissions';
 import { ALL_SLICES } from '../src/platform/slices/definitions';
 import { isSliceEnabled } from '../src/platform/slices/manifest';
@@ -82,11 +83,10 @@ function sliceSuites() {
 runPlatformConformance({
   sourceRoots: [SOURCE_ROOT],
   suites: {
-    // Every @Cron only enqueues (CLAUDE.md queue rule 1). The starter's only app @Cron was the deleted notes
-    // sample, and the suite refuses minCronFiles: 0 (a vacuous scan). RE-ENABLE this suite with
-    // `{ exempt: [], minCronFiles: 1 }` in the same change that adds the app's first @Cron (the housekeeping
-    // cron of CLOUD-xx), so the queue rule keeps its executable form.
-    cronEnqueueOnly: { skip: 'The app has no @Cron of its own yet (the starter sample was deleted); re-enable with the first one.' },
+    // Every @Cron only enqueues (CLAUDE.md queue rule 1). The app's first @Cron is the command sweeper
+    // (src/localai/commands/sweeper.task.ts, CLOUD-08), which only enqueues the `localai.commands.sweep` job; the
+    // suite refuses minCronFiles: 0 (a vacuous scan), so it now runs with no exemption.
+    cronEnqueueOnly: { exempt: [], minCronFiles: 1 },
     // Every foreign key to User in the composed schema (the platform's models
     // and the app's fragments) has a registry entry whose purge matches
     // onDelete: the platform's inventory and the app's, as registered.
@@ -95,7 +95,7 @@ runPlatformConformance({
       policies: userOwnedModelRegistry.list(),
       // The raw SQL of every slice's code that is in the tree, enabled or not
       // (the scan reads every file under src/), each argued (`ApiSlice.rawSql`).
-      rawSqlAllowlist: Object.values(ALL_SLICES).flatMap((slice) => slice.rawSql ?? []),
+      rawSqlAllowlist: [...Object.values(ALL_SLICES).flatMap((slice) => slice.rawSql ?? []), ...LOCALAI_RAW_SQL],
       registerIn: 'src/app.ownership.ts (or your module\'s own *.ownership.ts)',
     },
     // Every route reachable from AppModule declares @Auth() or @Public(), and

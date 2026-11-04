@@ -1,0 +1,11 @@
+{
+  "statusCode": 409,
+  "code": "CONFLICT",
+  "message": "This command is no longer held by this node",
+  "details": {
+    "code": "LAI-CLD-059",
+    "reason": "lease_lost"
+  },
+  "path": "/api/nodes/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3/localai/commands/6b3c9a52-7d1e-4c3a-9f0b-2a5e8d417c60/renew",
+  "timestamp": "2026-11-02T15:04:00.000Z"
+}
