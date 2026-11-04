@@ -2,6 +2,7 @@ package item
 
 import (
 	"errors"
+	"github.com/marinoscar/local-ai/agent/internal/fsperm"
 	"io"
 	"os"
 
@@ -36,7 +37,7 @@ type FS interface {
 type OSFS struct{ config.OSFS }
 
 // MkdirAll implements FS.
-func (OSFS) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
+func (OSFS) MkdirAll(path string, perm os.FileMode) error { return fsperm.MkdirAll(path, perm) }
 
 // OpenRead implements FS.
 func (OSFS) OpenRead(name string) (io.ReadCloser, error) { return os.Open(name) }

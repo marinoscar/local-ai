@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/marinoscar/local-ai/agent/internal/fsperm"
 	"io/fs"
 	"net/url"
 	"os"
@@ -384,7 +385,7 @@ func (g *GitMirror) cloneOrResume(ctx context.Context, bin, rawURL, dest, proxy 
 		}
 		g.Env.log().Warn("an unusable earlier clone was moved aside", "component", "sync", "path", filepath.Base(aside))
 	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	if err := fsperm.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return fail(CodeFetch, err, "cannot create the staging directory")
 	}
 	args := append(g.netArgs(proxy), "clone", "--mirror", "--no-tags", "--", rawURL, dest)
@@ -466,7 +467,7 @@ func (g *GitMirror) tarballs(ctx context.Context, bin, mirror, staging, name str
 		return nil, err
 	}
 	srcDir := filepath.Join(staging, "src")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+	if err := fsperm.MkdirAll(srcDir, 0o755); err != nil {
 		return nil, fail(CodeMirror, err, "cannot create the staging directory")
 	}
 	var files []manifest.File

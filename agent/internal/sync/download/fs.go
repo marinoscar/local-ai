@@ -1,6 +1,7 @@
 package download
 
 import (
+	"github.com/marinoscar/local-ai/agent/internal/fsperm"
 	"io"
 	"os"
 )
@@ -47,7 +48,7 @@ type ReadFile interface {
 type OSFS struct{}
 
 // MkdirAll implements FS.
-func (OSFS) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
+func (OSFS) MkdirAll(path string, perm os.FileMode) error { return fsperm.MkdirAll(path, perm) }
 
 // OpenPart implements FS.
 func (OSFS) OpenPart(name string) (PartFile, error) {

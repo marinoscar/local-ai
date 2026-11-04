@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/marinoscar/local-ai/agent/internal/fsperm"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -120,7 +121,7 @@ type OSFS struct{ config.OSFS }
 func (OSFS) RemoveAll(name string) error { return os.RemoveAll(name) }
 
 // MkdirAll implements FS.
-func (OSFS) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
+func (OSFS) MkdirAll(path string, perm os.FileMode) error { return fsperm.MkdirAll(path, perm) }
 
 // OpenRead implements FS.
 func (OSFS) OpenRead(name string) (io.ReadCloser, error) { return os.Open(name) }
