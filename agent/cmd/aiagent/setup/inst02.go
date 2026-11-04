@@ -168,4 +168,3 @@ func newFlags(name string, stderr io.Writer) *flag.FlagSet {
 	fs.SetOutput(stderr)
 	return fs
 }
-
