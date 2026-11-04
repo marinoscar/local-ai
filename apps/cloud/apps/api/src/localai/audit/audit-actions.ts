@@ -7,6 +7,8 @@
 /** Every `audit_events.action` this page lists starts with this. */
 export const AUDIT_ACTION_PREFIX = 'localai.';
 
+import { VPS_AUDIT_ACTIONS } from '../vps/vps.constants';
+
 export interface AuditGroup {
   /** The prefix filter for the group (`?action=localai.command.`). */
   readonly prefix: string;
@@ -20,6 +22,7 @@ export const AUDIT_GROUPS: readonly AuditGroup[] = [
   { prefix: 'localai.catalog.', label: 'Catalog' },
   { prefix: 'localai.checklist.', label: 'Publish checklist' },
   { prefix: 'localai.alert.', label: 'Alerts' },
+  { prefix: 'localai.vps.', label: 'VPS publishing' },
   { prefix: 'localai.gateway.', label: 'Gateway' },
 ];
 
@@ -28,6 +31,21 @@ export interface AuditActionDef {
   /** Plain-language name for the filter dropdown. */
   readonly label: string;
 }
+
+/**
+ * The VPS slice's actions come from ITS list (`VPS_AUDIT_ACTIONS`), so the two cannot drift; the record type makes a
+ * new action there a compile error until it is named here (and given a summary case in `audit-summary.ts`).
+ */
+const VPS_ACTION_LABELS: Record<(typeof VPS_AUDIT_ACTIONS)[number], string> = {
+  'localai.vps.publish_requested': 'VPS publish requested',
+  'localai.vps.unpublish_requested': 'VPS unpublish requested',
+  'localai.vps.published': 'VPS publish finished',
+  'localai.vps.unpublished': 'VPS unpublish finished',
+  'localai.vps.publish_failed': 'VPS publish failed',
+  'localai.vps.route53_key_set': 'Route53 key saved',
+  'localai.vps.route53_key_cleared': 'Route53 key removed',
+};
+const VPS_ACTION_DEFS: readonly AuditActionDef[] = VPS_AUDIT_ACTIONS.map((action) => ({ action, label: VPS_ACTION_LABELS[action] }));
 
 /** The known actions. The order is the dropdown order. */
 export const KNOWN_AUDIT_ACTIONS: readonly AuditActionDef[] = [
@@ -49,6 +67,7 @@ export const KNOWN_AUDIT_ACTIONS: readonly AuditActionDef[] = [
   { action: 'localai.catalog.approved', label: 'Catalog approved' },
   { action: 'localai.checklist.updated', label: 'Checklist step updated' },
   { action: 'localai.alert.acknowledged', label: 'Alert acknowledged' },
+  ...VPS_ACTION_DEFS,
   { action: 'localai.gateway.key_created', label: 'Gateway key created' },
   { action: 'localai.gateway.key_revoked', label: 'Gateway key revoked' },
   { action: 'localai.gateway.key_updated', label: 'Gateway key changed' },
@@ -71,3 +90,4 @@ export const AUDIT_TARGET_NODE = 'localai_node';
 export const AUDIT_TARGET_COMMAND = 'localai_command';
 export const AUDIT_TARGET_CATALOG = 'localai_catalog';
 export const AUDIT_TARGET_ALERT = 'localai_alert';
+export const AUDIT_TARGET_VPS = 'localai_vps';

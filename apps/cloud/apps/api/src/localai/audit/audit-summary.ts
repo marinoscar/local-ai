@@ -11,6 +11,7 @@ import {
   AUDIT_TARGET_CATALOG,
   AUDIT_TARGET_COMMAND,
   AUDIT_TARGET_NODE,
+  AUDIT_TARGET_VPS,
   NODE_ACTOR_ACTIONS,
 } from './audit-actions';
 
@@ -141,6 +142,8 @@ function linkOf(src: AuditRowSource, node: string | null): string | null {
     return version === null ? '/lab/catalog' : `/lab/catalog?version=${encodeURIComponent(version)}`;
   }
   if (src.targetType === AUDIT_TARGET_ALERT) return '/lab/alerts';
+  // The Route53 key rows target the VPS slice itself: its admin card is the page to open.
+  if (src.targetType === AUDIT_TARGET_VPS) return '/admin/settings/vps-publishing';
   return null;
 }
 
@@ -218,6 +221,30 @@ function summaryOf(src: AuditRowSource, meta: Record<string, unknown>, node: str
       const kind = safe(meta.kind, ALERT_KIND, 48);
       return join(['Acknowledged', kind, 'alert', on(labId(meta.nodeId, ids))]);
     }
+    case 'localai.vps.publish_requested':
+    case 'localai.vps.unpublish_requested': {
+      // { jobId, host }: the public host only. The tailnet address, the key and the job's brokered secret are not here.
+      const verb = src.action === 'localai.vps.publish_requested' ? 'publish' : 'unpublish';
+      const host = safe(meta.host, PUBLIC_HOST, 253);
+      return join([`Requested VPS ${verb} of ${nodeLabel}`, host === null ? null : `(${host})`]);
+    }
+    case 'localai.vps.published':
+    case 'localai.vps.unpublished': {
+      // The run is stored by the stack-agent: { action, host, jobId, steps }. `steps` is not printed.
+      const verb = src.action === 'localai.vps.published' ? 'publish' : 'unpublish';
+      const host = safe(meta.host, PUBLIC_HOST, 253);
+      return join([`VPS ${verb} of ${nodeLabel} finished`, host === null ? null : `(${host})`]);
+    }
+    case 'localai.vps.publish_failed': {
+      const verb = meta.action === 'unpublish' ? 'unpublish' : 'publish';
+      const step = safe(meta.failedStep, STEP, 32);
+      return join([`VPS ${verb} of ${nodeLabel} failed`, step === null ? null : `at step ${step}`]);
+    }
+    // The access key hint in `route53_key_set` is a masked value of the credential store; it is not shown at all.
+    case 'localai.vps.route53_key_set':
+      return 'Route53 key of the VPS stack-agent saved';
+    case 'localai.vps.route53_key_cleared':
+      return 'Route53 key of the VPS stack-agent removed';
     case 'localai.gateway.key_created':
     case 'localai.gateway.key_revoked':
     case 'localai.gateway.key_updated': {

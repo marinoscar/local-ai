@@ -30,6 +30,8 @@ export function targetLabel(row: Pick<AuditRow, 'targetType' | 'targetId'>): str
       return `catalog ${row.targetId}`;
     case 'localai_alert':
       return `alert ${short(row.targetId)}`;
+    case 'localai_vps':
+      return row.targetId === 'route53' ? 'Route53 key' : `VPS ${short(row.targetId)}`;
     case 'localai_gateway_key':
       return `gateway key ${short(row.targetId)}`;
     case 'localai_model_policy':

@@ -5,7 +5,7 @@
 //
 // The wizard and node routes (CLOUD-14, CLOUD-12) write node.created, credential_minted, credential_revoked, updated,
 // retired, tailnet_revealed and checklist.updated: they come from the REAL routes on a wizard node. The actions whose
-// writers have not landed on this branch (the gateway) are inserted with the exact
+// writers are not run here (the VPS stack-agent needs a running worker; the gateway has not landed) are inserted with the exact
 // `targetType` and `meta` shapes of the §3.5 table, so the page is proven against every action the table lists; when
 // those items land, their own flows can replace the inserts.
 //
@@ -250,10 +250,18 @@ describe('the flows that write audit rows today', () => {
     expect(acked.statusCode).toBeLessThan(300);
   });
 
-  it('inserts the rows of the actions whose writers are not on this branch (the gateway), in the §3.5 shapes', async () => {
-    seededTargetIds.push('gw-key-1', 'gw-policy-1');
+  it('inserts the rows of the actions whose writers are not on this branch (the VPS stack-agent and the gateway), in the §3.5 shapes', async () => {
+    seededTargetIds.push('gw-key-1', 'gw-policy-1', 'route53');
     await prisma.auditEvent.createMany({
       data: [
+        // The VPS stack-agent's rows (CLOUD-19): the shapes its services write. Its flow needs a running agent worker.
+        { actorUserId: userIds.admin, action: 'localai.vps.publish_requested', targetType: 'localai_node', targetId: story.nodeId, meta: { jobId: '7c4d2dae-8b63-4a5f-8e6f-1b2c3d4e5f60', host: `${story.nodeId}.example.test` } },
+        { actorUserId: userIds.admin, action: 'localai.vps.unpublish_requested', targetType: 'localai_node', targetId: story.nodeId, meta: { jobId: '7c4d2dae-8b63-4a5f-8e6f-1b2c3d4e5f61', host: `${story.nodeId}.example.test` } },
+        { actorUserId: null, action: 'localai.vps.published', targetType: 'localai_node', targetId: story.nodeId, meta: { action: 'publish', host: `${story.nodeId}.example.test`, jobId: '7c4d2dae-8b63-4a5f-8e6f-1b2c3d4e5f60', steps: 'dns:done,certificate:done' } },
+        { actorUserId: null, action: 'localai.vps.unpublished', targetType: 'localai_node', targetId: story.nodeId, meta: { action: 'unpublish', host: `${story.nodeId}.example.test`, jobId: '7c4d2dae-8b63-4a5f-8e6f-1b2c3d4e5f61', steps: 'vhost:done' } },
+        { actorUserId: null, action: 'localai.vps.publish_failed', targetType: 'localai_node', targetId: story.nodeId, meta: { action: 'publish', host: `${story.nodeId}.example.test`, jobId: '7c4d2dae-8b63-4a5f-8e6f-1b2c3d4e5f62', steps: 'dns:done,certificate:failed', failedStep: 'certificate' } },
+        { actorUserId: userIds.admin, action: 'localai.vps.route53_key_set', targetType: 'localai_vps', targetId: 'route53', meta: { accessKeyHint: 'AK…ab12' } },
+        { actorUserId: userIds.admin, action: 'localai.vps.route53_key_cleared', targetType: 'localai_vps', targetId: 'route53', meta: {} },
         { actorUserId: userIds.admin, action: 'localai.gateway.key_created', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12', name: 'Desk laptop' } },
         { actorUserId: userIds.admin, action: 'localai.gateway.key_revoked', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12' } },
         { actorUserId: userIds.admin, action: 'localai.gateway.key_updated', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12', name: 'Desk' } },
@@ -315,6 +323,11 @@ describe('every action of the §3.5 table appears', () => {
     expect(one('localai.alert.acknowledged').link).toBe('/lab/alerts');
     expect(one('localai.alert.acknowledged').summary).toBe(`Acknowledged node.stale alert on ${story.nodeId}`);
     expect(one('localai.gateway.key_created').link).toBe('/gateway/keys');
+    expect(one('localai.vps.publish_failed').summary).toBe(`VPS publish of ${story.nodeId} failed at step certificate`);
+    expect(one('localai.vps.publish_failed').actor).toEqual({ kind: 'system', label: 'system' });
+    expect(one('localai.vps.published').summary).toBe(`VPS publish of ${story.nodeId} finished (${story.nodeId}.example.test)`);
+    expect(one('localai.vps.route53_key_set')).toMatchObject({ summary: 'Route53 key of the VPS stack-agent saved', link: '/admin/settings/vps-publishing' });
+    expect(one('localai.vps.route53_key_set').summary).not.toContain('ab12');
 
     const wizard = await auditAll(`${since}&nodeId=${WIZARD_NODE}`);
     const wizardRow = (action: string) => wizard.find((row) => row.action === action)!;

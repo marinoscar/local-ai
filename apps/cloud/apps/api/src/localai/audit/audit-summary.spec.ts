@@ -1,3 +1,4 @@
+import { VPS_AUDIT_ACTIONS } from '../vps/vps.constants';
 import { AUDIT_NODE_CREDENTIAL_REVOKED, AUDIT_NODE_RETIRED, AUDIT_NODE_UPDATED } from '../nodes/nodes-admin.service';
 import { AUDIT_NODE_TAILNET_REVEALED } from '../nodes/lab-nodes.service';
 import { AUDIT_CHECKLIST_UPDATED } from '../wizard/checklist.service';
@@ -39,6 +40,7 @@ describe('the known audit actions', () => {
       AUDIT_COMMAND_REQUESTED,
       AUDIT_COMMAND_CANCELLED,
       AUDIT_COMMAND_SETTLED,
+      ...VPS_AUDIT_ACTIONS,
     ];
     const known = new Set(KNOWN_AUDIT_ACTIONS.map((def) => def.action));
     for (const action of written) expect(known.has(action)).toBe(true);
@@ -53,6 +55,13 @@ describe('the known audit actions', () => {
     spec.push('localai.gateway.key_created', 'localai.gateway.key_revoked', 'localai.gateway.key_updated', 'localai.gateway.policy_updated');
     const known = new Set(KNOWN_AUDIT_ACTIONS.map((def) => def.action));
     for (const action of spec) expect(known.has(action)).toBe(true);
+  });
+
+  it('has a summary case for every VPS action: none falls back to the bare action name', () => {
+    for (const action of VPS_AUDIT_ACTIONS) {
+      const { summary } = describeAudit(row(action, action.includes('route53') ? 'localai_vps' : 'localai_node', action.includes('route53') ? 'route53' : 'ai-n3', {}));
+      expect(summary).not.toBe(action);
+    }
   });
 
   it('the node-actor actions are known actions', () => {
@@ -91,6 +100,14 @@ describe('describeAudit: summary and link per action', () => {
     ['checklist updated', row('localai.checklist.updated', 'localai_node', 'ai-n4', { step: 'dns', state: 'done' }), 'Checklist step dns of ai-n4 is now done', '/lab/nodes/ai-n4'],
     ['checklist updated (the wizard shape, with the action)', row('localai.checklist.updated', 'localai_node', 'ai-n4', { step: 'dns', action: 'check', state: 'done' }), 'Checklist step dns of ai-n4 is now done (check)', '/lab/nodes/ai-n4'],
     ['alert acknowledged', row('localai.alert.acknowledged', 'localai_alert', CMD, { kind: 'ark.drive_stale', nodeId: 'ai-n2' }), 'Acknowledged ark.drive_stale alert on ai-n2', '/lab/alerts'],
+    ['vps publish requested', row('localai.vps.publish_requested', 'localai_node', 'ai-n3', { jobId: CMD, host: 'ai-n3.example.test' }), 'Requested VPS publish of ai-n3 (ai-n3.example.test)', '/lab/nodes/ai-n3'],
+    ['vps unpublish requested', row('localai.vps.unpublish_requested', 'localai_node', 'ai-n3', { jobId: CMD, host: 'ai-n3.example.test' }), 'Requested VPS unpublish of ai-n3 (ai-n3.example.test)', '/lab/nodes/ai-n3'],
+    ['vps published (the stack-agent journal)', row('localai.vps.published', 'localai_node', 'ai-n3', { action: 'publish', host: 'ai-n3.example.test', jobId: CMD, steps: 'dns:done,vhost:done,certificate:done' }), 'VPS publish of ai-n3 finished (ai-n3.example.test)', '/lab/nodes/ai-n3'],
+    ['vps unpublished', row('localai.vps.unpublished', 'localai_node', 'ai-n3', { action: 'unpublish', host: 'ai-n3.example.test', jobId: CMD, steps: 'vhost:done' }), 'VPS unpublish of ai-n3 finished (ai-n3.example.test)', '/lab/nodes/ai-n3'],
+    ['vps publish failed names the step', row('localai.vps.publish_failed', 'localai_node', 'ai-n3', { action: 'publish', host: 'ai-n3.example.test', jobId: CMD, steps: 'dns:done,certificate:failed', failedStep: 'certificate' }), 'VPS publish of ai-n3 failed at step certificate', '/lab/nodes/ai-n3'],
+    ['vps unpublish failed', row('localai.vps.publish_failed', 'localai_node', 'ai-n3', { action: 'unpublish', failedStep: 'vhost' }), 'VPS unpublish of ai-n3 failed at step vhost', '/lab/nodes/ai-n3'],
+    ['vps route53 key saved shows no hint', row('localai.vps.route53_key_set', 'localai_vps', 'route53', { accessKeyHint: 'AKIA…ab12' }), 'Route53 key of the VPS stack-agent saved', '/admin/settings/vps-publishing'],
+    ['vps route53 key removed', row('localai.vps.route53_key_cleared', 'localai_vps', 'route53', {}), 'Route53 key of the VPS stack-agent removed', '/admin/settings/vps-publishing'],
     ['gateway key created', row('localai.gateway.key_created', 'localai_gateway_key', CMD, { prefix: 'lai_ab12', name: 'Desk laptop' }), 'Gateway key lai_ab12 "Desk laptop" created', '/gateway/keys'],
     ['gateway key revoked', row('localai.gateway.key_revoked', 'localai_gateway_key', CMD, { prefix: 'lai_ab12' }), 'Gateway key lai_ab12 revoked', '/gateway/keys'],
     ['gateway policy', row('localai.gateway.policy_updated', 'localai_model_policy', 'qwen3.6-35b-a3b-q4km', { allowedModels: 'x' }), 'Gateway model policy changed', '/gateway/keys'],
@@ -156,6 +173,21 @@ describe('describeAudit never prints a secret', () => {
 
   it('does not print an unknown action that carries a token in its name', () => {
     expect(describeAudit(row(`localai.x.${token}`, 'localai_x', '1', {})).summary).not.toContain(token);
+  });
+
+  it('keeps a Route53 hint, a tailnet address and the journal steps out of the VPS summaries', () => {
+    const rows = [
+      row('localai.vps.route53_key_set', 'localai_vps', 'route53', { accessKeyHint: `${token}`, secretAccessKey: hex }),
+      row('localai.vps.publish_requested', 'localai_node', 'ai-n3', { jobId: CMD, host: tailnet }),
+      row('localai.vps.published', 'localai_node', 'ai-n3', { host: 'ai-n3.example.test', steps: `dns:done,${hex}:failed`, tailnetIp: tailnet }),
+      row('localai.vps.publish_failed', 'localai_node', 'ai-n3', { failedStep: token, steps: hex }),
+    ];
+    for (const input of rows) {
+      const { summary } = describeAudit(input);
+      for (const secret of [token, hex, tailnet, 'AKIA']) expect(summary).not.toContain(secret);
+    }
+    expect(describeAudit(rows[1]!).summary).toBe('Requested VPS publish of ai-n3');
+    expect(describeAudit(rows[3]!).summary).toBe('VPS publish of ai-n3 failed');
   });
 
   it('keeps control characters and long names out of a key name', () => {

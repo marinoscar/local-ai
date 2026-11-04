@@ -18,6 +18,7 @@ describe('targetLabel', () => {
     [{ targetType: 'localai_catalog', targetId: '2026.11.02-1' }, 'catalog 2026.11.02-1'],
     [{ targetType: 'localai_alert', targetId: '4a1e5c2d-9b7f-4d3a-8c6e-1f2a3b4c5d6e' }, 'alert 4a1e5c2d'],
     [{ targetType: 'localai_gateway_key', targetId: 'gwk-1' }, 'gateway key gwk-1'],
+    [{ targetType: 'localai_vps', targetId: 'route53' }, 'Route53 key'],
     [{ targetType: 'localai_future_thing', targetId: 'f-1' }, 'future thing f-1'],
   ])('%j -> %s', (row, label) => {
     expect(targetLabel(row)).toBe(label);
