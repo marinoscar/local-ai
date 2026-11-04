@@ -98,6 +98,10 @@ type Options struct {
 	// upstream's own paths. For Intercept the handler is served with the original request, with
 	// its body intact and limited. For Deny the string is the doctor code of the 403.
 	PathPolicy func(*http.Request) (Decision, http.Handler, string)
+	// ResponseHook runs on every upstream response after the helper's own header rules (nosniff, frame
+	// headers) and before the response is written; /library/ uses it to add a Content-Security-Policy
+	// to HTML. It must not read or replace the body.
+	ResponseHook func(*http.Response)
 	// DropSetCookie removes Set-Cookie from the upstream's responses.
 	DropSetCookie bool
 	// FrameHeaders adds X-Frame-Options: SAMEORIGIN and Referrer-Policy: no-referrer to responses
@@ -426,6 +430,9 @@ func (p *proxy) modifyResponse(resp *http.Response) error {
 	}
 	if loc := h.Get("Location"); loc != "" {
 		h.Set("Location", p.rewriteLocation(loc))
+	}
+	if p.opts.ResponseHook != nil {
+		p.opts.ResponseHook(resp)
 	}
 	if wd != nil {
 		if resp.StatusCode == http.StatusSwitchingProtocols {

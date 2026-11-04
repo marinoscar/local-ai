@@ -1084,6 +1084,7 @@ Packages: `internal/api/proxy` (the helper), `internal/api/static` (path safety 
 | `BodyLimit` | default 1 MiB; over it (declared or streamed) is `413` `LAI-AGT-025` and the upstream never gets the whole body |
 | `ResponseTimeout` | default 600 s for the whole exchange; negative means no cap (streams). `IdleTimeout` (0: none) is the longest the exchange may go with no byte moving either way, before and during the response (chat: 10 min). Both are disarmed once a WebSocket is upgraded |
 | `MethodPolicy`, `PathPolicy` | `MethodPolicy` returns an `*api.Error` to refuse (`proxy.ReadOnly`: `405` with `Allow: GET, HEAD`); `PathPolicy` returns `Allow`, `Deny` (`403` with the given code) or `Intercept` (a handler serves the **original** request instead; the policy sees a copy whose path is the upstream's). Method policy runs first |
+| `ResponseHook` | a function run on every upstream response after the helper's own header rules and before it is written; it must not touch the body. `/library/` uses it to add the CSP to HTML |
 | `DropSetCookie`, `FrameHeaders` | drop upstream `Set-Cookie`; add `X-Frame-Options: SAMEORIGIN` and `Referrer-Policy: no-referrer`. `X-Content-Type-Options: nosniff` is always added and the upstream's CSP is always kept |
 | `DownStatus`, `DownCode` | `502` (default) or `503`; the doctor code of the page (default `LAI-LLM-004`; chat `LAI-SVC-102`, library `LAI-SVC-002`) |
 

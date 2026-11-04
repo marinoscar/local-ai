@@ -263,6 +263,13 @@ kiwix-serve exposes each book under its name with the date (`wikipedia_en_all_no
 
 The agent exposes the mapping content id → book name in `GET /api/v1/services` (`kiwix.books[]`), so the Portal never hard-codes dates.
 
+*Implementation (SVC-04, `internal/svc/kiwix/proxy.go`, `books.go`, mounted in `internal/app/build.go`):*
+- `kiwix.NewProxy` is `proxy.New` with the target `http://127.0.0.1:<ports.kiwix>`, `StripPrefix` empty (path and query unchanged), `MethodPolicy: proxy.ReadOnly`, `DownStatus` 503 with `LAI-SVC-002`, the default 600 s timeout and no `X-Forwarded-*` (the helper removes the client's and adds none). `kiwix.Routes` registers it as one `GET` route (level none, no route deadline): a `POST` is `405` from the server and never reaches kiwix-serve; `HEAD` is served by the `GET` route.
+- The CSP of §6 and `X-Content-Type-Options: nosniff` are set through the helper's `ResponseHook` when the upstream `Content-Type` starts with `text/html` (case-insensitive); every other type is passed through untouched.
+- The 503 page is the shared error page, so its texts are those of `LAI-SVC-002` in `doctor-codes.md` ("The library service isn't running" / "El servicio de la biblioteca no se está ejecutando", with the fix in the same language). Language: the `X-LocalAI-UI-Language` header (`en` or `es`), else `Accept-Language` by q-value, else what the server resolved from `ui.language`.
+- `books[]` is `kiwix.BookMap`: one element per book of the merged library of SVC-03 (`content_id` = the catalog item id, `name` = `source.book` with a trailing `_YYYY-MM` removed by `kiwix.UndatedName` (`^(.*)_\d{4}-\d{2}$`), `root` = the root of the chosen copy). It is filled by the kiwix readiness hook, so it is present while the unit answers.
+- The Playwright test of the issue (`agent/ui/e2e/library-offline.spec.ts`) needs the `agent/ui` project, which does not exist in the tree yet; `TestProxyCSPOnHTMLOnly` proves the header, and the browser-side proof stays a manual check (see §9.3).
+
 ### 4.2 whisper.cpp server
 
 #### 4.2.1 Build per backend
