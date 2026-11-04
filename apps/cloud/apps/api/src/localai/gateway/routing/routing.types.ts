@@ -30,6 +30,8 @@ export interface Candidate extends CandidateRef {
   /** Parallel requests the model serves at once on this node (llama `--parallel`); at least 1. */
   slots: number;
   ctx: number | null;
+  /** What the node reports the model accepts (`text`, `image`, `audio`, `video`); empty when it reported none. */
+  inputModalities: readonly string[];
 }
 
 /** A candidate with its live counters at the moment of the selection (the shape of gateway.md section 4.3). */
