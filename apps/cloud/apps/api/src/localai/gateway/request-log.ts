@@ -64,10 +64,16 @@ export function newRequestLog(requestId: string): GatewayRequestLog {
   };
 }
 
+/** The longest string a field of the line carries: `requested_model` is text the client chose (up to the 8 MiB body). */
+export const MAX_LOG_FIELD_CHARS = 200;
+
 /** The JSON of the line: exactly the listed fields, in order, whatever else the record may have grown. */
 export function formatRequestLog(log: GatewayRequestLog): string {
   const line: Record<string, unknown> = {};
-  for (const field of REQUEST_LOG_FIELDS) line[field] = log[field];
+  for (const field of REQUEST_LOG_FIELDS) {
+    const value = log[field];
+    line[field] = typeof value === 'string' && value.length > MAX_LOG_FIELD_CHARS ? value.slice(0, MAX_LOG_FIELD_CHARS) : value;
+  }
   return JSON.stringify(line);
 }
 
