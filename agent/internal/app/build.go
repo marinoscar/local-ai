@@ -18,6 +18,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/drill"
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
+	"github.com/marinoscar/local-ai/agent/internal/maps"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/modes"
 	"github.com/marinoscar/local-ai/agent/internal/portal"
@@ -166,12 +167,15 @@ func (d *Daemon) build(ctx context.Context) error {
 		ModelID: func() string { return whisper.EnvModelID(d.c.Paths.Join(whisper.EnvPath), nil) },
 		Now:     clock.Now, Metrics: metrics, Logger: log,
 	})
+	d.maps = maps.New(d.mapsDeps(metrics))
+	d.maps.SetGPS(lazyGPS{d})
 	sup, err := health.New(health.Options{
 		Manager: c.Systemd, Publisher: c.Bus, Mode: d.modeName, Metrics: metrics, Clock: clock, Logger: log,
 		Specs: []health.Spec{
 			kiwixSpec,
 			health.WhisperSpec(prober, ports(), func() bool { return blockEnabled(cfg.Get(), "whisper") }),
 			d.piper.Spec(),
+			d.maps.Spec(),
 		},
 		RequireServices: func() []string {
 			if p := d.profile(); p != nil {
@@ -574,6 +578,7 @@ func (d *Daemon) buildServer() error {
 			return reg.Add(kiwix.Routes(kiwix.NewProxy(kiwix.ProxyOptions{Port: c.Config.Get().Ports.Kiwix, Logger: d.log}))...)
 		}},
 		{"speech stt", func() error { return reg.Add(d.whisperSTT.Routes()...) }},
+		{"maps", func() error { return reg.Add(d.maps.Routes()...) }},
 	}
 	for _, r := range regs {
 		if err := r.add(); err != nil {
