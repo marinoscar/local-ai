@@ -349,6 +349,7 @@ func (d *Daemon) stepSubsystems(ctx context.Context) error {
 	if cfg := d.c.Config.Get(); blockEnabled(cfg, "kiwix") && d.c.Systemd != nil {
 		d.writeKiwixUnit(ctx, kiwixThreads(cfg))
 	}
+	d.startWorker(&placesWorker{d: d}) // the place index: built now and on every change of the places item
 	if d.ark != nil {
 		d.startWorker(d.ark.driveWorker()) // a drive that goes away stops the transfers writing to it
 		d.ark.startDrives()                // after it: the first pass publishes drive.mounted for a drive already plugged in

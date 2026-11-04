@@ -17,7 +17,8 @@ import (
 const ContentTypePMTiles = "application/vnd.pmtiles"
 
 // Routes returns the survival-set routes of the maps (companion-services.md section 3.5):
-// /maps/tiles/, /maps/assets/ and /maps/catalog.json. All are GET (and so HEAD), level none.
+// /maps/tiles/, /maps/assets/, /maps/catalog.json, /maps/search and /maps/nearest. All are GET (and
+// so HEAD), level none.
 func (s *Maps) Routes() []api.Route {
 	get := func(pattern string, h func(http.ResponseWriter, *http.Request) error) api.Route {
 		return api.Route{Method: http.MethodGet, Pattern: pattern, Auth: []api.Level{api.AuthNone}, Absolute: true,
@@ -27,6 +28,8 @@ func (s *Maps) Routes() []api.Route {
 		get(CatalogPath, s.serveCatalog),
 		get(TilesPrefix, s.serveTile),
 		get(AssetsPrefix, s.serveAsset),
+		get(SearchPath, s.serveSearch),
+		get(NearestPath, s.serveNearest),
 	}
 }
 

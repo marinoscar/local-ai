@@ -15,6 +15,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
+	"github.com/marinoscar/local-ai/agent/internal/maps/places"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 )
 
@@ -100,6 +101,7 @@ type Maps struct {
 
 	search atomic.Pointer[searchHolder]
 	gps    atomic.Pointer[gpsHolder]
+	places atomic.Pointer[places.Manager]
 
 	mu      sync.Mutex
 	headers map[headerKey]Header
@@ -133,6 +135,9 @@ func New(d Deps) *Maps {
 func (s *Maps) SetSearch(p SearchProvider) { s.search.Store(&searchHolder{p: p}) }
 
 func (s *Maps) searchInfo() SearchInfo {
+	if si, ok := s.placeSearchInfo(); ok {
+		return si
+	}
 	if h := s.search.Load(); h != nil && h.p != nil {
 		return h.p.SearchInfo()
 	}

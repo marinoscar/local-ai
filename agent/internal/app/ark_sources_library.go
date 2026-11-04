@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/marinoscar/local-ai/agent/internal/execx"
+	"github.com/marinoscar/local-ai/agent/internal/maps/places"
 	"github.com/marinoscar/local-ai/agent/internal/sync/download"
 	"github.com/marinoscar/local-ai/agent/internal/sync/item"
 	"github.com/marinoscar/local-ai/agent/internal/sync/resolve"
@@ -52,5 +53,15 @@ func (s *arkStack) registerLibrarySources(vals *item.Validators) error {
 	if err := resolve.RegisterZIMValidator(vals); err != nil {
 		return err
 	}
-	return pm.RegisterValidator(vals)
+	if err := pm.RegisterValidator(vals); err != nil {
+		return err
+	}
+	// The GeoNames dumps have no pinned hash: their content is checked instead, against the rows of the
+	// version in use (companion-services.md section 4.4.4).
+	return places.RegisterValidator(vals, func(string) int {
+		if d.places == nil {
+			return 0
+		}
+		return d.places.Rows()
+	})
 }
