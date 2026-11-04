@@ -126,8 +126,8 @@ func TestTranscribeFailures(t *testing.T) {
 		timeout time.Duration
 		want    error
 	}{
-		{"500 is down", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "boom", 500) }, 0, ErrServerDown},
-		{"503 is down", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "loading", 503) }, 0, ErrServerDown},
+		{"500 is down", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "boom", http.StatusInternalServerError) }, 0, ErrServerDown},
+		{"503 is down", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "loading", http.StatusServiceUnavailable) }, 0, ErrServerDown},
 		{"garbage is down", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("<html>")) }, 0, ErrServerDown},
 		{"hang is a timeout", func(w http.ResponseWriter, r *http.Request) { time.Sleep(400 * time.Millisecond) }, 50 * time.Millisecond, ErrInferenceTimeout},
 	}
