@@ -880,8 +880,10 @@ export interface paths {
         put?: never;
         /**
          * Transcribe audio
-         * @description Owned by companion-services.md section 3.4; the agent only routes it to whisper-server. The upload is
-         *     `multipart/form-data` (not JSON) and the limit is 25 MiB. agent.md section 3.8.25.
+         * @description Owned by companion-services.md section 3.4 and 4.2.5. The upload is `multipart/form-data` (not JSON) and
+         *     the limit is 25 MiB. The agent decodes the WAV, averages the channels, resamples to 16 kHz and sends it
+         *     to whisper-server (one request in flight, two waiting). The transcript is never logged. Messages and
+         *     fixes follow `X-LocalAI-UI-Language`. agent.md section 3.8.25.
          *
          */
         post: operations["speechToText"];
@@ -3927,17 +3929,17 @@ export interface operations {
                     "application/json": components["schemas"]["SttResponse"];
                 };
             };
-            /** @description LAI-SVC-014: not WAV, unsupported encoding, too long, empty or silent; LAI-AGT-020 malformed request. */
+            /** @description LAI-SVC-014: not WAV, unsupported encoding, too long, empty or silent (details.reason: not_wav, truncated, no_format_chunk, bad_format_chunk, unsupported_encoding, unsupported_channels, unsupported_rate, no_data_chunk, bad_block_align, empty, too_long, silent; silence also carries the message "I couldn't hear anything. Try again closer to the microphone."); LAI-AGT-020 malformed multipart body, a duplicate audio part, a language that is not auto or a 2 to 3 letter code, or a prompt over 200 characters. */
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            /** @description LAI-SVC-014 or LAI-AGT-025: larger than 25 MiB. */
+            /** @description LAI-SVC-014 (details.reason too_large): larger than 25 MiB. */
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             /** @description LAI-SVC-015: 2 requests are already queued. */
             429: components["responses"]["RateLimited"];
             500: components["responses"]["Internal"];
-            /** @description LAI-AGT-024 the agent is starting or stopping; LAI-SVC-010 no model; LAI-SVC-011 the server is down. */
+            /** @description LAI-AGT-024 the agent is starting or stopping; LAI-SVC-010 whisper-server cannot be reached and no model is installed; LAI-SVC-011 the server is down, answered with an error, or whisper.enabled is false (details.reason: connect, status, bad_reply, error_field, disabled). */
             503: components["responses"]["Starting"];
             /** @description LAI-SVC-016: whisper took longer than 60 s. */
             504: components["responses"]["GatewayTimeout"];
