@@ -61,9 +61,13 @@ afterEach(async () => {
 });
 
 describe('start-up order (desktop.md 3.6, implementation note 1)', () => {
-  it('sets the switches and the scheme before ready, installs every guard before the first window, then loads localai://app', async () => {
+  it('sets the switches and the scheme before ready, installs every guard before the first window, then runs the start-up sequence', async () => {
     const { start } = await import('../../src/main/index');
-    start();
+    const bootstrap = vi.fn(() => {
+      calls.push('bootstrap');
+      return Promise.resolve();
+    });
+    start({ bootstrap });
     await Promise.resolve();
     await Promise.resolve();
 
@@ -84,7 +88,12 @@ describe('start-up order (desktop.md 3.6, implementation note 1)', () => {
 
     const { egressGuard } = await import('../../src/main/egress-guard');
     expect(egressGuard.installed).toBe(true);
+    // Hidden until the start-up sequence decides what it shows (desktop.md 4.1); its own page is the top bar placeholder.
     expect(windows[0]!.url).toBe('localai://app/topbar/');
+    expect(windows[0]!.options['show']).toBe(false);
+    expect(bootstrap).toHaveBeenCalledTimes(1);
+    expect(at('bootstrap')).toBeGreaterThan(at('new BrowserWindow'));
+    expect((bootstrap.mock.calls[0] as unknown as [{ win: unknown }])[0].win).toBeDefined();
     expect(windows[0]!.options['webPreferences']).toMatchObject({
       contextIsolation: true,
       sandbox: true,

@@ -6,14 +6,9 @@
 //
 // It needs a display (xvfb on a server) and port 7070 free: the fake agent listens there, exactly like the real one.
 // As root (a container) Chromium needs --no-sandbox; set LOCALAI_E2E_NO_SANDBOX=1 anywhere else it is needed.
-import { resolve } from 'node:path';
-import { type ElectronApplication, type Page, _electron as electron, expect, test } from '@playwright/test';
+import { type ElectronApplication, type Page, expect, test } from '@playwright/test';
 import { type FakeAgent, startFakeAgent } from '../fixtures/fake-agent';
-
-// Playwright loads specs as CommonJS (this package has no "type": "module"), so __dirname is available.
-const appDir = resolve(__dirname, '..', '..');
-const executable = process.env['LOCALAI_E2E_EXECUTABLE'] ? resolve(process.env['LOCALAI_E2E_EXECUTABLE']) : undefined;
-const noSandbox = process.env['LOCALAI_E2E_NO_SANDBOX'] === '1' || process.getuid?.() === 0;
+import { type Launched, launch } from './helpers';
 
 interface EgressLine {
   component: string;
@@ -25,6 +20,7 @@ interface EgressLine {
 }
 
 let agent: FakeAgent;
+let run: Launched;
 let app: ElectronApplication;
 let logLines: EgressLine[];
 let stderr = '';
@@ -32,12 +28,9 @@ let stderr = '';
 test.beforeAll(async () => {
   agent = await startFakeAgent({ port: 7070 });
   logLines = [];
-  const common = ['--disable-gpu', ...(noSandbox ? ['--no-sandbox'] : [])];
-  app = await electron.launch(
-    executable
-      ? { executablePath: executable, args: common }
-      : { args: [...common, appDir], cwd: appDir },
-  );
+  // No token file: the start-up sequence ends on the LAI-DSK-003 page, which is a shell page like any other.
+  run = await launch({ token: null });
+  app = run.app;
   app.process().stderr?.on('data', (chunk: Buffer) => {
     stderr += chunk.toString('utf8');
     for (const line of chunk.toString('utf8').split('\n')) {
@@ -52,13 +45,13 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await app?.close();
+  await run?.stop();
   await agent?.close();
 });
 
 test('the shell window loads from localai://app, with the CSP, in whichever way the app is run', async () => {
   const page = await app.firstWindow();
-  await page.waitForURL('localai://app/topbar/');
+  await page.waitForURL(/^localai:\/\/app\/error\//);
   await expect(page.locator('#root')).not.toBeEmpty();
   const headers = await page.evaluate(async () => {
     const response = await fetch('localai://app/topbar/');
