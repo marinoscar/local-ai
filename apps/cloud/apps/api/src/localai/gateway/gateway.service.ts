@@ -11,9 +11,10 @@ import { AttemptLoop, RequestAbortReason } from './attempts';
 import { clientWantsUsageChunk, serialiseBody } from './body-rewrite';
 import { GatewayError } from './errors';
 import { GATEWAY_LIMITS, type GatewayLimits } from './limits';
-import { GATEWAY_MODEL_RESOLVER, type GatewayModelResolver } from './model-resolver';
+import { GATEWAY_MODEL_RESOLVER, type GatewayModelResolver, type ResolvedGatewayModel } from './model-resolver';
 import { ProxyRequest, PROXY_ENDPOINTS, type ProxyEndpointName } from './proxy-request';
 import { GATEWAY_PROXY_SETTINGS, type ProxySettingsReader } from './proxy-settings';
+import type { SelectedCandidate } from './routing/routing.types';
 import type { GatewayRequestContext } from './routes';
 import { GATEWAY_STREAM_HANDLER, type StreamProxyHandler } from './stream-handler';
 import { UpstreamBodyError, UpstreamBodyTooLargeError, upstreamRejectionError } from './upstream/errors';
@@ -46,6 +47,21 @@ export async function readUpstreamBody(response: UpstreamResponse, cap: number):
     throw new UpstreamBodyError(code === 'UND_ERR_BODY_TIMEOUT');
   }
   return Buffer.concat(chunks);
+}
+
+/**
+ * A request whose body is not JSON (a transcription's multipart upload, already read and checked by its route). The
+ * service resolves the model, admits the request and runs the same non-stream path as `handle()`.
+ */
+export interface UploadPlan {
+  /** The model exactly as the client sent it. */
+  requestedModel: string;
+  /** Runs on the resolved model, before the limits admit the request: throw a `GatewayError` to refuse it. */
+  check?(resolved: ResolvedGatewayModel): void;
+  /** Candidates the request can use at all (a transcription: nodes that accept audio). */
+  eligible?(candidate: SelectedCandidate): boolean;
+  /** The upstream body for the resolved model id, with its `Content-Type`. */
+  build(modelId: string): { body: Buffer; contentType: string };
 }
 
 @Injectable()
@@ -102,6 +118,38 @@ export class GatewayService {
     }
   }
 
+  /** Handles one non-JSON inference request (`POST /v1/audio/transcriptions`). Same contract as {@link handle}. */
+  async handleUpload(endpoint: ProxyEndpointName, ctx: GatewayRequestContext, plan: UploadPlan): Promise<unknown> {
+    const spec = PROXY_ENDPOINTS[endpoint];
+    const request = new ProxyRequest({ ctx, spec, stream: false, requestedModel: plan.requestedModel, usage: this.usage });
+    try {
+      const resolved = await this.resolver.resolve(plan.requestedModel, ctx.principal.key);
+      request.resolved = resolved;
+      ctx.log.model = resolved.modelId;
+      plan.check?.(resolved);
+
+      request.ticket = await this.limits.admit({ ctx, modelId: resolved.modelId, endpoint: spec.name, stream: false });
+      for (const [name, value] of Object.entries(request.ticket.headers())) void ctx.reply.header(name, value);
+
+      const settings = await this.settings.read();
+      request.maxAttempts = settings.maxAttempts;
+      request.timeouts = {
+        connectMs: settings.timeouts.connectMs,
+        firstByteMs: resolved.policy.firstByteTimeoutS !== null ? resolved.policy.firstByteTimeoutS * 1000 : settings.timeouts.firstByteMs,
+        idleMs: settings.timeouts.idleMs,
+      };
+      const built = plan.build(resolved.modelId);
+      request.upstreamBody = built.body;
+      request.upstreamContentType = built.contentType;
+      request.eligible = plan.eligible;
+      request.startTotalTimer(settings.timeouts.nonStreamTotalMs);
+      return await this.nonStream(request);
+    } catch (error) {
+      this.settleError(request, error);
+      throw error;
+    }
+  }
+
   private async nonStream(request: ProxyRequest): Promise<unknown> {
     const { ctx } = request;
     const resolved = request.resolved!;
@@ -111,6 +159,8 @@ export class GatewayService {
       path: request.spec.upstreamPath,
       body: request.upstreamBody,
       accept: 'application/json',
+      contentType: request.upstreamContentType,
+      eligible: request.eligible,
       maxAttempts: request.maxAttempts,
       timeouts: request.timeouts,
       signal: request.signal,
@@ -143,13 +193,15 @@ export class GatewayService {
       response.destroy();
     }
 
-    const usage = this.usageOf(payload, response.contentType);
+    // A transcription is billed by nothing the node reports: no tokens, source "none" (spec section 4.5).
+    const audio = request.spec.name === 'audio.transcriptions';
+    const usage = audio ? null : this.usageOf(payload, response.contentType);
     request.settle({
       status: response.status,
       errorCode: null,
       aborted: false,
-      promptTokens: usage?.promptTokens ?? null,
-      completionTokens: usage?.completionTokens ?? null,
+      promptTokens: audio ? 0 : (usage?.promptTokens ?? null),
+      completionTokens: audio ? 0 : (usage?.completionTokens ?? null),
       usageSource: usage ? 'upstream' : 'none',
     });
     return ctx.reply
