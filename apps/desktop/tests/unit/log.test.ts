@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -42,7 +43,7 @@ describe('main.log', () => {
   });
 
   it('never writes a token, bearer header or session cookie', async () => {
-    const token = `lat_${'A1b2C3d4E5f6G7h8I9j0'.repeat(3).slice(0, 43)}`;
+    const token = `lat_${randomBytes(32).toString('base64url')}`;
     const log = createFileLogger({ dir, stderr: false });
     log.log('error', 'agent', `login failed with Authorization: Bearer ${token}`, { cookie: `localai_session=${token}`, key: token });
     const text = await readFile(join(dir, 'main.log'), 'utf8');
