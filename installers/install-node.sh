@@ -908,6 +908,7 @@ revert_hardening() {
   fi
   say "run: $(quote_cmd "$bin" "${HARDEN_ARGS[@]}")"
   run_logged "$bin" "${HARDEN_ARGS[@]}" || rc=$?
+  if ((!DRY_RUN)) && grep -q '"reboot_required": true' "$STATE_DIR/hardening.json" 2>/dev/null; then REBOOT_REQUIRED=1; fi
   return "$rc"
 }
 # END P4 laptop hardening
@@ -1309,6 +1310,22 @@ do_uninstall() {
     UNINSTALL_NOTES+=("the old llama-qwen service was restored and started (same port 8080 and key)")
   fi
 
+  # 9. hardening (INST-03, issue #116 provides revert_hardening). Done before step 6 because it needs the agent
+  # binary and the install state (backups) that steps 6 and 7 remove.
+  if ((OPT_REVERT_HARDENING)); then
+    CUR_TAG="P0 uninstall hardening"
+    if declare -F revert_hardening >/dev/null; then
+      revert_hardening || step_rc=$?
+      if ((step_rc != 0)); then say "WARNING: reverting the laptop hardening failed (exit $step_rc); the rest is done."; fi
+      if [[ "${REBOOT_REQUIRED:-0}" == 1 ]]; then reboot_needed=1; fi
+    else
+      say "WARNING: --revert-hardening is not available in this version of the installer (owner: INST-03, issue #116). Nothing was reverted."
+      UNINSTALL_NOTES+=("the laptop hardening was NOT reverted (not available in this version)")
+    fi
+  else
+    UNINSTALL_NOTES+=("kept the laptop hardening (use --revert-hardening to undo it)")
+  fi
+
   # 6. the program files
   CUR_TAG="P0 uninstall files"
   safe_rm_rf "$ur" /opt/localai
@@ -1333,21 +1350,6 @@ do_uninstall() {
     UNINSTALL_NOTES+=("content was deleted (/srv/localai)")
   else
     UNINSTALL_NOTES+=("kept /srv/localai (models and content); ark drives were not touched")
-  fi
-
-  # 9. hardening (INST-03, issue #116 provides revert_hardening)
-  if ((OPT_REVERT_HARDENING)); then
-    CUR_TAG="P0 uninstall hardening"
-    if declare -F revert_hardening >/dev/null; then
-      revert_hardening || step_rc=$?
-      if ((step_rc != 0)); then say "WARNING: reverting the laptop hardening failed (exit $step_rc); the rest is done."; fi
-      if [[ "${REBOOT_REQUIRED:-0}" == 1 ]]; then reboot_needed=1; fi
-    else
-      say "WARNING: --revert-hardening is not available in this version of the installer (owner: INST-03, issue #116). Nothing was reverted."
-      UNINSTALL_NOTES+=("the laptop hardening was NOT reverted (not available in this version)")
-    fi
-  else
-    UNINSTALL_NOTES+=("kept the laptop hardening (use --revert-hardening to undo it)")
   fi
 
   # 10. user and group only with --purge-config

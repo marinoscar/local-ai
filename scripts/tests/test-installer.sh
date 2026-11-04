@@ -302,7 +302,7 @@ sed -i "s/serve_pattern: B/serve_pattern: A/" "$FR/etc/localai/node.yaml"
 t "tailscale pattern A removes the tcp listener" 0 "" un y -- --uninstall
 t "  ...the --tcp=18080 one" 0 "" calls_has "tailscale serve --tcp=18080 off"
 mkroot
-t "revert-hardening says plainly when it is not available yet" 0 "NOT reverted" un y -- --uninstall --revert-hardening
+t "revert-hardening without the agent program warns and carries on" 0 "Cannot revert the laptop hardening" un y -- --uninstall --revert-hardening
 t "revert-hardening is called when INST-03 defines it" 0 "HARDENING-REVERTED" bash -c 'source "$1"; revert_hardening() { echo HARDENING-REVERTED; }; declare -F revert_hardening >/dev/null && revert_hardening' _ "$INST"
 
 echo "== uninstall safety guards"
