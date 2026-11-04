@@ -599,3 +599,27 @@ func TestItemDirDerivation(t *testing.T) {
 		}
 	}
 }
+
+// The directory above the item trees belongs to the apt user too: apt runs as that user and must be able to
+// enter <sync>/apt/<item> (found on a real node, where the root agent had left <sync>/apt as root:root 0750).
+func TestAptClosurePrepareTreeHandsTheParentDirectoryToTheAptUser(t *testing.T) {
+	f := newAptFixture(t, "test", "amd64", basicPkgs()...)
+	a := newAptClosure(t, f)
+	item := aptItem("kit-debs-test-amd64", "test", "amd64", "pkg-c")
+	src, _, err := a.item(item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src.Extra = nil
+	parent := filepath.Join(t.TempDir(), "apt")
+	if err := a.prepareTree(filepath.Join(parent, "kit-debs-test-amd64"), src); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm()&0o300 != 0o300 {
+		t.Errorf("the apt user cannot enter and write %s: mode %v", parent, fi.Mode())
+	}
+}
