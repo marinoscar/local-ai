@@ -16,6 +16,7 @@ import { verifyTenancyModeAtStartup } from '@marinoscar/platform-api/identity';
 import { STORAGE_OPTIONS, simpleUploadFileSizeLimit, type ResolvedStorageModuleOptions } from '@marinoscar/platform-api/storage';
 
 import { AppModule } from './app.module';
+import { registerNodeLinkBodyLimits } from './localai/node-link/node-link.body-limits';
 import { isSliceEnabled } from './platform/slices/manifest';
 import { PrismaService } from './prisma/prisma.service';
 
@@ -37,6 +38,8 @@ export async function createApp(): Promise<NestFastifyApplication> {
   // Route and caller attributes on the HTTP server span (`http.route`, `app.route.matched`),
   // first so it runs ahead of every other hook. Only when the SDK is installed.
   registerRequestSpanAttributes(app.getHttpAdapter().getInstance(), sdk !== null);
+  // Per-route body limits of the node-facing Local AI routes (state: 256 KiB); before init, when routes register.
+  registerNodeLinkBodyLimits(app.getHttpAdapter().getInstance());
   await app.register(fastifyCookie, { secret: process.env.COOKIE_SECRET || process.env.JWT_SECRET });
   if (isSliceEnabled('storage')) {
     // The simple (single request) upload route reads multipart bodies; its size
