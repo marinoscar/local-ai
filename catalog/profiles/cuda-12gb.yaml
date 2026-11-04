@@ -14,7 +14,7 @@ storage:
   budget_bytes: 500000000000
   min_free_bytes: 40000000000
 include:
-  models: [qwen3.5-9b-q4km, qwen3.6-35b-a3b-q4km, whisper-medium, piper-en-medium, piper-es-medium]
+  models: [qwen3.5-9b-q4km, qwen3.6-35b-a3b-q4km, whisper-medium, piper-en-medium, piper-es-medium, qwen3.5-4b-q4km, embeddinggemma-300m-q8]
   content:
     # tier 1
     - docs-bundle
