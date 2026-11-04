@@ -1,4 +1,3 @@
-import { keyAllowsModel } from './model-resolver';
 import { DEFAULT_GATEWAY_TIMEOUTS, parseProxySettings } from './proxy-settings';
 import { parseUsage } from './usage/usage-sink';
 import { isValidPublicHost } from './upstream/client';
@@ -30,18 +29,6 @@ describe('parseProxySettings', () => {
     expect(parseProxySettings({ 'gateway.maxAttempts': 2, 'gateway.timeouts': { idleMs: 4000 } })).toEqual({ timeouts: { ...DEFAULT_GATEWAY_TIMEOUTS, idleMs: 4000 }, maxAttempts: 2 });
     expect(parseProxySettings({ gateway: { maxAttempts: 0 } }).maxAttempts).toBe(3);
   });
-});
-
-describe('keyAllowsModel (spec 4.4 scope rule)', () => {
-  it.each([
-    [[], 'lab-coder', 'qwen', true],
-    [['qwen'], 'qwen', 'qwen', true],
-    [['qwen'], 'lab-coder', 'qwen', true],
-    [['lab-coder'], 'lab-coder', 'qwen', true],
-    [['lab-coder'], 'qwen', 'qwen', false],
-    [['lab-coder'], 'other-alias', 'qwen', false],
-    [['other'], 'qwen', 'qwen', false],
-  ])('%j requested %s (id %s)', (allowed, requested, id, expected) => expect(keyAllowsModel(allowed, requested, id)).toBe(expected));
 });
 
 describe('SSRF guard on the node host', () => {

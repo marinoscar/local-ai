@@ -12,8 +12,9 @@ import { GatewayService } from '../../src/localai/gateway/gateway.service';
 import { proxyHandlers } from '../../src/localai/gateway/handlers';
 import { buildGateway, type TestGateway } from '../../src/localai/gateway/gateway.testkit';
 import type { AdmissionInput, AdmissionTicket, GatewayLimits, SettleInfo } from '../../src/localai/gateway/limits';
-import { DEFAULT_MODEL_POLICY, keyAllowsModel, type GatewayModelResolver, type ResolvedGatewayModel } from '../../src/localai/gateway/model-resolver';
+import { DEFAULT_MODEL_POLICY, type GatewayModelResolver, type ResolvedGatewayModel } from '../../src/localai/gateway/model-resolver';
 import { GatewayError } from '../../src/localai/gateway/errors';
+import { keyAllows } from '../../src/localai/gateway/models/resolve';
 import { DEFAULT_GATEWAY_TIMEOUTS, type ProxySettings, type ProxySettingsReader } from '../../src/localai/gateway/proxy-settings';
 import { FakeBus, FakeClock, model, node } from '../../src/localai/gateway/routing/routing.fixtures';
 import { RoutingTable } from '../../src/localai/gateway/routing/routing-table';
@@ -35,7 +36,7 @@ class FakeResolver implements GatewayModelResolver {
     const aliases: Record<string, string> = { 'lab-model': 'model-a', 'short-fb': 'model-a' };
     const modelId = aliases[requested] ?? requested;
     if (!['model-a', 'embed-a', 'unloaded-a'].includes(modelId)) throw new GatewayError('LAI-GW-020');
-    if (!keyAllowsModel(key.allowedModels, requested, modelId)) throw new GatewayError('LAI-GW-012');
+    if (!keyAllows(key, requested, { id: modelId })) throw new GatewayError('LAI-GW-012');
     return {
       modelId,
       requestedModel: requested,

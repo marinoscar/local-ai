@@ -10,6 +10,7 @@ import { GatewayAuthenticator, type GatewayPrincipal } from './auth';
 import { GatewayError } from './errors';
 import { GatewayService } from './gateway.service';
 import { GatewaySettingsReader } from './gateway-settings';
+import { ModelListing } from './models/listing';
 import { registerGatewayRoutes } from './routes';
 
 @Controller('ping')
@@ -48,6 +49,7 @@ describe('registerGatewayRoutes on a Nest application', () => {
         },
         { provide: GatewaySettingsReader, useValue: { enabled: () => true, corsOrigins: async () => [] } },
         { provide: GatewayService, useValue: { handle: async () => undefined } },
+        { provide: ModelListing, useValue: { list: async () => ({ object: 'list', data: [] }), find: async () => null } },
       ],
     }).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
@@ -86,8 +88,11 @@ describe('registerGatewayRoutes on a Nest application', () => {
 
   it('a keyed request reaches the stub (503 gateway_unavailable), and an unknown path is the 404 endpoint_not_supported', async () => {
     const headers = { authorization: 'Bearer ok' };
-    const stub = await app.inject({ method: 'GET', url: '/api/gateway/v1/models', headers });
+    const stub = await app.inject({ method: 'POST', url: '/api/gateway/v1/audio/transcriptions', headers });
     expect(stub.statusCode).toBe(503);
+    const models = await app.inject({ method: 'GET', url: '/api/gateway/v1/models', headers });
+    expect(models.statusCode).toBe(200);
+    expect(models.json()).toEqual({ object: 'list', data: [] });
     const unknown = await app.inject({ method: 'GET', url: '/api/gateway/v1/nope', headers });
     expect(unknown.statusCode).toBe(404);
     expect(unknown.json().error.localai_code).toBe('LAI-GW-024');

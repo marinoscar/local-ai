@@ -2,7 +2,7 @@
 // `registerGatewayRoutes` with `app.get(GatewayService, { strict: false })`.
 //
 // Every extension point is a provider token with a default here; the item that builds on it rebinds ONE token:
-//   GATEWAY_MODEL_RESOLVER  GW-05: models/resolve.ts adapter (interim: PrismaModelResolver)
+//   GATEWAY_MODEL_RESOLVER  GW-05: models/resolve.ts adapter (CatalogModelResolver)
 //   GATEWAY_LIMITS          GW-08: RPM, concurrency, daily budget
 //   GATEWAY_USAGE_SINK      GW-08: the usage recorder
 //   GATEWAY_STREAM_HANDLER  GW-07: SSE passthrough
@@ -15,7 +15,8 @@ import { AttemptLoop, TableCandidateSource, type AttemptHooks, type CandidateSou
 import { GatewayService } from './gateway.service';
 import { GATEWAY_LIMITS, noopLimits } from './limits';
 import { GATEWAY_MODEL_RESOLVER } from './model-resolver';
-import { PrismaModelResolver } from './model-resolver.prisma';
+import { CatalogModelResolver } from './model-resolver.catalog';
+import { GatewayModelsModule } from './models/models.module';
 import { GATEWAY_PROXY_SETTINGS, PrismaProxySettingsReader } from './proxy-settings';
 import { NodeKeyProvider } from './routing/node-key.provider';
 import { GatewayRoutingModule } from './routing/routing.module';
@@ -30,11 +31,11 @@ export const GATEWAY_ATTEMPT_HOOKS = Symbol('LOCALAI_GATEWAY_ATTEMPT_HOOKS');
 export const GATEWAY_CANDIDATE_SOURCE = Symbol('LOCALAI_GATEWAY_CANDIDATE_SOURCE');
 
 @Module({
-  imports: [GatewayRoutingModule],
+  imports: [GatewayRoutingModule, GatewayModelsModule],
   providers: [
-    PrismaModelResolver,
+    CatalogModelResolver,
     PrismaProxySettingsReader,
-    { provide: GATEWAY_MODEL_RESOLVER, useExisting: PrismaModelResolver },
+    { provide: GATEWAY_MODEL_RESOLVER, useExisting: CatalogModelResolver },
     { provide: GATEWAY_PROXY_SETTINGS, useExisting: PrismaProxySettingsReader },
     { provide: GATEWAY_LIMITS, useValue: noopLimits },
     { provide: GATEWAY_USAGE_SINK, useValue: noopUsageSink },

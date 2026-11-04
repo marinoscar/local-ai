@@ -10,6 +10,7 @@ import { LocalaiDoctorModule } from './doctor';
 import { GatewayCoreModule } from './gateway/gateway-core.module';
 import { GatewayProxyModule } from './gateway/gateway-proxy.module';
 import { KeysModule } from './gateway/keys/keys.module';
+import { GatewayModelsModule } from './gateway/models/models.module';
 import { GatewayRoutingModule } from './gateway/routing/routing.module';
 import { LocalaiSettingsModule } from './settings.module';
 import { LabNodesModule } from './nodes/lab-nodes.module';
@@ -31,6 +32,7 @@ import { WizardModule } from './wizard/wizard.module';
     VpsModule,
     LocalaiAuditModule,
     GatewayRoutingModule,
+    GatewayModelsModule,
     GatewayCoreModule,
     GatewayProxyModule,
     LocalaiSettingsModule,

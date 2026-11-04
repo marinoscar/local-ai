@@ -24,6 +24,8 @@ import { GatewaySettingsReader, type GatewayConfig } from './gateway-settings';
 import { GatewayService } from './gateway.service';
 import { proxyHandlers } from './handlers';
 import { buildGatewayIndex } from './index-route';
+import { ModelListing } from './models/listing';
+import { modelsHandlers } from './models-route';
 import { resolveRequestId } from './request-id';
 import { formatRequestLog, newRequestLog, type GatewayLogSink, type GatewayRequestLog } from './request-log';
 
@@ -234,6 +236,9 @@ export async function registerGatewayRoutes(app: NestFastifyApplication): Promis
     // The platform names the question `isEnabled()`: whether traffic is being held back at all, whoever asks.
     maintenance: { isActive: () => maintenance.isEnabled() },
     logger: nestLogSink(),
-    handlers: { ...proxyHandlers(app.get(GatewayService, { strict: false })) },
+    handlers: {
+      ...modelsHandlers(app.get(ModelListing, { strict: false })),
+      ...proxyHandlers(app.get(GatewayService, { strict: false })),
+    },
   });
 }
