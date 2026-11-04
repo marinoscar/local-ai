@@ -27,7 +27,7 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
    - **Keys:** the node key hint, **Rotate key…** (owner; see what breaks in [02 Part 7](02-chat-and-api-keys.md)); the node credential, **Replace credential…**. Full keys are never shown.
    - **Settings:** name, public host, serve pattern, tailnet machine and IP (hidden, **Reveal** is audited), **gateway enabled** and **priority**, catalog pin, **Retire node…** (type the id; ids are never reused).
    - **Go offline** works from the cloud, but bringing the node back online must be done **at the node** (`aictl mode online`). The cloud can never start Survival mode.
-4. **Alerts** (`/lab/alerts`): active problems, each with a code and the plain fix, and **Ack**. Alerts clear themselves when the problem is gone. Emails go to people with the operate permission.
+4. **Alerts** (`/lab/alerts`, also linked from the Lab header): active problems, each with its severity (icon and word), a code and the plain fix, and **Ack** (people with the operate permission). Alerts clear themselves when the problem is gone. Everyone with the operate permission gets a bell notification when an alert appears and when it clears; **critical** alerts are also emailed. An alert nobody acknowledged is announced again every 24 hours; **Ack** stops the reminders but does not clear the alert. A computer in Offline or Survival mode is quiet on purpose and raises no "stopped reporting" alert.
 
    | Code | Alert | What to do |
    |---|---|---|

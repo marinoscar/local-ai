@@ -12,7 +12,8 @@ import { LOCALAI_CLOCK, systemLocalaiClock } from './command-events';
 import { CommandsAuditListener } from './commands-audit.listener';
 import { CommandsController } from './commands.controller';
 import { CommandsQueryService } from './commands-query.service';
-import { LOCALAI_COMMAND_NOTIFIER, NoopLocalaiCommandNotifier } from './command-notifier';
+import { LOCALAI_COMMAND_NOTIFIER } from './command-notifier';
+import { NotificationsCommandNotifier } from './command-failed.notifier';
 import { CommandsService } from './commands.service';
 import { CommandsSweepHandler } from './sweeper.job';
 import { CommandsSweepTask } from './sweeper.task';
@@ -24,8 +25,8 @@ import { CommandsSweepTask } from './sweeper.task';
     CommandsService,
     CommandsQueryService,
     CommandsAuditListener,
-    // CLOUD-15 (notifications) replaces the no-op notifier by providing LOCALAI_COMMAND_NOTIFIER here.
-    { provide: LOCALAI_COMMAND_NOTIFIER, useClass: NoopLocalaiCommandNotifier },
+    // `localai.command_failed` to the requester, through the notifications slice (CLOUD-15).
+    { provide: LOCALAI_COMMAND_NOTIFIER, useClass: NotificationsCommandNotifier },
     ClaimService,
     CommandsSweepHandler,
     CommandsSweepTask,

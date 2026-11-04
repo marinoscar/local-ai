@@ -1,17 +1,17 @@
 // The hook that raises the `localai.command.failed` notification (docs/specs/cloud-app.md section 4.9): a browser
 // notification to the person who sent the command, "{type} on {node} failed: {fix}".
 //
-// The notification registration (event key, channels, default on) belongs to CLOUD-15, which is not built yet. Until
-// then this port has a no-op default, so the settled-command listener already calls it at the right moment (after
-// the settling write committed, outside any transaction) and CLOUD-15 only has to bind a real implementation to
-// `LOCALAI_COMMAND_NOTIFIER`. It must never throw into the listener, which also catches: a failed notification must
-// not undo or hide the audit row.
+// The notification is registered in `../localai.notifications.ts` as `localai.command_failed` (the platform registry takes
+// one dot, so the spec's `localai.command.failed` became that permanent key) and `CommandsModule` binds
+// `NotificationsCommandNotifier` (`command-failed.notifier.ts`) to `LOCALAI_COMMAND_NOTIFIER`. The no-op below stays as
+// the default for a test or an app without the notifications slice. It must never throw into the listener, which also
+// catches: a failed notification must not undo or hide the audit row.
 import { Injectable, Logger } from '@nestjs/common';
 
 /** Injection token of the {@link LocalaiCommandNotifier}. */
 export const LOCALAI_COMMAND_NOTIFIER = Symbol('LOCALAI_COMMAND_NOTIFIER');
 
-/** The permanent event key of the notification (spec section 4.9). */
+/** The spec's name of the event (section 4.9); the registered notification key is `localai.command_failed`. Used in log lines only. */
 export const LOCALAI_COMMAND_FAILED_EVENT = 'localai.command.failed';
 
 export interface LocalaiCommandFailedEvent {
@@ -39,12 +39,12 @@ export interface LocalaiCommandNotifier {
   commandFailed(event: LocalaiCommandFailedEvent): Promise<void>;
 }
 
-/** The default until CLOUD-15 registers the notification: it only leaves a log line (ids and codes, no text). */
+/** A notifier that only leaves a log line (ids and codes, no text). */
 @Injectable()
 export class NoopLocalaiCommandNotifier implements LocalaiCommandNotifier {
   private readonly logger = new Logger(NoopLocalaiCommandNotifier.name);
 
   async commandFailed(event: LocalaiCommandFailedEvent): Promise<void> {
-    this.logger.log(`${LOCALAI_COMMAND_FAILED_EVENT}: command_id=${event.commandId} node_id=${event.nodeId} code=${event.errorCode ?? '-'} (no notification registered yet)`);
+    this.logger.log(`${LOCALAI_COMMAND_FAILED_EVENT}: command_id=${event.commandId} node_id=${event.nodeId} code=${event.errorCode ?? '-'} (no notifier bound)`);
   }
 }

@@ -27,6 +27,7 @@ import { ADMIN_SECTIONS } from './config/adminSections';
 import { NAVIGATION } from './config/navigation';
 import { USER_SETTINGS_SECTIONS } from './config/userSettingsSections';
 import { CatalogPage } from './localai/catalog/CatalogPage';
+import { AlertsPage } from './localai/alerts/AlertsPage';
 import { LabOverviewPage } from './localai/lab/LabOverviewPage';
 import { AddNodeWizard } from './localai/wizard/AddNodeWizard';
 import { NodeDetailPage } from './localai/node/NodeDetailPage';
@@ -168,6 +169,8 @@ export function AppRoutes() {
           {/* The Add-node wizard (section 4.8): the permission is the string POST /api/localai/nodes enforces. */}
           <Route path="lab/nodes/new" element={<Gate permission="lab:admin"><AddNodeWizard /></Gate>} />
           <Route path="lab/nodes/:nodeId" element={<Gate permission="lab:read"><NodeDetailPage /></Gate>} />
+          {/* The Alerts page, a Lab sub-route: GET /api/localai/alerts needs lab:read (CLOUD-15). */}
+          <Route path="lab/alerts" element={<Gate permission="lab:read"><AlertsPage /></Gate>} />
           <Route path="settings" element={<Hub sections={USER_SETTINGS_SECTIONS} hubKey="user-settings-hub" title="Settings" subtitle="Manage your account preferences." />} />
           <Route path="settings/tokens" element={<UserTokensPage />} />
           <Route path="admin/settings" element={<Hub sections={ADMIN_SECTIONS} hubKey="admin-settings-hub" title="Administration" subtitle="Users, background jobs and the health of this deployment." />} />
