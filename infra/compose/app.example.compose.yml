@@ -1,0 +1,36 @@
+# =============================================================================
+# App compose overlay: the example (APP-OWNED)
+# =============================================================================
+# Created once by `platform-infra sync` and never overwritten. It changes
+# nothing: a name ending in `.example.compose.yml` is never applied. Copy it to
+# `app.<name>.compose.yml` (every mode built on base.compose.yml) or
+# `app.<scope>.<name>.compose.yml` (scope dev, devdb, prod, vps or worker:
+# only the modes whose platform files include `<scope>.compose.yml`) and the
+# deploy (`composeFilesFor()`) appends it after every platform file, sorted by
+# file name, so it wins:
+#
+#   base, prod, [telemetry], vps, [vps.telemetry], app.*.compose.yml
+#
+# Platform files are generated and never edited; everything an app changes in
+# the stack is an overlay like this one. Two shapes, from the package's
+# fixtures:
+#
+#   # app.prod.memory-limits.compose.yml: other memory limits (prod and vps)
+#   services:
+#     api:
+#       deploy:
+#         resources:
+#           limits:
+#             memory: ${API_MEM_LIMIT:-512M}
+#
+#   # app.vps.no-stack-agent.compose.yml: run without the stack agent
+#   services:
+#     stack-agent:
+#       profiles: ["disabled"]
+#
+# Paths in an overlay resolve against infra/compose/ (the project directory),
+# exactly as in the platform files.
+# =============================================================================
+
+x-app-overlay:
+  description: Example only; never applied. See the comment above.

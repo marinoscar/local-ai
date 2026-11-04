@@ -1,0 +1,13 @@
+# =============================================================================
+# App compose overlay: the catalog checker in the API image (APP-OWNED)
+# =============================================================================
+# The cloud lints catalogs with the real `aictl` (docs/specs/cloud-app.md, section 4.6). apps/api/Dockerfile downloads
+# the static `aiagent` of agent release node-v<AIAGENT_VERSION>, verifies it against the release's SHA256SUMS and
+# installs it at /opt/localai/bin/aiagent with a symlink /opt/localai/bin/aictl. This overlay only hands the version to
+# the build; set AIAGENT_VERSION in .env (infra/compose/app.env.example). An empty value is fine for the development
+# image, which has no checker; the production image build fails without it.
+services:
+  api:
+    build:
+      args:
+        AIAGENT_VERSION: ${AIAGENT_VERSION:-}

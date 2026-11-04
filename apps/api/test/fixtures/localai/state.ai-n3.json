@@ -1,0 +1,416 @@
+{
+  "schema_version": 1,
+  "node_id": "ai-n3",
+  "boot_id": "5f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f",
+  "seq": 41,
+  "reported_at": "2026-11-03T12:00:41Z",
+  "agent_version": "0.4.0",
+  "mode": "online",
+  "mode_transition": null,
+  "connectivity": "full",
+  "profile": "large-24gb",
+  "catalog_version": "2026.11.02-1",
+  "llama": {
+    "build": "f3586e66b-cuda",
+    "backend": "cuda",
+    "router": "up",
+    "models_max": 2
+  },
+  "hardware": {
+    "gpus": [
+      {
+        "name": "NVIDIA GeForce RTX 4090 Laptop GPU",
+        "vram_total_mib": 16376,
+        "vram_used_mib": 7210,
+        "temp_c": 61.5
+      }
+    ],
+    "ram_total_mib": 65536,
+    "ram_used_mib": 21870,
+    "cpu_temp_c": 54.0,
+    "power": {
+      "source": "ac",
+      "battery_percent": null
+    }
+  },
+  "models": [
+    {
+      "id": "qwen3.5-9b-q4km",
+      "present": true,
+      "verified": true,
+      "loadable": true,
+      "loadable_reason": null,
+      "status": "loaded",
+      "default": true,
+      "slots": 2,
+      "ctx": 32768,
+      "roles": [
+        "chat",
+        "coder"
+      ],
+      "input_modalities": [
+        "text"
+      ],
+      "roots": [
+        "internal",
+        "ark-0a1b2c3d"
+      ]
+    },
+    {
+      "id": "qwen3.6-35b-a3b-q4km",
+      "present": true,
+      "verified": true,
+      "loadable": false,
+      "loadable_reason": "needs 24000 MiB VRAM, 16376 total, 7210 used",
+      "status": "unloaded",
+      "default": false,
+      "slots": 1,
+      "ctx": 65536,
+      "roles": [
+        "chat"
+      ],
+      "input_modalities": [
+        "text"
+      ],
+      "roots": [
+        "internal"
+      ]
+    },
+    {
+      "id": "qwen3.5-4b-q4km",
+      "present": true,
+      "verified": true,
+      "loadable": true,
+      "loadable_reason": null,
+      "status": "unloaded",
+      "default": false,
+      "slots": 4,
+      "ctx": 16384,
+      "roles": [
+        "chat"
+      ],
+      "input_modalities": [
+        "text"
+      ],
+      "roots": [
+        "internal"
+      ]
+    },
+    {
+      "id": "embeddinggemma-300m-q8",
+      "present": true,
+      "verified": true,
+      "loadable": true,
+      "loadable_reason": null,
+      "status": "loaded",
+      "default": false,
+      "slots": 1,
+      "ctx": 2048,
+      "roles": [
+        "embedding"
+      ],
+      "input_modalities": [
+        "text"
+      ],
+      "roots": [
+        "internal"
+      ]
+    },
+    {
+      "id": "qwen3-vl-8b-q4km",
+      "present": false,
+      "verified": false,
+      "loadable": false,
+      "loadable_reason": "model files are not on this node",
+      "status": "unloaded",
+      "default": false,
+      "slots": 1,
+      "ctx": null,
+      "roles": [
+        "vision"
+      ],
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "roots": []
+    }
+  ],
+  "services": [
+    {
+      "name": "llama",
+      "active_state": "active",
+      "since": "2026-11-03T08:00:00Z"
+    },
+    {
+      "name": "kiwix",
+      "active_state": "active",
+      "since": "2026-11-03T08:00:00Z"
+    },
+    {
+      "name": "whisper",
+      "active_state": "active",
+      "since": "2026-11-03T08:00:00Z"
+    },
+    {
+      "name": "sync",
+      "active_state": "active",
+      "since": "2026-11-03T08:00:00Z"
+    },
+    {
+      "name": "drill",
+      "active_state": "active",
+      "since": "2026-11-03T08:00:00Z"
+    }
+  ],
+  "ark": {
+    "roots": [
+      {
+        "id": "internal",
+        "present": true,
+        "ready_generated_at": "2026-11-03T04:10:00Z",
+        "tiers": {
+          "t1": "ok",
+          "t2": "partial",
+          "t3": "not_planned"
+        },
+        "items_missing": 1,
+        "items_failed": 0,
+        "items_skipped_budget": 0,
+        "bytes_used": 187654321098,
+        "bytes_free": 412345678901,
+        "last_sync_at": "2026-11-03T03:58:12Z",
+        "last_verify_at": "2026-10-28T03:12:00Z",
+        "overall": "yellow",
+        "survival_capable": true,
+        "ready": {
+          "schema_version": 1,
+          "generated_at": "2026-11-03T04:10:00Z",
+          "generated_by": {
+            "agent_version": "0.4.0"
+          },
+          "root": {
+            "id": "internal",
+            "kind": "internal",
+            "profile": "large-24gb",
+            "catalog_version": "2026.11.02-1",
+            "fs_total_bytes": 1000204886016,
+            "fs_free_bytes": 412345678901,
+            "budget_bytes": 600000000000,
+            "used_bytes": 187654321098,
+            "trash_bytes": 0,
+            "read_only": false
+          },
+          "overall": "yellow",
+          "survival_capable": true,
+          "last_sync": {
+            "run_id": "syn-20261103T020000Z-4f2a",
+            "trigger": "scheduled",
+            "finished_at": "2026-11-03T03:58:12Z",
+            "state": "done",
+            "age_days": 0
+          },
+          "last_full_reverify_at": "2026-10-28T03:12:00Z",
+          "counts": {
+            "verified": 3,
+            "stale": 1,
+            "missing": 1
+          },
+          "items": [
+            {
+              "id": "qwen3.5-9b-q4km",
+              "kind": "model",
+              "tier": 1,
+              "survival": true,
+              "status": "verified",
+              "version": "2026.11.02-1",
+              "verified_at": "2026-10-28T03:12:00Z",
+              "last_reverified_at": "2026-10-28T03:12:00Z",
+              "checked_current_at": "2026-11-03T03:58:00Z",
+              "age_days": 6,
+              "freshness": "green",
+              "bytes": 5680000000,
+              "trust": "pinned"
+            },
+            {
+              "id": "whisper-small",
+              "kind": "stt",
+              "tier": 1,
+              "survival": true,
+              "status": "verified",
+              "version": "2026.11.02-1",
+              "verified_at": "2026-10-28T03:12:00Z",
+              "age_days": 6,
+              "freshness": "green",
+              "bytes": 487000000,
+              "trust": "pinned"
+            },
+            {
+              "id": "piper-en-medium",
+              "kind": "tts",
+              "tier": 1,
+              "survival": true,
+              "status": "verified",
+              "version": "2026.11.02-1",
+              "verified_at": "2026-10-28T03:12:00Z",
+              "age_days": 6,
+              "freshness": "green",
+              "bytes": 63000000,
+              "trust": "sidecar"
+            },
+            {
+              "id": "qwen3.6-35b-a3b-q4km",
+              "kind": "model",
+              "tier": 2,
+              "survival": false,
+              "status": "stale",
+              "version": "2026.10.10-1",
+              "verified_at": "2026-10-12T03:12:00Z",
+              "age_days": 22,
+              "freshness": "yellow",
+              "bytes": 21500000000,
+              "trust": "pinned",
+              "reason": "newer version in catalog"
+            },
+            {
+              "id": "wiki-en-mini",
+              "kind": "zim",
+              "tier": 2,
+              "survival": false,
+              "status": "missing",
+              "reason": "not downloaded yet",
+              "code": "LAI-SYN-004"
+            }
+          ],
+          "problems": [
+            {
+              "code": "LAI-SYN-004",
+              "severity": "warning",
+              "item": "wiki-en-mini",
+              "title": "One content item is missing"
+            }
+          ]
+        }
+      },
+      {
+        "id": "ark-0a1b2c3d",
+        "present": true,
+        "ready_generated_at": null,
+        "tiers": {
+          "t1": "ok",
+          "t2": "ok",
+          "t3": "partial"
+        },
+        "items_missing": 0,
+        "items_failed": 0,
+        "items_skipped_budget": 0,
+        "bytes_used": 801234567890,
+        "bytes_free": 198765432110,
+        "last_sync_at": "2026-11-02T22:14:00Z",
+        "last_verify_at": "2026-10-28T03:12:00Z",
+        "overall": "green",
+        "survival_capable": true,
+        "ready": null
+      }
+    ],
+    "drive_last_synced_at": "2026-11-02T22:14:00Z"
+  },
+  "sync": {
+    "running": false,
+    "run_id": null,
+    "progress_pct": null,
+    "last_run": {
+      "id": "syn-20261103T020000Z-4f2a",
+      "finished_at": "2026-11-03T03:58:12Z",
+      "result": "partial",
+      "skip_reason": null,
+      "error_code": null
+    }
+  },
+  "drill": {
+    "run_id": "drl-20261101T043512Z-9c1e",
+    "last_run_at": "2026-11-01T05:21:40Z",
+    "result": "warn",
+    "survival_ready": true,
+    "failed_checks": [
+      "LAI-DRL-031"
+    ],
+    "failed_check_ids": [
+      "drl.stt.es"
+    ],
+    "results": {
+      "schema_version": 1,
+      "run_id": "drl-20261101T043512Z-9c1e",
+      "trigger": "scheduled",
+      "agent_version": "0.4.0",
+      "catalog_version": "2026.11.02-1",
+      "mode": "online",
+      "quick": false,
+      "started_at": "2026-11-01T04:35:12Z",
+      "finished_at": "2026-11-01T05:21:40Z",
+      "overall": "warn",
+      "survival_ready": true,
+      "counts": {
+        "pass": 27,
+        "warn": 2,
+        "fail": 0,
+        "skip": 1
+      },
+      "checks": [
+        {
+          "id": "drl.llm.answer.qwen3.5-9b-q4km",
+          "area": "llm",
+          "result": "pass",
+          "ms": 41230,
+          "details": {
+            "load_ms": 28400,
+            "tokens_per_s": 31.2,
+            "answer": "READY"
+          }
+        },
+        {
+          "id": "drl.stt.es",
+          "area": "speech",
+          "result": "warn",
+          "code": "LAI-DRL-031",
+          "ms": 2900,
+          "details": {
+            "wer": 0.33,
+            "language": "es",
+            "accurate": false,
+            "note": null
+          }
+        },
+        {
+          "id": "drl.kit.rebuild_dry_run",
+          "area": "kit",
+          "result": "pass",
+          "ms": 1800
+        }
+      ],
+      "restored": {
+        "loaded_models": [
+          "qwen3.5-9b-q4km"
+        ],
+        "default_model": "qwen3.5-9b-q4km",
+        "ok": true
+      },
+      "network_fence": {
+        "enabled": true,
+        "blocked_dials": 0
+      }
+    }
+  },
+  "tailscale": {
+    "serve_pattern": "B",
+    "serve_active": true,
+    "backend_state": "Running"
+  },
+  "alerts": [
+    {
+      "code": "LAI-CLD-029",
+      "severity": "info",
+      "title": "A newer agent is available"
+    }
+  ]
+}

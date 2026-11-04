@@ -1,0 +1,23 @@
+{
+  "name": "@app/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The app's identity and slice manifest: the files every runtime reads its name, repository, CLI name, colours and enabled platform slices from.",
+  "type": "commonjs",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./identity.json": "./identity.json",
+    "./slices.json": "./slices.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "identity.json",
+    "slices.json"
+  ]
+}

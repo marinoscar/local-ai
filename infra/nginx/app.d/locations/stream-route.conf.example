@@ -1,0 +1,17 @@
+# =============================================================================
+# Example: an app server-sent-events route (APP-OWNED, never applied as is)
+# =============================================================================
+# Copy this file to stream-route.conf (the .example suffix keeps it inert) and
+# edit the path. It serves the route through the application's nginx:
+# unbuffered, 600 s timeouts, the security headers (platform/sse-proxy.conf).
+#
+# ON A VPS THIS IS ONLY HALF THE WORK. The shared host proxy in front of the
+# stack buffers and cuts anything else at 60 s, so declare the same path to the
+# CLI too, in the app's createCli options:
+#
+#   createCli({ ..., proxy: { streamPaths: ['/api/coach/chat/stream'] } })
+#
+# (or registerProxyStreamPath('/api/coach/chat/stream') before createCli).
+# =============================================================================
+
+location /api/coach/chat/stream { include /etc/nginx/platform/sse-proxy.conf; }

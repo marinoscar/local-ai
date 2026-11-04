@@ -1,0 +1,180 @@
+# GENERATED from @marinoscar/platform-infra@0.1.0-next.21 (compose) — do not edit; extend through an infra/compose/app.*.compose.yml overlay
+# Source of truth: @marinoscar/platform-infra/compose/vps.compose.yml; re-materialise with `npx platform-infra sync`
+# =============================================================================
+# Docker Compose - VPS Overrides
+# =============================================================================
+# Applied AFTER prod.compose.yml, for a deployment that sits behind a shared
+# host reverse proxy (the /opt/infra/proxy model):
+#
+#   docker compose \
+#     -f base.compose.yml \
+#     -f prod.compose.yml \
+#     -f vps.compose.yml \
+#     up -d
+#
+# This file exists for one reason above all others: NOTHING IN THE STACK MAY
+# BE PUBLISHED ON A PUBLIC INTERFACE. Everything reaches the application
+# through the host proxy, which terminates TLS and holds the certificate.
+#
+# A deployment with the `observability` group also layers telemetry.compose.yml
+# (before this file) and vps.telemetry.compose.yml (after it), which applies the
+# same rule to the collector and GreptimeDB. Their hardening lives there, not
+# here: a service block in this file would be a service with no image on every
+# deployment without telemetry. `laictl deploy` builds the list
+# (packages/platform-cli/src/engine/deploy/compose-files.ts).
+#
+# It also adds `stack-agent` (issue #567), the one service here that holds the
+# Docker socket. See its own block below for the security trade-off; in short:
+# the socket is root-equivalent on the host, so it is confined to a process
+# that accepts NO parameters, can only `up` two fixed telemetry services of
+# this very project, is published on no port, and is token-gated.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Nginx - loopback only
+  # ---------------------------------------------------------------------------
+  nginx:
+    # `!override` REPLACES the inherited ports list instead of merging with it.
+    #
+    # This is the whole point of the file and the one line in it that fails
+    # silently when written wrong. Compose MERGES sequences across overlay
+    # files, so a plain `ports:` here would ADD this mapping and keep
+    # base.compose.yml's "3535:80" — leaving the application published on
+    # 0.0.0.0 exactly as before, while the file looks like it fixed it.
+    #
+    # Verify with `docker compose ... config`: there must be ONE entry, and it
+    # must carry host_ip 127.0.0.1.
+    ports: !override
+      - "127.0.0.1:${APP_BIND_PORT:-3535}:80"
+    # An unbounded json-file log is a slow-motion outage on a small VPS: the
+    # disk fills, and everything that writes fails at once, usually first
+    # showing up as Postgres or Docker itself refusing to work.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # API - deploy-info bind mount, and log rotation
+  # ---------------------------------------------------------------------------
+  api:
+    # What the CLI deployed here, readable by the running application.
+    #
+    # READ-ONLY on purpose: the application reports this document, it does not
+    # author it. Mounting it writable would let a compromised container rewrite
+    # its own provenance.
+    #
+    # The DIRECTORY is mounted, not the file, so the CLI can replace
+    # `info.json` atomically (write a temp file, rename over it) and have the
+    # container see the new one without a restart. Bind-mounting the file
+    # itself pins an inode, and a rename would leave the container reading the
+    # old document for ever.
+    #
+    # ⚠ The source directory MUST exist before this stack starts. Docker
+    # creates a missing bind source as root:root, after which the CLI's own
+    # write fails with EACCES -- with every deploy step reporting green. The
+    # install pipeline creates it ahead of `up`.
+    #
+    # `DEPLOY_ROOT` is written into .env by the CLI and is deliberately absent
+    # from .env.example: it doubles as the marker identifying an .env this CLI
+    # wrote. The `:-` default keeps `docker compose config` working in a plain
+    # checkout, where the path simply does not exist and the API reports the
+    # document as absent -- which is the correct answer there.
+    volumes:
+      - ${DEPLOY_ROOT:-./.deploy}/deploy-info:/app/deploy-info:ro
+    environment:
+      - DEPLOY_INFO_PATH=${DEPLOY_INFO_PATH:-/app/deploy-info/info.json}
+      # How the admin UI (re)deploys the telemetry containers with no shell
+      # step (#567): the API asks the stack-agent below, over the internal
+      # network. The API itself never sees the Docker socket.
+      - STACK_AGENT_URL=http://stack-agent:8090
+      - STACK_AGENT_TOKEN=${STACK_AGENT_TOKEN:?set STACK_AGENT_TOKEN in infra/compose/.env (laictl deploy generates it)}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Web - log rotation
+  # ---------------------------------------------------------------------------
+  web:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # stack-agent - the ONLY holder of the Docker socket  (issue #567)
+  # ---------------------------------------------------------------------------
+  # Lets the admin UI (re)deploy the GreptimeDB telemetry containers on a VPS
+  # with no shell or CLI step, without the API ever holding the socket.
+  #
+  # ⚠ THE TRADE-OFF, STATED PLAINLY. Access to /var/run/docker.sock is
+  # root-equivalent on the host: whoever can talk to it can start a privileged
+  # container that mounts `/`. Mounting it into the API -- a large,
+  # internet-facing process -- would hand that to anyone who ever found a bug
+  # in it. Instead it is confined to this small process (apps/stack-agent,
+  # zero runtime dependencies), which:
+  #
+  #   - accepts NO parameters: no path segment, query string, header value or
+  #     body is ever read into a command. It runs exactly
+  #     `docker compose -p <its own project> -f <its own files> up -d
+  #     --no-build greptimedb otel-collector`, and `compose ps` of those two;
+  #   - learns the project, files and directory from ITS OWN container's
+  #     compose labels, so it cannot be pointed at another project;
+  #   - is published on NO port: only containers on app-network reach it;
+  #   - answers /v1/* only with STACK_AGENT_TOKEN (constant-time compare), and
+  #     refuses everything with 503 when the token is unset or short;
+  #   - runs read-only, with every capability dropped and no-new-privileges.
+  #
+  # What remains is the residual risk of any socket holder: a compromise of
+  # THIS process (not of the API) is a compromise of the host. That is why it
+  # does so little.
+  stack-agent:
+    build:
+      context: ../..
+      dockerfile: apps/stack-agent/Dockerfile
+    restart: unless-stopped
+    networks:
+      - app-network
+    # No `ports:` on purpose. Never add one.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # ⚠ SAME ABSOLUTE PATH INSIDE AS OUTSIDE. Compose resolves relative bind
+      # sources (`../otel/otel-collector-config.yaml`) to absolute paths and
+      # hands THOSE to the host's daemon, so the compose files must be read
+      # from the path they have on the host. Read-only: `up` reads .env and the
+      # compose files and writes nothing here.
+      #
+      # `:?`, unlike the api's deploy-info mount above: without DEPLOY_ROOT
+      # this service cannot work at all, and failing loudly beats mounting a
+      # directory that does not exist. `laictl deploy` writes it into .env.
+      - ${DEPLOY_ROOT:?DEPLOY_ROOT is written into infra/compose/.env by laictl deploy}:${DEPLOY_ROOT:?DEPLOY_ROOT is written into infra/compose/.env by laictl deploy}:ro
+    environment:
+      - STACK_AGENT_TOKEN=${STACK_AGENT_TOKEN:?set STACK_AGENT_TOKEN in infra/compose/.env (laictl deploy generates it)}
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

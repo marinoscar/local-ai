@@ -1,0 +1,61 @@
+# =============================================================================
+# App collector overlay (app-owned)
+# =============================================================================
+# The OpenTelemetry collector starts with TWO config files, in this order:
+#
+#   --config=/etc/otelcol/platform.yaml   infra/otel/otel-collector-config.yaml
+#                                         GENERATED from
+#                                         @marinoscar/platform-infra; never edit
+#   --config=/etc/otelcol/app.yaml        infra/otel/app-collector.yaml
+#                                         THIS FILE: yours, edit freely
+#
+# `platform-infra sync` creates infra/otel/app-collector.yaml from
+# @marinoscar/platform-infra/telemetry/otel/app-collector.example.yaml ONCE,
+# when it is absent, and never overwrites it afterwards.
+#
+# As shipped, this file is BEHAVIOUR-NEUTRAL: it contains no configuration at
+# all (comments only), so the collector runs exactly the platform config.
+# Restart the collector after editing it:
+#
+#   docker compose -f base.compose.yml -f dev.compose.yml -f telemetry.compose.yml restart otel-collector
+#
+# -----------------------------------------------------------------------------
+# HOW THE TWO FILES MERGE
+# -----------------------------------------------------------------------------
+#   - Maps merge, key by key: a receiver, processor or exporter defined here
+#     is ADDED beside the platform's; a key defined in both takes this file's
+#     value.
+#   - Lists are REPLACED, never appended. `receivers: [x]` under an existing
+#     pipeline throws away the platform's list for that pipeline. To add a
+#     receiver to the platform's `metrics` pipeline you would have to restate
+#     its whole list, and silently fall behind the next time the platform
+#     changes it.
+#
+# THE SAFER PATTERN: a NEW named pipeline (`metrics/app`, `logs/app`, ...)
+# that reuses the platform's processors and exporters by name. It cannot
+# change what the platform pipelines do. The same goes for
+# `service.extensions`: it is a list, so do not restate it here.
+#
+# Example: scrape an app sidecar's Prometheus endpoint into GreptimeDB.
+#
+#   receivers:
+#     prometheus/app:
+#       config:
+#         scrape_configs:
+#           - job_name: app-sidecar
+#             scrape_interval: 30s
+#             static_configs:
+#               - targets: ["sidecar:9464"]
+#
+#   service:
+#     pipelines:
+#       metrics/app:
+#         receivers: [prometheus/app]
+#         processors: [memory_limiter, attributes/redact, transform/promote_labels, batch]
+#         exporters: [otlphttp/greptime]
+#
+# A variable read here (`${env:NAME}`) must also reach the collector
+# container: add it to the `otel-collector` service's `environment` in a
+# compose overlay of your own, not in the generated telemetry.compose.yml.
+# Never put a secret in this file; read it from the environment.
+# =============================================================================

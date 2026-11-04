@@ -1,0 +1,15 @@
+{
+  // Standalone (agent.yml: `npm ci && npm run typecheck`) this package has no React or MUI installed, so it type-checks
+  // only the generated agent API types. The components under src/lab are type-checked by the host that installs React and
+  // MUI and imports them (apps/cloud/apps/web: `npm run typecheck --workspace=web`, with preserveSymlinks).
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["src/api"]
+}

@@ -1,0 +1,15 @@
+{
+  "data": {
+    "nodeId": "ai-n3",
+    "apiVersion": 1,
+    "features": ["state.v1", "commands.v1", "catalog.v1", "key.v1"],
+    "commandPlane": "localai",
+    "heartbeatIntervalS": 15,
+    "stateMinIntervalS": 5,
+    "stateMaxIntervalS": 60,
+    "claimWaitMaxMs": 25000,
+    "keyReported": true,
+    "serverTime": "2026-11-02T15:04:05.000Z"
+  },
+  "meta": { "timestamp": "2026-11-02T15:04:05.000Z" }
+}

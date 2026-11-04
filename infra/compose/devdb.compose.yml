@@ -1,0 +1,93 @@
+# GENERATED from @marinoscar/platform-infra@0.1.0-next.21 (compose) — do not edit; extend through an infra/compose/app.*.compose.yml overlay
+# Source of truth: @marinoscar/platform-infra/compose/devdb.compose.yml; re-materialise with `npx platform-infra sync`
+# =============================================================================
+# Docker Compose - Development database (OPT-IN)
+# =============================================================================
+# Usage:
+#   docker compose -f base.compose.yml -f dev.compose.yml -f devdb.compose.yml up
+#
+# -----------------------------------------------------------------------------
+# WHY THIS IS A SEPARATE FILE RATHER THAN A SERVICE IN base.compose.yml
+# -----------------------------------------------------------------------------
+#
+# Because there are two legitimate ways to run this application and neither is
+# wrong:
+#
+#   - Somebody trying the template for the first time, or starting a new product
+#     from it, wants a database to exist without thinking about it. For them, a
+#     missing `db` service is a hard blocker on the first five minutes.
+#   - A host running several applications built from this template shares ONE
+#     PostgreSQL container between them, on the external `devnet` network, and
+#     resolves it as the hostname `postgres`. For them, a `db` service baked
+#     into the base file is a second database competing for the same role,
+#     started on every `up`, holding a port and a volume nobody wanted.
+#
+# An overlay serves both: absent by default, one `-f` away when wanted. That is
+# also why the base file's `POSTGRES_HOST` default is `db` — this overlay is the
+# thing that default was always describing.
+#
+# -----------------------------------------------------------------------------
+# WHAT THIS IS NOT FOR
+# -----------------------------------------------------------------------------
+#
+# Development only, and it says so in three places for a reason: the credentials
+# below are the well-known `postgres`/`postgres` pair, and the port is published
+# on the host. Do not add this overlay to a production `docker compose` command.
+# Production points POSTGRES_* at a real database — see docs/runbooks/deploy-to-vps.md.
+#
+# The test database is a DIFFERENT service in `test.compose.yml`, on a different
+# port (5433) with its own volume, so that running the test suite never touches
+# the data you have been developing against.
+# =============================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      # These deliberately mirror base.compose.yml's own POSTGRES_* defaults, so
+      # that `.env` overriding any of them moves the server and the API together
+      # rather than leaving the API authenticating against the wrong values.
+      #
+      # The image makes ITS POSTGRES_USER a superuser, and row-level security
+      # (issue #725) is inert for a superuser. So the image's bootstrap login is
+      # the fixed `postgres` (administration only) and the role the API runs as,
+      # `.env`'s POSTGRES_USER, is created ordinary by
+      # postgres-init/10-application-role.sh on the first start of an empty
+      # volume. An existing dev volume keeps its old superuser: recreate it
+      # (docker volume rm) or follow the SECURITY-ARCHITECTURE.md steps.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+      APP_DB_USER: ${POSTGRES_USER:-app}
+      APP_DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      # Published so that `prisma migrate` and `psql` can be run from the host
+      # checkout, which is how migrations are actually created. 5432 is the
+      # default and will collide with a PostgreSQL already running locally —
+      # set POSTGRES_BIND_PORT to move it if so.
+      - "${POSTGRES_BIND_PORT:-5432}:5432"
+    volumes:
+      - dev-db-data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - app-network
+    healthcheck:
+      # The API's readiness probe checks the database, so without this the API
+      # can start, fail to connect, and report unhealthy purely because Postgres
+      # had not finished its first-run initialisation yet.
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d ${POSTGRES_DB:-appdb}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  api:
+    # Compose merges this with the base definition; the API must not start
+    # accepting requests before the database can answer.
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  dev-db-data:

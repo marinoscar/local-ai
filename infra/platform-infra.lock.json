@@ -1,0 +1,52 @@
+{
+  "version": "0.1.0-next.21",
+  "identity": {
+    "cliName": "laictl",
+    "envPrefix": "LAICTL_",
+    "serviceName": "local-ai-api",
+    "workerImage": "ghcr.io/OWNER/REPO-worker:latest",
+    "testDatabase": "local_ai_test",
+    "testContainer": "local-ai-db-test"
+  },
+  "fragments": {
+    "compose": {
+      "files": {
+        "infra/compose/base.compose.yml": "2f0eaa32b71095d124f0e68f5b7b9addd61dd7fb7d479929d61a9f781f8be31c",
+        "infra/compose/dev.compose.yml": "5c289ee8d21b816550c677b3dc35de37c7a8a7033bbd3a2b0c7c2b477825d07c",
+        "infra/compose/devdb.compose.yml": "3eb626711e6a4cd68178fe09ed8449c10c9c862782f1797891ad2a61bf9f6441",
+        "infra/compose/prod.compose.yml": "027ca7b6c38af5c056a465d849af205528f78a3c2ebc6a57b7a8534877125e6a",
+        "infra/compose/vps.compose.yml": "99a7123e854d35483c8e7d5de790fc97d91cc103a52fa82510594937043b2181",
+        "infra/compose/worker.compose.yml": "6f88fa2d80057364d96c31bb54734e5135efc249da6b2dec77fe5692c37ce2fc",
+        "infra/compose/worker.build.compose.yml": "8675ce8b0dfb5e8de057d9fed224bea918abfebf6c856d8c643156baf28c27d8",
+        "infra/compose/test.compose.yml": "73c60af69bf2c3aec1f50a989a37996584c4d21d6a23e8afaf6ad74136f0560f",
+        "infra/compose/postgres-init/10-application-role.sh": "a7ea0ac5bdd7fa7537a3653e9e0c92fa8ca512718b1a7de60832666552dfb1f0"
+      },
+      "executable": [
+        "infra/compose/postgres-init/10-application-role.sh"
+      ]
+    },
+    "nginx": {
+      "files": {
+        "infra/nginx/nginx.conf": "e9543d3d1e83781be09f4d3a7e2bb2e9340a10aef55d429edcd6a658e82bb119",
+        "infra/nginx/csp.conf": "fd5518cd235b9b400599758c579404886e5a588b503004bf700d24fc3c3902b4",
+        "infra/nginx/csp.dev.conf": "36d6d4ac04e950e53a990ef445cd5fd080646836f364d8d8ff4a6c7f89563f85",
+        "infra/nginx/platform/security-headers.conf": "1a390bbd1562e92f7a73b3c8b55387a3a73de3fa1a35907b3bd1f6bda88011ca",
+        "infra/nginx/platform/sse-proxy.conf": "09d146b21acf14a29c8b5b4341b764d23c9be8319ff5d02359bd2c6d0d1cabe0",
+        "infra/nginx/platform/android-app.conf": "f8afebca96460e907d25586cb3fa7754adf82e6e1088cfc1c4a3ac099fe1962e"
+      }
+    },
+    "env": {
+      "files": {
+        "infra/compose/.env.example": "43d7d09171fcf75af8948cfbd437249b398876814d0d3af9ea26a7d3441e5478",
+        "infra/compose/.env.worker.example": "84d8ab757eacd1b4a4b1a713ca30d0da089443aa9d656b7164c11c29e4b48caf"
+      }
+    },
+    "telemetry": {
+      "files": {
+        "infra/compose/telemetry.compose.yml": "4b24874db3bc359cad2e0dc0176400a46842f0b21faee7190e1c83a7f11c8f31",
+        "infra/compose/vps.telemetry.compose.yml": "e02c3447feec8a4e7fed7ea0ec4dfb4c44947eeafd0baa5d895894e5b48e32f1",
+        "infra/otel/otel-collector-config.yaml": "4f7f560b7787a8cea8152bd6e22664ae5e262f135f8944287d779647cdca3832"
+      }
+    }
+  }
+}

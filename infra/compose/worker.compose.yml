@@ -1,0 +1,92 @@
+# GENERATED from @marinoscar/platform-infra@0.1.0-next.21 (compose) — do not edit; extend through an infra/compose/app.*.compose.yml overlay
+# Source of truth: @marinoscar/platform-infra/compose/worker.compose.yml; re-materialise with `npx platform-infra sync`
+# =============================================================================
+# Worker node fleet  (issue #278, epic #254)
+# =============================================================================
+# The recommended way to run workers: containers, not a per-machine install.
+#
+#   docker compose -f worker.compose.yml up -d
+#   docker compose -f worker.compose.yml up -d --scale worker=4
+#
+# IMAGE-ONLY. No checkout is needed to run a fleet — that is the point of
+# publishing the image. Use worker.build.compose.yml alongside this file to
+# build from source instead.
+#
+# -----------------------------------------------------------------------------
+# SCALING NEEDS NO COORDINATION
+# -----------------------------------------------------------------------------
+# Each replica registers as its own node (its name derives from the container
+# hostname, which Docker makes unique) and they load-balance through the
+# server's `FOR UPDATE SKIP LOCKED` claim. Two replicas can never receive the
+# same job, and none of them is configured to know the others exist.
+#
+# Do NOT set LAICTL_NODE_NAME or LAICTL_NODE_ID when scaling: every replica
+# would then reattach to the SAME node row, and the server's per-node claim cap
+# would be shared between processes that each think they own it.
+#
+# -----------------------------------------------------------------------------
+# NO PRODUCT, APP OR REPOSITORY NAME APPEARS IN THIS FILE
+# -----------------------------------------------------------------------------
+# The service key is `worker`, which is unambiguous inside this bundle and
+# needs no rename. The environment-variable names are the second unavoidable
+# copy of packages/platform-cli/src/engine/node/worker-env.ts, guarded
+# bidirectionally by packages/platform-cli/src/engine/node/worker-env.test.ts.
+# =============================================================================
+
+services:
+  worker:
+    image: ${WORKER_IMAGE:-ghcr.io/OWNER/REPO-worker:latest}
+
+    # REQUIRED, not a nicety. The memory watchdog (#277) EXITS DELIBERATELY
+    # when the heap crosses its threshold, after draining cleanly and writing a
+    # snapshot. Without a restart policy that successful drain leaves the
+    # worker down — a self-healing mechanism turned into an outage.
+    restart: unless-stopped
+
+    # Long enough for a real drain. Docker sends SIGTERM, waits this long, then
+    # SIGKILLs; a job killed mid-flight has to wait out its lease before the
+    # server retries it anywhere.
+    stop_grace_period: 300s
+
+    environment:
+      # ---- Required ---------------------------------------------------------
+      # The server, and a `nod_` node credential from `laictl node enroll`.
+      # These two alone are enough: with no config file the worker synthesises
+      # its settings from the environment.
+      LAICTL_SERVER_URL: ${LAICTL_SERVER_URL:?set LAICTL_SERVER_URL}
+      LAICTL_TOKEN: ${LAICTL_TOKEN:?set LAICTL_TOKEN}
+
+      # ---- Identity ---------------------------------------------------------
+      # Leave both EMPTY when scaling. See the note above.
+      LAICTL_NODE_ID: ${LAICTL_NODE_ID:-}
+      LAICTL_NODE_NAME: ${LAICTL_NODE_NAME:-}
+
+      # ---- Work -------------------------------------------------------------
+      LAICTL_CONCURRENCY: ${LAICTL_CONCURRENCY:-}
+      LAICTL_ELIGIBLE_TYPES: ${LAICTL_ELIGIBLE_TYPES:-}
+      LAICTL_POLL_INTERVAL_MS: ${LAICTL_POLL_INTERVAL_MS:-}
+
+      # ---- Runtime ----------------------------------------------------------
+      # Baked into the image; restated so `docker compose config` shows the
+      # whole surface in one place.
+      LAICTL_HEADLESS: ${LAICTL_HEADLESS:-true}
+      LAICTL_STATE_DIR: ${LAICTL_STATE_DIR:-/var/lib/worker}
+
+      # ---- Memory (#277) ----------------------------------------------------
+      LAICTL_HEAP_LIMIT_MB: ${LAICTL_HEAP_LIMIT_MB:-}
+      # Set by the re-exec on its own child; never set this by hand.
+      LAICTL_HEAP_TUNED: ${LAICTL_HEAP_TUNED:-}
+      LAICTL_MEMORY_WATCHDOG: ${LAICTL_MEMORY_WATCHDOG:-}
+      LAICTL_MEMORY_THRESHOLD: ${LAICTL_MEMORY_THRESHOLD:-}
+      LAICTL_HEAP_SNAPSHOTS: ${LAICTL_HEAP_SNAPSHOTS:-}
+
+    volumes:
+      # State survives a restart, so a replica re-attaches to its node row
+      # instead of leaking a new one. Named per-replica by Docker when scaled.
+      - worker-state:/var/lib/worker
+
+    # The worker makes only OUTBOUND connections. It needs no ports, no inbound
+    # rule, and no database access whatsoever.
+
+volumes:
+  worker-state:
