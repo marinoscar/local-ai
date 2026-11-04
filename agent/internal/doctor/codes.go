@@ -382,6 +382,8 @@ const (
 	INS050 = "LAI-INS-050"
 	INS060 = "LAI-INS-060"
 	INS070 = "LAI-INS-070"
+	INS080 = "LAI-INS-080"
+	INS081 = "LAI-INS-081"
 
 	// LAI-KIT
 	KIT001 = "LAI-KIT-001"
@@ -2448,6 +2450,18 @@ var table = []Code{
 		Severity: Info,
 		Title:    Msg{EN: "A reboot is needed to finish the install", ES: "Hace falta reiniciar para terminar la instalación"},
 		Fix:      Msg{EN: "Reboot when convenient.", ES: "Reinicie cuando le convenga."},
+	},
+	{
+		ID:       INS080,
+		Severity: Error,
+		Title:    Msg{EN: "Putting the old llama-qwen service back failed", ES: "Falló la restauración del servicio llama-qwen antiguo"},
+		Fix:      Msg{EN: "Nothing under /etc/localai was removed. Read the message above, fix it, and run the same --uninstall command again.", ES: "No se eliminó nada de /etc/localai. Lea el mensaje anterior, corríjalo y vuelva a ejecutar el mismo comando --uninstall."},
+	},
+	{
+		ID:       INS081,
+		Severity: Error,
+		Title:    Msg{EN: "The uninstaller refused to delete a path it does not own", ES: "El desinstalador se negó a borrar una ruta que no le pertenece"},
+		Fix:      Msg{EN: "Nothing was deleted. Report the log at /var/log/localai-install.log.", ES: "No se borró nada. Informe del registro en /var/log/localai-install.log."},
 	},
 	{
 		ID:       KIT001,

@@ -372,12 +372,14 @@ VPS CHECKLIST for ai-n4 (run on the VPS as root; details: docs/source/vps-ai-nod
 3. `systemctl disable --now localai-sync.timer localai-drill.timer localai-whisper localai-kiwix localai-llama localai-agent`; remove our Tailscale Serve listeners (`tailscale serve --https=443 off` / `--tcp=18080 off` per pattern) unless `--restore-legacy`.
 4. Remove the unit files, `daemon-reload`.
 5. `--restore-legacy`: if `/var/lib/localai/migration/llama-qwen/llama-qwen.service` exists (saved by the migration, [llama-router.md](llama-router.md) §4.9.2 M9; the installer never keeps its own copy), in this order: (a) replace the symlink `/etc/llama-qwen/api-key` with a real file, a copy of `/etc/localai/api-key` (root 0600), **before** anything under `/etc/localai` can be removed; (b) unmask and restore the unit to `/etc/systemd/system/llama-qwen.service`, `daemon-reload`; (c) `systemctl enable --now llama-qwen`. Only then do steps 6–7 remove the agent and (with `--purge-config`) `/etc/localai`. Clients keep working (same port and key).
-6. Remove `/opt/localai` (including `/opt/localai/installers/`), `/usr/local/bin/aictl`, `/usr/local/sbin/install-node.sh`.
+6. Remove `/opt/localai` (including `/opt/localai/installers/`), `/usr/local/bin/aictl`, `/usr/local/sbin/install-node.sh`, `/etc/polkit-1/rules.d/50-localai-operators.rules`.
 7. `--purge-config`: remove `/etc/localai` and `/var/lib/localai` (asks to type `DELETE`). Without it they stay, so a reinstall keeps the node id, key, token and PIN.
 8. `--purge-content`: remove `/srv/localai` (asks to type `DELETE` and shows its size). Never touches ark drives.
 9. `--revert-hardening`: restore or remove the logind drop-in, `systemctl unmask` the sleep targets, remove the dconf file and run `dconf update`, remove the NM conf and dispatcher script; `reboot_required` if logind changed. (SSH, packages, users and groups are left.)
 10. `userdel localai` and `groupdel localai-operators` only with `--purge-config`.
 Exit 0 with a summary of what was kept.
+
+Details of the implementation (INST-08): the confirmations (the `[y/N]` question and each `DELETE`) are all asked up front, before anything changes, and `--yes` answers none of them; a missing answer or no terminal is exit 4. `--restore-legacy` together with `--purge-content` is exit 2 (the migration moved the legacy models into `/srv/localai`, so deleting them would break the service being restored). If `--restore-legacy` finds no saved `llama-qwen.service`, the installer warns, says the old service is not restored, and continues; if the saved unit exists but `/etc/localai/api-key` does not, or the restore fails, it stops with `LAI-INS-080` before anything under `/etc/localai` is removed. Every recursive delete goes through a guard that accepts only `/opt/localai`, `/etc/localai`, `/var/lib/localai` and `/srv/localai` (`LAI-INS-081` otherwise). Without `--purge-config` the installer deletes only its own phase record (`state.json`) so that a reinstall re-runs every phase. `--revert-hardening` calls the INST-03 `revert_hardening` function and says plainly when it is not available.
 
 ### 4.5 Repair
 `sudo bash install-node.sh --repair` re-runs every phase with checks in "verify and fix" mode:
@@ -387,6 +389,7 @@ Exit 0 with a summary of what was kept.
 - packages missing from the list are reinstalled,
 - the llama build is smoke-tested and rebuilt if broken,
 - `aictl doctor` is run at the end.
+The installer copy and the symlink are repaired by the driver itself: the copy comes from the script that is running (or, when the running script is the installed one, from `<ark>/localai/kit/installers/install-node.sh` given with `--from-ark`; if neither exists the installer says it cannot judge the installed copy). Every other item is done by its phase: the driver forces all 15 phases to run (an "already done" record is not trusted) with `REPAIR_MODE=1`, and a phase in that mode must verify and fix without touching identity or secrets. A failing final `aictl doctor` makes `--repair` exit 1.
 It never changes the node id, key, agent token, PIN, cloud credential, profile, or content. It is what doctor fixes like "Run `sudo install-node.sh --repair`" mean.
 
 ### 4.6 Logs
@@ -469,6 +472,8 @@ Log format §4.6. `aictl doctor` reads `state.json` and runs the `LAI-INS` check
 | LAI-INS-050 | error (warning in doctor) | Tailscale serve pattern doesn't match the inventory | Use `--serve-pattern` with the value in the inventory. |
 | LAI-INS-060 | warning | The admin PIN wasn't set | Run `sudo aictl pin set`. |
 | LAI-INS-070 | info | A reboot is needed to finish the install | Reboot when convenient. |
+| LAI-INS-080 | error | Putting the old llama-qwen service back failed | Nothing under /etc/localai was removed. Read the message above, fix it, and run the same --uninstall command again. |
+| LAI-INS-081 | error | The uninstaller refused to delete a path it does not own | Nothing was deleted. Report the log at /var/log/localai-install.log. |
 
 ## 9. Test plan
 

@@ -602,6 +602,319 @@ phase0() {
   say "options: node-id=${OPT_NODE_ID:-auto} profile=${OPT_PROFILE:-auto} backend=${OPT_BACKEND:-detect} cloud-url=$OPT_CLOUD_URL migrate=$OPT_MIGRATE hardening=$OPT_HARDENING serve-pattern=${OPT_SERVE_PATTERN:-auto} no-tailscale=$OPT_NO_TAILSCALE no-sync=$OPT_NO_SYNC no-ssh=$OPT_NO_SSH no-polkit=$OPT_NO_POLKIT reboot=$OPT_REBOOT yes=$OPT_YES enroll=$((OPT_ENROLL || ${#OPT_ENROLL_FILE} > 0)) desktop-user=${OPT_DESKTOP_USER:-none}"
 }
 
+# ===============================================================================================================
+# INST-08 (issue #155): --uninstall and --repair   (installer.md sections 4.4 and 4.5)
+# Test hooks (honoured only with LAI_INSTALLER_DEV=1): LAI_INSTALL_ROOT is a prefix put in front of every
+# absolute path below (a fake root folder), LAI_INSTALL_ANSWERS is a file whose lines answer the prompts,
+# LAI_INSTALL_SELF is the path this script pretends to be. systemctl, tailscale, aictl, userdel, groupdel and
+# dconf are found through PATH, so a test puts fakes first.
+# ===============================================================================================================
+REPAIR_MODE=0       # 1 while --repair runs: phases must verify and fix, never change identity, secrets or content
+ANSWERS_OPEN=""
+UNINSTALL_NOTES=()  # the "what was kept / what was left" lines of the summary
+readonly UNINSTALL_UNITS=(localai-sync.timer localai-drill.timer localai-whisper localai-kiwix localai-llama localai-agent)
+readonly UNINSTALL_UNIT_FILES=(localai-sync.service localai-sync.timer localai-drill.service localai-drill.timer
+  localai-whisper.service localai-kiwix.service localai-llama.service localai-agent.service
+  localai-agent-rollback.service localai-agent-rollback.timer)
+readonly LEGACY_BACKUP_DIR=/var/lib/localai/migration/llama-qwen
+
+lai_root() { if ((DEV)); then printf '%s' "${LAI_INSTALL_ROOT:-}"; fi; }
+root_owner() { if ((DEV)); then printf '%s:%s' "$(id -u)" "$(id -g)"; else printf 'root:root'; fi; }
+
+# ask_line <prompt>: the answer goes to ANSWER. From /dev/tty (or the dev answers file). No terminal = empty answer.
+ask_line() {
+  ANSWER=""
+  if ((DEV)) && [[ -n "${LAI_INSTALL_ANSWERS:-}" ]]; then
+    if [[ -z "$ANSWERS_OPEN" ]]; then exec 8<"$LAI_INSTALL_ANSWERS"; ANSWERS_OPEN=1; fi
+    IFS= read -r ANSWER <&8 || true
+    say "$1 [answer read from the test answers file]"
+  elif { : </dev/tty; } 2>/dev/null; then
+    printf '%s ' "$1" >/dev/tty
+    IFS= read -r ANSWER </dev/tty || true
+    log_only "asked: $1"
+  else
+    say "No terminal to ask on: $1"
+  fi
+}
+
+# confirm_strict <question>: y/yes only. --yes does NOT answer it (installer.md section 3.2). Exit 4 otherwise.
+confirm_strict() {
+  if ((DRY_RUN)); then say "[dry-run] would ask: $1 [y/N]"; return 0; fi
+  ask_line "$1 [y/N]"
+  [[ "$ANSWER" == [yY] || "$ANSWER" == [yY][eE][sS] ]] || { say "Not confirmed. Nothing was changed."; leave 4; }
+}
+
+# confirm_delete <what to delete and why>: the person must type DELETE (upper case). --yes does NOT answer it.
+confirm_delete() {
+  if ((DRY_RUN)); then say "[dry-run] would ask you to type DELETE to confirm: $1"; return 0; fi
+  ask_line "$1 Type DELETE (capital letters) to confirm, anything else cancels:"
+  [[ "$ANSWER" == DELETE ]] || { say "Not confirmed (you did not type DELETE). Nothing was changed."; leave 4; }
+}
+
+# safe_rm_rf <fake-root prefix> <path>: only these four trees, never an empty or relative path.
+safe_rm_rf() {
+  local ur="$1" rel="$2"
+  case "$rel" in
+    /opt/localai|/etc/localai|/var/lib/localai|/srv/localai) ;;
+    *) fail 1 LAI-INS-081 "refusing to delete '$ur$rel': it is not one of the four Local AI folders. Nothing was deleted." ;;
+  esac
+  if [[ -z "$rel" || "$rel" != /* || "$rel" == "/" ]]; then
+    fail 1 LAI-INS-081 "refusing to delete an empty or root path. Nothing was deleted."
+  fi
+  if [[ ! -e "$ur$rel" && ! -L "$ur$rel" ]]; then say "already gone: $ur$rel"; return 0; fi
+  run_or_say rm -rf -- "$ur$rel"
+}
+
+rm_file_or_say() { # rm_file_or_say <path>
+  if [[ -e "$1" || -L "$1" ]]; then run_or_say rm -f -- "$1"; else say "already gone: $1"; fi
+}
+
+# The legacy unit is saved by the migration (llama-router.md 4.9.2 M9). Prints the file to restore, or nothing.
+legacy_unit_source() {
+  local ur="$1"
+  if [[ -f "$ur$LEGACY_BACKUP_DIR/llama-qwen.service" ]]; then
+    printf '%s' "$ur$LEGACY_BACKUP_DIR/llama-qwen.service"
+  elif [[ -f "$SYSTEMD_DIR/llama-qwen.service" && ! -L "$SYSTEMD_DIR/llama-qwen.service" ]]; then
+    printf '%s' "$SYSTEMD_DIR/llama-qwen.service"   # not migrated, or already restored: it is still there
+  fi
+}
+
+# Steps 5 (a) (b) (c). Nothing under /etc/localai is touched here; the caller removes it only afterwards.
+restore_legacy() {
+  local ur="$1" src="$2" key_src="$1/etc/localai/api-key" key_dst="$1/etc/llama-qwen/api-key" tmp
+  CUR_TAG="P0 restore-legacy"
+  say "Putting the old llama-qwen service back (same port 8080, same key)."
+  # (a) the key first: a real file, so it survives the removal of /etc/localai.
+  if [[ -L "$key_dst" || ! -e "$key_dst" ]]; then
+    if ((DRY_RUN)); then
+      say "[dry-run] would replace the link $key_dst with a real copy of $key_src (root, mode 0600)"
+    else
+      mkdir -p "$(dirname "$key_dst")"
+      tmp="$(mktemp "$(dirname "$key_dst")/.api-key.XXXXXX")"
+      cp -- "$key_src" "$tmp" || { rm -f "$tmp"; fail 1 LAI-INS-080 "could not copy the key to $key_dst. Nothing under /etc/localai was removed."; }
+      chmod 0600 "$tmp"
+      chown "$(root_owner)" "$tmp" || { rm -f "$tmp"; fail 1 LAI-INS-080 "could not set the owner of the key copy. Nothing under /etc/localai was removed."; }
+      mv -f -- "$tmp" "$key_dst"
+      say "wrote $key_dst as a real file (mode 0600)"
+    fi
+  else
+    say "already a real file: $key_dst"
+  fi
+  # (b) unmask (removes the mask link), restore the unit and its drop-ins, reload.
+  svc_or_say unmask llama-qwen.service || true
+  if [[ "$src" != "$SYSTEMD_DIR/llama-qwen.service" ]]; then
+    if ((DRY_RUN)); then
+      say "[dry-run] would restore $src to $SYSTEMD_DIR/llama-qwen.service (mode 0644)"
+    else
+      mkdir -p "$SYSTEMD_DIR"
+      rm -f -- "$SYSTEMD_DIR/llama-qwen.service"
+      cp -- "$src" "$SYSTEMD_DIR/llama-qwen.service"
+      chmod 0644 "$SYSTEMD_DIR/llama-qwen.service"
+      say "restored $SYSTEMD_DIR/llama-qwen.service"
+      if [[ -d "$(dirname "$src")/llama-qwen.service.d" && ! -e "$SYSTEMD_DIR/llama-qwen.service.d" ]]; then
+        cp -r -- "$(dirname "$src")/llama-qwen.service.d" "$SYSTEMD_DIR/llama-qwen.service.d"
+        say "restored the drop-in folder llama-qwen.service.d"
+      fi
+    fi
+  fi
+  svc_or_say daemon-reload || fail 1 LAI-INS-080 "systemctl daemon-reload failed. Nothing under /etc/localai was removed."
+  # (c) start it
+  run_or_say systemctl enable --now llama-qwen.service || fail 1 LAI-INS-080 "the old llama-qwen service did not start. Nothing under /etc/localai was removed: read 'journalctl -u llama-qwen -n 50'."
+  say "llama-qwen is enabled and started. Clients keep working with the same port and key."
+}
+
+do_uninstall() {
+  local ur f legacy_src="" pattern="" size="" reboot_needed=0 step_rc=0
+  ur="$(lai_root)"
+  CUR_TAG="P0 uninstall"
+  # Refuse impossible combinations before anything is touched.
+  if ((OPT_RESTORE_LEGACY && OPT_PURGE_CONTENT)); then
+    usage_error "--restore-legacy and --purge-content conflict: the old service reads its models from /srv/localai (the migration moved them there)"
+  fi
+  if ((OPT_RESTORE_LEGACY)); then
+    legacy_src="$(legacy_unit_source "$ur")"
+    if [[ -z "$legacy_src" ]]; then
+      say "WARNING: --restore-legacy found no saved llama-qwen.service (looked in $ur$LEGACY_BACKUP_DIR/ and $SYSTEMD_DIR/)."
+      say "         There is nothing to restore, so the old service will NOT be put back. The rest of the uninstall goes on."
+      UNINSTALL_NOTES+=("the old llama-qwen service was not restored: no saved copy was found")
+    elif [[ ! -f "$ur/etc/localai/api-key" ]]; then
+      fail 1 LAI-INS-080 "the key $ur/etc/localai/api-key is missing, so the old service could not keep its key. Nothing was changed."
+    fi
+  fi
+
+  # 1. confirm (and the DELETE prompts, all up front, so a "no" leaves everything as it was)
+  confirm_strict "This removes Local AI from this computer. Models and content in /srv/localai are kept unless you add --purge-content. Continue?"
+  if ((OPT_PURGE_CONFIG)); then
+    confirm_delete "This also deletes /etc/localai and /var/lib/localai: the node id, API key, agent token, PIN and cloud credential. They cannot be recovered."
+  fi
+  if ((OPT_PURGE_CONTENT)); then
+    size="$(du -sh -- "$ur/srv/localai" 2>/dev/null | cut -f1 || true)"
+    confirm_delete "This also deletes /srv/localai (${size:-unknown size} of models and content). Ark drives are never touched."
+  fi
+
+  # 2. unenroll, best effort, 10 s
+  if [[ -f "$ur/etc/localai/cloud-credential" ]]; then
+    if command -v aictl >/dev/null 2>&1; then
+      run_or_say timeout 10 aictl cloud unenroll --yes || say "Could not tell the cloud (best effort). The node record can be removed on the cloud's Nodes page."
+    else
+      say "Enrolled, but aictl is not available: the cloud still lists this node; remove it on the cloud's Nodes page."
+    fi
+  else
+    say "not enrolled with the cloud"
+  fi
+
+  # 3. stop and disable the units; remove our Tailscale Serve listener unless the old service takes over
+  CUR_TAG="P0 uninstall units"
+  for f in "${UNINSTALL_UNITS[@]}"; do
+    run_or_say systemctl disable --now "$f" || say "  (could not disable $f: it may not be installed; going on)"
+  done
+  if ((!OPT_RESTORE_LEGACY)); then
+    if command -v tailscale >/dev/null 2>&1; then
+      pattern="$(sed -n -E 's/^[[:space:]]*serve_pattern:[[:space:]]*"?([AB])"?.*/\1/p' "$ur/etc/localai/node.yaml" 2>/dev/null | head -n 1 || true)"
+      case "$pattern" in
+        A) run_or_say tailscale serve --tcp=18080 off || say "  (tailscale serve --tcp=18080 off failed; going on)" ;;
+        B) run_or_say tailscale serve --https=443 off || say "  (tailscale serve --https=443 off failed; going on)" ;;
+        *) say "Tailscale Serve pattern unknown (no node.yaml): left as it is" ;;
+      esac
+    else
+      say "tailscale not installed: no Serve listener to remove"
+    fi
+  else
+    say "Tailscale Serve left as it is: the old service keeps using it"
+  fi
+
+  # 4. remove the unit files
+  for f in "${UNINSTALL_UNIT_FILES[@]}"; do rm_file_or_say "$SYSTEMD_DIR/$f"; done
+  if [[ -d "$SYSTEMD_DIR/localai-llama.service.d" ]]; then run_or_say rm -rf -- "$SYSTEMD_DIR/localai-llama.service.d"; fi
+  svc_or_say daemon-reload
+
+  # 5. restore the legacy service BEFORE the agent and /etc/localai go
+  if ((OPT_RESTORE_LEGACY)) && [[ -n "$legacy_src" ]]; then
+    restore_legacy "$ur" "$legacy_src"
+    UNINSTALL_NOTES+=("the old llama-qwen service was restored and started (same port 8080 and key)")
+  fi
+
+  # 6. the program files
+  CUR_TAG="P0 uninstall files"
+  safe_rm_rf "$ur" /opt/localai
+  rm_file_or_say "$ur/usr/local/bin/aictl"
+  rm_file_or_say "$ur/usr/local/sbin/install-node.sh"
+  rm_file_or_say "$ur/etc/polkit-1/rules.d/50-localai-operators.rules"
+
+  # 7. config and state
+  if ((OPT_PURGE_CONFIG)); then
+    safe_rm_rf "$ur" /etc/localai
+    safe_rm_rf "$ur" /var/lib/localai
+    UNINSTALL_NOTES+=("config and state were deleted (/etc/localai, /var/lib/localai)")
+  else
+    # The phase record says "done" for things that are now gone: drop it so a reinstall re-runs every phase.
+    rm_file_or_say "$STATE_FILE"
+    UNINSTALL_NOTES+=("kept /etc/localai and /var/lib/localai: a reinstall reuses the node id, API key, agent token and PIN")
+  fi
+
+  # 8. content
+  if ((OPT_PURGE_CONTENT)); then
+    safe_rm_rf "$ur" /srv/localai
+    UNINSTALL_NOTES+=("content was deleted (/srv/localai)")
+  else
+    UNINSTALL_NOTES+=("kept /srv/localai (models and content); ark drives were not touched")
+  fi
+
+  # 9. hardening (INST-03, issue #116 provides revert_hardening)
+  if ((OPT_REVERT_HARDENING)); then
+    CUR_TAG="P0 uninstall hardening"
+    if declare -F revert_hardening >/dev/null; then
+      revert_hardening || step_rc=$?
+      if ((step_rc != 0)); then say "WARNING: reverting the laptop hardening failed (exit $step_rc); the rest is done."; fi
+      if [[ "${REBOOT_REQUIRED:-0}" == 1 ]]; then reboot_needed=1; fi
+    else
+      say "WARNING: --revert-hardening is not available in this version of the installer (owner: INST-03, issue #116). Nothing was reverted."
+      UNINSTALL_NOTES+=("the laptop hardening was NOT reverted (not available in this version)")
+    fi
+  else
+    UNINSTALL_NOTES+=("kept the laptop hardening (use --revert-hardening to undo it)")
+  fi
+
+  # 10. user and group only with --purge-config
+  if ((OPT_PURGE_CONFIG)); then
+    run_or_say userdel localai || say "  (userdel localai: not removed; it may not exist)"
+    run_or_say groupdel localai-operators || say "  (groupdel localai-operators: not removed; it may not exist)"
+  else
+    UNINSTALL_NOTES+=("kept the localai user and the localai-operators group")
+  fi
+
+  CUR_TAG="P0 uninstall summary"
+  if ((DRY_RUN)); then say "[dry-run] done: nothing was changed."; fi
+  say "Local AI has been removed from this computer. Summary:"
+  for f in "${UNINSTALL_NOTES[@]}"; do say "  - $f"; done
+  if ((reboot_needed)); then say "  - reboot required to finish reverting the laptop settings (LAI-INS-070)"; fi
+  return 0
+}
+
+# Keep /opt/localai/installers/install-node.sh and its /usr/local/sbin symlink healthy (spec 4.5).
+repair_installer_files() {
+  local ur="$1" dest link target=/opt/localai/installers/install-node.sh self src="" cur_target
+  dest="$ur$target"; link="$ur/usr/local/sbin/install-node.sh"
+  CUR_TAG="P0 repair installer"
+  self="${BASH_SOURCE[0]}"
+  if ((DEV)) && [[ -n "${LAI_INSTALL_SELF:-}" ]]; then self="$LAI_INSTALL_SELF"; fi
+  if [[ "$(readlink -f -- "$self")" != "$(readlink -f -- "$dest" 2>/dev/null || echo "$dest")" ]]; then
+    src="$self"
+  elif [[ -n "$OPT_FROM_ARK" && -f "$OPT_FROM_ARK/localai/kit/installers/install-node.sh" ]]; then
+    src="$OPT_FROM_ARK/localai/kit/installers/install-node.sh"
+  fi
+  if [[ -n "$src" ]]; then
+    write_file_or_diff "$dest" 0755 "$(root_owner)" <"$src"
+  else
+    say "This run uses the installed copy itself, so it cannot tell if it was changed. To refresh it, run the installer from the release download or from the ark drive with --from-ark."
+    if [[ ! -e "$dest" ]]; then
+      say "WARNING: $dest is missing and there is no other copy to restore it from. Run this repair from the ark drive: sudo bash <drive>/localai/kit/installers/install-node.sh --from-ark <drive> --repair"
+    fi
+  fi
+  if ((!DRY_RUN)) && [[ -f "$dest" && "$(stat -c %a "$dest")" != 755 ]]; then chmod 0755 "$dest"; say "fixed the mode of $dest"; fi
+  cur_target="$(readlink -- "$link" 2>/dev/null || true)"
+  if [[ "$cur_target" == "$target" ]]; then
+    say "already correct: $link -> $target"
+  else
+    if ((!DRY_RUN)); then mkdir -p "$(dirname "$link")"; fi
+    run_or_say ln -sfn -- "$target" "$link"
+  fi
+}
+
+do_repair() {
+  local ur entry i=0 id rc=0
+  ur="$(lai_root)"
+  REPAIR_MODE=1
+  CUR_TAG="P0 repair"
+  say "Repair: checking and fixing this install. Your node id, keys, PIN, cloud link and content are not changed."
+  repair_installer_files "$ur"
+  for entry in "${PHASE_TABLE[@]}"; do
+    i=$((i + 1))
+    id="${entry%%|*}"
+    PH_STATUS[$id]=""   # force the phase to run: in repair mode "already done" is not trusted
+    run_phase "$i" "$entry"
+  done
+  CUR_TAG="P0 repair doctor"
+  if ((STUBS_RUN > 0)); then
+    say "NOTE: $STUBS_RUN of $PHASE_TOTAL phases are not implemented in this version, so they repaired nothing."
+  fi
+  if ((DRY_RUN)); then say "[dry-run] would run: aictl doctor"; say "[dry-run] done: nothing was changed."; return 0; fi
+  if command -v aictl >/dev/null 2>&1; then
+    run_or_say aictl doctor || rc=$?
+    if ((rc != 0)); then
+      say "aictl doctor still reports problems (exit $rc). Each line above names its LAI code and the fix; see docs/runbooks/07-troubleshooting.md."
+      return 1
+    fi
+    say "Repair finished and aictl doctor is clean."
+  else
+    say "aictl is not installed here, so the final health check was skipped."
+  fi
+  return 0
+}
+# ===============================================================================================================
+# end INST-08
+# ===============================================================================================================
+
 main() {
   parse_args "$@"
   if ((OPT_HELP)); then usage; return 0; fi
@@ -640,12 +953,8 @@ main() {
   phase0
 
   if ((OPT_REPAIR || OPT_UNINSTALL)); then
-    local mode="repair"
-    if ((OPT_UNINSTALL)); then mode="uninstall"; fi
-    CUR_TAG="P0 $mode"
-    say "NOT IMPLEMENTED YET: --$mode does nothing in this version of the installer (owner: $REPAIR_UNINSTALL_OWNER)."
-    say "NOTHING WAS CHANGED."
-    return 0
+    if ((OPT_UNINSTALL)); then do_uninstall; else do_repair; fi
+    return $?
   fi
 
   local i=0 entry
