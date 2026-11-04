@@ -29,6 +29,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 	"github.com/marinoscar/local-ai/agent/internal/svc/kiwix"
 	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
+	"github.com/marinoscar/local-ai/agent/internal/svc/vision"
 	"github.com/marinoscar/local-ai/agent/internal/svc/whisper"
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
 	"github.com/marinoscar/local-ai/agent/internal/sync/run/adapt"
@@ -189,6 +190,10 @@ func (d *Daemon) build(ctx context.Context) error {
 		Enabled: func() bool { return blockEnabled(cfg.Get(), "whisper") },
 		Backend: func() string { return whisperBackend(cfg.Get()) },
 	})); err != nil {
+		return err
+	}
+
+	if err := vision.Register(c.Checks, visionSource{d}); err != nil {
 		return err
 	}
 
