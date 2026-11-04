@@ -4,8 +4,9 @@ import { Module } from '@nestjs/common';
 
 import { CatalogModule } from './catalog/catalog.module';
 import { CommandsModule } from './commands/commands.module';
+import { LabNodesModule } from './nodes/lab-nodes.module';
 import { LocalaiNodesModule } from './nodes/nodes.module';
 import { NodeLinkModule } from './node-link/node-link.module';
 
-@Module({ imports: [NodeLinkModule, LocalaiNodesModule, CatalogModule, CommandsModule] })
+@Module({ imports: [NodeLinkModule, LocalaiNodesModule, CatalogModule, CommandsModule, LabNodesModule] })
 export class LocalaiModule {}
