@@ -12,6 +12,7 @@ import { Home } from "./screens/Home";
 import { Status } from "./screens/Status";
 import { LockDialog } from "./screens/LockDialog";
 import { mapsManualsBody, useHelpRedirect } from "./screens/mapsManuals";
+import { Photo } from "./screens/Photo";
 import { Stub } from "./screens/Stub";
 import { Talk } from "./screens/Talk";
 import { Unavailable } from "./screens/Unavailable";
@@ -103,6 +104,8 @@ export function App() {
           <Library status={status} />
         ) : view.screen === "first-aid" ? (
           <FirstAid status={status} />
+        ) : view.screen === "photo" ? (
+          <Photo status={status} />
         ) : view.screen === "talk" ? (
           <Talk status={status} />
         ) : view.screen === "status" && status ? (

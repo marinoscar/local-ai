@@ -28,6 +28,8 @@ export interface Capability {
   gps?: boolean;
   /** Only on manuals: the rendered runbooks (agent.md section 3.8.29). */
   items?: { id: string; title: string; url: string }[];
+  /** photo only: the vision model to switch to when reason is needs_switch. */
+  vision_model?: string;
 }
 
 export interface Model {
