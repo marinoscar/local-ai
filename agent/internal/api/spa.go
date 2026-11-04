@@ -31,6 +31,8 @@ type SPAOptions struct {
 	// PortalFile is the Portal entry, default "portal.html". Every /portal/* path that is not an
 	// asset serves it, so the SPA's client-side routes survive a reload.
 	PortalFile string
+	// MapsFile is the map viewer entry, default "maps.html".
+	MapsFile string
 	// PortalHook runs on GET /portal before the page is written. PORTAL-02 sets it to issue the
 	// lai_portal cookie in survival mode (survival-portal.md section 3.3); nil is a no-op.
 	PortalHook func(w http.ResponseWriter, r *http.Request)
@@ -54,6 +56,9 @@ func SPARoutes(opts SPAOptions) []Route {
 	if opts.PortalFile == "" {
 		opts.PortalFile = "portal.html"
 	}
+	if opts.MapsFile == "" {
+		opts.MapsFile = "maps.html"
+	}
 	s := &spa{opts: opts}
 	get := func(pattern string, fn HandlerFunc) Route {
 		return Route{Method: http.MethodGet, Pattern: pattern, Auth: []Level{AuthNone}, Absolute: true, Handler: fn}
@@ -64,6 +69,8 @@ func SPARoutes(opts SPAOptions) []Route {
 		get("/portal", s.portal),
 		get("/portal/", s.portal),
 		get("/portal/assets/", s.assets),
+		get("/maps/", s.maps),
+		get("/maps/viewer/", s.viewerAssets),
 	}
 }
 
@@ -104,6 +111,26 @@ func (s *spa) assets(w http.ResponseWriter, r *http.Request) error {
 		return notFoundError()
 	}
 	return s.serve(w, r, path.Join("assets", rest), "public, max-age=31536000, immutable")
+}
+
+// maps serves the offline map viewer at exactly /maps/ (companion-services.md section 4.4.3) with the
+// same CSP as the Portal. Any other path under /maps/ that no tile, asset or place route claims is a
+// plain 404.
+func (s *spa) maps(w http.ResponseWriter, r *http.Request) error {
+	if r.URL.Path != "/maps/" {
+		return notFoundError()
+	}
+	return s.page(w, r, s.opts.MapsFile, PortalContentSecurityPolicy)
+}
+
+// viewerAssets serves /maps/viewer/<x> from viewer/<x> of the dist: the viewer's hashed bundle. It is
+// not under /maps/assets/, which belongs to the map fonts and sprites (SVC-09).
+func (s *spa) viewerAssets(w http.ResponseWriter, r *http.Request) error {
+	rest := strings.TrimPrefix(r.URL.Path, "/maps/viewer/")
+	if rest == "" || strings.Contains(rest, "..") || !s.isFile(path.Join("viewer", rest)) {
+		return notFoundError()
+	}
+	return s.serve(w, r, path.Join("viewer", rest), "public, max-age=31536000, immutable")
 }
 
 // page serves an HTML entry with the CSP of its area. A missing entry means a bad build: the agent

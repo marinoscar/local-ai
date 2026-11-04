@@ -30,6 +30,8 @@ func distFS() fstest.MapFS {
 	return fstest.MapFS{
 		"index.html":                  {Data: []byte("<!doctype html><title>Dashboard</title>")},
 		"portal.html":                 {Data: []byte("<!doctype html><title>Portal</title>")},
+		"maps.html":                   {Data: []byte("<!doctype html><title>Maps</title>")},
+		"viewer/maps-7a8b9c.js":       {Data: []byte("console.log('maps')")},
 		"favicon.svg":                 {Data: []byte("<svg xmlns='http://www.w3.org/2000/svg'/>")},
 		".secret":                     {Data: []byte("dotfile")},
 		"assets/app-1a2b3c.js":        {Data: []byte("console.log('app')")},
@@ -85,7 +87,7 @@ func TestSPAOnlineAndFallback(t *testing.T) {
 			t.Fatalf("%d %q", rec.Code, rec.Body.String())
 		}
 	})
-	for _, p := range []string{"/settings", "/models/qwen", "/some/deep/client/route", "/index.html", "/portal.html", "/chat", "/library", "/maps", "/docs", "/favicon.ico", "/.secret", "/node_modules/x/index.js", "/missing.js"} {
+	for _, p := range []string{"/settings", "/models/qwen", "/some/deep/client/route", "/index.html", "/portal.html", "/chat", "/library", "/docs", "/favicon.ico", "/.secret", "/node_modules/x/index.js", "/missing.js"} {
 		t.Run("fallback "+p, func(t *testing.T) {
 			rec := do(h, req{target: p})
 			if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Dashboard") {
@@ -331,6 +333,46 @@ func portOf(t *testing.T, rawURL string) int {
 }
 
 // Real TCP: the routes work through the full server and its Host check, with a browser-like client.
+func TestSPAMapsViewer(t *testing.T) {
+	h := spaServer(t, SPAOptions{}).Handler()
+
+	t.Run("/maps/ is the viewer with the Portal CSP", func(t *testing.T) {
+		rec := do(h, req{target: "/maps/"})
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Maps") {
+			t.Fatalf("%d %s", rec.Code, rec.Body.String())
+		}
+		if got := rec.Header().Get("Content-Security-Policy"); got != PortalContentSecurityPolicy {
+			t.Fatalf("CSP = %q", got)
+		}
+		if rec.Header().Get("Cache-Control") != "no-cache" {
+			t.Fatalf("Cache-Control = %q", rec.Header().Get("Cache-Control"))
+		}
+	})
+	t.Run("the bundle is served from /maps/viewer/ and cached", func(t *testing.T) {
+		rec := do(h, req{target: "/maps/viewer/maps-7a8b9c.js"})
+		if rec.Code != 200 || rec.Body.String() != "console.log('maps')" {
+			t.Fatalf("%d %q", rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
+			t.Fatalf("Cache-Control = %q", rec.Header().Get("Cache-Control"))
+		}
+	})
+	t.Run("anything else is a 404", func(t *testing.T) {
+		for _, p := range []string{"/maps/viewer/", "/maps/viewer/missing.js", "/maps/viewer/../index.html", "/maps/other", "/maps/index.html"} {
+			rec := do(h, req{target: p})
+			if rec.Code != 404 {
+				t.Fatalf("%s: %d %s", p, rec.Code, rec.Body.String())
+			}
+		}
+	})
+	t.Run("/maps without the slash goes to /maps/", func(t *testing.T) {
+		rec := do(h, req{target: "/maps"})
+		if rec.Code != 307 && rec.Code != 301 || rec.Header().Get("Location") != "/maps/" {
+			t.Fatalf("%d %v", rec.Code, rec.Header())
+		}
+	})
+}
+
 func TestSPAOverTCP(t *testing.T) {
 	s := spaServer(t, SPAOptions{Mode: func() string { return "survival" }})
 	srv := httptest.NewServer(s.Handler())
