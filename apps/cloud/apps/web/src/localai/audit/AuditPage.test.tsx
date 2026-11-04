@@ -209,29 +209,32 @@ describe('AuditPage', () => {
     });
   });
 
-  it('has no axe violations: loaded, empty, and failed', async () => {
+  // axe walks the whole table; under a loaded CI machine that can pass the 5 s default, so these three get more room.
+  const AXE_TIMEOUT = 30_000;
+  const axeViolations = async (container: HTMLElement) => (await axe.run(container, { rules: { 'color-contrast': { enabled: false } } })).violations.map((violation) => `${violation.id}: ${violation.help}`);
+
+  it('has no axe violations when loaded', async () => {
     const loaded = renderPage();
     await screen.findByTestId('audit-count');
-    await waitFor(() => expect(within(screen.getByLabelText('Node')).getAllByRole('option').length).toBe(5));
-    let result = await axe.run(loaded.container, { rules: { 'color-contrast': { enabled: false } } });
-    expect(result.violations.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
-    loaded.unmount();
+    await waitFor(() => expect(within(screen.getByLabelText('Node', { selector: 'select' })).getAllByRole('option').length).toBe(5));
+    expect(await axeViolations(loaded.container)).toEqual([]);
+  }, AXE_TIMEOUT);
 
+  it('has no axe violations when empty', async () => {
     const empty = renderPage({ fetchAudit: async () => ({ items: [], page: 1, pageSize: 50, total: 0, totalPages: 1 }) });
     await screen.findByTestId('audit-empty');
-    result = await axe.run(empty.container, { rules: { 'color-contrast': { enabled: false } } });
-    expect(result.violations.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
-    empty.unmount();
+    expect(await axeViolations(empty.container)).toEqual([]);
+  }, AXE_TIMEOUT);
 
+  it('has no axe violations when failed', async () => {
     const failed = renderPage({
       fetchAudit: async () => {
         throw new Error('x');
       },
     });
     await screen.findByText('Could not load the audit trail.');
-    result = await axe.run(failed.container, { rules: { 'color-contrast': { enabled: false } } });
-    expect(result.violations.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
-  });
+    expect(await axeViolations(failed.container)).toEqual([]);
+  }, AXE_TIMEOUT);
 });
 
 describe('URL state', () => {
