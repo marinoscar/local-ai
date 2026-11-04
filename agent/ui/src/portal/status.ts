@@ -26,6 +26,8 @@ export interface Capability {
   /** maps */
   search?: boolean;
   gps?: boolean;
+  /** Only on manuals: the rendered runbooks (agent.md section 3.8.29). */
+  items?: { id: string; title: string; url: string }[];
 }
 
 export interface Model {
@@ -66,6 +68,8 @@ export interface FirstAidEntry {
 export interface PortalStatus {
   schema_version: number;
   generated_at?: string;
+  /** This node's id, for the Survival card address. */
+  node_id?: string;
   mode: string;
   language: string;
   emergency_number: string;

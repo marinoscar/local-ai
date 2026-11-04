@@ -47,6 +47,9 @@ export function Unavailable({
             {t("unavailable.manual")}
           </button>
         ) : null}
+        <button type="button" className="btn" onClick={() => navigate("help")}>
+          {t("help.title")}
+        </button>
         <button type="button" className="btn" onClick={() => navigate("")}>
           {t("common.home")}
         </button>
