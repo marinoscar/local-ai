@@ -69,6 +69,27 @@ jobs:
           ALTER SCHEMA public OWNER TO app;
           SQL
 
+      # The catalog lint tests (cloud-app.md section 4.6) run the real linter. The
+      # agent binary is multi-call by argv[0], so the file the tests execute must
+      # be NAMED aictl: build aiagent and symlink it. agent/ is vendored, so the
+      # build needs no network.
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      - name: Build aictl for catalog lint
+        working-directory: agent
+        run: |
+          CGO_ENABLED=0 go build -mod=vendor -o "$RUNNER_TEMP/aiagent" ./cmd/aiagent
+          ln -sf "$RUNNER_TEMP/aiagent" "$RUNNER_TEMP/aictl"
+          echo "LOCALAI_AICTL_PATH=$RUNNER_TEMP/aictl" >> "$GITHUB_ENV"
+
+      - name: Check aictl runs
+        run: |
+          "$LOCALAI_AICTL_PATH" --help
+          "$LOCALAI_AICTL_PATH" catalog lint --help
+
       - run: npm ci
 
       # The platform's lock and drift checks: installed migrations, the
