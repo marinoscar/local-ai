@@ -230,7 +230,7 @@ func whisperSmokeModel(env local.Env) (string, bool) {
 	}
 	var found []cand
 	for _, r := range local.FindRoots(context.Background(), env) {
-		dirs, err := os.ReadDir(filepath.Join(r.Path, "models"))
+		dirs, err := os.ReadDir(filepath.Join(r.Path, "speech", "whisper"))
 		if err != nil {
 			continue
 		}
@@ -238,7 +238,7 @@ func whisperSmokeModel(env local.Env) (string, bool) {
 			if !d.IsDir() {
 				continue
 			}
-			dir := filepath.Join(r.Path, "models", d.Name())
+			dir := filepath.Join(r.Path, "speech", "whisper", d.Name())
 			m, err := manifest.Load(config.OSFS{}, dir)
 			if err != nil || m.Engine != "whisper" {
 				continue
