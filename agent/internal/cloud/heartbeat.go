@@ -43,7 +43,7 @@ func (l *Link) heartbeatLoop(ctx context.Context) {
 	bo := NewBackoff(l.rnd)
 	for {
 		delay := l.heartbeatInterval()
-		if l.online() {
+		if l.active() {
 			res := l.heartbeatOnce(ctx)
 			switch res.kind {
 			case hbOK:
@@ -55,7 +55,7 @@ func (l *Link) heartbeatLoop(ctx context.Context) {
 				delay = res.retryAfter
 			}
 		}
-		if !l.wait(ctx, delay) {
+		if !l.wait(ctx, delay, l.hbWake) {
 			return
 		}
 	}

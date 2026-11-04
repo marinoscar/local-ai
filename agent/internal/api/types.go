@@ -57,6 +57,8 @@ type Cloud struct {
 	StateTransport string         `json:"state_transport"`
 	Inflight       map[string]any `json:"inflight"`
 	KeySynced      bool           `json:"key_synced"`
+	// Paused: a drill runs and the link sends nothing (agent.md section 4.8.10).
+	Paused bool `json:"paused"`
 }
 
 // CloudEnrollRequest is the body of POST /cloud/enroll (schema CloudEnrollRequest).

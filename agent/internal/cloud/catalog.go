@@ -48,7 +48,7 @@ func (l *Link) FetchCatalogIfChanged(ctx context.Context, etag string) (*catalog
 }
 
 func (l *Link) fetchCatalog(ctx context.Context, etag string) (*catalog.Bundle, error) {
-	if !l.callable() || !l.online() {
+	if !l.callable() || !l.active() {
 		return nil, ErrNotLinked
 	}
 	path, ok := l.serverPath("/localai/catalog")
