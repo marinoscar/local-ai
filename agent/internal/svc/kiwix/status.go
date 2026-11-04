@@ -120,10 +120,7 @@ func (s *Status) Attach(p *health.FuncProbe, f Fetcher, port func() int) {
 	p.ContentFn = s.Content
 	p.ReadinessFn = func(ctx context.Context) health.Readiness {
 		books, _ := s.Snapshot()
-		rd := health.Readiness{Detail: plural(len(books), "book"), Books: make([]health.Book, 0, len(books))}
-		for _, b := range books {
-			rd.Books = append(rd.Books, health.Book{ContentID: b.ContentID, Name: b.Name, Root: b.Root})
-		}
+		rd := health.Readiness{Detail: plural(len(books), "book"), Books: BookMap(books)}
 		if f != nil && port != nil {
 			if body, err := f.Get(ctx, CatalogURL(port())); err == nil {
 				if n, perr := ParseTotalResults(body); perr == nil && n != len(books) {

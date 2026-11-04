@@ -564,6 +564,9 @@ func (d *Daemon) buildServer() error {
 			return api.RegisterArkImport(reg, api.ArkImportDeps{Importer: adapt.Importer{Engine: d.ark.engine, Planner: d.ark.importer}, Audit: d.audit, Logger: d.log})
 		}},
 		{"speech", func() error { return reg.Add(d.piper.Routes()...) }},
+		{"library", func() error {
+			return reg.Add(kiwix.Routes(kiwix.NewProxy(kiwix.ProxyOptions{Port: c.Config.Get().Ports.Kiwix, Logger: d.log}))...)
+		}},
 	}
 	for _, r := range regs {
 		if err := r.add(); err != nil {
