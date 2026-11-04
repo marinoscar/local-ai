@@ -40,6 +40,12 @@ describe('LabOverviewPage', () => {
     ]);
   });
 
+  it('links the alert count to the Alerts page for anyone who can read the lab', async () => {
+    renderPage(async () => labFixture());
+    const link = await screen.findByRole('link', { name: 'View alerts' });
+    expect(link).toHaveAttribute('href', '/lab/alerts');
+  });
+
   it('shows a viewer (lab:read only) no action buttons except the per-card Open links', async () => {
     renderPage(async () => labFixture());
     await screen.findByTestId('lab-summary');

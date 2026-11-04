@@ -28,6 +28,7 @@ import {
   type NotificationChannelDef,
 } from '@marinoscar/platform-api/notifications';
 
+import { LOCALAI_NOTIFICATIONS } from '../../localai/localai.notifications';
 import { contributions } from '../slices/contributions';
 import { IDENTITY_NOTIFICATIONS } from './identity.notifications';
 
@@ -43,3 +44,4 @@ registerNotifications(OPS_NOTIFICATIONS);
 registerNotifications(NODES_NOTIFICATIONS);
 registerNotifications(contributions().notifications);
 // The app's own events are registered here, after the platform's.
+registerNotifications(LOCALAI_NOTIFICATIONS);
