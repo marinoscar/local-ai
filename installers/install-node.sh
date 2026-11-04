@@ -846,10 +846,10 @@ phase_packages() {
 # =============================================================================================================
 REBOOT_REQUIRED=0
 
-# harden_bin: the agent binary (P2 puts it at /opt/localai/bin/aiagent). Dev hook: LAI_INSTALL_AIAGENT.
+# harden_bin: the agent binary (P2 puts it at /opt/localai/bin/aiagent). Dev hook: LAI_INSTALL_HARDEN_AGENT.
 harden_bin() {
   # With the dev hooks on, the real binary is never used (a test must not harden the machine it runs on).
-  if ((DEV)); then printf '%s' "${LAI_INSTALL_AIAGENT:-/nonexistent/lai-dev-no-aiagent}"; else printf '%s' /opt/localai/bin/aiagent; fi
+  if ((DEV)); then printf '%s' "${LAI_INSTALL_HARDEN_AGENT:-/nonexistent/lai-dev-no-aiagent}"; else printf '%s' /opt/localai/bin/aiagent; fi
 }
 
 # harden_args <mode...>: the arguments shared by every call.

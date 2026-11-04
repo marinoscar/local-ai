@@ -574,17 +574,17 @@ chmod +x "$fakeagent"
 export FAKE_ARGS_LOG="$w/agent.args"
 # shellcheck disable=SC2120  # it is passed through t(), which shellcheck cannot see
 hphase() { # hphase <args...>: run only phase P4 of the installer with the fake agent
-  bash -c 'source "$1"; shift; DEV=1; LAI_INSTALL_AIAGENT="$1"; shift; STATE_DIR="$1"; shift; STATE_FILE="$STATE_DIR/state.json"; LOG_OPEN=; mkdir -p "$STATE_DIR"
+  bash -c 'source "$1"; shift; DEV=1; LAI_INSTALL_HARDEN_AGENT="$1"; shift; STATE_DIR="$1"; shift; STATE_FILE="$STATE_DIR/state.json"; LOG_OPEN=; mkdir -p "$STATE_DIR"
     parse_args "$@"; CUR_PHASE_ID=""; run_phase 4 "${PHASE_TABLE[3]}"; echo "REBOOT_REQUIRED=$REBOOT_REQUIRED"' _ "$INST" "$fakeagent" "$w/hstate" "$@"
 }
 : >"$FAKE_ARGS_LOG"
 t "--no-hardening skips and never calls the agent" 0 "Laptop hardening is off" hphase --no-hardening
 t "  ... the agent was not called" 0 "" test ! -s "$FAKE_ARGS_LOG"
 t "dry run without the agent shows the command" 10 "[dry-run] would run: /nonexistent/aiagent setup harden --state-dir" bash -c '
-  source "$1"; DEV=1; DRY_RUN=1; LAI_INSTALL_AIAGENT=/nonexistent/aiagent; STATE_DIR="$2"; STATE_FILE="$2/s.json"; LOG_OPEN=; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""
+  source "$1"; DEV=1; DRY_RUN=1; LAI_INSTALL_HARDEN_AGENT=/nonexistent/aiagent; STATE_DIR="$2"; STATE_FILE="$2/s.json"; LOG_OPEN=; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""
   phase_hardening' _ "$INST" "$w/hstate"
 t "a real run without the agent is loud, not done" 10 "NOT IMPLEMENTED YET" bash -c '
-  source "$1"; DEV=1; DRY_RUN=0; LAI_INSTALL_AIAGENT=/nonexistent/aiagent; STATE_DIR="$2"; LOG_OPEN=; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""
+  source "$1"; DEV=1; DRY_RUN=0; LAI_INSTALL_HARDEN_AGENT=/nonexistent/aiagent; STATE_DIR="$2"; LOG_OPEN=; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""
   phase_hardening' _ "$INST" "$w/hstate"
 rm -rf "$w/hstate"; : >"$FAKE_ARGS_LOG"
 t "auto mode calls setup harden with the state dir" 0 "phase P4 laptop hardening: done" hphase
@@ -599,15 +599,15 @@ t "  ... in the phase details" 0 "reboot_required=true" grep -F "reboot_required
 t "  ... and the output says reboot, not restart logind" 0 "logind settings apply after a reboot" grep -F "logind settings apply after a reboot" <<<"$out"
 rm -rf "$w/hstate"; : >"$FAKE_ARGS_LOG"
 t "dry run passes --dry-run to the agent" 0 "--dry-run" bash -c '
-  source "$1"; DEV=1; DRY_RUN=1; LAI_INSTALL_AIAGENT="$2"; STATE_DIR="$3"; LOG_OPEN=; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""
+  source "$1"; DEV=1; DRY_RUN=1; LAI_INSTALL_HARDEN_AGENT="$2"; STATE_DIR="$3"; LOG_OPEN=; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""
   phase_hardening; cat "$FAKE_ARGS_LOG"' _ "$INST" "$fakeagent" "$w/hstate"
 t "agent failure fails the phase with the repair hint" 1 "sudo install-node.sh --repair" env FAKE_RC=1 bash -c '
-  source "$1"; set -Eeuo pipefail; DEV=1; DRY_RUN=0; LAI_INSTALL_AIAGENT="$2"; STATE_DIR="$3"; STATE_FILE="$3/s.json"; LOG_OPEN=; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""
+  source "$1"; set -Eeuo pipefail; DEV=1; DRY_RUN=0; LAI_INSTALL_HARDEN_AGENT="$2"; STATE_DIR="$3"; STATE_FILE="$3/s.json"; LOG_OPEN=; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""
   run_phase 4 "${PHASE_TABLE[3]}"' _ "$INST" "$fakeagent" "$w/hstate"
-t "check_hardening: passes when the agent verifies" 0 "" env FAKE_CHECK_RC=0 bash -c 'source "$1"; DEV=1; LAI_INSTALL_AIAGENT="$2"; STATE_DIR="$3"; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""; check_hardening' _ "$INST" "$fakeagent" "$w/hstate"
-t "check_hardening: fails when the agent finds a problem" 1 "" env FAKE_CHECK_RC=1 bash -c 'source "$1"; DEV=1; LAI_INSTALL_AIAGENT="$2"; STATE_DIR="$3"; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""; check_hardening' _ "$INST" "$fakeagent" "$w/hstate"
+t "check_hardening: passes when the agent verifies" 0 "" env FAKE_CHECK_RC=0 bash -c 'source "$1"; DEV=1; LAI_INSTALL_HARDEN_AGENT="$2"; STATE_DIR="$3"; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""; check_hardening' _ "$INST" "$fakeagent" "$w/hstate"
+t "check_hardening: fails when the agent finds a problem" 1 "" env FAKE_CHECK_RC=1 bash -c 'source "$1"; DEV=1; LAI_INSTALL_HARDEN_AGENT="$2"; STATE_DIR="$3"; OPT_HARDENING=auto; OPT_NO_SSH=0; OPT_DESKTOP_USER=""; check_hardening' _ "$INST" "$fakeagent" "$w/hstate"
 : >"$FAKE_ARGS_LOG"
-t "revert_hardening calls the agent with --revert" 0 "" bash -c 'source "$1"; DEV=1; DRY_RUN=0; LAI_INSTALL_AIAGENT="$2"; STATE_DIR="$3"; LOG_OPEN=; revert_hardening' _ "$INST" "$fakeagent" "$w/hstate"
+t "revert_hardening calls the agent with --revert" 0 "" bash -c 'source "$1"; DEV=1; DRY_RUN=0; LAI_INSTALL_HARDEN_AGENT="$2"; STATE_DIR="$3"; LOG_OPEN=; revert_hardening' _ "$INST" "$fakeagent" "$w/hstate"
 t "  ... arguments" 0 "setup harden --revert" grep -F -- "setup harden --revert" "$FAKE_ARGS_LOG"
 t "the installer never restarts logind (CI grep)" 0 "ok" "$SRC/scripts/check-no-logind-restart.sh"
 
