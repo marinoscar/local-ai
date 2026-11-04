@@ -1,0 +1,208 @@
+schema_version: 1
+models:
+  - id: qwen3.6-35b-a3b-q4km
+    display_name: "Qwen 3.6 35B A3B"
+    summary: "Strong general assistant for chat, reasoning and code. Needs a 12 GB graphics card."
+    engine: llama
+    roles: [chat, reasoning, coder]
+    languages: [en, es, multi]
+    license: apache-2.0
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: ggml-org/Qwen3.6-35B-A3B-GGUF
+      revision: 7878dc9a905c7c9379e5e8d6a1aa9affdd6839c5
+    files:
+      - kind: weights
+        name: Qwen3.6-35B-A3B-Q4_K_M.gguf
+        url: null
+        size_bytes: 20419565568
+        sha256: "671e47e0ec53c665d048b98c3ecbfd5236b5ca9c3e02ed19fc8f81f7b85140c7"
+    requirements:
+      backends: [cuda]
+      min_vram_mib: 11250
+      min_ram_mib: 24576
+      min_disk_bytes: 20419565568
+    llama:
+      ctx: 65536
+      n_gpu_layers: 99
+      flash_attn: "on"
+      parallel: 1
+      mmproj_file_kind: null
+      chat_template: null
+      extra_args: ["--n-cpu-moe", "23"]
+      env: {}
+    client_hints:
+      max_output_tokens: 8192
+      reasoning: true
+  - id: qwen3.5-9b-q4km
+    display_name: "Qwen 3.5 9B"
+    summary: "Fast general assistant. Good for chat, writing and simple code."
+    summary_es: "Asistente general rápido. Bueno para conversar, escribir y código simple."
+    engine: llama
+    roles: [chat, reasoning, coder]
+    languages: [en, es, multi]
+    license: apache-2.0
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: unsloth/Qwen3.5-9B-MTP-GGUF
+      revision: 9716a636ee4bddc3fed678220b7a33dd2a4160ae
+    files:
+      - kind: weights
+        name: Qwen3.5-9B-Q4_K_M.gguf
+        url: null
+        size_bytes: 5868826976
+        sha256: "e8dd94817e95d6c0939102049d068418269978377b13616c4726235e232841fe"
+    requirements:
+      backends: [cuda, vulkan, cpu]
+      min_vram_mib: 7566
+      min_ram_mib: 8192
+      min_disk_bytes: 5868826976
+    llama:
+      ctx: 32768
+      n_gpu_layers: 99
+      flash_attn: "on"
+      parallel: 1
+      speculative:
+        type: draft-mtp
+        n_max: 3
+        draft_file_kind: null
+        draft_ngl: all
+      mmproj_file_kind: null
+      chat_template: null
+      extra_args: []
+      env: {}
+    client_hints:
+      max_output_tokens: 8192
+      reasoning: true
+  - id: whisper-small
+    display_name: "Whisper small"
+    summary: "Turns speech into text. English and Spanish."
+    summary_es: "Convierte voz en texto. Inglés y español."
+    engine: whisper
+    roles: [stt]
+    languages: [en, es, multi]
+    license: mit
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: ggerganov/whisper.cpp
+      revision: 5359861c739e955e79d9a303bcbc70fb988958b1
+    files:
+      - kind: whisper
+        name: ggml-small.bin
+        url: null
+        size_bytes: 487601967
+        sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
+    requirements:
+      backends: [cuda, vulkan, cpu]
+      min_vram_mib: 0
+      min_ram_mib: 2048
+      min_disk_bytes: 487601967
+  - id: whisper-medium
+    display_name: "Whisper medium"
+    summary: "Turns speech into text. English and Spanish."
+    summary_es: "Convierte voz en texto. Inglés y español."
+    engine: whisper
+    roles: [stt]
+    languages: [en, es, multi]
+    license: mit
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: ggerganov/whisper.cpp
+      revision: 5359861c739e955e79d9a303bcbc70fb988958b1
+    files:
+      - kind: whisper
+        name: ggml-medium.bin
+        url: null
+        size_bytes: 1533763059
+        sha256: "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208"
+    requirements:
+      backends: [cuda, vulkan, cpu]
+      min_vram_mib: 0
+      min_ram_mib: 4096
+      min_disk_bytes: 1533763059
+  - id: whisper-large-v3-turbo
+    display_name: "Whisper large v3 turbo"
+    summary: "Turns speech into text. English and Spanish."
+    summary_es: "Convierte voz en texto. Inglés y español."
+    engine: whisper
+    roles: [stt]
+    languages: [en, es, multi]
+    license: mit
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: ggerganov/whisper.cpp
+      revision: 5359861c739e955e79d9a303bcbc70fb988958b1
+    files:
+      - kind: whisper
+        name: ggml-large-v3-turbo.bin
+        url: null
+        size_bytes: 1624555275
+        sha256: "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"
+    requirements:
+      backends: [cuda, vulkan, cpu]
+      min_vram_mib: 0
+      min_ram_mib: 4096
+      min_disk_bytes: 1624555275
+  - id: piper-en-medium
+    display_name: "Voice English (medium)"
+    summary: "Reads text aloud in English."
+    summary_es: "Lee texto en voz alta en inglés."
+    engine: piper
+    roles: [tts]
+    languages: [en]
+    license: "custom:https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/MODEL_CARD"
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: rhasspy/piper-voices
+      revision: e7229f7d33a10e145e109b886d661984201ac3c4
+    files:
+      - kind: piper_onnx
+        name: en/en_US/lessac/medium/en_US-lessac-medium.onnx
+        url: null
+        size_bytes: 63201294
+        sha256: "5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f"
+      - kind: piper_config
+        name: en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+        url: null
+        size_bytes: 4885
+        sha256: "efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb3da181dab690a0"
+    requirements:
+      backends: [cuda, vulkan, cpu]
+      min_vram_mib: 0
+      min_ram_mib: 1024
+      min_disk_bytes: 63206179
+  - id: piper-es-medium
+    display_name: "Voice Spanish (medium)"
+    summary: "Reads text aloud in Spanish."
+    summary_es: "Lee texto en voz alta en español."
+    engine: piper
+    roles: [tts]
+    languages: [es]
+    license: "CC0-1.0"
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: rhasspy/piper-voices
+      revision: e7229f7d33a10e145e109b886d661984201ac3c4
+    files:
+      - kind: piper_onnx
+        name: es/es_MX/ald/medium/es_MX-ald-medium.onnx
+        url: null
+        size_bytes: 63201294
+        sha256: "019b3803293c93e34a206dd2e53a3889209a514e786fd7144f7b70196c579b63"
+      - kind: piper_config
+        name: es/es_MX/ald/medium/es_MX-ald-medium.onnx.json
+        url: null
+        size_bytes: 4878
+        sha256: "5a71498158e04afc8099bfd019c7e87c68eb9d042505a2b1a87e5c1ac2b1a61d"
+    requirements:
+      backends: [cuda, vulkan, cpu]
+      min_vram_mib: 0
+      min_ram_mib: 1024
+      min_disk_bytes: 63206172

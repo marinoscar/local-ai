@@ -1,0 +1,913 @@
+# catalog/ark.yaml: the ark content catalog (Kiwix books, offline maps, place names, docs).
+# Spec: docs/specs/catalog.md section 3 and 3.1. Rules: `aictl catalog lint catalog/`.
+#
+# Kiwix items: `book` is the file name without its date (`<name>_<flavour>` of the Kiwix OPDS entry).
+# Every book and its directory were checked against the Kiwix OPDS catalog and the download directory
+# listing (evidence: the PR description of issue #74). `base_url` is the directory of the book on the
+# Kiwix download origin; sync resolves the newest dated file there and its `.sha256` sidecar, so no hash
+# is stored in this file. `expected_size_bytes` is the OPDS size rounded up for growth; sync uses the
+# real size from the origin.
+#
+# Order matters: the planner drops later list positions first within a tier (catalog.md section 4), and
+# the profiles list items in this order. Kit items (kit-*) are KIT-01 and are not in this file yet.
+#
+# No sha256 is written here: Kiwix items use the origin's sidecar and the place files use computed
+# checksums with trust on first use (catalog.md section 3.1). `map-assets` (a github_release item that
+# needs a pinned tag and digest) is added once issue #251 allows a digest in a tracked file.
+schema_version: 1
+content:
+
+  # ---- Tier 1: in every profile ----
+
+  - id: docs-bundle
+    kind: docs
+    display_name: "Manuals and runbooks"
+    summary: "The printable guides for running, repairing and rebuilding the lab, offline."
+    summary_es: "Las guías para operar, reparar y reconstruir el laboratorio, sin internet."
+    survival_tier: 1
+    source:
+      type: repo_docs
+    expected_size_bytes: 150000000
+
+  - id: wikimed-en
+    kind: kiwix
+    display_name: "WikiMed (English)"
+    summary: "Medical encyclopedia with pictures: first aid, symptoms and treatment."
+    summary_es: "Enciclopedia médica con imágenes: primeros auxilios, síntomas y tratamiento."
+    survival_tier: 1
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: wikipedia_en_medicine_maxi
+      base_url: https://lb.download.kiwix.org/zim/wikipedia/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 2000000000
+    refresh_days: 90
+    portal_links:
+      - key: cpr
+        title: {en: "CPR (heart not beating)", es: "RCP (el corazón no late)"}
+        article: "Cardiopulmonary_resuscitation"
+        es_item: wikimed-es
+        es_article: "Reanimación_cardiopulmonar"
+        order: 10
+      - key: choking
+        title: {en: "Choking", es: "Atragantamiento"}
+        article: "Choking"
+        es_item: wikimed-es
+        es_article: "Atragantamiento"
+        order: 20
+      - key: bleeding
+        title: {en: "Severe bleeding", es: "Sangrado grave"}
+        article: "Bleeding"
+        es_item: wikimed-es
+        es_article: "Hemorragia"
+        order: 30
+      - key: shock
+        title: {en: "Shock", es: "Choque (shock)"}
+        article: "Shock_(circulatory)"
+        es_item: wikimed-es
+        es_article: "Choque_circulatorio"
+        order: 40
+      - key: burns
+        title: {en: "Burns", es: "Quemaduras"}
+        article: "Burn"
+        es_item: wikimed-es
+        es_article: "Quemadura"
+        order: 50
+      - key: fracture
+        title: {en: "Broken bone", es: "Hueso roto"}
+        article: "Bone_fracture"
+        es_item: wikimed-es
+        es_article: "Fractura_ósea"
+        order: 60
+      - key: head_injury
+        title: {en: "Head injury", es: "Golpe en la cabeza"}
+        article: "Head_injury"
+        es_item: wikimed-es
+        es_article: "Traumatismo_craneoencefálico"
+        order: 70
+      - key: allergic_reaction
+        title: {en: "Allergic reaction", es: "Reacción alérgica"}
+        article: "Anaphylaxis"
+        es_item: wikimed-es
+        es_article: "Anafilaxia"
+        order: 80
+      - key: snake_bite
+        title: {en: "Snake bite", es: "Mordedura de serpiente"}
+        article: "Snakebite"
+        es_item: wikimed-es
+        es_article: "Mordedura_de_serpiente"
+        order: 90
+      - key: dehydration
+        title: {en: "Dehydration (oral rehydration)", es: "Deshidratación (suero oral)"}
+        article: "Oral_rehydration_therapy"
+        es_item: wikimed-es
+        es_article: "Sales_de_rehidratación_oral"
+        order: 100
+      - key: heat_stroke
+        title: {en: "Heat stroke", es: "Golpe de calor"}
+        article: "Heat_stroke"
+        es_item: wikimed-es
+        es_article: "Golpe_de_calor"
+        order: 110
+      - key: hypothermia
+        title: {en: "Hypothermia", es: "Hipotermia"}
+        article: "Hypothermia"
+        es_item: wikimed-es
+        es_article: "Hipotermia"
+        order: 120
+      - key: wound_infection
+        title: {en: "Wounds and infection", es: "Heridas e infección"}
+        article: "Wound_healing"
+        es_item: wikimed-es
+        es_article: "Cicatrización"
+        order: 130
+      - key: childbirth
+        title: {en: "Childbirth", es: "Parto"}
+        article: "Childbirth"
+        es_item: wikimed-es
+        es_article: "Parto"
+        order: 140
+      - key: food_safety
+        title: {en: "Food safety", es: "Seguridad de los alimentos"}
+        article: "Food_safety"
+        es_item: wikimed-es
+        es_article: "Seguridad_alimentaria_(inocuidad)"
+        order: 160
+
+  - id: survival-first-aid
+    kind: kiwix
+    display_name: "First aid and medicine manuals"
+    summary: "Printable first aid, wilderness and village medicine manuals."
+    summary_es: "Manuales de primeros auxilios y medicina de campo, listos para imprimir."
+    survival_tier: 1
+    languages: [en]
+    source:
+      type: kiwix
+      book: zimgit-medicine_en
+      base_url: https://lb.download.kiwix.org/zim/other/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 73000000
+    refresh_days: 365
+
+  - id: survival-water
+    kind: kiwix
+    display_name: "Water treatment guides"
+    summary: "How to find, clean and store safe drinking water."
+    summary_es: "Cómo encontrar, limpiar y guardar agua segura para beber."
+    survival_tier: 1
+    languages: [en]
+    source:
+      type: kiwix
+      book: zimgit-water_en
+      base_url: https://lb.download.kiwix.org/zim/other/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 22000000
+    refresh_days: 365
+    portal_links:
+      - key: water_purification
+        title: {en: "Make water safe to drink", es: "Potabilizar el agua"}
+        article: "files/Water (2).pdf"
+        es_item: wikimed-es
+        es_article: "Agua_potable"
+        order: 150
+
+  - id: survival-food
+    kind: kiwix
+    display_name: "Food preparation and storage guides"
+    summary: "Cooking without a kitchen, canning, drying and keeping food from spoiling."
+    summary_es: "Cocinar sin cocina, enlatar, secar y conservar los alimentos."
+    survival_tier: 1
+    languages: [en]
+    source:
+      type: kiwix
+      book: zimgit-food-preparation_en
+      base_url: https://lb.download.kiwix.org/zim/other/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 110000000
+    refresh_days: 365
+
+  - id: survival-post-disaster
+    kind: kiwix
+    display_name: "Post-disaster survival library"
+    summary: "Water, food, shelter, first aid, foraging, knots and emergency planning guides."
+    summary_es: "Guías de agua, comida, refugio, primeros auxilios, plantas comestibles, nudos y planes de emergencia."
+    survival_tier: 1
+    languages: [en]
+    source:
+      type: kiwix
+      book: zimgit-post-disaster_en
+      base_url: https://lb.download.kiwix.org/zim/other/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 670000000
+    refresh_days: 365
+
+  - id: ifixit-en
+    kind: kiwix
+    display_name: "iFixit repair guides (English)"
+    summary: "Step-by-step repair guides for phones, laptops, appliances and more."
+    summary_es: "Guías paso a paso para reparar teléfonos, computadoras y electrodomésticos."
+    survival_tier: 1
+    languages: [en]
+    license: "CC BY-NC-SA"
+    source:
+      type: kiwix
+      book: ifixit_en_all
+      base_url: https://lb.download.kiwix.org/zim/ifixit/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 3700000000
+    refresh_days: 180
+
+  - id: osm-central-america
+    kind: maps
+    display_name: "Offline map: Costa Rica and Central America"
+    summary: "Streets, towns, rivers and roads. Works without internet."
+    summary_es: "Calles, pueblos, ríos y caminos. Funciona sin internet."
+    survival_tier: 1
+    license: "ODbL 1.0"
+    source:
+      type: pmtiles_extract
+      planet_url_pattern: "https://build.protomaps.com/{date}.pmtiles"
+      bbox: [-92.5, 7.0, -77.0, 18.6]
+      maxzoom: 15
+      checksum: computed
+    expected_size_bytes: 2500000000
+    refresh_days: 180
+
+  - id: places-central-america
+    kind: maps
+    display_name: "Place names: Central America"
+    summary: "Search towns, villages, rivers and landmarks by name, offline."
+    summary_es: "Busque pueblos, ríos y lugares por su nombre, sin internet."
+    survival_tier: 1
+    license: "CC BY 4.0"
+    source:
+      type: url
+      files:
+        - {url: "https://download.geonames.org/export/dump/CR.zip", sha256: null}
+        - {url: "https://download.geonames.org/export/dump/PA.zip", sha256: null}
+        - {url: "https://download.geonames.org/export/dump/NI.zip", sha256: null}
+        - {url: "https://download.geonames.org/export/dump/HN.zip", sha256: null}
+        - {url: "https://download.geonames.org/export/dump/SV.zip", sha256: null}
+        - {url: "https://download.geonames.org/export/dump/GT.zip", sha256: null}
+        - {url: "https://download.geonames.org/export/dump/BZ.zip", sha256: null}
+      version_policy: latest
+      checksum: computed
+      trust: tofu
+    expected_size_bytes: 5000000
+    refresh_days: 180
+
+  - id: wikipedia-en-nopic
+    kind: kiwix
+    display_name: "Wikipedia (English, text only)"
+    summary: "All of English Wikipedia without pictures."
+    summary_es: "Toda la Wikipedia en inglés, sin imágenes."
+    survival_tier: 1
+    languages: [en]
+    license: "CC BY-SA 4.0"
+    source:
+      type: kiwix
+      book: wikipedia_en_all_nopic
+      base_url: https://lb.download.kiwix.org/zim/wikipedia/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 55000000000
+    refresh_days: 90
+
+  - id: wikipedia-es-nopic
+    kind: kiwix
+    display_name: "Wikipedia (Spanish, text only)"
+    summary: "All of Spanish Wikipedia without pictures."
+    summary_es: "Toda la Wikipedia en español, sin imágenes."
+    survival_tier: 1
+    languages: [es]
+    license: "CC BY-SA 4.0"
+    source:
+      type: kiwix
+      book: wikipedia_es_all_nopic
+      base_url: https://lb.download.kiwix.org/zim/wikipedia/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 14000000000
+    refresh_days: 90
+
+  - id: wikipedia-en-maxi
+    kind: kiwix
+    display_name: "Wikipedia (English, with pictures)"
+    summary: "All of English Wikipedia with its pictures. Needs a large disk."
+    summary_es: "Toda la Wikipedia en inglés, con imágenes. Necesita un disco grande."
+    survival_tier: 1
+    languages: [en]
+    license: "CC BY-SA 4.0"
+    source:
+      type: kiwix
+      book: wikipedia_en_all_maxi
+      base_url: https://lb.download.kiwix.org/zim/wikipedia/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 140000000000
+    refresh_days: 90
+
+  # ---- Tier 2: useful; kept when the budget allows ----
+
+  - id: wikimed-es
+    kind: kiwix
+    display_name: "WikiMed (Spanish)"
+    summary: "Medical encyclopedia in Spanish, with pictures."
+    summary_es: "Enciclopedia médica en español, con imágenes."
+    survival_tier: 2
+    languages: [es]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: wikipedia_es_medicine_maxi
+      base_url: https://lb.download.kiwix.org/zim/wikipedia/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 490000000
+    refresh_days: 90
+
+  - id: mdwiki-en
+    kind: kiwix
+    display_name: "MDWiki medical encyclopedia"
+    summary: "Detailed medical articles in English."
+    summary_es: "Artículos médicos detallados en inglés."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: mdwiki_en_all_maxi
+      base_url: https://lb.download.kiwix.org/zim/other/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 2400000000
+    refresh_days: 180
+
+  - id: stackexchange-diy
+    kind: kiwix
+    display_name: "Home improvement Q&A"
+    summary: "Questions and answers about house repair, plumbing and wiring."
+    summary_es: "Preguntas y respuestas sobre reparaciones del hogar, plomería y electricidad."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: diy.stackexchange.com_en_all
+      base_url: https://lb.download.kiwix.org/zim/stack_exchange/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 2200000000
+    refresh_days: 180
+
+  - id: stackexchange-electronics
+    kind: kiwix
+    display_name: "Electronics Q&A"
+    summary: "Questions and answers about circuits, repairs and parts."
+    summary_es: "Preguntas y respuestas sobre circuitos, reparaciones y componentes."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: electronics.stackexchange.com_en_all
+      base_url: https://lb.download.kiwix.org/zim/stack_exchange/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 4400000000
+    refresh_days: 180
+
+  - id: stackexchange-cooking
+    kind: kiwix
+    display_name: "Cooking Q&A"
+    summary: "Questions and answers about cooking and handling food."
+    summary_es: "Preguntas y respuestas sobre cocina y manejo de alimentos."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: cooking.stackexchange.com_en_all
+      base_url: https://lb.download.kiwix.org/zim/stack_exchange/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 250000000
+    refresh_days: 180
+
+  - id: stackexchange-gardening
+    kind: kiwix
+    display_name: "Gardening Q&A"
+    summary: "Questions and answers about growing food and plants."
+    summary_es: "Preguntas y respuestas sobre cultivo de alimentos y plantas."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: gardening.stackexchange.com_en_all
+      base_url: https://lb.download.kiwix.org/zim/stack_exchange/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 970000000
+    refresh_days: 180
+
+  - id: stackexchange-outdoors
+    kind: kiwix
+    display_name: "Outdoors Q&A"
+    summary: "Questions and answers about camping, hiking and wilderness skills."
+    summary_es: "Preguntas y respuestas sobre acampar, caminar y sobrevivir en la naturaleza."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: outdoors.stackexchange.com_en_all
+      base_url: https://lb.download.kiwix.org/zim/stack_exchange/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 150000000
+    refresh_days: 180
+
+  - id: stackexchange-ham
+    kind: kiwix
+    display_name: "Amateur radio Q&A"
+    summary: "Questions and answers about building and using radios."
+    summary_es: "Preguntas y respuestas sobre cómo armar y usar radios."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: ham.stackexchange.com_en_all
+      base_url: https://lb.download.kiwix.org/zim/stack_exchange/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 80000000
+    refresh_days: 180
+
+  - id: wikibooks-en
+    kind: kiwix
+    display_name: "Wikibooks (English, text only)"
+    summary: "Free textbooks and manuals written by volunteers."
+    summary_es: "Libros de texto y manuales libres escritos por voluntarios."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: wikibooks_en_all_nopic
+      base_url: https://lb.download.kiwix.org/zim/wikibooks/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 3700000000
+    refresh_days: 90
+
+  - id: wikivoyage-en
+    kind: kiwix
+    display_name: "Wikivoyage (English, text only)"
+    summary: "Travel guides for places around the world."
+    summary_es: "Guías de viaje de lugares de todo el mundo."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: wikivoyage_en_all_nopic
+      base_url: https://lb.download.kiwix.org/zim/wikivoyage/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 290000000
+    refresh_days: 180
+
+  - id: wikivoyage-es
+    kind: kiwix
+    display_name: "Wikiviajes (Spanish, text only)"
+    summary: "Travel guides for places around the world, in Spanish."
+    summary_es: "Guías de viaje de lugares de todo el mundo, en español."
+    survival_tier: 2
+    languages: [es]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: wikivoyage_es_all_nopic
+      base_url: https://lb.download.kiwix.org/zim/wikivoyage/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 45000000
+    refresh_days: 180
+
+  - id: stackexchange-superuser
+    kind: kiwix
+    display_name: "Super User Q&A"
+    summary: "Questions and answers about computers and software."
+    summary_es: "Preguntas y respuestas sobre computadoras y programas."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: superuser.com_en_all
+      base_url: https://lb.download.kiwix.org/zim/stack_exchange/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 4200000000
+    refresh_days: 180
+
+  - id: stackexchange-askubuntu
+    kind: kiwix
+    display_name: "Ask Ubuntu Q&A"
+    summary: "Questions and answers about Ubuntu Linux."
+    summary_es: "Preguntas y respuestas sobre Ubuntu Linux."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: askubuntu.com_en_all
+      base_url: https://lb.download.kiwix.org/zim/stack_exchange/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 2900000000
+    refresh_days: 180
+
+  - id: stackexchange-unix
+    kind: kiwix
+    display_name: "Unix and Linux Q&A"
+    summary: "Questions and answers about Linux and Unix systems."
+    summary_es: "Preguntas y respuestas sobre sistemas Linux y Unix."
+    survival_tier: 2
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: unix.stackexchange.com_en_all
+      base_url: https://lb.download.kiwix.org/zim/stack_exchange/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 1400000000
+    refresh_days: 180
+
+  - id: gutenberg-en-technology
+    kind: kiwix
+    display_name: "Project Gutenberg: technology books"
+    summary: "Public-domain books on engineering, building, tools and trades."
+    summary_es: "Libros de dominio público sobre ingeniería, construcción, herramientas y oficios."
+    survival_tier: 2
+    languages: [en]
+    license: "Public domain (Project Gutenberg License)"
+    source:
+      type: kiwix
+      book: gutenberg_en_lcc-t
+      base_url: https://lb.download.kiwix.org/zim/gutenberg/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 14000000000
+    refresh_days: 365
+
+  - id: gutenberg-en-agriculture
+    kind: kiwix
+    display_name: "Project Gutenberg: agriculture books"
+    summary: "Public-domain books on farming, gardening and animals."
+    summary_es: "Libros de dominio público sobre agricultura, huertos y animales."
+    survival_tier: 2
+    languages: [en]
+    license: "Public domain (Project Gutenberg License)"
+    source:
+      type: kiwix
+      book: gutenberg_en_lcc-s
+      base_url: https://lb.download.kiwix.org/zim/gutenberg/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 4700000000
+    refresh_days: 365
+
+  - id: gutenberg-en-medicine
+    kind: kiwix
+    display_name: "Project Gutenberg: medicine books"
+    summary: "Public-domain medical and health books."
+    summary_es: "Libros de medicina y salud de dominio público."
+    survival_tier: 2
+    languages: [en]
+    license: "Public domain (Project Gutenberg License)"
+    source:
+      type: kiwix
+      book: gutenberg_en_lcc-r
+      base_url: https://lb.download.kiwix.org/zim/gutenberg/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 2100000000
+    refresh_days: 365
+
+  - id: libretexts-en-medicine
+    kind: kiwix
+    display_name: "LibreTexts: Medicine"
+    summary: "Open college textbooks on medicine and health."
+    summary_es: "Libros universitarios abiertos sobre medicina y salud."
+    survival_tier: 2
+    languages: [en]
+    source:
+      type: kiwix
+      book: libretexts.org_en_med
+      base_url: https://lb.download.kiwix.org/zim/libretexts/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 1300000000
+    refresh_days: 365
+
+  - id: libretexts-en-engineering
+    kind: kiwix
+    display_name: "LibreTexts: Engineering"
+    summary: "Open college textbooks on engineering."
+    summary_es: "Libros universitarios abiertos sobre ingeniería."
+    survival_tier: 2
+    languages: [en]
+    source:
+      type: kiwix
+      book: libretexts.org_en_eng
+      base_url: https://lb.download.kiwix.org/zim/libretexts/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 700000000
+    refresh_days: 365
+
+  - id: libretexts-en-biology
+    kind: kiwix
+    display_name: "LibreTexts: Biology"
+    summary: "Open college textbooks on biology."
+    summary_es: "Libros universitarios abiertos sobre biología."
+    survival_tier: 2
+    languages: [en]
+    source:
+      type: kiwix
+      book: libretexts.org_en_bio
+      base_url: https://lb.download.kiwix.org/zim/libretexts/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 2400000000
+    refresh_days: 365
+
+  - id: libretexts-en-chemistry
+    kind: kiwix
+    display_name: "LibreTexts: Chemistry"
+    summary: "Open college textbooks on chemistry."
+    summary_es: "Libros universitarios abiertos sobre química."
+    survival_tier: 2
+    languages: [en]
+    source:
+      type: kiwix
+      book: libretexts.org_en_chem
+      base_url: https://lb.download.kiwix.org/zim/libretexts/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 2300000000
+    refresh_days: 365
+
+  - id: energypedia-en
+    kind: kiwix
+    display_name: "Energypedia (power and energy)"
+    summary: "Guides on solar, small hydro, biogas and other off-grid power."
+    summary_es: "Guías sobre energía solar, mini hidráulica, biogás y otras fuentes de energía fuera de la red."
+    survival_tier: 2
+    languages: [en]
+    source:
+      type: kiwix
+      book: energypedia_en_all_nopic
+      base_url: https://lb.download.kiwix.org/zim/other/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 750000000
+    refresh_days: 365
+
+  - id: khanacademy-en
+    kind: kiwix
+    display_name: "Khan Academy (English)"
+    summary: "Video lessons and exercises from school level upward. Very large."
+    summary_es: "Lecciones en video y ejercicios desde la escuela en adelante. Muy grande."
+    survival_tier: 2
+    languages: [en]
+    source:
+      type: kiwix
+      book: khanacademy_en_all
+      base_url: https://lb.download.kiwix.org/zim/other/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 190000000000
+    refresh_days: 365
+
+  - id: khanacademy-es
+    kind: kiwix
+    display_name: "Khan Academy (Spanish)"
+    summary: "Video lessons and exercises from school level upward, in Spanish. Very large."
+    summary_es: "Lecciones en video y ejercicios desde la escuela en adelante, en español. Muy grande."
+    survival_tier: 2
+    languages: [es]
+    source:
+      type: kiwix
+      book: khanacademy_es_all
+      base_url: https://lb.download.kiwix.org/zim/other/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 170000000000
+    refresh_days: 365
+
+  # ---- Tier 3: nice to have; the ark drive and large nodes ----
+
+  - id: wiktionary-en
+    kind: kiwix
+    display_name: "Wiktionary (English)"
+    summary: "Dictionary of English words and of many other languages."
+    summary_es: "Diccionario de palabras en inglés y en muchos otros idiomas."
+    survival_tier: 3
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: wiktionary_en_all_nopic
+      base_url: https://lb.download.kiwix.org/zim/wiktionary/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 9500000000
+    refresh_days: 180
+
+  - id: wiktionary-es
+    kind: kiwix
+    display_name: "Wikcionario (Spanish)"
+    summary: "Dictionary of Spanish words and of many other languages."
+    summary_es: "Diccionario de palabras en español y en muchos otros idiomas."
+    survival_tier: 3
+    languages: [es]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: wiktionary_es_all_nopic
+      base_url: https://lb.download.kiwix.org/zim/wiktionary/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 680000000
+    refresh_days: 180
+
+  - id: ted-natural-disaster
+    kind: kiwix
+    display_name: "TED talks: natural disasters"
+    summary: "Video talks about disasters, preparing and rebuilding."
+    summary_es: "Charlas en video sobre desastres, preparación y reconstrucción."
+    survival_tier: 3
+    languages: [en, es]
+    license: "CC BY-NC-ND 4.0"
+    source:
+      type: kiwix
+      book: ted_mul_natural-disaster
+      base_url: https://lb.download.kiwix.org/zim/ted/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 740000000
+    refresh_days: 365
+
+  - id: ted-water
+    kind: kiwix
+    display_name: "TED talks: water"
+    summary: "Video talks about clean water and sanitation."
+    summary_es: "Charlas en video sobre agua limpia y saneamiento."
+    survival_tier: 3
+    languages: [en, es]
+    license: "CC BY-NC-ND 4.0"
+    source:
+      type: kiwix
+      book: ted_mul_water
+      base_url: https://lb.download.kiwix.org/zim/ted/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 900000000
+    refresh_days: 365
+
+  - id: ted-medicine
+    kind: kiwix
+    display_name: "TED talks: medicine"
+    summary: "Video talks about medicine and health."
+    summary_es: "Charlas en video sobre medicina y salud."
+    survival_tier: 3
+    languages: [en, es]
+    license: "CC BY-NC-ND 4.0"
+    source:
+      type: kiwix
+      book: ted_mul_medicine
+      base_url: https://lb.download.kiwix.org/zim/ted/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 3800000000
+    refresh_days: 365
+
+  - id: gutenberg-es-all
+    kind: kiwix
+    display_name: "Project Gutenberg (Spanish)"
+    summary: "Public-domain books in Spanish."
+    summary_es: "Libros de dominio público en español."
+    survival_tier: 3
+    languages: [es]
+    license: "Public domain (Project Gutenberg License)"
+    source:
+      type: kiwix
+      book: gutenberg_es_all
+      base_url: https://lb.download.kiwix.org/zim/gutenberg/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 2000000000
+    refresh_days: 365
+
+  - id: stackexchange-stackoverflow
+    kind: kiwix
+    display_name: "Stack Overflow"
+    summary: "Programming questions and answers. Very large."
+    summary_es: "Preguntas y respuestas sobre programación. Muy grande."
+    survival_tier: 3
+    languages: [en]
+    license: "CC BY-SA"
+    source:
+      type: kiwix
+      book: stackoverflow.com_en_all
+      base_url: https://lb.download.kiwix.org/zim/stack_exchange/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 120000000000
+    refresh_days: 180
+
+  - id: survivor-library
+    kind: kiwix
+    display_name: "Survivor Library"
+    summary: "Scanned books on old-time trades, farming and making things by hand. Very large."
+    summary_es: "Libros escaneados sobre oficios antiguos, agricultura y trabajo manual. Muy grande."
+    survival_tier: 3
+    languages: [en]
+    source:
+      type: kiwix
+      book: survivorlibrary.com_en_all
+      base_url: https://lb.download.kiwix.org/zim/zimit/
+      version_policy: latest
+      pinned: null
+      checksum: sidecar
+    expected_size_bytes: 230000000000
+    refresh_days: 365
+
+  - id: osm-north-america
+    kind: maps
+    display_name: "Offline map: North America"
+    summary: "Roads and towns of Canada, the United States and Mexico. Ark drive only."
+    summary_es: "Caminos y pueblos de Canadá, Estados Unidos y México. Solo para el disco ark."
+    survival_tier: 3
+    license: "ODbL 1.0"
+    source:
+      type: pmtiles_extract
+      planet_url_pattern: "https://build.protomaps.com/{date}.pmtiles"
+      bbox: [-168.5, 14.0, -52.0, 72.0]
+      maxzoom: 13
+      checksum: computed
+    expected_size_bytes: 15000000000
+    refresh_days: 365
