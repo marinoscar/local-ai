@@ -1,18 +1,18 @@
 // Gateway key token handling for the REQUEST path (docs/specs/gateway.md sections 2 and 4.1): the shape check that
 // runs before any database query, the sha256 hex that is looked up, and the constant-time comparison. Key CREATION
 // (generating the token, storing the hash) is the key-management item; this file only verifies what a client sends.
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
+
+import { GATEWAY_TOKEN_PATTERN, hashGatewayToken } from './gateway.token';
+
+// Creation and hashing are `gateway.token.ts` (key management mints with the same functions this file verifies with).
+export { hashGatewayToken };
 
 /** `lai_` + 43 base64url characters (32 random bytes). Anything else is refused without a DB query. */
-export const GATEWAY_KEY_REGEX = /^lai_[A-Za-z0-9_-]{43}$/;
+export const GATEWAY_KEY_REGEX = GATEWAY_TOKEN_PATTERN;
 
 export function isWellFormedGatewayKey(token: string): boolean {
   return GATEWAY_KEY_REGEX.test(token);
-}
-
-/** sha256 hex of the FULL token, as stored in `localai_gateway_keys.token_hash`. */
-export function hashGatewayToken(token: string): string {
-  return createHash('sha256').update(token, 'utf8').digest('hex');
 }
 
 /** Constant-time equality of two sha256 hex strings (false for different lengths, without comparing). */
