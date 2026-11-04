@@ -9,4 +9,12 @@ export const LOCALAI_RAW_SQL: readonly { readonly file: string; readonly why: st
       'bound parameter; the text has no request-derived part. localai_commands has no row-level security and no user scope: ' +
       'the only user link is the requested_by_id actor column, which the statement never reads.',
   },
+  {
+    file: 'localai/wizard/checklist.service.ts',
+    why:
+      'Saving one checklist step merges into the node row\'s publish_checklist JSON, so two steps saved at once must not ' +
+      'lose one: the merge runs under SELECT ... FOR UPDATE on that row, which Prisma cannot express. The only value is the ' +
+      'row id (a uuid read from the node row, bound as a parameter and cast to uuid), never request text. localai_nodes ' +
+      'has no row-level security and no user scope.',
+  },
 ];

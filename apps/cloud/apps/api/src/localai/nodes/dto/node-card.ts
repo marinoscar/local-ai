@@ -68,5 +68,8 @@ export type LabSummaryDto = z.infer<typeof LabSummaryDtoSchema>;
 export const LabNodesResponseSchema = z.object({ summary: LabSummaryDtoSchema, nodes: z.array(NodeCardDtoSchema) }).strict();
 export type LabNodesResponse = z.infer<typeof LabNodesResponseSchema>;
 
-/** The detail payload: the card fields plus the last snapshot. `tailnetIp` exists only when revealed. */
-export type NodeDetailDto = NodeCardDto & { lastState: unknown; tailnetIp?: string | null };
+/**
+ * The detail payload: the card fields plus the last snapshot. `tailnetIp` exists only when revealed. `keyReceived` is
+ * whether the node's llama key has reached the cloud (never the key or its hint): the Add-node wizard polls it.
+ */
+export type NodeDetailDto = NodeCardDto & { lastState: unknown; keyReceived: boolean; tailnetIp?: string | null };

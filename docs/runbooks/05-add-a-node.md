@@ -54,18 +54,21 @@ In this page the new node is **ai-n4** on a machine called **dell-linux**. Use t
 
 ## Part 2. Create the node in the cloud (Add node wizard)
 
-> 🛠 Verify when implemented (Epic E6).
+> 🛠 Verify on the first real node: the wizard is built ([cloud-app.md §4.8](../specs/cloud-app.md#48-add-node-wizard)) but has not yet been run against a real new node.
 
-7. Open `https://ai.marin.cr` → **Lab** → **Add node**. Fill in step 1:
-   - **Node id:** the suggested next free id (for example `ai-n4`).
-   - **Name:** for example `Dell Precision (ai-n4)`.
+7. Open `https://ai.marin.cr` → **Lab** → **Add node** (you need `lab:admin`). Step 1 of 3, **Describe the node**:
+   - **Node id:** the suggested next free id (for example `ai-n4`). An id is never reused, even for a retired node; if you type one that was used, the page says so and offers the next free one.
+   - **Name:** for example `Dell Precision (ai-n4)`. Empty uses the node id.
    - **Public host:** `ai-n4.marin.cr` (filled in for you).
    - **Serve:** **Pattern B** unless you have a reason for A.
-   - **Tailnet name:** the machine name (`dell-linux`). **Tailnet IP:** leave it empty for now; add it in Part 5 (node page → **Settings**).
+   - **Tailnet name:** the machine name (`dell-linux`). Paste the full name (`dell-linux.<TAILNET>.ts.net`) to have it filled into the vhost file in Part 7; with the short name that file shows `<TAILNET>` for you to replace.
+   - **Tailnet IP:** if you know it (run `tailscale ip -4` on the node after Part 5), enter it now. It is stored for administrators only and is used only to fill in the vhost file in Part 7. Left empty, that file shows the placeholder `<TAILNET_IP_AI_N4>` and you type the address in by hand.
    - **Profile hint:** your best guess (`small-8gb`, `cuda-12gb`, `max-128gb`, `cpu-only`); the installer confirms it.
    Press **Create node**.
-   - **What you should see:** step 2 with the **node credential** `nod_…` **shown once**, and the install command.
-8. Press **Copy** next to the credential and keep it somewhere private for the next 30 minutes (a password manager). You'll paste it in Part 6. Note the **installer checksum (sha256)** shown by the wizard.
+   - **What you should see:** step 2 of 3, **Install on the node**, with the **node credential** `nod_…` **shown once** (hidden by default; **Show** and **Copy** are next to it) and the three install commands with the **checksum**. The credential works for this node only.
+   - **If it doesn't work:** "That id has been used before": press **Use ai-n…**. Any other message names the field to fix.
+8. Press **Copy** next to the credential and keep it somewhere private for the next 30 minutes (a password manager). You'll paste it when the installer asks (step 11) or in Part 6. Note the **installer checksum (sha256)** shown by the wizard. Do not press **Continue to publish** yet: that removes the credential from the page, and it cannot be shown again. If you lose it, the fix is to make a new one for this node (node → **Keys** → **Replace credential…**), not to create another node.
+   - **What you should see:** while you do Parts 3 to 6, the wizard shows **Waiting for ai-n4 to contact the cloud …** and turns **✔ Enrolled** and **✔ Key received** by itself. If you closed the page, open `https://ai.marin.cr/lab/nodes/new?node=ai-n4` to go straight to Part 7's checklist.
 
 ---
 
@@ -81,7 +84,7 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
    sha256sum install-node.sh
    ```
 
-   - **What you should see:** a 64-character value. It must equal the checksum in the wizard. If it doesn't, **stop** and don't run it.
+   - **What you should see:** a 64-character value. It must equal the checksum in the wizard. If it doesn't, **stop** and don't run it. If the wizard says "Checksum unknown, check the release page", compare with the `install-node.sh` line of `SHA256SUMS` on the release page it links.
 10. **Dry run** (shows everything it would do, changes nothing):
 
     ```
@@ -95,6 +98,8 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
     ```
     sudo bash install-node.sh --node-id ai-n4
     ```
+
+    The wizard's own command ends with `--cloud-url https://ai.marin.cr --enroll`. You can run that form instead: the installer then asks `Node credential (nod_…):` (nothing appears while you paste), enrolls the node as its last phase, and **Part 6 is already done** (check it with `aictl cloud status`). Use the form without `--enroll` if you don't have the credential at hand; Part 6 enrolls later. Leave `--enroll` off for the dry run in step 10.
 
     - It asks you to **choose an admin PIN** (4 to 8 digits), twice. You'll need it to delete things or leave Survival mode. **Write it down** and keep it with the ark drive's paper copy of [01](01-survival-mode.md), not on the drive itself.
     - NVIDIA without a working driver: it offers to install it; say yes, reboot when told, and run the same command again.
@@ -160,7 +165,7 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
 
 ## Part 6. Enroll in the cloud
 
-18. **Store the node credential** from Part 2. It asks for it without showing it; paste and press **Enter**:
+18. **Store the node credential** from Part 2 (skip to step 19 if you ran the installer with `--enroll` in step 11). It asks for it without showing it; paste and press **Enter**:
 
     ```
     sudo aictl cloud enroll
@@ -176,13 +181,13 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
     ```
 
     In the wizard, steps **6. Node enrolled** and **7. llama key received by the cloud** turn ✔ by themselves.
-20. **Delete the copy of the credential** from wherever you kept it.
+20. **Delete the copy of the credential** from wherever you kept it, then press **Continue to publish** in the wizard (it removes the credential from the page).
 
 ---
 
 ## Part 7. Publish the node on the VPS
 
-The installer printed this checklist with the right pattern. The wizard's step 3 shows the same steps with **Check** buttons. Source: [source/vps-ai-nodes-setup.md §6](../source/vps-ai-nodes-setup.md#6-adding-a-new-node). Run the VPS commands **as root on the VPS**.
+The installer printed this checklist with the right pattern. The wizard's step 3 shows the same steps with **Check** buttons and with the commands and files already filled in for this node (press **Show command** or **Show file**; the tailnet address in them is the one you gave in step 7, or a placeholder if you left it empty). Source: [source/vps-ai-nodes-setup.md §6](../source/vps-ai-nodes-setup.md#6-adding-a-new-node). Run the VPS commands **as root on the VPS**.
 
 > 🛠 Verify when implemented: phase 2 will automate steps 22 to 27 (**Publish automatically**, [cloud-app.md §4.10](../specs/cloud-app.md#410-later-automated-node-vhostcert-publishing-phase-2-not-in-v1)). Until then, do them by hand.
 
