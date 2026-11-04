@@ -126,6 +126,7 @@ func TestAFailureBeforeTheOldServiceStopsLeavesItServingAndTheRerunCompletes(t *
 		{"M4 the preset lacks load-on-startup", worldOpts{hasCurrent: true}, func(w *world) { w.rend.noLoadFlag = true }, func(w *world) { w.rend.noLoadFlag = false }, M3},
 		{"M5 localai cannot read a model file", worldOpts{hasCurrent: true}, func(w *world) { w.unreadable[newModel] = true }, func(w *world) { w.unreadable = map[string]bool{} }, M4},
 		{"M5 localai cannot run the new llama-server", worldOpts{hasCurrent: true}, func(w *world) { w.newBinaryBroken = true }, func(w *world) { w.newBinaryBroken = false }, M4},
+		{"M5 the new llama-server has no router memory margin", worldOpts{hasCurrent: true}, func(w *world) { w.oldRouterFlags = true }, func(w *world) { w.oldRouterFlags = false }, M4},
 		{"M5 the port is not the old service's", worldOpts{hasCurrent: true}, func(w *world) { w.ssPID = 4242 }, func(w *world) { w.ssPID = 0 }, M4},
 	}
 	for _, c := range cases {

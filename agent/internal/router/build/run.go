@@ -138,6 +138,9 @@ func (m *Manager) build(ctx context.Context, req Request) (Result, error) {
 		defer func() { _ = m.opt.FS.RemoveAll(m.srcPath(sha)) }()
 	}
 	plan := m.plan(in, sha)
+	if redist == nil && tools.NVCC != "" && tools.NVCC == m.localNVCC() {
+		plan = plan.WithLocalCuda(tools.NVCC)
+	}
 	if redist != nil {
 		progress(StageSource, "Unpacking the CUDA redistributable "+redist.Version+" of the kit")
 		root, e := m.prepareRedist(ctx, *redist)

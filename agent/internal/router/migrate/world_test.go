@@ -395,6 +395,12 @@ func (x *fakeExec) Run(_ context.Context, c execx.Cmd) (execx.Result, error) {
 		if w.newBinaryBroken {
 			return exit(126)
 		}
+		if strings.HasSuffix(args, "--help") {
+			if w.oldRouterFlags {
+				return ok("--models-preset PATH\n--models-max N\n")
+			}
+			return ok("--models-preset PATH\n--models-max N\n--models-memory-margin MiB\n")
+		}
 		return ok("version: 6000 (commit " + w.commit + ")\n")
 	case base == "llama-server" && strings.HasPrefix(c.Path, "/home/"):
 		if w.legacyVersionOut == "" {
@@ -407,6 +413,11 @@ func (x *fakeExec) Run(_ context.Context, c execx.Cmd) (execx.Result, error) {
 			return exit(1)
 		}
 		return ok("version: 6000 (commit " + cur + ")\n")
+	case base == "llama-server" && strings.HasSuffix(args, "--help"):
+		if w.oldRouterFlags {
+			return ok("--models-preset PATH\n--models-max N\n")
+		}
+		return ok("--models-preset PATH\n--models-max N\n--models-memory-margin MiB\n")
 	case base == "llama-server" && strings.HasSuffix(args, "--list-devices"):
 		if w.noGPU {
 			return ok("Available devices:\n  Vulkan0: llvmpipe (LLVM 15.0.7, 256 bits) (64000 MiB)\n")
@@ -554,7 +565,7 @@ func (r *fakeRenderer) Render(context.Context) (RenderResult, error) {
 	if err := config.WriteFileAtomicFS(w.fs, "/etc/localai/models.ini", []byte(b.String()), 0o640, -1, -1); err != nil {
 		return RenderResult{}, err
 	}
-	if err := config.WriteFileAtomicFS(w.fs, "/etc/systemd/system/localai-llama.service", []byte("[Service]\nExecStart=/opt/localai/llama.cpp/current/bin/llama-server\n"), 0o644, -1, -1); err != nil {
+	if err := config.WriteFileAtomicFS(w.fs, "/etc/systemd/system/localai-llama.service", []byte("[Service]\nExecStart=/opt/localai/llama.cpp/current/bin/llama-server --models-preset /etc/localai/models.ini --models-max 1 --models-memory-margin 768\n"), 0o644, -1, -1); err != nil {
 		return RenderResult{}, err
 	}
 	return RenderResult{INIPath: "/etc/localai/models.ini", UnitPath: "/etc/systemd/system/localai-llama.service"}, nil
@@ -663,13 +674,15 @@ type world struct {
 	strangerOnPort  bool
 	unreadable      map[string]bool
 	newBinaryBroken bool
-	currentBroken   bool
-	noGPU           bool
-	catErr          string
-	execCalls       []string
-	ssPID           int
-	legacyNoAuth    bool
-	ssDual          bool
+	// oldRouterFlags makes the new llama-server lack --models-memory-margin (llama.cpp before #21231).
+	oldRouterFlags bool
+	currentBroken  bool
+	noGPU          bool
+	catErr         string
+	execCalls      []string
+	ssPID          int
+	legacyNoAuth   bool
+	ssDual         bool
 }
 
 type lockedBuf struct {

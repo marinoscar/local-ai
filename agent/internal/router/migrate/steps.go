@@ -457,6 +457,7 @@ func (e *Engine) m5Checks(ctx context.Context, p *Plan) error {
 	if res, err := e.runNamed(ctx, "runuser", "-u", ServiceUser, "--", bin, "--version"); err != nil || res.ExitCode != 0 {
 		bad = append(bad, fmt.Sprintf("%s cannot run %s", ServiceUser, bin))
 	}
+	bad = append(bad, e.missingRouterFlags(ctx, bin)...)
 	if msg := e.checkPortOwner(ctx); msg != "" {
 		bad = append(bad, msg)
 	}
@@ -465,6 +466,32 @@ func (e *Engine) m5Checks(ctx context.Context, p *Plan) error {
 			Details: map[string]any{"checks": bad}}
 	}
 	return nil
+}
+
+var routerFlagRe = regexp.MustCompile(`--models-[a-z-]+`)
+
+// missingRouterFlags names the router flags the generated unit uses that the new llama-server does not
+// know. The old binary the migration rebuilds can predate router options (for example
+// --models-memory-margin): found here, before the old service stops, instead of as a failed start after.
+func (e *Engine) missingRouterFlags(ctx context.Context, bin string) []string {
+	unit, err := e.fs.ReadFile(e.paths.NewUnitFile())
+	if err != nil {
+		return nil
+	}
+	res, err := e.runNamed(ctx, "runuser", "-u", ServiceUser, "--", bin, "--help")
+	if err != nil || res.ExitCode != 0 {
+		return nil // the --version check above already reports a binary that cannot run
+	}
+	help := string(res.Stdout) + string(res.Stderr)
+	var out []string
+	seen := map[string]bool{}
+	for _, f := range routerFlagRe.FindAllString(string(unit), -1) {
+		if !seen[f] && !strings.Contains(help, f) {
+			seen[f] = true
+			out = append(out, fmt.Sprintf("this llama.cpp build does not know %s: build a newer commit with `aictl rebuild-llama` first, or set memory_margin_mib to 0 in the profile", f))
+		}
+	}
+	return out
 }
 
 var pidRe = regexp.MustCompile(`pid=(\d+)`)

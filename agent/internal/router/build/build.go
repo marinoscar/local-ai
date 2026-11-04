@@ -355,6 +355,9 @@ type AuditWriter interface {
 // Options configures New. Every field is optional except where a feature needs it: Agent and Probe
 // are needed to activate (without them a node is treated as having no agent and no router to ask).
 type Options struct {
+	// LocalNVCC is the compiler of NVIDIA's own installer when it is not on the fixed PATH; empty means
+	// /usr/local/cuda/bin/nvcc.
+	LocalNVCC string
 	// Root is /opt/localai/llama.cpp (DefaultRoot).
 	Root string
 	// BuiltBy is the "built_by" of BUILD.json, "aiagent <version>"; default "aiagent dev".
