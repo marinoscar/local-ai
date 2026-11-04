@@ -14,6 +14,7 @@ export interface SourceModelRow {
   status: string;
   slots: number;
   ctx: number | null;
+  inputModalities?: readonly string[];
 }
 
 /** A `localai_nodes` row with its models and the EAB health of its linked worker (`offline` when it has none). */
@@ -89,6 +90,7 @@ export function buildSnapshot(rows: readonly SourceNodeRow[], now: Date): Routin
         canLoad,
         slots: Math.max(1, model.slots),
         ctx: model.ctx,
+        inputModalities: model.inputModalities ?? [],
       });
       candidates.set(model.modelId, list);
     }

@@ -71,3 +71,11 @@ describe('candidate status', () => {
     expect(snapshot.candidates.has('model-a')).toBe(false);
   });
 });
+
+describe('candidate input modalities', () => {
+  it('carries what the node reported, and an empty list when it reported none', () => {
+    const snapshot = buildSnapshot([node('ai-n1', [model('model-a', { inputModalities: ['text', 'audio'] }), model('model-b')])], NOW);
+    expect(snapshot.candidates.get('model-a')?.[0]?.inputModalities).toEqual(['text', 'audio']);
+    expect(snapshot.candidates.get('model-b')?.[0]?.inputModalities).toEqual([]);
+  });
+});
