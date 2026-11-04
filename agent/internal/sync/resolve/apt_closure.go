@@ -359,6 +359,17 @@ func aptMessage(res execx.Result) string {
 // off the system configuration. It rewrites the generated files every time and leaves apt's own
 // state (the downloaded lists) alone.
 func (a *AptClosure) prepareTree(tree string, src aptSource) error {
+	// The directory that holds every item's tree is created here by the (root) agent under its umask, so
+	// the apt user could not even enter it: hand it over before the item tree below it.
+	parent := filepath.Dir(tree)
+	if err := os.MkdirAll(parent, 0o750); err != nil {
+		return fail(CodeApt, err, "cannot create the private apt directory")
+	}
+	if a.Credential != nil {
+		if err := os.Lchown(parent, int(a.Credential.UID), int(a.Credential.GID)); err != nil {
+			return fail(CodeApt, err, "cannot hand the private apt directory to the apt user")
+		}
+	}
 	dirs := []string{
 		"etc/apt/sources.list.d", "etc/apt/trusted.gpg.d", "etc/apt/preferences.d", "etc/apt/apt.conf.d",
 		"var/lib/apt/lists/partial", "var/cache/apt/archives/partial", "var/lib/dpkg", "home",
