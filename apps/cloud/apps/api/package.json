@@ -49,6 +49,7 @@
     "passport": "^0.7.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "undici": "^7.30.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
