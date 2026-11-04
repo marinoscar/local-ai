@@ -6,10 +6,11 @@
 export const LOCALAI_COMMAND_ENQUEUER = Symbol('LOCALAI_COMMAND_ENQUEUER');
 
 /**
- * Who queued the command: a person's action (`ui`), the API itself (`system`), the gateway (`gateway`) or a catalog
+ * Who queued the command: a person's browser session (`ui`), a script with a personal access token (`api`), the
+ * desktop app when it identifies itself (`desktop`), the API itself (`system`), the gateway (`gateway`) or a catalog
  * approval that asked the nodes to refresh (`catalog_approve`). Stored in `localai_commands.source`.
  */
-export type CommandSource = 'ui' | 'system' | 'gateway' | 'catalog_approve';
+export type CommandSource = 'ui' | 'api' | 'desktop' | 'system' | 'gateway' | 'catalog_approve';
 
 export interface EnqueuedCommand {
   /** `localai_commands.id`. */

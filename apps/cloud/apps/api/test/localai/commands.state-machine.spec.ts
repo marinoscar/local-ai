@@ -20,7 +20,7 @@ function setup() {
   const clock = new FakeClock();
   const store = new FakeCommandStore(clock);
   const bus = new FakeBus();
-  const commands = new CommandsService(store as never, bus as never, clock);
+  const commands = new CommandsService(store as never, bus as never, clock, { record: async () => undefined });
   const claims = new ClaimService(new StoreClaimRepository(store) as never, bus as never, clock);
   const registered: unknown[] = [];
   const sweeper = new CommandsSweepHandler({ register: (handler: unknown) => registered.push(handler) } as never, store as never, commands, clock);
