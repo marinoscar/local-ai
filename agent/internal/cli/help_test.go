@@ -153,11 +153,7 @@ func registeredCommands() map[string]*Command {
 // documentedButNotBuilt are commands the spec documents that another issue owns and that are not in
 // the tree yet. Each entry says whose it is; the test fails when one is registered (the entry must go)
 // so the list only ever shrinks.
-var documentedButNotBuilt = map[string]string{
-	"ark eject": "SYNC-03 (ark-sync.md section 10)",
-	"ark init":  "SYNC-03 (ark-sync.md section 10)",
-	"ark mount": "SYNC-03 (ark-sync.md section 10)",
-}
+var documentedButNotBuilt = map[string]string{}
 
 func TestEveryDocumentedCommandIsRegisteredAndTheOtherWayRound(t *testing.T) {
 	reg := registeredCommands()

@@ -1,0 +1,4 @@
+== stdout ==
+✓ The drive ark-0000aaaa is mounted at /media/root/AI-ARK.
+== stderr ==
+== exit 0 ==

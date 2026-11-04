@@ -1,0 +1,9 @@
+== stdout ==
+✓ AI-ARK está preparada como unidad del arca (ark-3f9c0a12). Llénela con
+  `aictl ark sync --root ark-3f9c0a12`.
+== stderr ==
+¿Preparar AI-ARK como unidad del arca?
+  /dev/sdb1, montado en /media/user/AI-ARK, 2.0 TB
+Solo añade una carpeta llamada localai.
+No formatea ni borra la unidad.
+Escriba ark-3f9c0a12 para confirmar: == exit 0 ==

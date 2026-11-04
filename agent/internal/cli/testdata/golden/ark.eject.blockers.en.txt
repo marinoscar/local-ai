@@ -1,0 +1,7 @@
+== stdout ==
+== stderr ==
+! vlc (process 4242) has files open on this drive.
+! The brain Qwen X is running from this drive.
+✗ Files are in use.  [LAI-ARK-009]
+  → Fix: Close them.
+== exit 6 ==
