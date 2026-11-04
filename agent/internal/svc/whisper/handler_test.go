@@ -331,8 +331,6 @@ func TestSTTHangingWhisperIs504(t *testing.T) {
 func TestSTTThirdWaitingRequestGets429(t *testing.T) {
 	gate := make(chan struct{})
 	e := newSTTEnv(t, func(e *sttEnv) { e.fw.gate = gate })
-	// Give the in-flight call time: the client timeout (300 ms) is for a hang, not for this test.
-	e.fw.ts.Config.WriteTimeout = 0
 	wav := tonePCM16WAV(16000, 1)
 	results := make(chan reply, 3)
 	send := func() { results <- e.post(t, wav, nil) }
