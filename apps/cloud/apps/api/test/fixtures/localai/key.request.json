@@ -1,0 +1,5 @@
+{
+  "key": "<replaced by the test: 64 lowercase hex built at runtime>",
+  "fingerprint": "<replaced by the test: first4 + ellipsis + last4 of the key>",
+  "rotated_at": "2026-11-02T15:04:05Z"
+}
