@@ -1,0 +1,18 @@
+{
+  "types": [
+    "status.refresh",
+    "model.load",
+    "model.unload",
+    "model.set_default",
+    "model.download",
+    "ark.sync",
+    "ark.verify",
+    "mode.offline",
+    "key.rotate",
+    "service.restart",
+    "logs.tail",
+    "catalog.refresh"
+  ],
+  "limit": 1,
+  "waitMs": 25000
+}
