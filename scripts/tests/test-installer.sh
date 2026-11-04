@@ -135,6 +135,7 @@ i2_mkrel() { # i2_mkrel <dir> [agent source]: agent files, SHA256SUMS, fake sign
 i2_mkrel "$I2_REL"
 i2_mkark() { # i2_mkark <dir>: a drive with the kit for noble/amd64
   local k="$1/localai/kit"; mkdir -p "$k/bin" "$k/installers" "$k/catalog" "$k/debs/noble-amd64" "$k/nvidia/noble-amd64-595-open"
+  mkdir -p "$k/src"; cp "$w/fx.tar.gz" "$k/src/llama.cpp-$C40B.tar.gz"   # the llama.cpp source P7 looks for (INST-05 fixture)
   echo '{}' >"$1/localai/ROOT.json"; echo 2026.11.02-1 >"$k/catalog/CATALOG_VERSION"; echo '{}' >"$k/debs/noble-amd64/MANIFEST.json"
   echo '{}' >"$k/nvidia/noble-amd64-595-open/MANIFEST.json"
   i2_mkrel "$1/rel-src"; cp "$1"/rel-src/aiagent-linux-* "$1"/rel-src/SHA256SUMS "$1"/rel-src/SHA256SUMS.minisig "$k/bin/"
