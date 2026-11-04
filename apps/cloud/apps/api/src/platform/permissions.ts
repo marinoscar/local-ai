@@ -14,9 +14,14 @@
 // onboarding) enforces the `settings` slice's.
 import type { PlatformPermissionOptions } from '@marinoscar/platform-api/manifest';
 
+import { LOCALAI_PERMISSIONS } from '../localai/localai.permissions';
 import { enabledPermissionSlices } from './slices/manifest';
 
 export const PERMISSION_OPTIONS = {
   slices: ['identity', 'settings', 'jobs', 'nodes', 'user-data', ...enabledPermissionSlices()],
-  // The app's own permission batches go here (`app: { permissions: [...] }`).
+  // The app's own permission batches go here.
+  app: {
+    // Local AI: lab:read/operate/admin and gateway:use/admin (docs/specs/cloud-app.md §3.4).
+    permissions: [LOCALAI_PERMISSIONS],
+  },
 } satisfies PlatformPermissionOptions;

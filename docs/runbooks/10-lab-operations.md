@@ -14,7 +14,7 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
 ## Part 1. Dashboard tour
 
 1. **Sign in.** Open `https://ai.marin.cr`, press **Sign in with Google**.
-   - **If it doesn't work:** "not allowed": the lab owner must add your exact email to the allowlist (**Admin → Settings → Allowlist**).
+   - **If it doesn't work:** "not allowed": the lab owner must add your exact email to the allowlist (**Admin → Settings → Users & Allowlist → Allowlist**; Part 8).
 2. **Lab** (`/lab`): one card per node.
    - The header: number of nodes, how many online, alerts, and "Gateway: ● N nodes" (how many nodes the gateway can use).
    - Each card: **health** (green Healthy, amber Degraded, red Down, grey "Offline mode (expected)"), **mode** (Online / Offline / Survival), hardware, **loaded models** (★ = default), graphics memory use, **Ark** per content root (internal and drive, with the drive's age), last **Sync** and **Drill**, agent and catalog versions (▲ = behind).
@@ -175,3 +175,36 @@ Every node builds its own llama.cpp for its own GPU. All nodes should run the **
 49. On the VPS, remove its vhost, certificate and DNS record ([source/vps-ai-nodes-setup.md §10](../source/vps-ai-nodes-setup.md#10-removal-and-rollback)).
 50. On the computer, if it leaves the lab: `sudo aictl cloud unenroll`, or uninstall ([installer.md §4.4](../specs/installer.md#44-uninstall)).
 51. Update `inventory.local.yaml` and [architecture/lab-inventory.md](../architecture/lab-inventory.md).
+
+---
+
+## Part 8. Give someone access
+
+Use this to let a person into the cloud, to change what they may do, or to take their access away. You need to be the **lab owner** (the address set as `INITIAL_ADMIN_EMAIL` when the cloud was deployed; the other roles cannot see the allowlist). Nobody can sign in unless their exact address is on the allowlist; the lab owner's own address is the only exception.
+
+**Which role does what** ([cloud-app.md §3.4](../specs/cloud-app.md#34-identity-allowlist-and-permissions)). A new person starts as **viewer**.
+
+| Role | Who it is for | Can look at the lab | Can send everyday commands (load, unload, sync, restart, logs) | Can create their own API keys | Can add or retire nodes, approve catalogs, send destructive commands, read the audit log, manage every key |
+|---|---|---|---|---|---|
+| **viewer** (default) | Someone who only needs to look | Yes | No | No | No |
+| **contributor** | A family member or power user | Yes | Yes | Yes | No |
+| **org admin** | A trusted operator | Yes | Yes | Yes | No |
+| **admin** (system, plus org admin) | The lab owner | Yes | Yes | Yes | Yes |
+
+> **Never add a whole domain.** Each entry is one person's exact address (`person@example.test`). A domain, a wildcard or a shared mailbox would let anyone with an address there in, including people who register an address later.
+
+52. **Add the address.** Sign in as the lab owner, open **Admin → Settings → Users & Allowlist** (`/admin/settings/users`), open the **Allowlist** tab, press **Add Email**, type the person's exact Google address, and press the confirm button.
+    - **What you should see:** the address appears in the list.
+    - **If it doesn't work:** you don't see the **Allowlist** tab: you are not signed in as the lab owner. "Invalid email": check for a typo or a space.
+53. **Tell the person** to open `https://ai.marin.cr` and press **Sign in with Google** with that same Google account.
+    - **What you should see:** they land on **Lab**. They can look at nodes, models, Ark readiness, alerts and command history, and no action buttons appear. That is the viewer role.
+    - **If it doesn't work:** they see "not allowed": the address on the list is not the one they signed in with (a different Google account, or a typo). Fix the entry, then ask them to try again.
+54. **Change their role** (only if they need more than looking). Open the **Users** tab, find the person (they appear after their first sign-in), open **Manage roles**, tick **contributor** (or **org admin**), and save. Do not tick **admin** for anyone but the lab owner.
+    - **What you should see:** the roles column shows the new role. After they reload the page (or sign in again) they see action buttons such as **Load**, **Sync now** and **Create key**.
+    - **If it doesn't work:** the buttons are still missing after a reload: ask them to sign out and in again, so their session picks up the new role.
+55. **Take access away.** Remove their address from the **Allowlist** tab (**Remove**) and, to end a session that is already open, switch their account off in the **Users** tab. Then revoke their API keys (Part 5).
+    - **What you should see:** they can no longer sign in; the keys show as revoked.
+56. **Check the Google side once.** The Google OAuth client allows exactly one redirect address, `https://ai.marin.cr/api/auth/google/callback`, and its consent screen stays **Testing** (with your people listed as test users) or **Internal**. It is never **public**.
+    - **If it doesn't work:** Google shows `redirect_uri_mismatch`: the address in the client must match that line exactly, with no trailing slash.
+
+The cloud's own machines (the nodes) never use these roles. A node signs in with its own credential and can only talk to its own node routes ([cloud-app.md §4.2](../specs/cloud-app.md#42-binding-guard-every-apinodesidlocalai-route)).
