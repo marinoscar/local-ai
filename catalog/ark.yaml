@@ -30,7 +30,8 @@ content:
     expected_size_bytes: 150000000
 
   # ---- Rebuild kit (rebuild-kit.md section 3.2). Kit items are always tier 1 (catalog.md section 3). ----
-  # Not here yet: kit-desktop needs a published desktop release to pin (E8); kit-cuda-redist is off by default.
+  # kit-agent-binaries leaves out the release's SHA256SUMS/.minisig until the layout decision of the design issue lands (the
+  # sync engine reserves SHA256SUMS in an item dir). Not here yet: kit-desktop needs a published desktop release to pin (E8); kit-cuda-redist is off by default.
   # kit-agent-binaries and kit-agent-source pin the pre-release node-v0.1.0-rc.1. Pins below were computed from
   # the downloaded release files (decision #251); nothing is copied from a mirror's listing unchecked.
 
@@ -82,8 +83,6 @@ content:
       files:
         - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.1/aiagent-linux-amd64", sha256: "5f911b029621196d56941acb4c1986a45c304db41674464001963f6296c53ae8"}
         - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.1/aiagent-linux-arm64", sha256: "2ea3a60b3ce5c64bf5ed39e34322edf728ebf8b484366ba17971c24f82f24e28"}
-        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.1/SHA256SUMS", sha256: "b8ba80d8387e38bcae8e7c47db969202af7f44f4ba98c89e8e01375e82fd9ff1"}
-        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.1/SHA256SUMS.minisig", sha256: "39b1e71cfa661132600dcc0ff93d80dc43ca27fe660701a1e30cb15c5df28c14"}
         - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.1/install-node.sh", sha256: "f5ed4e94b4a791a18ebdf915075451643571b6a9925f35ebff5a36e00664e6ed"}
       version_policy: pinned
       checksum: pinned
