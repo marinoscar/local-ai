@@ -48,7 +48,7 @@ func (l *Link) supervise(ctx context.Context, startLinked bool, bo *Backoff, fir
 // connectUntilLinked runs register and handshake until both succeed. It returns false when ctx ends.
 func (l *Link) connectUntilLinked(ctx context.Context, bo *Backoff) bool {
 	for {
-		if !l.online() {
+		if !l.active() {
 			if !l.wait(ctx, l.heartbeatInterval()) {
 				return false
 			}
@@ -115,7 +115,7 @@ func (l *Link) probeRevoked(ctx context.Context) bool {
 		if !l.wait(ctx, hourly) {
 			return false
 		}
-		if !l.online() {
+		if !l.active() {
 			continue
 		}
 		res := l.registerOnce(ctx)

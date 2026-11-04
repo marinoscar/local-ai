@@ -414,6 +414,8 @@ func (d *Daemon) build(ctx context.Context) error {
 		State: c.State, Publisher: c.Bus, Mode: mv, Llama: llamaActivity{lock: c.OpLock, view: c.RouterWatcher},
 		Power: powerSource{h: c.Hardware}, Metrics: gauge, NodeID: node, AgentVersion: env.Version,
 		CatalogVersion: func() string { return c.Catalog.Get().Catalog.Version }, Clock: clock, Logger: log,
+		// The fence pauses the cloud link for the length of a run (drill.md section 4.4).
+		Fence: &drill.PausingFence{Link: c.Cloud},
 	})
 	if err != nil {
 		return fmt.Errorf("drill engine: %w", err)

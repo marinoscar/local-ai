@@ -169,7 +169,7 @@ func (l *Link) keyLoop(ctx context.Context) {
 			}
 			continue
 		}
-		if l.online() {
+		if l.active() {
 			if _, err := l.pushKey(ctx); err == nil {
 				if l.keySynced() {
 					continue
@@ -204,7 +204,7 @@ func (l *Link) keyFailed(err error) {
 // retries every 5 minutes by itself. ErrNotLinked is the answer of a node that is not enrolled,
 // stopped or revoked.
 func (l *Link) Push(ctx context.Context) error {
-	if !l.callable() || !l.online() {
+	if !l.callable() || !l.active() {
 		l.setSynced(false)
 		return ErrNotLinked
 	}
@@ -225,7 +225,7 @@ func (l *Link) Push(ctx context.Context) error {
 // key_synced with the fingerprint. A node that is not linked answers 409 LAI-AGT-023; a push the cloud
 // did not take answers 200 with key_synced false (the link keeps retrying).
 func (l *Link) ResendKey(ctx context.Context) (api.ResendKeyResult, error) {
-	if !l.callable() || !l.online() {
+	if !l.callable() || !l.active() {
 		return api.ResendKeyResult{}, api.NewError(api.CodeNotInMode, 409, map[string]any{"reason": "not_linked", "state": string(l.State())})
 	}
 	if l.d.Keys == nil {

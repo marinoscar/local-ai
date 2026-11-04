@@ -828,8 +828,9 @@ Auth: `op` or `portal`.
 200 {"enrolled": true, "url": "https://ai.marin.cr", "state": "linked", "server_node_id": "<uuid>", "name": "ai-n3",
      "since": "…", "last_heartbeat_at": "…", "last_claim_at": "…", "last_error": null, "credential": "nod_…a1b2",
      "eligible_types": ["localai.status.refresh", "…"], "server_features": ["node_host_vitals"],
-     "state_transport": "endpoint", "inflight": null, "key_synced": true}
+     "state_transport": "endpoint", "inflight": null, "key_synced": true, "paused": false}
 ```
+`paused` is `true` while a drill runs (§4.8.11); the link then sends nothing and keeps its session.
 `state_transport` ∈ `endpoint` (snapshots go to `POST …/localai/state`, §4.8.4) | `capabilities` (fallback while the cloud lacks that endpoint: the snapshot rides in the EAB capabilities report).
 `POST /cloud/enroll` (admin) body `{"url": "https://ai.marin.cr", "credential": "nod_…"}` → writes the credential (0600), sets `cloud.url` in `node.yaml`, registers synchronously (10 s). →
 `200 {"state": "linked", "server_node_id": "<uuid>", "reattached": false}`; network failure → `200 {"state": "backoff", "last_error": "…"}` (credential kept, link retries); `401` from the cloud → `422 LAI-CLD-051` and the credential is **not** kept. In offline/survival: credential is stored, `state: "stopped"`. Audit `cloud.enroll`.
@@ -1658,6 +1659,12 @@ Per loop (register, handshake, heartbeat, claim, state push), independent. Full-
 - **Audit and counters.** Every command that reaches a decision writes one `cloud.job` line (`target.type`, `result` ok, fail or denied, the doctor code, `actor {kind: cloud, job_id}`); operations the handler calls write their own lines with the same actor. `claims`, `succeeded`, `failed`, `emptyPolls`, `rateLimited`, `claimFailures`, `leaseRenewals` and `leaseRenewFailures` feed the heartbeat counters.
 - **Seam for AGENT-19.** `jobs.Deps.AgentUpdate` (`jobs.AgentUpdater{Update(ctx, cloud.Job, version) (cloud.Outcome, error)}`) is the executor of `agent.update`; without it the type fails with `LAI-AGT-023`. A successful update returns `Outcome{Defer: true}`: the claim loop settles nothing, keeps the inflight entry and audits `deferred`; the new process settles it after its health check with `Claimer.SettleResult` or `SettleFailure` (they use the persisted plane and claim token, remove the entry whatever the cloud answers and return `ErrNotLinked`, leaving the entry, while the link cannot talk). `ClaimerDeps.Recover` is the startup hook that takes such entries over.
 - **Executors** call the same internal methods as the routes, with `audit.Cloud(jobID)`: `router.Orchestrator.LoadWith/UnloadWith/SetDefault`, `modelsapi.Service.Get/Download/Delete/RotateKey` (`Delete` always with `KeepLast: true`; `SYN-044` and a loaded model become `kept_roots` reasons instead of failures), `api.ServicesDeps.RunAction`, `statusapi.Deps.RefreshCatalog` (a `LAI-CAT-002` lint failure is the result `accepted: false`, not a failure), the journal reader, the mode engine and the ark engine's start calls (`jobs.Ark`, `StartSync`/`StartVerify`; a run already active answers `started: false` with its id; a dry run answers `started: false` and `sync_run_id: "dry-run"`). `jobs/assert.go` pins the real types to the interfaces. `model.download` answers `already_present` when the model is verified on every named root (the internal root when none is named); `model.load` reads `vram_used_mib` from a fresh hardware sample and `is_default` from the status. Each result is checked in the tests against the cloud's result schema (`cloud/fake.ValidateResult`).
+
+#### 4.8.11 Pause and resume around a drill
+`cloud.Link` implements `drill.LinkPauser` (`Pause()`, `Resume()`; both idempotent and safe when the link is not running), and the daemon binds it with `drill.PausingFence{Link: …}` as the drill engine's fence (drill.md §4.4).
+- **Paused** means no new outbound call: the heartbeat, state push, key push, catalog probe, register and probe loops skip their turn, `Session()` reports no session so the claim loop idles, and the link's HTTP client refuses a call that starts anyway (`cloud.ErrPaused`, no connection made). A call already on the wire finishes and its answer is handled normally. The session is kept: the state does not change, nothing is deregistered, and the cloud sees only a gap in heartbeats.
+- **Resume** wakes the heartbeat (sent at once), the state push (still within the cloud's minimum interval) and the key push, and the claim loop picks up on its next recheck.
+- `GET /cloud` shows `paused`.
 
 ### 4.9 Concurrency model and locks (§4.12 covers shutdown)
 

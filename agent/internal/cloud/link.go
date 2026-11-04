@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
@@ -172,6 +173,10 @@ type Link struct {
 
 	stateWake chan struct{}
 	keyWake   chan struct{}
+	hbWake    chan struct{}
+
+	// paused: a drill runs and the link stands still (pause.go).
+	paused atomic.Bool
 
 	mu sync.Mutex
 	st linkData
@@ -229,7 +234,8 @@ func New(d Deps) (*Link, error) {
 	}
 	l := &Link{d: d, clk: d.Clock, rnd: d.Rand, hostSrc: d.Host,
 		opSem: make(chan struct{}, 1), sigCh: make(chan struct{}, 1),
-		stateWake: make(chan struct{}, 1), keyWake: make(chan struct{}, 1)}
+		stateWake: make(chan struct{}, 1), keyWake: make(chan struct{}, 1), hbWake: make(chan struct{}, 1)}
+	l.d.HTTP = pauseGate{next: d.HTTP, paused: &l.paused}
 	if l.clk == nil {
 		l.clk = RealClock{}
 	}
@@ -263,6 +269,9 @@ func (l *Link) BootID() string { return l.bootID }
 func (l *Link) Counters() *Counters { return &l.counters }
 
 func (l *Link) online() bool { return l.d.Online == nil || l.d.Online() }
+
+// active is online and not paused: the condition for every call the loops make on their own.
+func (l *Link) active() bool { return l.online() && !l.paused.Load() }
 
 func (l *Link) cfg() config.Config { return l.d.Config.Get() }
 
@@ -919,6 +928,7 @@ func (l *Link) CloudStatus() api.Cloud {
 	out.LastHeartbeatAt, out.LastClaimAt = timeOut(st.lastHB), timeOut(st.lastClaim)
 	out.LastError = strPtrOrNil(st.lastErr)
 	out.KeySynced = l.d.State.Snapshot().Key.CloudSynced
+	out.Paused = l.paused.Load()
 	if l.d.Inflight != nil {
 		if _, info := l.d.Inflight(); len(info) > 0 {
 			out.Inflight = info
@@ -954,7 +964,7 @@ type Session struct {
 // Session returns the claim loop's view; ok is false unless the node is registered and the link is
 // linked, backing off or disabled.
 func (l *Link) Session() (Session, bool) {
-	if !l.callable() {
+	if l.paused.Load() || !l.callable() {
 		return Session{}, false
 	}
 	cfg := l.cfg()

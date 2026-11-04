@@ -8,8 +8,7 @@ package drill
 
 // LinkPauser is the part of the cloud link the drill needs. Pause stops the link's outbound traffic
 // without ending its session, and Resume lets it go on and push the state again. Both are safe to call
-// when the link is not running. The daemon wiring binds the cloud link here; nothing in internal/cloud
-// implements it yet.
+// when the link is not running. The daemon wiring binds the cloud link here (*cloud.Link implements it).
 type LinkPauser interface {
 	Pause()
 	Resume()

@@ -3532,6 +3532,7 @@ components:
         state_transport: {type: string, enum: [endpoint, capabilities]}
         inflight: {type: [object, "null"], additionalProperties: true}
         key_synced: {type: boolean}
+        paused: {type: boolean, description: "True while a drill runs: the link sends nothing and keeps its session."}
 
     CloudEnrollRequest:
       type: object

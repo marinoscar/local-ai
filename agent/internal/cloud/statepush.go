@@ -111,7 +111,7 @@ func (l *Link) stateLoop(ctx context.Context) {
 		} else if ctx.Err() != nil {
 			return
 		}
-		if !l.online() {
+		if !l.active() {
 			lastPush = l.clk.Now()
 			continue
 		}
