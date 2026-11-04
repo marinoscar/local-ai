@@ -22,7 +22,7 @@ func fixtureKey(t *testing.T, oldFormat bool) ([]byte, string) {
 	h := sha1.Sum(append([]byte{0x99, 0, byte(len(body))}, body...))
 	var out []byte
 	if oldFormat {
-		out = append(out, 0x80|6<<2|0, byte(len(body)))
+		out = append(out, 0x80|6<<2, byte(len(body)))
 	} else {
 		out = append(out, 0xc0|6, byte(len(body)))
 	}
