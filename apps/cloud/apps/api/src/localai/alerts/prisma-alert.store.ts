@@ -59,7 +59,7 @@ export class PrismaAlertStore implements AlertStore {
     if (rows.length === 0) return [];
     const workerIds = rows.map((row) => row.workerNodeId).filter((id): id is string => id !== null);
     const workers = workerIds.length
-      ? await this.prisma.workerNode.findMany({ where: { id: { in: workerIds } }, select: { id: true, status: true, lastHeartbeatAt: true, createdAt: true } })
+      ? await this.prisma.workerNode.findMany({ where: { id: { in: workerIds } }, select: { id: true, status: true, lastHeartbeatAt: true, registeredAt: true } })
       : [];
     const byId = new Map(workers.map((worker) => [worker.id, worker]));
     const { staleHeartbeatSeconds } = await this.settings.read();
@@ -83,7 +83,7 @@ export class PrismaAlertStore implements AlertStore {
         // A node with no linked worker row counts as offline (spec 4.5).
         eab: worker ? deriveNodeHealth(worker, staleHeartbeatSeconds, now) : 'offline',
         lastContactAt: contact,
-        enrolledAt: worker?.createdAt ?? null,
+        enrolledAt: worker?.registeredAt ?? null,
       };
     });
   }

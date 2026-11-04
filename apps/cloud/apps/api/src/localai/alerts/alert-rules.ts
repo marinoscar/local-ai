@@ -42,7 +42,7 @@ export interface RuleNode {
   eab: NodeHealth;
   /** The latest sign of life: the worker's last heartbeat or the last snapshot, whichever is later. Null when neither exists. */
   lastContactAt: Date | null;
-  /** When the node enrolled (its worker row was created), for `key.missing`; null when unknown. */
+  /** When the node enrolled (its worker row was registered), for `key.missing`; null when unknown. */
   enrolledAt: Date | null;
 }
 

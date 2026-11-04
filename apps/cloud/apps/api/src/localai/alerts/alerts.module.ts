@@ -3,6 +3,7 @@
 // audit sink are global; the notifications dispatcher is global when the notifications slice is mounted.
 import { Module } from '@nestjs/common';
 
+import { LabAudience } from '../lab-audience';
 import { LOCALAI_CLOCK, systemLocalaiClock } from '../commands/command-events';
 import { LabNodesModule } from '../nodes/lab-nodes.module';
 import { LOCALAI_ALERT_NOTIFIER } from './alert-ports';
@@ -21,6 +22,7 @@ import { PrismaAlertStore } from './prisma-alert.store';
   providers: [
     AlertsService,
     AlertSettingsReader,
+    LabAudience,
     AlertsEvaluateHandler,
     AlertsEvaluateTask,
     PrismaAlertStore,

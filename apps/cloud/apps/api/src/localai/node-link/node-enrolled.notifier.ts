@@ -5,6 +5,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { NotificationsService } from '@marinoscar/platform-api/notifications';
 
+import { LabAudience } from '../lab-audience';
 import { NOTIFICATION_NODE_ENROLLED } from '../localai.notifications';
 import { LOCALAI_PERMISSIONS } from '../localai.permissions';
 import type { LocalaiNodeEnrolledEvent, LocalaiNodeNotifier } from './node-link.notifier';
@@ -13,18 +14,19 @@ import type { LocalaiNodeEnrolledEvent, LocalaiNodeNotifier } from './node-link.
 export class NotificationsNodeNotifier implements LocalaiNodeNotifier {
   private readonly logger = new Logger(NotificationsNodeNotifier.name);
 
-  constructor(@Optional() private readonly notifications?: NotificationsService) {}
+  constructor(
+    private readonly audience: LabAudience,
+    @Optional() private readonly notifications?: NotificationsService,
+  ) {}
 
   async nodeEnrolled(event: LocalaiNodeEnrolledEvent): Promise<void> {
     if (!this.notifications) {
       this.logger.log(`${NOTIFICATION_NODE_ENROLLED}: node_id=${event.nodeId} (notifications slice not mounted)`);
       return;
     }
-    await this.notifications.notifyPermissionHolders(
-      NOTIFICATION_NODE_ENROLLED,
-      LOCALAI_PERMISSIONS.LAB_ADMIN.id,
-      { node: event.nodeId, displayName: event.displayName },
-      { channels: ['browser', 'email'] },
-    );
+    const data = { node: event.nodeId, displayName: event.displayName };
+    for (const userId of await this.audience.holdersOf(LOCALAI_PERMISSIONS.LAB_ADMIN.id)) {
+      await this.notifications.notify(NOTIFICATION_NODE_ENROLLED, userId, data, { channels: ['browser', 'email'] });
+    }
   }
 }

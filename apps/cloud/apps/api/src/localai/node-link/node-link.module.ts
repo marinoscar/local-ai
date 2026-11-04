@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { JobsAlertReevaluator } from '../alerts/alert-reevaluator';
+import { LabAudience } from '../lab-audience';
 import { NodeKeysModule } from '../keys/node-keys.module';
 import { LocalaiNodeBindingGuard } from './binding.guard';
 import { NodeKeyController } from './key.controller';
@@ -20,6 +21,7 @@ import { StateService } from './state.service';
   controllers: [NodeLinkController, NodeKeyController],
   providers: [
     LocalaiNodeBindingGuard,
+    LabAudience,
     { provide: LOCALAI_NODE_NOTIFIER, useClass: NotificationsNodeNotifier },
     { provide: LOCALAI_ALERT_REEVALUATOR, useClass: JobsAlertReevaluator },
     StateService,

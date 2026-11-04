@@ -11,8 +11,8 @@
 //
 // CHANNELS. `localai.alert_raised` declares browser and email; whether a given alert also mails is decided per dispatch
 // (`alerts-notifier.ts` narrows the channels to browser alone unless the alert is critical), and a user's own
-// preferences can still mute either channel. Recipients are the holders of `lab:operate`; `localai.node_enrolled` goes
-// to the holders of `lab:admin`.
+// preferences can still mute either channel. Recipients are the holders of `lab:operate` (an organization permission; see
+// `lab-audience.ts`); `localai.node_enrolled` goes to the holders of `lab:admin`.
 //
 // `localai.command_failed` (the requester, browser) belongs to the command API issue (#83) and is added there.
 import type { BrowserNotificationTemplate, NotificationRegistration } from '@marinoscar/platform-api/notifications';
