@@ -7,6 +7,7 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import { RegistryFreezeService } from '@marinoscar/platform-api/core';
 
 import configuration from './config/configuration';
+import { LocalaiModule } from './localai/localai.module';
 import { PLATFORM_MODULES } from './platform/platform';
 import { PrismaModule } from './prisma/prisma.service';
 
@@ -23,6 +24,7 @@ import { PrismaModule } from './prisma/prisma.service';
     PrismaModule,
     ...PLATFORM_MODULES,
     // The app's features go here.
+    LocalaiModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
