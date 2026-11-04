@@ -6,7 +6,7 @@
   "description": "Survival Portal SPA. Built to dist/ and embedded in the agent with go:embed.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build -c vite.maps.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src e2e",
     "test": "vitest run",
@@ -29,5 +29,10 @@
     "typescript-eslint": "^8.72.1",
     "vite": "^6.4.5",
     "vitest": "^4.1.12"
+  },
+  "dependencies": {
+    "@protomaps/basemaps": "^5.7.2",
+    "maplibre-gl": "^5.24.0",
+    "pmtiles": "^4.5.0"
   }
 }

@@ -1,0 +1,238 @@
+/* Map viewer styles. Classes only (the CSP has no 'unsafe-inline' for styles); system fonts only. */
+:root {
+  --bg: #fffdf8;
+  --fg: #1b1b1b;
+  --accent: #0b5cad;
+  --accent-fg: #ffffff;
+  --line: #5a5a5a;
+  --warn-bg: #fff3cd;
+  --warn-fg: #4d3b00;
+  font-family: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 1.125rem;
+}
+.viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  height: 100%;
+  padding: 0.5rem;
+}
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+.title {
+  margin: 0;
+  font-size: 1.5rem;
+}
+.picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 16rem;
+}
+.picker .field {
+  flex: 1;
+}
+.field {
+  min-height: 3rem;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  color: var(--fg);
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 0.5rem;
+}
+.grow {
+  flex: 1;
+}
+.btn {
+  min-height: 3rem;
+  min-width: 3rem;
+  padding: 0.5rem 1rem;
+  font: inherit;
+  font-weight: 700;
+  color: var(--fg);
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.btn-primary {
+  color: var(--accent-fg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.btn-icon {
+  font-size: 1.75rem;
+  line-height: 1;
+}
+.btn:disabled,
+.field:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn:focus-visible,
+.field:focus-visible,
+.map-host:focus-visible {
+  outline: 4px solid #ff9f1a;
+  outline-offset: 2px;
+}
+.search,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.search .field {
+  min-width: 12rem;
+}
+.nearest-label {
+  font-weight: 700;
+  margin-left: 0.5rem;
+}
+.note {
+  margin: 0;
+  min-height: 1.5rem;
+}
+.code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 700;
+}
+.banner,
+.suggest {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border: 2px solid #b58900;
+  border-radius: 0.5rem;
+}
+.panel {
+  max-width: 40rem;
+  margin: 2rem auto;
+  padding: 1rem;
+}
+.lead {
+  font-size: 1.375rem;
+}
+.stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 16rem;
+  border: 2px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.map-host {
+  position: absolute;
+  inset: 0;
+}
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: -0.75rem 0 0 -0.75rem;
+  border: 3px solid #c0392b;
+  border-radius: 50%;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.35);
+}
+.zoom {
+  position: absolute;
+  right: 0.75rem;
+  top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 2;
+}
+.readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+.readout-dec {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.readout-dms {
+  font-variant-numeric: tabular-nums;
+}
+.results ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+}
+.result span {
+  font-weight: 400;
+}
+.foot {
+  font-size: 0.875rem;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.pin {
+  width: 1.75rem;
+  height: 1.75rem;
+  background: #c0392b;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #7b241c;
+}
+.place {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.place-dot {
+  width: 1rem;
+  height: 1rem;
+  background: #0b5cad;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #08396e;
+}
+.place-label {
+  padding: 0 0.25rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 0.25rem;
+  white-space: nowrap;
+}

@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { handleMaps } from "./fake-maps.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = join(here, "..", "dist");
@@ -133,6 +134,7 @@ async function readBody(req) {
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
   const p = url.pathname;
+  if (await handleMaps(req, res, url, CSP)) return;
   if (p.startsWith("/__")) {
     if (p === "/__reset") {
       status = defaultStatus();
@@ -226,7 +228,7 @@ createServer(async (req, res) => {
       );
     return send(res, 200, rss, { "Content-Type": "application/rss+xml" });
   }
-  // Other areas of the real agent (chat, library, maps, docs): a page is enough.
+  // Other areas of the real agent (chat, library, docs): a page is enough.
   if (/^\/(chat|library|maps|docs)(\/|$)/.test(p)) {
     return send(res, 200, `<!doctype html><title>${p}</title><p>${p}</p>`, {
       "Content-Type": TYPES[".html"],

@@ -11,10 +11,10 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ['src/**/*.{ts,tsx}', 'e2e/**/*.{ts,mjs}'],
-    languageOptions: { globals: { window: 'readonly', document: 'readonly', navigator: 'readonly', localStorage: 'readonly', fetch: 'readonly', URL: 'readonly', Headers: 'readonly', EventSource: 'readonly', KeyboardEvent: 'readonly', HTMLElement: 'readonly', HTMLDialogElement: 'readonly', RequestInit: 'readonly', Response: 'readonly', console: 'readonly', process: 'readonly' , setTimeout: 'readonly', clearTimeout: 'readonly' } },
+    languageOptions: { globals: { window: 'readonly', document: 'readonly', navigator: 'readonly', localStorage: 'readonly', fetch: 'readonly', URL: 'readonly', Headers: 'readonly', EventSource: 'readonly', KeyboardEvent: 'readonly', HTMLElement: 'readonly', HTMLDialogElement: 'readonly', RequestInit: 'readonly', Response: 'readonly', console: 'readonly', process: 'readonly' , setTimeout: 'readonly', clearTimeout: 'readonly', Buffer: 'readonly' } },
   },
   {
-    files: ['src/portal/**/*.tsx'],
+    files: ['src/portal/**/*.tsx', 'src/maps/**/*.tsx'],
     plugins: { react },
     rules: {
       'react/jsx-no-literals': ['error', { noStrings: false, allowedStrings: [] }],
