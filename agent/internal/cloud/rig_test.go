@@ -394,6 +394,21 @@ func (r *rig) waitTimers(n int) {
 	}
 }
 
+// waitProbeArmed waits (in real time) until exactly one timer is pending and it is a full hour away: the
+// revoked link's hourly register probe, armed and not yet advanced.
+func (r *rig) waitProbeArmed() {
+	r.t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if d, ok := r.clk.NextDelay(); ok && r.clk.Pending() == 1 && d == time.Hour {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	d, _ := r.clk.NextDelay()
+	r.t.Fatalf("the hourly probe was never armed alone: %d timers pending, next %v", r.clk.Pending(), d)
+}
+
 // step waits until some timer is due within d and then moves the clock by d: one tick of whichever
 // loop is about to wake.
 func (r *rig) step(d time.Duration) {

@@ -350,8 +350,10 @@ func TestHeartbeat401RevokesAndAHourlyProbeRecovers(t *testing.T) {
 	r.waitAlert(doctor.CLD051, true)
 	regs := r.srv.Count(fake.RouteRegister)
 	hbs := r.srv.Count(fake.RouteHeartbeat)
-	// Revoked: no loops, only the hourly register probe.
-	r.waitTimers(1)
+	// Revoked: no loops, only the hourly register probe. A heartbeat timer may still be pending until its
+	// loop notices the revocation, so wait until the one timer left is the probe's full hour before moving
+	// the clock (otherwise the probe is armed after the Advance and is an hour away again: a flaky test).
+	r.waitProbeArmed()
 	r.clk.Advance(30 * time.Minute)
 	if r.srv.Count(fake.RouteRegister) != regs || r.srv.Count(fake.RouteHeartbeat) != hbs {
 		t.Fatal("the link called the cloud while revoked, before the hourly probe")
