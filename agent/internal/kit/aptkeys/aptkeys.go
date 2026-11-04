@@ -41,7 +41,7 @@ var Pins = []Pin{
 		Vendor:       "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg",
 	},
 	{
-		Name:         "nvidia-cuda-archive-keyring.gpg",
+		Name: "nvidia-cuda-archive-keyring.gpg",
 		// Two keys: the 2022 key that signs the ubuntu2404 repository, and the key that signs ubuntu2604
 		// (found on a real node, issue #312). The second has ONE source only: the cuda-keyring deb in
 		// the ubuntu2604 directory of the vendor's own HTTPS site, and the repository's InRelease verifies
