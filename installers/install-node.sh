@@ -1357,7 +1357,7 @@ p2_link() {
 
 p2_place() {
   local bin="$INSTALL_PFX/opt/localai/bin" inst="$INSTALL_PFX/opt/localai/installers" own_args=()
-  ((${FAKE_EUID:-$EUID} == 0)) && own_args=(-o root -g root)
+  ((EUID == 0)) && own_args=(-o root -g root)
   local src="$P2_TMP/aiagent-linux-$P1_ARCH"
   if [[ -x "$bin/aiagent" ]] && cmp -s "$src" "$bin/aiagent"; then
     say "the agent in $bin/aiagent is already this version"
