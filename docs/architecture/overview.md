@@ -113,7 +113,7 @@
 | `/var/lib/localai/update/` | root 0700 | Self-update staging and the in-progress marker `pending.json` ([agent.md](../specs/agent.md) §4.10) |
 | `/var/lib/localai/llama-cache/` | localai 0750 | `LLAMA_CACHE` of llama-server, kept **empty** ([llama-router.md](../specs/llama-router.md) §3.1) |
 | `/var/lib/localai/bench/` | root 0755 | `aictl bench` results ([llama-router.md](../specs/llama-router.md) §4.13) |
-| `/var/lib/localai/build/` | root 0755 | Scratch of the kit builds: the unpacked CUDA redistributables and whisper.cpp source tree, and for `aictl rebuild-agent` the Go toolchain and the source tree (all removed after the build). Keeps `agent-build.log` and the lock `.agent-build.lock` ([rebuild-kit.md](../specs/rebuild-kit.md) §4.3.4) |
+| `/var/lib/localai/build/` | root 0700 | Scratch of the kit builds: the unpacked CUDA redistributables and whisper.cpp source tree, and for `aictl rebuild-agent` the Go toolchain and the source tree (all removed after the build). Keeps `agent-build.log` and the lock `.agent-build.lock` ([rebuild-kit.md](../specs/rebuild-kit.md) §4.3.4) |
 | `/var/lib/localai/migration/llama-qwen/` | root 0700 | Legacy-migration plan, progress and backups ([llama-router.md](../specs/llama-router.md) §4.9) |
 | `/opt/localai/bin/aiagent.prev` | root 0755 | Previous agent binary, kept for rollback ([agent.md](../specs/agent.md) §4.10) |
 | `/opt/localai/llama.cpp/src/<commit>/` | root 0755 | llama.cpp source trees used for builds ([llama-router.md](../specs/llama-router.md) §4.10) |

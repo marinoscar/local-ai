@@ -647,6 +647,198 @@ phase_migration() {
 }
 # ===============================================================================================================
 
+# INST-04 (issue #149): P5 users, groups and directories, P6 packages and companion programs.
+# Spec: docs/specs/installer.md section 4.3 P5 and P6. These definitions replace the stubs above.
+# Everything that needs root-owned state is done by `aiagent setup dirs` / `aiagent setup binaries` (Go, tested
+# with fakes); this block only calls them, passes --dry-run through, and turns a failure into a doctor code.
+# ===============================================================================================================
+
+# The package groups of section 4.3 P6. installers/packages/*.list holds the same names; test-installer.sh
+# checks that the two agree. Backend groups are added for the detected backend only.
+readonly -a INST04_PKGS_BASE=(ca-certificates curl jq git iw network-manager pciutils usbutils minisign zstd udisks2)
+readonly -a INST04_PKGS_BUILD=(build-essential cmake ninja-build pkg-config ccache)
+readonly -a INST04_PKGS_VULKAN=(libvulkan-dev glslc spirv-headers vulkan-tools mesa-vulkan-drivers)
+readonly -a INST04_PKGS_CUDA=(nvidia-cuda-toolkit)
+readonly -a INST04_TOOLS=(kiwix-tools pmtiles piper)
+
+# inst04_bin <aiagent|aictl>: where the program staged by P2 lives. Dev hooks only with LAI_INSTALLER_DEV=1.
+inst04_bin() {
+  # With the dev hooks on, a test that does not name a fake gets a path that does not exist, so no test ever runs
+  # the real programs of the machine it happens to run on.
+  if ((DEV)); then
+    case "$1" in
+      aiagent) printf '%s' "${LAI_INSTALL_AIAGENT:-/nonexistent/dev/aiagent}" ;;
+      aictl) printf '%s' "${LAI_INSTALL_AICTL:-/nonexistent/dev/aictl}" ;;
+    esac
+    return 0
+  fi
+  case "$1" in
+    aiagent) printf '%s' /opt/localai/bin/aiagent ;;
+    aictl) printf '%s' /usr/local/bin/aictl ;;
+  esac
+}
+
+inst04_opt_dir() {
+  if ((DEV)); then printf '%s' "${LAI_INSTALL_OPT_DIR:-/nonexistent/dev/opt}"; else printf '%s' /opt/localai; fi
+}
+
+inst04_catalog_dir() {
+  if ((DEV)); then printf '%s' "${LAI_INSTALL_CATALOG_DIR:-/nonexistent/dev/catalog}"; else printf '%s' /etc/localai/catalog; fi
+}
+
+# inst04_backend: --backend, else what P1 detected (DETECTED_BACKEND), else cpu.
+inst04_backend() { printf '%s' "${OPT_BACKEND:-${DETECTED_BACKEND:-cpu}}"; }
+
+# inst04_packages: the names to install, one per line: base, build, then the backend's.
+inst04_packages() {
+  printf '%s\n' "${INST04_PKGS_BASE[@]}" "${INST04_PKGS_BUILD[@]}"
+  case "$(inst04_backend)" in
+    vulkan) printf '%s\n' "${INST04_PKGS_VULKAN[@]}" ;;
+    cuda) printf '%s\n' "${INST04_PKGS_CUDA[@]}" ;;
+  esac
+}
+
+# inst04_run_agent <bin-kind> <args...>: run one of our own programs. A dry run passes --dry-run to the step
+# (the step only reads) when the program is already there; if P2 has not staged it yet (a dry run never does),
+# the call is only described. A real run without the program is a failure.
+# Returns the program's exit code; sets LAST_OUTPUT (run_logged).
+inst04_run_agent() {
+  local kind="$1" bin
+  shift
+  bin="$(inst04_bin "$kind")"
+  if ((DRY_RUN)) && ((EUID != 0 && !DEV)); then
+    # `aiagent setup` and `aictl kit` are root only (exit 77), so an unprivileged dry run only describes the call.
+    say "[dry-run] would run: $kind $*"
+    return 0
+  fi
+  if [[ ! -x "$bin" ]]; then
+    if ((DRY_RUN)); then
+      say "[dry-run] would run: $kind $* (the program is not installed yet; phase P2 puts it at $bin)"
+      return 0
+    fi
+    say "The program $bin is missing, so this step cannot run. Phase P2 (stage artifacts) must finish first."
+    return 1
+  fi
+  local rc=0
+  if ((DRY_RUN)); then
+    say "[dry-run] checking with: $kind $* --dry-run"
+    run_logged "$bin" "$@" --dry-run || rc=$?
+  else
+    say "run: $kind $*"
+    run_logged "$bin" "$@" || rc=$?
+  fi
+  return "$rc"
+}
+
+# --- P5 users, groups and directories ---------------------------------------------------------------------------
+
+inst04_dirs_args() {
+  INST04_ARGS=(setup dirs)
+  if ((OPT_NO_POLKIT)); then INST04_ARGS+=(--no-polkit); fi
+  if [[ -n "$OPT_DESKTOP_USER" ]]; then INST04_ARGS+=(--desktop-user "$OPT_DESKTOP_USER"); fi
+  if [[ -n "$OPT_NODE_ID" ]]; then INST04_ARGS+=(--node-id "$OPT_NODE_ID"); fi
+  if [[ -n "$OPT_PROFILE" ]]; then INST04_ARGS+=(--profile "$OPT_PROFILE"); fi
+}
+
+# check_users_dirs: satisfied when `aiagent setup dirs --check` finds nothing to change.
+check_users_dirs() {
+  local bin
+  bin="$(inst04_bin aiagent)"
+  [[ -x "$bin" ]] || return 1
+  inst04_dirs_args
+  "$bin" "${INST04_ARGS[@]}" --check >/dev/null 2>&1
+}
+
+phase_users_dirs() {
+  inst04_dirs_args
+  if ! inst04_run_agent aiagent "${INST04_ARGS[@]}"; then
+    fail 1 LAI-INS-035 "could not create the localai user, the folders or the permissions (lines above). Fix what they name, then re-run: sudo install-node.sh"
+  fi
+  if [[ -n "$OPT_DESKTOP_USER" ]] && ((!DRY_RUN)); then
+    say "NOTE: log out and back in as $OPT_DESKTOP_USER so the new group localai-operators applies to you."
+  fi
+  return 0
+}
+
+# --- P6 packages --------------------------------------------------------------------------------------------------
+
+# inst04_apt_fail <what>: LAI-INS-030 with apt's last 20 lines.
+inst04_apt_fail() {
+  local n=${#LAST_OUTPUT[@]} from=0 i
+  if ((n > 20)); then from=$((n - 20)); fi
+  say "The last lines apt printed:"
+  for ((i = from; i < n; i++)); do say "  | ${LAST_OUTPUT[i]}"; done
+  fail 1 LAI-INS-030 "installing the packages failed at: $1. Read the apt messages above, fix what they name, then re-run: sudo install-node.sh"
+}
+
+inst04_packages_online() {
+  local -a pkgs
+  mapfile -t pkgs < <(inst04_packages)
+  say "Installing the programs this node needs from the internet (apt): ${pkgs[*]}"
+  if ! run_or_say apt-get update; then inst04_apt_fail "apt-get update"; fi
+  if ! apt_or_say "${pkgs[@]}"; then inst04_apt_fail "apt-get install"; fi
+}
+
+# Offline: `aictl kit install-debs` is the one implementation of the spec's temporary-source install. It re-verifies
+# every .deb against SHA256SUMS and PACKAGES.lock first, adds /etc/apt/sources.list.d/localai-ark.list, installs
+# with only that source enabled, and removes the source file whatever happens (rebuild-kit.md section 4.1.4).
+inst04_packages_offline() {
+  local root="$OPT_FROM_ARK/localai" list
+  local -a pkgs
+  mapfile -t pkgs < <(inst04_packages)
+  list="$(IFS=,; printf '%s' "${pkgs[*]}")"
+  if [[ ! -d "$root/kit" ]]; then
+    fail 1 LAI-INS-016 "the ark drive has no kit folder at $root/kit. Sync the drive on a computer with internet first."
+  fi
+  say "Installing the programs this node needs from the ark drive (no internet): ${pkgs[*]}"
+  if ! inst04_run_agent aictl kit install-debs --root "$root" --packages "$list"; then
+    inst04_apt_fail "aictl kit install-debs"
+  fi
+}
+
+inst04_binaries() {
+  local -a args=(setup binaries)
+  if [[ -n "$OPT_FROM_ARK" ]]; then
+    args+=(--kit "$OPT_FROM_ARK/localai/kit")
+  else
+    if ((DRY_RUN)) && [[ ! -f "$(inst04_catalog_dir)/ark.yaml" ]]; then
+      say "[dry-run] would run: aiagent setup binaries --online (the catalog is not installed yet; phase P2 puts it in $(inst04_catalog_dir))"
+      return 0
+    fi
+    args+=(--online --catalog "$(inst04_catalog_dir)")
+  fi
+  say "Installing kiwix-tools, pmtiles and piper from verified files..."
+  if ! inst04_run_agent aiagent "${args[@]}"; then
+    fail 1 LAI-INS-035 "could not install kiwix-tools, pmtiles and piper (lines above). Fix what they name, then re-run: sudo install-node.sh"
+  fi
+}
+
+# check_packages: every package is installed and the three companion programs have a current version.
+check_packages() {
+  local p t
+  while IFS= read -r p; do
+    # shellcheck disable=SC2016
+    dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || return 1
+  done < <(inst04_packages)
+  for t in "${INST04_TOOLS[@]}"; do
+    [[ -e "$(inst04_opt_dir)/$t/current" ]] || return 1
+  done
+  return 0
+}
+
+phase_packages() {
+  if [[ -n "$OPT_FROM_ARK" ]]; then
+    inst04_packages_offline
+  else
+    inst04_packages_online
+  fi
+  inst04_binaries
+  return 0
+}
+# ===============================================================================================================
+# end of INST-04
+# ===============================================================================================================
+
 # run_phase <index 1..15> <table entry>
 run_phase() {
   local n="$1" entry="$2" id fn name rc=0 start=$SECONDS

@@ -253,11 +253,13 @@ Only for laptops (or `--hardening`). Each step is ported from [source/laptop-ser
 #### P5. Users, groups and directories
 `aiagent setup dirs`:
 - `groupadd --system localai-operators` if missing.
-- `useradd --system --home-dir /var/lib/localai --shell /usr/sbin/nologin localai` if missing; `usermod -aG video,render localai`.
+- `useradd --system --user-group --home-dir /var/lib/localai --no-create-home --shell /usr/sbin/nologin localai` if missing (the folder is created below with its exact owner and mode, so `useradd` must not create it); `usermod -aG video,render localai` for the groups that exist on this Ubuntu (a missing `render` group is skipped with a note).
 - `usermod -aG localai-operators <desktop user>`; note in the summary that the user must log out and back in for the group to apply.
 - Create, with owner and mode exactly as overview.md §3.2: `/opt/localai/{bin,installers,llama.cpp/builds,llama.cpp/src,whisper.cpp/builds,piper,kiwix-tools,pmtiles}` (root 0755), `/etc/localai` (root:localai 0750), `/etc/localai/catalog` (root:localai 0750), `/var/lib/localai/{sync,drill,cloud,kiwix,llama-cache}` (localai 0750), `/var/lib/localai/{install,build}` (root 0700), `/var/lib/localai/update` (root 0700), `/var/lib/localai/bench` (root 0755), `/var/lib/localai/migration` (root 0700; `aiagent migrate` creates `migration/llama-qwen/` under it), `/opt/localai/installers` (root 0755), `/srv/localai` (localai 0755) with the layout dirs of §3.3 and its `ROOT.json` (`kind: internal`).
 - The installer creates every one of these directories itself (the agent's own startup also creates `update/` if it is missing, agent.md §4.1, but the installer does not rely on that).
-- Existing paths with a different owner/mode are corrected (logged with old values).
+- `/var/lib/localai` itself is `localai` 0750 (the installer's own `install/` state folder inside it stays root 0700). The layout directories below `/srv/localai` are created the way the agent's own startup creates them (`ark.CreateLayout`: root-owned, 0755; `.trash` and `.staging` 0700); only `/srv/localai` itself is owned by `localai`. An existing `ROOT.json` of the internal root is kept; a damaged one is moved aside to `ROOT.json.damaged-<UTC>` (never deleted) and rewritten.
+- Existing paths with a different owner/mode are corrected (logged with old values). A file where a directory belongs is an error (`LAI-INS-035`), never deleted.
+- `aiagent setup dirs --dry-run` prints every create/chown/chmod with old and new values and changes nothing; `--check` is the same and exits 1 if anything would change (the installer's "already done?" test). Without `--dry-run` it needs root (exit 77); a dry run only reads, so it works unprivileged. Flags: `--no-polkit`, `--desktop-user`, `--node-id`, `--profile`, `--json`. Failure: `LAI-INS-035`.
 - Unless `--no-polkit`: write `/etc/polkit-1/rules.d/50-localai-operators.rules` (root 0644), which allows members of `localai-operators` to run only `start` and `restart` on `localai-agent.service` without a password (nothing else, no other unit):
   ```js
   polkit.addRule(function(action, subject) {
@@ -282,8 +284,10 @@ Lists (exact names checked per codename at implementation):
 | optional | `openssh-server` (P4), `tailscale` (P10), `gpsd` (never by default) |
 
 - **Online:** `apt-get update` then `DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends <list>`. Already-installed packages are left at their version (no upgrades).
-- **Offline:** add a temporary source `/etc/apt/sources.list.d/localai-ark.list` containing `deb [trusted=yes] file:<mount>/localai/kit/debs/<codename>-<arch> ./`, run `apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/localai-ark.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0`, install with the same `-o` options so only the kit repo is used, then remove the source file. `[trusted=yes]` is acceptable because every `.deb` was verified against Ubuntu's signed indexes at sync time and is re-verified against `PACKAGES.lock` before this step ([rebuild-kit.md](rebuild-kit.md) §Offline apt).
-- Then `aiagent setup binaries` installs kiwix-tools, pmtiles and piper from verified tarballs ([companion-services.md](companion-services.md) §4.1.1, §4.3.1).
+- **Offline (implementation):** the installer calls `aictl kit install-debs --root <mount>/localai --packages <list>` ([rebuild-kit.md](rebuild-kit.md) §4.1.4, [aictl.md](aictl.md) §4.23c), which is the single implementation of the steps below: it re-verifies every `.deb`, writes the temporary source, installs with only that source enabled, and removes the source file whatever happens. The package list passed is the group list of this section for the detected backend (so the offline and online installs install the same names). `--dry-run` passes `--dry-run` to it.
+- **Offline (what that does):** add a temporary source `/etc/apt/sources.list.d/localai-ark.list` containing `deb [trusted=yes] file:<mount>/localai/kit/debs/<codename>-<arch> ./`, run `apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/localai-ark.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0`, install with the same `-o` options so only the kit repo is used, then remove the source file. `[trusted=yes]` is acceptable because every `.deb` was verified against Ubuntu's signed indexes at sync time and is re-verified against `PACKAGES.lock` before this step ([rebuild-kit.md](rebuild-kit.md) §Offline apt).
+- Then `aiagent setup binaries` installs kiwix-tools, pmtiles and piper from verified tarballs ([companion-services.md](companion-services.md) §4.1.1, §4.3.1): offline `aiagent setup binaries --kit <mount>/localai/kit` (each tarball is hashed against its `MANIFEST.json` first; the same code as `aictl kit install <tool>`), online `aiagent setup binaries --online --catalog /etc/localai/catalog` (downloads only the `https` URLs that the catalog `kit-kiwix-tools`, `kit-pmtiles` and `kit-piper` items pin with a sha256, hashes the file before extracting, never installs an unpinned download). `--tools a,b` limits the set; `--dry-run` checks the kit files (or lists the pinned URLs) and installs nothing. Each tool lands in `/opt/localai/<tool>/<version>/`, `current` is repointed atomically and the previous version is kept. A failure carries the tool's own code (`LAI-KIT-001`, `LAI-KIT-040`, `LAI-SVC-003`, `LAI-SVC-020`) or `LAI-INS-015` (download failed) or `LAI-INS-035`.
+- The package names are in the script and, one per line, in `installers/packages/{base,build,vulkan,cuda}.list`; a test keeps the two equal. The backend comes from `--backend`, else what P1 detected, else `cpu`.
 - Failure: `LAI-INS-030` with apt's last 20 lines.
 
 #### P7. llama.cpp build or reuse
@@ -427,6 +431,7 @@ It never changes the node id, key, agent token, PIN, cloud credential, profile, 
 | llama.cpp build fails | fail; the old unit (if any) keeps running | `LAI-INS-032` |
 | Migration fails | rollback by llama-router, fail | `LAI-INS-033` |
 | Agent doesn't become healthy | fail with `journalctl -u localai-agent -n 50` | `LAI-INS-034` |
+| Users, folders, permissions or companion programs (kiwix-tools, pmtiles, piper) can't be set up | fail with the step's message (a `LAI-KIT-nnn` code too when the kit is damaged) | `LAI-INS-035` |
 | Hardening check fails after reboot | doctor warning | `LAI-INS-040`…`044` |
 | Serve pattern disagrees with inventory | install: fail (error); doctor later: warning | `LAI-INS-050` |
 | No TTY for the PIN | skip with warning | `LAI-INS-060` |
@@ -471,6 +476,7 @@ Log format §4.6. `aictl doctor` reads `state.json` and runs the `LAI-INS` check
 | LAI-INS-032 | error | Building llama.cpp failed | Read `build.log` in the failed build folder under `/opt/localai/llama.cpp/builds/` (named in the message); run `sudo install-node.sh --repair`. |
 | LAI-INS-033 | error | Migration failed and was rolled back | The old service is running again. Read the log and report it. |
 | LAI-INS-034 | critical | The agent didn't start | Run `journalctl -u localai-agent -n 50` and `sudo install-node.sh --repair`. |
+| LAI-INS-035 | error | Users, folders, permissions or companion programs could not be set up | Read the lines above, fix what they name (disk full, read-only disk, damaged ark drive), and re-run `sudo install-node.sh`. |
 | LAI-INS-040 | warning | Lid/power-key settings aren't active | Reboot the computer (don't restart logind). |
 | LAI-INS-041 | warning | Sleep targets aren't masked | Run `sudo install-node.sh --repair`. |
 | LAI-INS-042 | warning | GNOME idle suspend is still on | Log in as the desktop user and run `sudo install-node.sh --repair`. |

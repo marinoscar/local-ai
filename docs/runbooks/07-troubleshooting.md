@@ -351,6 +351,7 @@ The installer prints the phase and code, and the full log is `/var/log/localai-i
 | `LAI-INS-032` | Build failed: read the build log it names; then `--repair`, or [06 Part 5](06-rebuild-a-node-offline.md) |
 | `LAI-INS-033` | Migration failed and was rolled back: the old service runs; read the log and report it |
 | `LAI-INS-034` | The agent didn't start: `journalctl -u localai-agent -n 50`, then `--repair` |
+| `LAI-INS-035` | Setting up users, folders, permissions or the companion programs failed: read the lines above it (disk full? damaged drive?), fix that, then run `sudo install-node.sh` again |
 | `LAI-INS-050` | Use `--serve-pattern` with the value in the inventory |
 | `LAI-INS-060` | Set the PIN: `sudo aictl pin set` |
 

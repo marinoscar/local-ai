@@ -274,12 +274,31 @@ func piperFile(m manifest.Manifest, arch string) (manifest.File, string, bool) {
 	return manifest.File{}, "", false
 }
 
-// installTarball is the flow of the three tarball tools: find the file in the tool's MANIFEST, hash it
-// against the pinned sha256, hand it to the installer.
-func (t *ToolInstaller) installTarball(ctx context.Context, kitDir, tool, dirName string, install TarballInstaller, pick releaseFile) (*ToolResult, error) {
-	if install == nil {
-		return nil, toolErr(tool, ErrToolInstall, "no installer is configured for this tool", nil)
+// Located is a tarball of the kit that passed its checksum: the file, its pinned sha256 and its version.
+type Located struct {
+	Path, SHA256, Version string
+}
+
+// Locate finds the tarball of a tarball tool (kiwix-tools, pmtiles, piper) in kitDir and checks it against
+// the sha256 of the tool's MANIFEST.json, without installing anything. `aiagent setup binaries --dry-run`
+// uses it; Install runs the same code first.
+func (t *ToolInstaller) Locate(ctx context.Context, kitDir, tool string) (*Located, error) {
+	var dirName string
+	var pick releaseFile
+	switch tool {
+	case ToolKiwix:
+		dirName, pick = "kiwix-tools", kiwixFile
+	case ToolPmtiles:
+		dirName, pick = "pmtiles", pmtilesFile
+	case ToolPiper:
+		dirName, pick = "piper", piperFile
+	default:
+		return nil, toolErr(tool, ErrToolNotInKit, "not a tarball tool of the kit", nil)
 	}
+	return t.locate(ctx, kitDir, tool, dirName, pick)
+}
+
+func (t *ToolInstaller) locate(ctx context.Context, kitDir, tool, dirName string, pick releaseFile) (*Located, error) {
 	t.step("verify", tool)
 	dir := filepath.Join(kitDir, PartTools, dirName)
 	m, err := manifest.Load(t.FS, dir)
@@ -303,9 +322,26 @@ func (t *ToolInstaller) installTarball(ctx context.Context, kitDir, tool, dirNam
 	case got != file.SHA256:
 		return nil, toolErr(tool, ErrToolDamaged, "the file does not match the checksum in its MANIFEST.json", nil, file.Path)
 	}
+	return &Located{Path: path, SHA256: file.SHA256, Version: version}, nil
+}
+
+// installTarball is the flow of the three tarball tools: find the file in the tool's MANIFEST, hash it
+// against the pinned sha256, hand it to the installer.
+func (t *ToolInstaller) installTarball(ctx context.Context, kitDir, tool, dirName string, install TarballInstaller, pick releaseFile) (*ToolResult, error) {
+	if install == nil {
+		return nil, toolErr(tool, ErrToolInstall, "no installer is configured for this tool", nil)
+	}
+	loc, err := t.locate(ctx, kitDir, tool, dirName, pick)
+	if err != nil {
+		return nil, err
+	}
+	return t.installLocated(ctx, tool, dirName, install, loc.Path, loc.SHA256, loc.Version)
+}
+
+func (t *ToolInstaller) installLocated(ctx context.Context, tool, dirName string, install TarballInstaller, path, sha, version string) (*ToolResult, error) {
 	prev := t.current(dirName)
 	t.step("install", tool)
-	if err := install(ctx, path, file.SHA256, version); err != nil {
+	if err := install(ctx, path, sha, version); err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -313,6 +349,64 @@ func (t *ToolInstaller) installTarball(ctx context.Context, kitDir, tool, dirNam
 	}
 	cur := t.current(dirName)
 	return &ToolResult{Tool: tool, Version: version, Previous: prevOf(prev, cur), Source: path, Unchanged: prev == version}, nil
+}
+
+// InstallFile installs a tarball tool from a file that is not in a kit (the online path of the installer:
+// a download whose sha256 the catalog pins). The file is hashed against sha256 first; a mismatch is
+// ErrToolDamaged and nothing is extracted.
+func (t *ToolInstaller) InstallFile(ctx context.Context, tool, tarball, sha256, version string) (*ToolResult, error) {
+	var dirName string
+	var install TarballInstaller
+	switch tool {
+	case ToolKiwix:
+		dirName, install = "kiwix-tools", t.Kiwix
+	case ToolPmtiles:
+		dirName, install = "pmtiles", t.installPmtiles
+	case ToolPiper:
+		dirName, install = "piper", t.Piper
+	default:
+		return nil, toolErr(tool, ErrToolNotInKit, "not a tarball tool of the kit", nil)
+	}
+	if install == nil {
+		return nil, toolErr(tool, ErrToolInstall, "no installer is configured for this tool", nil)
+	}
+	t.step("verify", tool)
+	got, err := hashFile(ctx, t.FS, tarball, maxDebBytes)
+	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return nil, err
+	case err != nil:
+		return nil, toolErr(tool, ErrToolDamaged, "cannot read the file", err, filepath.Base(tarball))
+	case got != sha256:
+		return nil, toolErr(tool, ErrToolDamaged, "the download does not match the checksum pinned in the catalog", nil, filepath.Base(tarball))
+	}
+	return t.installLocated(ctx, tool, dirName, install, tarball, sha256, version)
+}
+
+// ReleaseFromURL says the version of a tool's release tarball from its download URL, or false when the URL is
+// not this tool's tarball for arch ("amd64" or "arm64"). It uses the same file-name rules as the kit.
+func ReleaseFromURL(tool, arch, url string) (string, bool) {
+	base := url
+	if i := strings.LastIndexByte(url, '/'); i >= 0 {
+		base = url[i+1:]
+	}
+	switch tool {
+	case ToolKiwix:
+		if g := kiwixFileRe.FindStringSubmatch(base); g != nil && g[1] == map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[arch] {
+			return g[2], true
+		}
+	case ToolPmtiles:
+		if g := pmtilesFileRe.FindStringSubmatch(base); g != nil && g[2] == map[string]string{"amd64": "x86_64", "arm64": "arm64"}[arch] {
+			return g[1], true
+		}
+	case ToolPiper:
+		if g := piperFileRe.FindStringSubmatch(base); g != nil && g[1] == map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[arch] {
+			if r := piperReleaseRe.FindStringSubmatch(url); r != nil {
+				return r[1], true
+			}
+		}
+	}
+	return "", false
 }
 
 // prevOf is the version that was current before: the one seen before the install, unless the
