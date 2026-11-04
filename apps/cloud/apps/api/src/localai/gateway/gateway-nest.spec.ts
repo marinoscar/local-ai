@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 
 import { GatewayAuthenticator, type GatewayPrincipal } from './auth';
 import { GatewayError } from './errors';
+import { GatewayService } from './gateway.service';
 import { GatewaySettingsReader } from './gateway-settings';
 import { ModelListing } from './models/listing';
 import { registerGatewayRoutes } from './routes';
@@ -47,6 +48,7 @@ describe('registerGatewayRoutes on a Nest application', () => {
           },
         },
         { provide: GatewaySettingsReader, useValue: { enabled: () => true, corsOrigins: async () => [] } },
+        { provide: GatewayService, useValue: { handle: async () => undefined } },
         { provide: ModelListing, useValue: { list: async () => ({ object: 'list', data: [] }), find: async () => null } },
       ],
     }).compile();
@@ -84,10 +86,12 @@ describe('registerGatewayRoutes on a Nest application', () => {
     expect(calls).toContain('authenticate');
   });
 
-  it('a keyed request reaches the stub (503 gateway_unavailable), and an unknown path is the 404 endpoint_not_supported', async () => {
+  it('a keyed request reaches the transcription route (400 without multipart), and an unknown path is the 404 endpoint_not_supported', async () => {
     const headers = { authorization: 'Bearer ok' };
-    const stub = await app.inject({ method: 'POST', url: '/api/gateway/v1/audio/transcriptions', headers });
-    expect(stub.statusCode).toBe(503);
+    // The transcription route is served now (GW-10): without a multipart body it is a 400, not the old 503 stub.
+    const transcription = await app.inject({ method: 'POST', url: '/api/gateway/v1/audio/transcriptions', headers });
+    expect(transcription.statusCode).toBe(400);
+    expect(transcription.json().error.localai_code).toBe('LAI-GW-001');
     const models = await app.inject({ method: 'GET', url: '/api/gateway/v1/models', headers });
     expect(models.statusCode).toBe(200);
     expect(models.json()).toEqual({ object: 'list', data: [] });
