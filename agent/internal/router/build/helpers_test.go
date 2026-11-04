@@ -415,10 +415,11 @@ func newHarness(t *testing.T, opts ...hopt) *harness {
 		h.linkAtRestart = append(h.linkAtRestart, target)
 	}
 	h.opts = Options{
-		Root:    root,
-		BuiltBy: "aiagent 0.1.0",
-		Node:    func() config.LlamaBlock { return config.LlamaBlock{Commit: testSHA, Backend: BackendCUDA} },
-		Exec:    h.exec,
+		Root:      root,
+		LocalNVCC: filepath.Join(root, "no-cuda", "bin", "nvcc"),
+		BuiltBy:   "aiagent 0.1.0",
+		Node:      func() config.LlamaBlock { return config.LlamaBlock{Commit: testSHA, Backend: BackendCUDA} },
+		Exec:      h.exec,
 		Lookup: func(name string) (string, error) {
 			if h.tools[name] {
 				return "/usr/bin/" + name, nil

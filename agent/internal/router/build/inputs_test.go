@@ -3,6 +3,8 @@ package build
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -257,5 +259,32 @@ func TestBuildIDOf(t *testing.T) {
 	}
 	if got := BuildIDOf("abc1234", "cpu"); got != "abc1234-cpu" {
 		t.Errorf("short sha: %q", got)
+	}
+}
+
+// A toolkit installed by NVIDIA's own installer lives in /usr/local/cuda, which is not on the fixed PATH:
+// the build finds it there and tells cmake where its root is.
+func TestPreflightFindsTheToolkitOfNvidiasInstaller(t *testing.T) {
+	h := newHarness(t)
+	h.tools["nvcc"] = false
+	nvcc := filepath.Join(h.root, "cuda", "bin", "nvcc")
+	h.write(nvcc, "#!/bin/sh\n")
+	if err := os.Chmod(nvcc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h.opts.LocalNVCC = nvcc
+	tools, e := h.manager().Preflight("cuda")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if tools.NVCC != nvcc {
+		t.Fatalf("NVCC = %q, want %q", tools.NVCC, nvcc)
+	}
+	plan := Plan{SourceDir: "/s", BuildDir: "/b"}.WithLocalCuda(nvcc)
+	joined := strings.Join(plan.ConfigureArgs, " ")
+	for _, want := range []string{"-DCUDAToolkit_ROOT=" + filepath.Join(h.root, "cuda"), "-DCMAKE_CUDA_COMPILER=" + nvcc} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("configure args lack %s: %s", want, joined)
+		}
 	}
 }

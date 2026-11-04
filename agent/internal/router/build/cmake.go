@@ -35,6 +35,27 @@ func Prerequisites(backend string) []Tool {
 	return tools
 }
 
+// localCudaRoot is where NVIDIA's installer puts the toolkit; localCudaNVCC is its compiler.
+const localCudaNVCC = "/usr/local/cuda/bin/nvcc"
+
+func (m *Manager) localNVCC() string {
+	if m.opt.LocalNVCC != "" {
+		return m.opt.LocalNVCC
+	}
+	return localCudaNVCC
+}
+
+// WithLocalCuda returns the plan told where the toolkit is, for a compiler that is not under /usr
+// (cmake looks for the headers and libraries relative to the compiler's own directory).
+func (p Plan) WithLocalCuda(nvcc string) Plan {
+	p.CMakeFlags = append(append([]string{}, p.CMakeFlags...),
+		"-DCUDAToolkit_ROOT="+filepath.Dir(filepath.Dir(nvcc)),
+		"-DCMAKE_CUDA_COMPILER="+nvcc,
+	)
+	p.ConfigureArgs = append([]string{"-S", p.SourceDir, "-B", p.BuildDir, "-G", "Ninja"}, p.CMakeFlags...)
+	return p
+}
+
 // Tools are the absolute paths of the programs a build runs, resolved once at the start from the
 // fixed PATH (llama-router.md section 4.10, implementation note 2).
 type Tools struct {
@@ -49,6 +70,12 @@ func (m *Manager) Preflight(backend string) (Tools, *Error) {
 	seen := map[string]bool{}
 	for _, tool := range Prerequisites(backend) {
 		path, err := m.opt.Lookup(tool.Name)
+		if err != nil && tool.Name == "nvcc" {
+			// NVIDIA's own installer puts the toolkit in /usr/local/cuda, which is not on the fixed PATH.
+			if fi, serr := m.opt.FS.Stat(m.localNVCC()); serr == nil && fi.Mode().IsRegular() {
+				path, err = m.localNVCC(), nil
+			}
+		}
 		if err != nil {
 			missing = append(missing, tool.Name)
 			if !seen[tool.Package] {
