@@ -37,9 +37,9 @@ import (
 //     result and writes the final file itself (atomic write), so a read-only or vanishing drive never
 //     leaves a half-written file and kiwix-manage never needs to write on a drive. A per-root library is
 //     the same output with the root's own prefix turned into a relative path.
-//   - This code never starts, stops or restarts localai-kiwix: kiwix-serve runs with --monitorLibrary and
-//     reloads the file. The empty-library start/stop and the open-file check after an eject belong to the
-//     health supervisor.
+//   - Library itself never starts, stops or restarts localai-kiwix: kiwix-serve runs with
+//     --monitorLibrary and reloads the file. The empty and non-empty transitions and the open-file check
+//     after an eject are Service's (service.go, units.go).
 
 const (
 	// LibraryFile is the name of a library file.
@@ -95,6 +95,8 @@ type Library struct {
 	Alerts AlertSink
 	// Log is the logger; default slog.Default.
 	Log *slog.Logger
+	// Status, when set, receives the books of every good merged run (the health probe reads it).
+	Status *Status
 
 	mu sync.Mutex
 	// last remembers the input of the last successful build per target, so an unchanged set of ZIMs
@@ -112,6 +114,8 @@ type Result struct {
 	Skipped []string
 	// Empty: the merged library has no books.
 	Empty bool
+	// List is the books of the merged library (without the skipped ones), for GET /services.
+	List []BookRef
 }
 
 // RootResult is what RegenerateRoot did.
@@ -158,6 +162,22 @@ type zim struct {
 	name    string // source.book, or the item id
 	sortKey string
 	size    int64
+	itemID  string // the catalog content id
+	rootID  string
+}
+
+func bookRefs(zs []zim, skipped []string) []BookRef {
+	skip := map[string]bool{}
+	for _, p := range skipped {
+		skip[p] = true
+	}
+	out := make([]BookRef, 0, len(zs))
+	for _, z := range zs {
+		if !skip[z.path] {
+			out = append(out, BookRef{ContentID: z.itemID, Name: z.name, Root: z.rootID})
+		}
+	}
+	return out
 }
 
 // collect returns the ZIMs of every kiwix item, one per book name (newest wins), sorted by path.
@@ -189,7 +209,7 @@ func (l *Library) collect(roots []ark.Root, onRoot string) []zim {
 				if name == "" {
 					name = id
 				}
-				z := zim{path: c.Files[i], name: name, sortKey: c.Manifest.SortKey, size: fi.Size()}
+				z := zim{path: c.Files[i], name: name, sortKey: c.Manifest.SortKey, size: fi.Size(), itemID: id, rootID: c.RootID}
 				if cur, ok := byName[name]; !ok || z.sortKey > cur.sortKey {
 					byName[name] = z
 				}
@@ -226,7 +246,8 @@ func (l *Library) Regenerate(ctx context.Context) (Result, error) {
 	fp := fingerprint(zs)
 	if cur, ok := l.last[dst]; ok && cur == fp {
 		if _, err := os.Stat(dst); err == nil {
-			res.Books = len(zs)
+			res.Books, res.List = len(zs), bookRefs(zs, nil)
+			l.Status.Set(res.List)
 			l.alertState(res)
 			return res, nil
 		}
@@ -246,6 +267,8 @@ func (l *Library) Regenerate(ctx context.Context) (Result, error) {
 	res.Written, res.Skipped = true, skipped
 	res.Books = len(zs) - len(skipped)
 	res.Empty = res.Books == 0
+	res.List = bookRefs(zs, skipped)
+	l.Status.Set(res.List)
 	l.log().Info("the merged library was rebuilt", "books", res.Books, "skipped", len(skipped))
 	l.alertState(res)
 	return res, nil
