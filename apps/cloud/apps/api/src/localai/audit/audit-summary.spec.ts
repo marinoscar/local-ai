@@ -1,3 +1,5 @@
+import { AUDIT_NODE_CREDENTIAL_REVOKED, AUDIT_NODE_RETIRED, AUDIT_NODE_UPDATED } from '../nodes/nodes-admin.service';
+import { AUDIT_NODE_TAILNET_REVEALED } from '../nodes/lab-nodes.service';
 import { AUDIT_CHECKLIST_UPDATED } from '../wizard/checklist.service';
 import { AUDIT_NODE_CREATED, AUDIT_NODE_CREDENTIAL_MINTED } from '../wizard/wizard.service';
 import { AUDIT_NODE_BINDING_REFUSED, AUDIT_NODE_ENROLLED } from '../node-link/binding.guard';
@@ -20,6 +22,10 @@ describe('the known audit actions', () => {
 
   it('lists every action the code writes today (their exported constants)', () => {
     const written = [
+      AUDIT_NODE_UPDATED,
+      AUDIT_NODE_RETIRED,
+      AUDIT_NODE_CREDENTIAL_REVOKED,
+      AUDIT_NODE_TAILNET_REVEALED,
       AUDIT_NODE_CREATED,
       AUDIT_NODE_CREDENTIAL_MINTED,
       AUDIT_CHECKLIST_UPDATED,
@@ -63,6 +69,9 @@ describe('describeAudit: summary and link per action', () => {
     ['node updated lists field names, never values', row('localai.node.updated', 'localai_node', 'ai-n3', { tailnetIp: '<set>', publicHost: 'ai-n3.example.test' }), 'Changed tailnetIp, publicHost on ai-n3', '/lab/nodes/ai-n3'],
     ['node updated without field names', row('localai.node.updated', 'localai_node', 'ai-n3', {}), 'Changed settings of ai-n3', '/lab/nodes/ai-n3'],
     ['node retired', row('localai.node.retired', 'localai_node', 'ai-n3', {}), 'Retired node ai-n3', '/lab/nodes/ai-n3'],
+    ['node retired, commands cancelled', row('localai.node.retired', 'localai_node', 'ai-n3', { cancelledCommands: 2 }), 'Retired node ai-n3, 2 queued commands cancelled', '/lab/nodes/ai-n3'],
+    ['node retired, one command cancelled', row('localai.node.retired', 'localai_node', 'ai-n3', { cancelledCommands: 1 }), 'Retired node ai-n3, 1 queued command cancelled', '/lab/nodes/ai-n3'],
+    ['node updated (the route shape: values, tailnet as a word)', row('localai.node.updated', 'localai_node', 'ai-n3', { displayName: 'Node Three', gatewayPriority: 50, tailnetIp: '<cleared>' }), 'Changed displayName, tailnetIp, gatewayPriority on ai-n3', '/lab/nodes/ai-n3'],
     ['credential minted (the spec name, tokenPrefix)', row('localai.node.credential_minted', 'localai_node', 'ai-n3', { credentialId: CMD, tokenPrefix: 'nod_ab12cd34' }), 'Created credential nod_ab12cd34 for ai-n3', '/lab/nodes/ai-n3'],
     ['credential minted (the wizard name, credentialPrefix)', row('localai.node.credential_minted', 'localai_node', 'ai-n3', { credentialId: CMD, credentialPrefix: 'nod_ab12cd34' }), 'Created credential nod_ab12cd34 for ai-n3', '/lab/nodes/ai-n3'],
     ['credential revoked', row('localai.node.credential_revoked', 'localai_node', 'ai-n3', { tokenPrefix: 'nod_ab12cd34' }), 'Revoked credential nod_ab12cd34 of ai-n3', '/lab/nodes/ai-n3'],

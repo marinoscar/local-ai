@@ -3,11 +3,11 @@
 // key, state with a mode change, a refused credential; the command plane: request, claim, result, cancel; the catalog:
 // draft, lint, approve), and the rows are then read back ONLY through `GET /api/localai/audit` as the lab admin.
 //
-// The wizard (CLOUD-14) writes node.created, node.credential_minted and checklist.updated: they come from the REAL
-// `POST /api/localai/nodes` and checklist routes. The actions whose writers have not landed on this branch (node
-// updated/retired, credential revoked, the tailnet reveal, the alert acknowledgement, the gateway) are inserted with the
-// exact `targetType` and `meta` shapes of the §3.5 table, so the page is proven against every action the table lists;
-// when those items land, their own flows can replace the inserts.
+// The wizard and node routes (CLOUD-14, CLOUD-12) write node.created, credential_minted, credential_revoked, updated,
+// retired, tailnet_revealed and checklist.updated: they come from the REAL routes on a wizard node. The actions whose
+// writers have not landed on this branch (the alert acknowledgement, the gateway) are inserted with the exact
+// `targetType` and `meta` shapes of the §3.5 table, so the page is proven against every action the table lists; when
+// those items land, their own flows can replace the inserts.
 //
 // What only real SQL proves: the `LIKE` prefix with `_` taken literally, the JSON-path node filter, the time window
 // and offset paging order, and the count.
@@ -102,7 +102,7 @@ async function enrolled(slot: number) {
 const nodeRoute = (node: { workerId: string; token: string }, method: 'GET' | 'POST', path: string, payload?: unknown) =>
   app.inject({ method, url: `/api/nodes/${node.workerId}/localai/${path}`, headers: { authorization: `Bearer ${node.token}`, 'content-type': 'application/json' }, ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }) });
 
-const ui = (method: 'GET' | 'POST' | 'DELETE', url: string, role: Role, payload?: unknown) =>
+const ui = (method: 'GET' | 'POST' | 'DELETE' | 'PATCH', url: string, role: Role, payload?: unknown) =>
   app.inject({ method, url: `/api/localai${url}`, headers: { authorization: `Bearer ${tokens[role]}` }, ...(payload === undefined ? {} : { payload: payload as object }) });
 
 async function audit(query: string, role: Role = 'admin'): Promise<Page> {
@@ -233,18 +233,18 @@ describe('the flows that write audit rows today', () => {
     const created = await ui('POST', '/nodes', 'admin', { nodeId: WIZARD_NODE, displayName: 'Wizard node' });
     expect(created.statusCode).toBe(201);
     expect((await ui('POST', `/nodes/${WIZARD_NODE}/checklist/tailnet`, 'admin', { action: 'mark_done' })).statusCode).toBe(200);
+    // The node routes (CLOUD-12): edit, reveal the tailnet address (audited), replace the credential (minted + revoked), retire.
+    expect((await ui('PATCH', `/nodes/${WIZARD_NODE}`, 'admin', { displayName: 'Wizard node two', gatewayPriority: 50 })).statusCode).toBe(200);
+    expect((await ui('GET', `/nodes/${WIZARD_NODE}?reveal=tailnet`, 'admin')).statusCode).toBe(200);
+    expect((await ui('POST', `/nodes/${WIZARD_NODE}/credential`, 'admin', {})).statusCode).toBe(201);
+    expect((await ui('POST', `/nodes/${WIZARD_NODE}/retire`, 'admin', { confirm: WIZARD_NODE })).statusCode).toBe(200);
   });
 
-  it('inserts the rows of the actions whose writers are not on this branch (updated, retired, revoked, reveal, alert, gateway), in the §3.5 shapes', async () => {
+  it('inserts the rows of the actions whose writers are not on this branch (alert acknowledgement and the gateway), in the §3.5 shapes', async () => {
     const alertId = '4a1e5c2d-9b7f-4d3a-8c6e-1f2a3b4c5d6e';
     seededTargetIds.push(alertId, 'gw-key-1', 'gw-policy-1');
-    const node = (action: string, meta: Prisma.InputJsonObject) => ({ actorUserId: userIds.admin, action, targetType: 'localai_node', targetId: story.nodeId, meta });
     await prisma.auditEvent.createMany({
       data: [
-        node('localai.node.updated', { displayName: 'Node One', tailnetIp: '<set>' }),
-        node('localai.node.retired', {}),
-        node('localai.node.credential_revoked', { credentialId: credentialIds[0], tokenPrefix: 'nod_ab12' }),
-        node('localai.node.tailnet_revealed', {}),
         { actorUserId: userIds.admin, action: 'localai.alert.acknowledged', targetType: 'localai_alert', targetId: alertId, meta: { kind: 'node.stale', nodeId: story.nodeId } },
         { actorUserId: userIds.admin, action: 'localai.gateway.key_created', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12', name: 'Desk laptop' } },
         { actorUserId: userIds.admin, action: 'localai.gateway.key_revoked', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12' } },
@@ -276,9 +276,18 @@ describe('every action of the §3.5 table appears', () => {
     expect(actorOf('localai.node.binding_refused')).toEqual({ kind: 'node', label: `node ${story.nodeId}` });
     expect(actorOf('localai.command.requested')).toEqual({ kind: 'user', label: emails.contributor });
     expect(actorOf('localai.command.settled')).toEqual({ kind: 'user', label: emails.contributor });
-    expect(actorOf('localai.node.updated')).toEqual({ kind: 'user', label: emails.admin });
     const wizard = await auditAll(`${since}&nodeId=${WIZARD_NODE}`);
-    expect(wizard.map((row) => row.action).sort()).toEqual(['localai.checklist.updated', 'localai.node.created', 'localai.node.credential_minted']);
+    expect(wizard.map((row) => row.action).sort()).toEqual([
+      'localai.checklist.updated',
+      'localai.node.created',
+      'localai.node.credential_minted',
+      'localai.node.credential_minted',
+      'localai.node.credential_revoked',
+      'localai.node.credential_revoked',
+      'localai.node.retired',
+      'localai.node.tailnet_revealed',
+      'localai.node.updated',
+    ]);
     for (const row of wizard) expect(row.actor).toEqual({ kind: 'user', label: emails.admin });
   });
 
@@ -303,6 +312,10 @@ describe('every action of the §3.5 table appears', () => {
     const wizardRow = (action: string) => wizard.find((row) => row.action === action)!;
     expect(wizardRow('localai.node.created').summary).toBe(`Added node ${WIZARD_NODE} (${WIZARD_NODE}.marin.cr)`);
     expect(wizardRow('localai.node.credential_minted').summary).toMatch(new RegExp(`^Created credential nod_[0-9a-f]{4} for ${WIZARD_NODE}$`));
+    expect(wizardRow('localai.node.credential_revoked').summary).toMatch(new RegExp(`^Revoked credential nod_[0-9a-f]{4} of ${WIZARD_NODE}$`));
+    expect(wizardRow('localai.node.updated').summary).toBe(`Changed displayName, gatewayPriority on ${WIZARD_NODE}`);
+    expect(wizardRow('localai.node.tailnet_revealed').summary).toBe(`Tailnet address of ${WIZARD_NODE} revealed`);
+    expect(wizardRow('localai.node.retired').summary).toBe(`Retired node ${WIZARD_NODE}`);
     expect(wizardRow('localai.checklist.updated').summary).toBe(`Checklist step tailnet of ${WIZARD_NODE} is now done (mark_done)`);
     for (const row of wizard) expect(row.link).toBe(`/lab/nodes/${WIZARD_NODE}`);
 

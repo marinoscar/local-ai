@@ -156,8 +156,11 @@ function summaryOf(src: AuditRowSource, meta: Record<string, unknown>, node: str
       const fields = changedFields(meta);
       return fields.length > 0 ? `Changed ${fields.join(', ')} on ${nodeLabel}` : `Changed settings of ${nodeLabel}`;
     }
-    case 'localai.node.retired':
-      return `Retired node ${nodeLabel}`;
+    case 'localai.node.retired': {
+      // The retire route writes { cancelledCommands }: the number of queued commands it cancelled.
+      const cancelled = typeof meta.cancelledCommands === 'number' && Number.isInteger(meta.cancelledCommands) && meta.cancelledCommands > 0 ? meta.cancelledCommands : null;
+      return cancelled === null ? `Retired node ${nodeLabel}` : `Retired node ${nodeLabel}, ${cancelled} queued ${cancelled === 1 ? 'command' : 'commands'} cancelled`;
+    }
     case 'localai.node.credential_minted':
       // The wizard writes `credentialPrefix`; the spec's table says `tokenPrefix`: either is read.
       return join(['Created credential', safe(meta.credentialPrefix, TOKEN_PREFIX, 20) ?? safe(meta.tokenPrefix, TOKEN_PREFIX, 20), 'for', nodeLabel]);
