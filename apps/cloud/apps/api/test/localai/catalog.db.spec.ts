@@ -354,6 +354,22 @@ describe('approval', () => {
     expect(approvedAudit[0]).toMatchObject({ actorUserId: ownerId, meta: { supersedes: first.version, notifyNodes: false, nodesNotified: 0 } });
   });
 
+  it('names the approver by display name in the list and in the detail (include and omit combined in real SQL)', async () => {
+    const row = await insertVersion('2099.07.20-1', 'valid', 'named');
+    expect((await admin('POST', `/versions/${row.version}/approve`, {})).statusCode).toBe(200);
+    const owner = await prisma.user.findUniqueOrThrow({ where: { id: ownerId }, select: { displayName: true } });
+    const expected = owner.displayName?.trim() || null;
+
+    const list = (await admin('GET', '/versions')).json() as { data: Array<{ version: string; approvedByName: string | null; status: string }> };
+    expect(list.data.find((item) => item.version === row.version)).toMatchObject({ status: 'approved', approvedByName: expected });
+    // An unapproved row has no approver; no file contents come with the list.
+    expect(list.data.find((item) => item.status === 'valid' || item.status === 'draft')?.approvedByName ?? null).toBeNull();
+    expect(list.data[0]).not.toHaveProperty('files');
+    const detail = (await admin('GET', `/versions/${row.version}`)).json() as { data: { approvedByName: string | null; files: unknown[] } };
+    expect(detail.data.approvedByName).toBe(expected);
+    expect(detail.data.files.length).toBeGreaterThan(0);
+  });
+
   it('keeps exactly one approved row when several valid versions are approved at the same moment', async () => {
     const versions = Array.from({ length: 6 }, (_, i) => `2099.08.01-${i + 1}`);
     for (const version of versions) await insertVersion(version, 'valid', version);

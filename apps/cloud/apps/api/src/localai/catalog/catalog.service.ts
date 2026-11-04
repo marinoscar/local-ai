@@ -21,6 +21,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ArchiveFetchError, archiveUrlFor, CATALOG_ARCHIVE_FETCHER, type CatalogArchiveFetcher } from './archive-fetcher';
 import { bundleSha256 } from './bundle-hash';
 import { LOCALAI_COMMAND_ENQUEUER, type LocalaiCommandEnqueuer } from '../commands/command-enqueuer';
+import { approverNameOf, WITH_APPROVER, type WithApprover } from './catalog-approver';
 import { CatalogSettings } from './catalog-settings';
 import { isCatalogNotifyEligible } from './node-eligibility';
 import { diffCatalogs, type FileDiff } from './catalog-diff';
@@ -64,6 +65,8 @@ export interface CatalogVersionSummary {
   createdById: string | null;
   createdAt: string;
   approvedById: string | null;
+  /** The approver's display name (null when unknown or the user is gone). */
+  approvedByName: string | null;
   approvedAt: string | null;
 }
 
@@ -141,7 +144,7 @@ export class CatalogService {
 
   /** Every version, newest first (by version, not by creation time), without file contents. */
   async list(): Promise<CatalogVersionSummary[]> {
-    const rows = await this.prisma.localaiCatalogVersion.findMany({ omit: { files: true } });
+    const rows = await this.prisma.localaiCatalogVersion.findMany({ omit: { files: true }, include: WITH_APPROVER });
     return rows
       .map((row) => this.summarize(row))
       .sort((a, b) => (isCatalogVersion(a.version) && isCatalogVersion(b.version) ? compareCatalogVersions(b.version, a.version) : 0));
@@ -363,7 +366,7 @@ export class CatalogService {
     }
 
     let supersedes: string | null = null;
-    let approved: LocalaiCatalogVersion;
+    let approved: LocalaiCatalogVersion & WithApprover;
     try {
       approved = await this.prisma.$transaction(async (tx) => {
         const previous = await tx.localaiCatalogVersion.findFirst({ where: { status: 'approved' }, select: { version: true } });
@@ -376,7 +379,7 @@ export class CatalogService {
         });
         if (result.count !== 1) throw new ConflictException({ message: `Catalog ${version} changed while it was being approved.`, details: { reason: 'concurrent_change' } });
         supersedes = previous?.version ?? null;
-        return tx.localaiCatalogVersion.findUniqueOrThrow({ where: { id: row.id } });
+        return tx.localaiCatalogVersion.findUniqueOrThrow({ where: { id: row.id }, include: WITH_APPROVER });
       });
     } catch (error) {
       // Two approvals racing: the loser meets the index. Its transaction rolled back, so nothing changed.
@@ -472,13 +475,13 @@ export class CatalogService {
   // Helpers
   // -------------------------------------------------------------------------------------------------------------
 
-  private async requireRow(version: string): Promise<LocalaiCatalogVersion> {
-    const row = isCatalogVersion(version) ? await this.prisma.localaiCatalogVersion.findUnique({ where: { version } }) : null;
+  private async requireRow(version: string): Promise<LocalaiCatalogVersion & WithApprover> {
+    const row = isCatalogVersion(version) ? await this.prisma.localaiCatalogVersion.findUnique({ where: { version }, include: WITH_APPROVER }) : null;
     if (!row) throw new NotFoundException({ message: `Catalog ${version.slice(0, 40)} was not found.`, details: { reason: 'version_not_found' } });
     return row;
   }
 
-  private summarize(row: Omit<LocalaiCatalogVersion, 'files'> & { files?: unknown }): CatalogVersionSummary {
+  private summarize(row: Omit<LocalaiCatalogVersion, 'files'> & { files?: unknown } & WithApprover): CatalogVersionSummary {
     const lint = readLintResult(row.lintResult);
     return {
       id: row.id,
@@ -494,6 +497,7 @@ export class CatalogService {
       createdById: row.createdById,
       createdAt: row.createdAt.toISOString(),
       approvedById: row.approvedById,
+      approvedByName: approverNameOf(row),
       approvedAt: row.approvedAt?.toISOString() ?? null,
     };
   }
