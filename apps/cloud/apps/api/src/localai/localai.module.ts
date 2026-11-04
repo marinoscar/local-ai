@@ -7,7 +7,9 @@ import { LocalaiAuditModule } from './audit/audit.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CommandsModule } from './commands/commands.module';
 import { LocalaiDoctorModule } from './doctor';
+import { GatewayCoreModule } from './gateway/gateway-core.module';
 import { KeysModule } from './gateway/keys/keys.module';
+import { GatewayRoutingModule } from './gateway/routing/routing.module';
 import { LocalaiSettingsModule } from './settings.module';
 import { LabNodesModule } from './nodes/lab-nodes.module';
 import { LocalaiNodesModule } from './nodes/nodes.module';
@@ -15,5 +17,22 @@ import { NodeLinkModule } from './node-link/node-link.module';
 import { VpsModule } from './vps/vps.module';
 import { WizardModule } from './wizard/wizard.module';
 
-@Module({ imports: [NodeLinkModule, LocalaiNodesModule, CatalogModule, CommandsModule, LabNodesModule, LocalaiDoctorModule, WizardModule, AlertsModule, VpsModule, LocalaiAuditModule, LocalaiSettingsModule, KeysModule] })
+@Module({
+  imports: [
+    NodeLinkModule,
+    LocalaiNodesModule,
+    CatalogModule,
+    CommandsModule,
+    LabNodesModule,
+    LocalaiDoctorModule,
+    WizardModule,
+    AlertsModule,
+    VpsModule,
+    LocalaiAuditModule,
+    GatewayRoutingModule,
+    GatewayCoreModule,
+    LocalaiSettingsModule,
+    KeysModule,
+  ],
+})
 export class LocalaiModule {}

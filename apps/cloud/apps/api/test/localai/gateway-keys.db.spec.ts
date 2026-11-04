@@ -6,6 +6,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 
+import { GatewayAuthenticator } from '../../src/localai/gateway/auth';
 import { createApp } from '../../src/main';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
@@ -161,6 +162,19 @@ describe('create, list, patch, revoke on real rows', () => {
     expect(text).not.toContain(token);
     expect(text).not.toContain(token.slice(10));
     expect(text).not.toContain(createHash('sha256').update(token).digest('hex'));
+  });
+});
+
+describe('the /v1 authenticator (GW-03) against a key made here', () => {
+  it('accepts a new key, and refuses it on the very next request after revoke (the cache entry is evicted)', async () => {
+    const authenticator = app.get(GatewayAuthenticator);
+    const created = await api('POST', '/localai/gateway/keys', tokens.contributor, { name: 'cache check' });
+    const { key, token } = data<{ key: KeyJson; token: string }>(created);
+    const ask = () => authenticator.authenticate({ authorization: `Bearer ${token}`, ip: '127.0.0.1' });
+    await expect(ask()).resolves.toMatchObject({ userId: userIds.contributor });
+    await expect(ask()).resolves.toBeDefined(); // served from the 10 s cache
+    expect((await api('DELETE', `/localai/gateway/keys/${key.id}`, tokens.contributor)).statusCode).toBe(200);
+    await expect(ask()).rejects.toMatchObject({ localaiCode: 'LAI-GW-010' });
   });
 });
 

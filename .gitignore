@@ -19,6 +19,8 @@ node_modules/
 *.deb
 /apps/desktop/release/
 /apps/desktop/out/
+/apps/desktop/test-results/
+/apps/desktop/playwright-report/
 
 # Content (models, ZIMs, maps never go in git)
 *.gguf

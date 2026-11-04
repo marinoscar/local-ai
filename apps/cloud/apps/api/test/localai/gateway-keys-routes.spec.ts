@@ -2,7 +2,7 @@
 // (no PostgreSQL): the real guards, the seeded role grants, the real services. The same queries against real SQL are
 // `gateway-keys.db.spec.ts`. Roles: viewer (lab:read), contributor (gateway:use), admin (everything).
 import fastifyCookie from '@fastify/cookie';
-import { Global, Logger, Module } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { SchedulerRegistry } from '@nestjs/schedule';
@@ -11,7 +11,7 @@ import { JobWorker } from '@marinoscar/platform-api/jobs';
 
 import '../../src/platform/registrations';
 import { AppModule } from '../../src/app.module';
-import { GATEWAY_KEY_AUTH_CACHE } from '../../src/localai/gateway/key-auth-cache';
+import { GatewayAuthenticator } from '../../src/localai/gateway/auth';
 import { hashGatewayToken } from '../../src/localai/gateway/gateway.token';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { PrismaSystemService } from '../../src/prisma/prisma-system.service';
@@ -20,11 +20,6 @@ import { prismaMock, resetPrismaMock } from '../ai-conformance/prisma.mock';
 
 const KEY_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1';
 const evict = jest.fn();
-
-/** Stands in for GW-03's auth cache: a global module binding the token, which is how GW-03 is expected to bind it. */
-@Global()
-@Module({ providers: [{ provide: GATEWAY_KEY_AUTH_CACHE, useValue: { evict } }], exports: [GATEWAY_KEY_AUTH_CACHE] })
-class FakeAuthCacheModule {}
 
 function keyRow(userId: string, patch: Record<string, unknown> = {}) {
   return {
@@ -54,7 +49,7 @@ describe('Gateway key routes over HTTP', () => {
   let storedSettings: Record<string, unknown>;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule, FakeAuthCacheModule] })
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
       .useValue(prismaMock)
       .overrideProvider(PrismaSystemService)
@@ -76,6 +71,8 @@ describe('Gateway key routes over HTTP', () => {
     await app.getHttpAdapter().getInstance().ready();
     for (const cronJob of app.get(SchedulerRegistry).getCronJobs().values()) void cronJob.stop();
     jwt = moduleRef.get(JwtService);
+    // Revocation evicts through the /v1 authenticator's own cache (GW-03): observe the call, keep the real class.
+    jest.spyOn(app.get(GatewayAuthenticator), 'evict').mockImplementation((hash: string) => void evict(hash));
   });
 
   afterAll(async () => {

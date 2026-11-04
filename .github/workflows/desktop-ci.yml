@@ -1,5 +1,5 @@
 name: desktop-ci
-# ai-desktop (apps/desktop): typecheck, unit tests, build, then package the deb and AppImage and check the result
+# ai-desktop (apps/desktop): typecheck, unit tests, build, then package the deb and AppImage, check the result and run the offline egress e2e against the packaged app
 # (docs/specs/desktop.md sections 3 and 4.11). It runs only for changes that can affect the desktop app, so a pull
 # request that touches only agent/** does not trigger it. packages/ui is consumed through "file:../../packages/ui",
 # which is why the job checks out the whole repository. The release workflow (desktop-release.yml) arrives with DSK-12.
@@ -44,6 +44,13 @@ jobs:
         run: node scripts/dist.mjs --linux --x64
       - name: Verify the packaged app (asar, fuses, no source maps, no node_modules/electron)
         run: node scripts/packaged-app.mjs verify
+      - name: End-to-end, offline egress (the packaged app under Xvfb, against the fake agent on 127.0.0.1:7070)
+        env:
+          LOCALAI_E2E_NO_SANDBOX: '1'
+          LOCALAI_E2E_EXECUTABLE: release/test-copy/ai-desktop
+        run: |
+          node scripts/packaged-app.mjs test-copy
+          xvfb-run -a npx playwright test tests/e2e/egress.spec.ts
       - name: Inspect the deb (depends, AppArmor profile, install paths)
         run: |
           deb=$(ls release/ai-desktop_*_amd64.deb)

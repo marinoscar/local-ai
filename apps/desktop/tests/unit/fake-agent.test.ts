@@ -21,4 +21,17 @@ describe('fake agent', () => {
     expect((await fetch(`${agent.url}/api/v1/nope`)).status).toBe(404);
     expect(agent.url.startsWith('http://127.0.0.1:')).toBe(true);
   });
+
+  it('serves the egress probe page and records what it reports', async () => {
+    agent = await startFakeAgent({ port: 0 });
+    const page = await fetch(`${agent.url}/egress-probe`);
+    expect(page.headers.get('content-type')).toContain('text/html');
+    expect(page.headers.get('content-security-policy')).toBeNull();
+    const html = await page.text();
+    expect(html).toContain('new WebSocket(');
+    expect(html).toContain('new Image()');
+    const posted = await fetch(`${agent.url}/egress-result`, { method: 'POST', body: JSON.stringify({ fetch: 'failed', img: 'failed', ws: 'failed' }) });
+    expect(posted.status).toBe(204);
+    expect(agent.probeResults).toEqual([{ fetch: 'failed', img: 'failed', ws: 'failed' }]);
+  });
 });
