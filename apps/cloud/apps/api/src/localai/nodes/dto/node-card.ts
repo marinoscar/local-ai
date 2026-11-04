@@ -68,8 +68,42 @@ export type LabSummaryDto = z.infer<typeof LabSummaryDtoSchema>;
 export const LabNodesResponseSchema = z.object({ summary: LabSummaryDtoSchema, nodes: z.array(NodeCardDtoSchema) }).strict();
 export type LabNodesResponse = z.infer<typeof LabNodesResponseSchema>;
 
+/** What the Settings tab shows. The tailnet address is a flag here: the value only ever comes with `?reveal=tailnet`. */
+export interface NodeSettingsDto {
+  publicHost: string;
+  servePattern: 'A' | 'B' | 'none';
+  tailnetMachine: string | null;
+  tailnetIpSet: boolean;
+  gatewayEnabled: boolean;
+  gatewayPriority: number;
+  catalogPin: string | null;
+  profile: string | null;
+  connectivity: string | null;
+}
+
+/** What the Keys tab shows: a hint and prefixes, NEVER key or token material. */
+export interface NodeKeysDto {
+  /** `ab12…9z0f` (first and last four of the llama key), or null before the node reported one. */
+  keyHint: string | null;
+  keyReportedAt: string | null;
+  /** The bound `nod_` credential's display fragment and last use; null when none is bound. */
+  credential: { prefix: string; lastUsedAt: string | null; createdAt: string } | null;
+}
+
 /**
- * The detail payload: the card fields plus the last snapshot. `tailnetIp` exists only when revealed. `keyReceived` is
- * whether the node's llama key has reached the cloud (never the key or its hint): the Add-node wizard polls it.
+ * The detail payload: the card fields plus the last snapshot and what the six tabs need. `tailnetIp` exists only when
+ * revealed. `acceptedTypes` is the command types the node allows (its reported allow list, section 3.6 `register`),
+ * `null` when the cloud does not know (no linked worker row); `modelSizes` maps model id to planned bytes from the
+ * approved catalog (best effort); `agentLatestVersion` is the `localai` setting `agent.latestVersion`.
  */
-export type NodeDetailDto = NodeCardDto & { lastState: unknown; keyReceived: boolean; tailnetIp?: string | null };
+export type NodeDetailDto = NodeCardDto & {
+  lastState: unknown;
+  /** Whether the node's llama key has reached the cloud (never the key or its hint): the Add-node wizard polls it. */
+  keyReceived: boolean;
+  tailnetIp?: string | null;
+  settings: NodeSettingsDto;
+  keys: NodeKeysDto;
+  acceptedTypes: string[] | null;
+  modelSizes: Record<string, number>;
+  agentLatestVersion: string | null;
+};
