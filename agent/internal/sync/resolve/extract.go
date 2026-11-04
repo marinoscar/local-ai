@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/marinoscar/local-ai/agent/internal/fsperm"
 	"io"
 	"io/fs"
 	"os"
@@ -362,7 +363,7 @@ func archiveEntryPath(name string) (string, error) {
 // mkdirBelow creates the directory rel below root, refusing to pass through a link.
 func mkdirBelow(root, rel string) error {
 	full := filepath.Join(root, filepath.FromSlash(rel))
-	if err := os.MkdirAll(full, 0o755); err != nil {
+	if err := fsperm.MkdirAll(full, 0o755); err != nil {
 		return fmt.Errorf("%w: cannot create %s: %w", ErrUnsafeArchive, rel, err)
 	}
 	for p := full; len(p) > len(root); p = filepath.Dir(p) {

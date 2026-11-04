@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
+	"github.com/marinoscar/local-ai/agent/internal/fsperm"
 	"io"
 	"io/fs"
 	"os"
@@ -198,7 +199,7 @@ func writeExtracted(root, rel string, src io.Reader, size int64) error {
 func writeExtractedMode(root, rel string, src io.Reader, size int64, mode os.FileMode) error {
 	full := filepath.Join(root, filepath.FromSlash(rel))
 	dir := filepath.Dir(full)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := fsperm.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("%w: cannot create %s: %w", ErrUnsafeArchive, rel, err)
 	}
 	// Nothing below root may be a symlink: it would redirect a later write.

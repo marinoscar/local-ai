@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/marinoscar/local-ai/agent/internal/fsperm"
 	"io"
 	"os"
 	"path"
@@ -219,7 +220,7 @@ func (r *RepoDocs) Produce(ctx context.Context, req Request) (Product, error) {
 	}
 	tag := "catalog-" + v
 	staging := req.StagingDir()
-	if err := os.MkdirAll(staging, 0o755); err != nil {
+	if err := fsperm.MkdirAll(staging, 0o755); err != nil {
 		return Product{}, fail(CodeVerifyDocs, err, "cannot create the staging directory")
 	}
 
@@ -395,7 +396,7 @@ func (r *RepoDocs) checkCatalog(dir, version, tag string) error {
 // --inventory <path>. It never executes anything from the tarball.
 func (r *RepoDocs) render(ctx context.Context, docsSrc, srcDir, out, catDir, staging string) (*docsrender.Report, error) {
 	tmp := filepath.Join(staging, "tmp")
-	if err := os.MkdirAll(tmp, 0o755); err != nil {
+	if err := fsperm.MkdirAll(tmp, 0o755); err != nil {
 		return nil, fail(CodeVerifyDocs, err, "cannot create the staging directory")
 	}
 	state := r.State

@@ -80,7 +80,7 @@ Non-goals:
 | `ark.yaml`, `kind: kit` | `kit/<subdir>/`, where `<subdir>` comes from [rebuild-kit.md](rebuild-kit.md) §3.2.1 (`kit.LayoutOf`: e.g. `kit/src/`, `kit/git/llama.cpp.git/`, `kit/debs/resolute-amd64/`) |
 | `ark.yaml`, `kind: docs` | `docs/` |
 
-Modes: directories 0755, files 0644, owner root. Services that read content (`localai-llama`, `localai-kiwix`, `localai-whisper`) run as `localai` and only need read access, so numeric uid differences between machines (the `localai` uid differs per node) never matter. On root init the agent `chown`s only the top directory `<root>` to the local `localai` user, not recursively. `.staging/` and `.trash/` are 0700 root.
+Modes: directories 0755, files 0644, owner root. Directories are created through `internal/fsperm.MkdirAll`, which chmods what it created to the exact mode, because `localai-agent.service` runs with `UMask=0027` and a plain `os.MkdirAll(…, 0o755)` would leave 0750 directories the `localai` services cannot enter (found on a real node, issue #319). Services that read content (`localai-llama`, `localai-kiwix`, `localai-whisper`) run as `localai` and only need read access, so numeric uid differences between machines (the `localai` uid differs per node) never matter. On root init the agent `chown`s only the top directory `<root>` to the local `localai` user, not recursively. `.staging/` and `.trash/` are 0700 root.
 
 ### 3.2 `ROOT.json`
 
