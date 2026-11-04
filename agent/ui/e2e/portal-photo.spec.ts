@@ -107,7 +107,7 @@ test("EXIF photo: upright, at most 1024 px, no EXIF or GPS in the request", asyn
   await withVision(page);
   const bodies = await rigChat(page, ["It looks like a ", "gradient."]);
   await page.goto("/portal/photo");
-  await expect(page.getByText("Brain: VLM One")).toBeVisible();
+  await expect(page.locator("#main").getByText("Brain: VLM One")).toBeVisible();
   await choose(page, FIXTURE);
   await expect(page.getByRole("img", { name: "Your photo" })).toBeVisible();
   await page.getByLabel("Your question:").fill("What is this?");
@@ -136,12 +136,12 @@ test("a file over 30 MB and a file that is not an image are LAI-SVC-108", async 
   await withVision(page);
   await page.goto("/portal/photo");
   await choose(page, { name: "big.jpg", mimeType: "image/jpeg", buffer: Buffer.alloc(31 * 1024 * 1024) });
-  await expect(page.getByText("This photo can't be opened.")).toBeVisible();
-  await expect(page.getByText("LAI-SVC-108")).toBeVisible();
+  await expect(page.locator("#main").getByText("This photo can't be opened.")).toBeVisible();
+  await expect(page.locator("#main").getByText("LAI-SVC-108")).toBeVisible();
   await choose(page, FIXTURE);
   await expect(page.getByRole("img", { name: "Your photo" })).toBeVisible();
   await choose(page, { name: "note.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
-  await expect(page.getByText("This photo can't be opened.")).toBeVisible();
+  await expect(page.locator("#main").getByText("This photo can't be opened.")).toBeVisible();
   await expect(page.getByRole("img", { name: "Your photo" })).toHaveCount(0);
 });
 
@@ -162,11 +162,11 @@ test("needs_switch: Switch loads the vision model, then the question goes", asyn
   const bodies = await rigChat(page, ["A leaf."]);
   await page.goto("/portal/photo");
   await expect(
-    page.getByText("The current brain can't see photos. Switch to VLM One? It takes about a minute."),
+    page.locator("#main").getByText("The current brain can't see photos. Switch to VLM One? It takes about a minute."),
   ).toBeVisible();
   await choose(page, FIXTURE);
   await page.getByRole("button", { name: "Switch", exact: true }).click();
-  await expect(page.getByText("Brain: VLM One")).toBeVisible({ timeout: 20000 });
+  await expect(page.locator("#main").getByText("Brain: VLM One")).toBeVisible({ timeout: 20000 });
   expect(loads).toHaveLength(1);
   await page.getByLabel("Your question:").fill("What is this?");
   await page.getByRole("button", { name: "Ask", exact: true }).click();
@@ -180,7 +180,7 @@ test("no vision model installed: the explanation screen says so", async ({ page 
   });
   await page.goto("/portal/photo");
   await expect(
-    page.getByText("No brain that understands photos is installed on this computer."),
+    page.locator("#main").getByText("No brain that understands photos is installed on this computer."),
   ).toBeVisible();
 });
 
@@ -220,7 +220,7 @@ test("follow-ups keep the image in the first message only and stop at four", asy
   expect(JSON.stringify(second[3])).not.toContain("image_url");
   expect(bodies.every((b) => b.messages.filter((m) => JSON.stringify(m).includes("image_url")).length === 1)).toBe(true);
   await expect(box).toBeDisabled();
-  await expect(page.getByText("That is enough questions about this photo.")).toBeVisible();
+  await expect(page.locator("#main").getByText("That is enough questions about this photo.")).toBeVisible();
   await page.getByRole("button", { name: "Ask another question" }).click();
   await expect(box).toBeEnabled();
 });
