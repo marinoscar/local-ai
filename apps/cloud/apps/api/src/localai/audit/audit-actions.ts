@@ -7,6 +7,12 @@
 /** Every `audit_events.action` this page lists starts with this. */
 export const AUDIT_ACTION_PREFIX = 'localai.';
 
+import {
+  AUDIT_GATEWAY_KEY_CREATED,
+  AUDIT_GATEWAY_KEY_REVOKED,
+  AUDIT_GATEWAY_KEY_UPDATED,
+  AUDIT_GATEWAY_POLICY_UPDATED,
+} from '../gateway/gateway.audit';
 import { VPS_AUDIT_ACTIONS } from '../vps/vps.constants';
 
 export interface AuditGroup {
@@ -68,10 +74,10 @@ export const KNOWN_AUDIT_ACTIONS: readonly AuditActionDef[] = [
   { action: 'localai.checklist.updated', label: 'Checklist step updated' },
   { action: 'localai.alert.acknowledged', label: 'Alert acknowledged' },
   ...VPS_ACTION_DEFS,
-  { action: 'localai.gateway.key_created', label: 'Gateway key created' },
-  { action: 'localai.gateway.key_revoked', label: 'Gateway key revoked' },
-  { action: 'localai.gateway.key_updated', label: 'Gateway key changed' },
-  { action: 'localai.gateway.policy_updated', label: 'Gateway policy changed' },
+  { action: AUDIT_GATEWAY_KEY_CREATED, label: 'Gateway key created' },
+  { action: AUDIT_GATEWAY_KEY_REVOKED, label: 'Gateway key revoked' },
+  { action: AUDIT_GATEWAY_KEY_UPDATED, label: 'Gateway key changed' },
+  { action: AUDIT_GATEWAY_POLICY_UPDATED, label: 'Gateway policy changed' },
 ];
 
 /**
