@@ -1,0 +1,219 @@
+// Local AI cloud state (docs/specs/cloud-app.md §3.5). Field names, enums and @map names are permanent.
+// Raw-SQL partial unique indexes (Prisma cannot express them; NEVER add @@unique for these) live only in
+// the add_localai migration and in prisma/platform.lock `rawSqlIndexes`:
+//   localai_catalog_one_approved, localai_commands_active_dedup, localai_alerts_one_active.
+
+// ---------------------------------------------------------------------------
+// Local AI nodes. One row per lab node id (ai-n<N>). Companion of EAB worker_nodes.
+//
+// SEAM GAP (docs/specs/cloud-app.md §3.5): platform-db 0.1.0-next.21 does not mark WorkerNode or
+// NodeCredential "// @extensible", so `extend model` on them is refused (NOT_EXTENSIBLE) and a Prisma
+// relation cannot be declared. worker_node_id and node_credential_id are therefore plain unique uuid
+// columns with NO foreign key; the binding guard (§4.2) re-derives and heals both on every node
+// contact. Once the platform marks the models extensible, add the two `extend model` back-relations
+// and the relations with onDelete: SetNull in a follow-up migration.
+// ---------------------------------------------------------------------------
+enum LocalaiNodePhase {
+  pending
+  enrolled
+  retired
+}
+
+enum LocalaiServePattern {
+  A
+  B
+  none
+}
+
+model LocalaiNode {
+  id               String              @id @default(uuid()) @db.Uuid
+  nodeId           String              @unique @map("node_id")
+  displayName      String              @map("display_name")
+  hardware         String?
+  backend          String?
+  publicHost       String              @map("public_host")
+  servePattern     LocalaiServePattern @map("serve_pattern")
+  tailnetMachine   String?             @map("tailnet_machine")
+  tailnetIp        String?             @map("tailnet_ip")
+  profile          String?
+  mode             String?
+  connectivity     String?
+  agentVersion     String?             @map("agent_version")
+  catalogVersion   String?             @map("catalog_version")
+  catalogPin       String?             @map("catalog_pin")
+  gatewayEnabled   Boolean             @default(true) @map("gateway_enabled")
+  gatewayPriority  Int                 @default(100) @map("gateway_priority")
+  phase            LocalaiNodePhase    @default(pending)
+  workerNodeId     String?             @unique @map("worker_node_id") @db.Uuid
+  nodeCredentialId String?             @unique @map("node_credential_id") @db.Uuid
+  lastState        Json?               @map("last_state") @db.JsonB
+  lastStateAt      DateTime?           @map("last_state_at") @db.Timestamptz
+  lastStateSeq     BigInt?             @map("last_state_seq")
+  keyHint          String?             @map("key_hint")
+  keyReportedAt    DateTime?           @map("key_reported_at") @db.Timestamptz
+  publishChecklist Json                @default("{}") @map("publish_checklist") @db.JsonB
+  createdById      String?             @map("created_by_id") @db.Uuid
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+  retiredAt        DateTime?           @map("retired_at") @db.Timestamptz
+
+  createdBy User?              @relation("LocalaiNodeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  models    LocalaiNodeModel[]
+  commands  LocalaiCommand[]
+  alerts    LocalaiAlert[]
+
+  @@map("localai_nodes")
+}
+
+extend model User {
+  localaiNodesCreated    LocalaiNode[]           @relation("LocalaiNodeCreatedBy")
+  localaiCommands        LocalaiCommand[]        @relation("LocalaiCommandRequestedBy")
+  localaiCatalogCreated  LocalaiCatalogVersion[] @relation("LocalaiCatalogCreatedBy")
+  localaiCatalogApproved LocalaiCatalogVersion[] @relation("LocalaiCatalogApprovedBy")
+}
+
+// ---------------------------------------------------------------------------
+// Per-node model state, projected from each accepted snapshot (§4.3).
+// A table (not only JSONB) because the gateway routing table and the UI query it.
+// ---------------------------------------------------------------------------
+enum LocalaiModelStatus {
+  loaded
+  loading
+  unloaded
+  failed
+}
+
+model LocalaiNodeModel {
+  nodeId          String             @map("node_id") @db.Uuid
+  modelId         String             @map("model_id")
+  present         Boolean
+  verified        Boolean
+  loadable        Boolean
+  loadableReason  String?            @map("loadable_reason")
+  status          LocalaiModelStatus
+  isDefault       Boolean            @default(false) @map("is_default")
+  slots           Int                @default(1)
+  roles           String[]
+  inputModalities String[]           @map("input_modalities")
+  ctx             Int?
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+  node            LocalaiNode        @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@id([nodeId, modelId])
+  @@index([modelId, status])
+  @@map("localai_node_models")
+}
+
+// ---------------------------------------------------------------------------
+// Catalog versions (§4.6). Raw SQL in the migration: at most one approved row.
+//   CREATE UNIQUE INDEX localai_catalog_one_approved ON localai_catalog_versions ((true)) WHERE status = 'approved';
+// ---------------------------------------------------------------------------
+enum LocalaiCatalogStatus {
+  draft
+  invalid
+  valid
+  approved
+  superseded
+}
+
+enum LocalaiCatalogSource {
+  github_release
+  upload
+  editor
+}
+
+model LocalaiCatalogVersion {
+  id           String               @id @default(uuid()) @db.Uuid
+  version      String               @unique
+  source       LocalaiCatalogSource
+  sourceRef    String?              @map("source_ref")
+  status       LocalaiCatalogStatus @default(draft)
+  files        Json                 @db.JsonB
+  bundleSha256 String               @map("bundle_sha256")
+  lintResult   Json?                @map("lint_result") @db.JsonB
+  lintedAt     DateTime?            @map("linted_at") @db.Timestamptz
+  notes        String?
+  createdById  String?              @map("created_by_id") @db.Uuid
+  approvedById String?              @map("approved_by_id") @db.Uuid
+  approvedAt   DateTime?            @map("approved_at") @db.Timestamptz
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  createdBy    User?                @relation("LocalaiCatalogCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy   User?                @relation("LocalaiCatalogApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@map("localai_catalog_versions")
+}
+
+// ---------------------------------------------------------------------------
+// Commands (interim command plane, §4.4). Not EAB jobs until seam SR-1 ships.
+// Raw SQL in the migration:
+//   CREATE UNIQUE INDEX localai_commands_active_dedup ON localai_commands (node_id, dedup_key)
+//     WHERE status IN ('queued','running') AND dedup_key IS NOT NULL;
+// ---------------------------------------------------------------------------
+enum LocalaiCommandStatus {
+  queued
+  running
+  succeeded
+  failed
+  expired
+  cancelled
+}
+
+model LocalaiCommand {
+  id             String               @id @default(uuid()) @db.Uuid
+  nodeId         String               @map("node_id") @db.Uuid
+  type           String
+  params         Json                 @db.JsonB
+  status         LocalaiCommandStatus @default(queued)
+  dedupKey       String?              @map("dedup_key")
+  source         String               @default("ui")
+  requestedById  String?              @map("requested_by_id") @db.Uuid
+  attempts       Int                  @default(0)
+  claimToken     String?              @map("claim_token") @db.Uuid
+  leaseExpiresAt DateTime?            @map("lease_expires_at") @db.Timestamptz
+  claimedAt      DateTime?            @map("claimed_at") @db.Timestamptz
+  expiresAt      DateTime             @map("expires_at") @db.Timestamptz
+  finishedAt     DateTime?            @map("finished_at") @db.Timestamptz
+  result         Json?                @db.JsonB
+  error          Json?                @db.JsonB
+  traceparent    String?
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  node           LocalaiNode          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  requestedBy    User?                @relation("LocalaiCommandRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+
+  @@index([nodeId, status, createdAt])
+  @@index([status, expiresAt])
+  @@map("localai_commands")
+}
+
+// ---------------------------------------------------------------------------
+// Alerts (§4.9). Raw SQL in the migration: one active alert per (node, kind); a lab-wide alert
+// (node_id null) is keyed on the all-zero uuid.
+//   CREATE UNIQUE INDEX localai_alerts_one_active ON localai_alerts
+//     (coalesce(node_id, '00000000-0000-0000-0000-000000000000'::uuid), kind) WHERE state = 'active';
+// ---------------------------------------------------------------------------
+enum LocalaiAlertState {
+  active
+  cleared
+}
+
+model LocalaiAlert {
+  id               String            @id @default(uuid()) @db.Uuid
+  nodeId           String?           @map("node_id") @db.Uuid
+  kind             String
+  code             String
+  severity         String
+  state            LocalaiAlertState @default(active)
+  title            String
+  details          Json?             @db.JsonB
+  firstRaisedAt    DateTime          @default(now()) @map("first_raised_at") @db.Timestamptz
+  lastSeenAt       DateTime          @default(now()) @map("last_seen_at") @db.Timestamptz
+  clearedAt        DateTime?         @map("cleared_at") @db.Timestamptz
+  acknowledgedAt   DateTime?         @map("acknowledged_at") @db.Timestamptz
+  acknowledgedById String?           @map("acknowledged_by_id") @db.Uuid
+  notifiedAt       DateTime?         @map("notified_at") @db.Timestamptz
+  node             LocalaiNode?      @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([state, severity])
+  @@map("localai_alerts")
+}

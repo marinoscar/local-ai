@@ -12,8 +12,9 @@ import {
 } from '@marinoscar/platform-api/manifest';
 
 import { APP_MODEL_OWNERSHIP, APP_USER_OWNED_MODELS } from '../app.ownership';
+import { LOCALAI_MODEL_OWNERSHIP, LOCALAI_USER_OWNED_MODELS } from '../localai/localai.ownership';
 import { PERMISSION_OPTIONS } from './permissions';
 
 registerPlatformPermissions(PERMISSION_OPTIONS);
-registerPlatformUserOwnedModels(APP_USER_OWNED_MODELS);
-registerPlatformModelOwnership(APP_MODEL_OWNERSHIP);
+registerPlatformUserOwnedModels([...APP_USER_OWNED_MODELS, ...LOCALAI_USER_OWNED_MODELS]);
+registerPlatformModelOwnership([...APP_MODEL_OWNERSHIP, ...LOCALAI_MODEL_OWNERSHIP]);

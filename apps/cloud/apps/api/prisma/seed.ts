@@ -11,6 +11,7 @@ import { platformPermissionCatalog } from '@marinoscar/platform-api/manifest';
 import { composeDefaultSystemSettings } from '@marinoscar/platform-api/settings';
 import { platformSeedInputFrom, seedPlatform } from '@marinoscar/platform-db/seed';
 
+import { seedLocalaiNodeSettings } from '../src/localai/localai.seed';
 import { PERMISSION_OPTIONS } from '../src/platform/permissions';
 import { registerSliceSettings } from '../src/platform/slices/register';
 
@@ -26,7 +27,11 @@ async function main(): Promise<void> {
       { permissions: platformPermissionCatalog(PERMISSION_OPTIONS), settings: composeDefaultSystemSettings() as Record<string, unknown> },
       process.env,
     );
-    await seedPlatform(prisma, input, { info: (msg) => console.log(msg) });
+    await seedPlatform(prisma, input, {
+      log: { info: (msg) => console.log(msg) },
+      // The app's own idempotent steps, run after the platform's (each in its own transaction).
+      extras: [seedLocalaiNodeSettings],
+    });
     await seedApp(prisma);
   } finally {
     await prisma.$disconnect();
