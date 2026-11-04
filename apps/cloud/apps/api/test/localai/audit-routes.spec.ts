@@ -12,7 +12,7 @@ import { JobWorker } from '@marinoscar/platform-api/jobs';
 
 import '../../src/platform/registrations';
 import { AppModule } from '../../src/app.module';
-import { KNOWN_AUDIT_ACTIONS } from '../../src/localai/audit/audit-actions';
+import { AUDIT_GROUPS, KNOWN_AUDIT_ACTIONS } from '../../src/localai/audit/audit-actions';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { PrismaSystemService } from '../../src/prisma/prisma-system.service';
 import { clearMockUsers, installBaseMocks, registerMockUser, type FixtureRole } from '../ai-conformance/mock-users';
@@ -248,7 +248,7 @@ describe('Audit routes over HTTP', () => {
       const { data } = response.json() as { data: { actions: Array<{ action: string }>; groups: unknown[]; nodes: Array<{ nodeId: string }>; pageSize: number } };
       expect(data.actions.map((entry) => entry.action)).toEqual(KNOWN_AUDIT_ACTIONS.map((entry) => entry.action));
       expect(data.actions.map((entry) => entry.action)).toContain('localai.node.tailnet_revealed');
-      expect(data.groups).toHaveLength(6);
+      expect(data.groups).toEqual(AUDIT_GROUPS);
       expect(data.nodes.map((node) => node.nodeId)).toEqual(['ai-n2', 'ai-n10']);
       expect(data.pageSize).toBe(50);
     });
