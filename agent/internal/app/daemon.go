@@ -18,6 +18,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/modes"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
+	"github.com/marinoscar/local-ai/agent/internal/svc/kiwix"
 	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
 )
 
@@ -90,7 +91,10 @@ type Daemon struct {
 	modelsDeps modelsapi.Deps
 	models     *modelsapi.Service
 	svcDeps    api.ServicesDeps
-	doctorKick chan struct{} // coalesced requests for a doctor pass (the drill reporter's OnChange)
+
+	kiwixStatus *kiwix.Status // what the last library run found (health probe, GET /services)
+	kiwixKick   kiwixKick     // asks the library worker for a regeneration
+	doctorKick  chan struct{} // coalesced requests for a doctor pass (the drill reporter's OnChange)
 
 	startedCh chan struct{} // closed at step 17
 	gateCh    chan struct{} // closed when step 12 ends

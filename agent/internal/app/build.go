@@ -156,10 +156,13 @@ func (d *Daemon) build(ctx context.Context) error {
 	metrics := health.NewMetrics()
 	d.piper = piper.New(d.piperDeps(metrics))
 	c.Piper = d.piper
+	kiwixSpec := health.KiwixSpec(prober, ports(), func() bool { return blockEnabled(cfg.Get(), "kiwix") })
+	d.kiwixStatus = kiwix.NewStatus()
+	d.kiwixStatus.Attach(kiwixSpec.Probe.(*health.FuncProbe), kiwix.HTTPFetcher{}, func() int { return cfg.Get().Ports.Kiwix })
 	sup, err := health.New(health.Options{
 		Manager: c.Systemd, Publisher: c.Bus, Mode: d.modeName, Metrics: metrics, Clock: clock, Logger: log,
 		Specs: []health.Spec{
-			health.KiwixSpec(prober, ports(), func() bool { return blockEnabled(cfg.Get(), "kiwix") }),
+			kiwixSpec,
 			health.WhisperSpec(prober, ports(), func() bool { return blockEnabled(cfg.Get(), "whisper") }),
 			d.piper.Spec(),
 		},
@@ -359,7 +362,7 @@ func (d *Daemon) build(ctx context.Context) error {
 		return fmt.Errorf("models service: %w", err)
 	}
 	d.svcDeps = api.ServicesDeps{
-		Status: svcView, Actions: c.Controller, Health: sup, Llama: router.NewLlamaHook(c.Orchestrator),
+		Status: svcView, Actions: &kiwixKickActions{ServiceActions: c.Controller, kick: &d.kiwixKick}, Health: sup, Llama: router.NewLlamaHook(c.Orchestrator),
 		Mode: d.modeName, Audit: d.audit, Logger: log,
 	}
 
