@@ -7,9 +7,13 @@
 //   GATEWAY_USAGE_SINK      GW-08: the usage recorder
 //   GATEWAY_STREAM_HANDLER  GW-07: SSE passthrough
 //   UPSTREAM_TRANSPORT      GW-10: tailnet mode
-//   GATEWAY_ATTEMPT_HOOKS / GATEWAY_CANDIDATE_SOURCE  GW-07/GW-09: observe the loop / on-demand load
+//   GATEWAY_ATTEMPT_HOOKS  GW-07: observe the loop
+//   GATEWAY_CANDIDATE_SOURCE  GW-09: the table's source wrapped by the on-demand load (routing/on-demand.ts)
 import { Logger, Module } from '@nestjs/common';
 import { resolveApiVersion } from '@marinoscar/platform-api/host';
+
+import { LOCALAI_COMMAND_ENQUEUER, type LocalaiCommandEnqueuer } from '../commands/command-enqueuer';
+import { CommandEnqueuerModule } from '../commands/command-enqueuer.module';
 
 import { AttemptLoop, TableCandidateSource, type AttemptHooks, type CandidateSource } from './attempts';
 import { GatewayService } from './gateway.service';
@@ -18,6 +22,8 @@ import { GATEWAY_MODEL_RESOLVER } from './model-resolver';
 import { CatalogModelResolver } from './model-resolver.catalog';
 import { GatewayModelsModule } from './models/models.module';
 import { GATEWAY_PROXY_SETTINGS, PrismaProxySettingsReader } from './proxy-settings';
+import { AuditLoadAudit, PrismaActiveLoadReader } from './routing/on-demand.adapters';
+import { ACTIVE_LOAD_READER, OnDemandCandidateSource, type ActiveLoadReader, type LoadAudit } from './routing/on-demand';
 import { NodeKeyProvider } from './routing/node-key.provider';
 import { GatewayRoutingModule } from './routing/routing.module';
 import { RoutingTable } from './routing/routing-table';
@@ -31,7 +37,7 @@ export const GATEWAY_ATTEMPT_HOOKS = Symbol('LOCALAI_GATEWAY_ATTEMPT_HOOKS');
 export const GATEWAY_CANDIDATE_SOURCE = Symbol('LOCALAI_GATEWAY_CANDIDATE_SOURCE');
 
 @Module({
-  imports: [GatewayRoutingModule, GatewayModelsModule],
+  imports: [GatewayRoutingModule, GatewayModelsModule, CommandEnqueuerModule],
   providers: [
     CatalogModelResolver,
     PrismaProxySettingsReader,
@@ -41,10 +47,17 @@ export const GATEWAY_CANDIDATE_SOURCE = Symbol('LOCALAI_GATEWAY_CANDIDATE_SOURCE
     { provide: GATEWAY_USAGE_SINK, useValue: noopUsageSink },
     { provide: GATEWAY_STREAM_HANDLER, useValue: streamingNotAvailable },
     { provide: GATEWAY_ATTEMPT_HOOKS, useValue: {} satisfies AttemptHooks },
+    PrismaActiveLoadReader,
+    AuditLoadAudit,
+    { provide: ACTIVE_LOAD_READER, useExisting: PrismaActiveLoadReader },
     {
+      // GW-09: the table's own source (steps 1, 2 and 4) wrapped by step 3, the on-demand load.
       provide: GATEWAY_CANDIDATE_SOURCE,
-      inject: [RoutingTable],
-      useFactory: (table: RoutingTable): CandidateSource => new TableCandidateSource(table),
+      inject: [RoutingTable, LOCALAI_COMMAND_ENQUEUER, ACTIVE_LOAD_READER, AuditLoadAudit],
+      useFactory: (table: RoutingTable, commands: LocalaiCommandEnqueuer, loads: ActiveLoadReader, audit: LoadAudit): CandidateSource => {
+        const logger = new Logger('GatewayOnDemand');
+        return new OnDemandCandidateSource({ inner: new TableCandidateSource(table), routing: table, commands, loads, audit, log: { warn: (line) => logger.warn(line) } });
+      },
     },
     { provide: UPSTREAM_TRANSPORT, useFactory: (): UpstreamTransport => createUpstreamTransport({ version: resolveApiVersion(__dirname) }) },
     {

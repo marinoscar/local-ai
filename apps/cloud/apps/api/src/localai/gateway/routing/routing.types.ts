@@ -81,6 +81,11 @@ export interface RoutableNode {
 export interface LoadableCandidate extends SelectedCandidate {
   /** Models of the node whose status is `loaded`, each with its live inflight count (never evict a busy one). */
   loadedOnNode: ReadonlyArray<{ modelId: string; inflight: number }>;
+  /**
+   * `llama.models_max` of the node's last snapshot: loading one more model unloads the others when
+   * `loadedOnNode.length + 1 > modelsMax`. Null when the snapshot carried none (the guard then assumes 1).
+   */
+  modelsMax: number | null;
 }
 
 /** The settings of the table (`gateway.queueFactor`, gateway.md section 3.7). */
