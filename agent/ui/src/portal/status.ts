@@ -29,6 +29,7 @@ export interface Model {
   id: string;
   display_name: string;
   vision?: boolean;
+  roles?: string[];
 }
 
 export interface Alert {

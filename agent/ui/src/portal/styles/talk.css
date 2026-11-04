@@ -1,0 +1,125 @@
+/* Talk screen (survival-portal.md section 4.1.4). Classes only: the CSP has no 'unsafe-inline'. */
+
+.talk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  margin-bottom: 16px;
+}
+.talk-bar .screen-title {
+  margin: 0 auto 0 0;
+}
+.talk-voice,
+.talk-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+.talk-voice select {
+  font: inherit;
+  min-height: 48px;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--fg);
+  padding: 0 10px;
+}
+.talk-auto input {
+  width: 28px;
+  height: 28px;
+}
+
+.talk-mic {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin: 12px 0 24px;
+}
+.mic {
+  font: inherit;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: min(100%, 26rem);
+  min-height: 11rem;
+  padding: 16px;
+  border: 4px solid var(--primary);
+  border-radius: 18px;
+  background: var(--panel);
+  color: var(--primary);
+  cursor: pointer;
+}
+.mic:hover:not(:disabled) {
+  background: var(--info-bg);
+}
+.mic:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+.mic-recording {
+  border-color: var(--bad);
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+.mic-text {
+  font-size: 1.1rem;
+}
+.talk-meter {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-weight: 700;
+}
+.talk-meter meter {
+  width: 14rem;
+  height: 1.4rem;
+}
+.talk-timer {
+  font-variant-numeric: tabular-nums;
+}
+
+.talk-line {
+  margin: 0 0 22px;
+}
+.talk-label {
+  margin: 0 0 4px;
+  font-weight: 700;
+}
+.talk-text,
+.talk-answer {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.45;
+}
+.talk-edit {
+  width: 100%;
+  font: inherit;
+  font-size: 1.35rem;
+  padding: 10px;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--fg);
+}
+.talk-count {
+  align-self: center;
+  font-weight: 700;
+}
+.talk-error {
+  margin: 12px 0 24px;
+  padding: 16px 20px;
+  border: 4px solid var(--bad);
+  border-radius: 14px;
+  background: var(--bad-bg);
+}
+.talk-status {
+  min-height: 1.6rem;
+  margin: 8px 0 0;
+  font-weight: 700;
+}
