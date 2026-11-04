@@ -479,6 +479,14 @@ The browser Geolocation API is **never** used (offline it fails, and online it s
 ```
 `source` ∈ `gps | manual | none`. A GPS fix older than 60 s is reported as `fix: "stale"`. A GPS source configured but silent for 2 minutes raises `LAI-SVC-033` (info, shown only on the map screen). The location never leaves the node (it is not in heartbeats or cloud reports).
 
+Implementation details (`internal/maps`, `internal/maps/gps`):
+- A stale GPS fix is still `source: gps, fix: stale` (the UI then offers the manual pin); a fresh GPS fix wins over a manual one; the manual location is used only when there has never been a GPS fix in this run. With `maps.gps: off` the GPS is ignored.
+- `accuracy_m` is `eph` (or the larger of `epx`/`epy`) from gpsd, and `HDOP × 5` (rounded) from an NMEA `GGA` sentence; `null` when the receiver gives none. `fix` is `3d` from a gpsd mode 3 or a `GGA` with at least 4 satellites and an altitude, else `2d`. `at` is the agent's clock when the fix arrived.
+- The response carries `"code": "LAI-SVC-033"` while a configured GPS is silent (omitted otherwise), so the map screen can show the hint; the same condition is the non-fast doctor check `svc.gps`. In `auto` a GPS counts as configured only once gpsd answered or a recognised receiver opened, so a laptop without a receiver never raises it.
+- `PUT` also accepts `{"text": "9.93, -84.08"}` or `{"text": "9°55'48\"N 84°4'48\"W"}` (decimal or DMS, either order) instead of `lat`/`lon`; giving both is a 400.
+- `maps.gps` that does not parse (`auto | off | gpsd | nmea:/dev/tty{ACM,USB,S,AMA}N`) is read as `off` so a typo never opens a serial port the owner did not choose. An explicit `nmea:<device>` is opened even if it is not on the allowlist (the owner chose it); `auto` only ever opens allowlisted receivers.
+- The viewer UI (button, long-press, coordinate entry) belongs to the viewer issue (#108); this issue ships the agent side.
+
 ### 4.5 Vision
 
 Vision is a normal LLM served by the router. This spec only fixes the requirements:
