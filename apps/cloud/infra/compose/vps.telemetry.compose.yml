@@ -1,0 +1,101 @@
+# GENERATED from @marinoscar/platform-infra@0.1.0-next.21 (telemetry) — do not edit; extend through infra/otel/app-collector.yaml or a compose overlay
+# Source of truth: @marinoscar/platform-infra/telemetry/compose/vps.telemetry.compose.yml; re-materialise with `npx platform-infra sync`
+# =============================================================================
+# Docker Compose - VPS Overrides for the Telemetry Stack
+# =============================================================================
+# Applied LAST, and only when the deployment enabled the `observability` group:
+#
+#   docker compose \
+#     -f base.compose.yml \
+#     -f prod.compose.yml \
+#     -f telemetry.compose.yml \
+#     -f vps.compose.yml \
+#     -f vps.telemetry.compose.yml \
+#     up -d
+#
+# The CLI's `deploy` builds that list itself (packages/platform-cli/src/engine/deploy/compose-files.ts,
+# from the @marinoscar/platform-infra/telemetry manifest) from the groups
+# recorded at install time; nobody types it by hand.
+#
+# WHY A SEPARATE FILE, not more entries in vps.compose.yml: vps.compose.yml is
+# applied to EVERY VPS deployment, including those without telemetry. A
+# service block there for `greptimedb` or `otel-collector` would be a
+# service with no image, and `docker compose config` fails the whole stack
+# with "has neither an image nor a build context". The hardening has to travel
+# with the services it hardens.
+#
+# Same rule as vps.compose.yml: NOTHING IN THE STACK MAY BE PUBLISHED ON A
+# PUBLIC INTERFACE. telemetry.compose.yml publishes development ports on
+# 0.0.0.0; every one of them is replaced here.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector - no host ports at all
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    # The API reaches the collector over the compose network
+    # (http://otel-collector:4318). Nothing outside the stack sends OTLP to a
+    # VPS deployment, so there is nothing to publish -- not even on loopback.
+    #
+    # `!override` with an empty list REPLACES telemetry.compose.yml's
+    # "4327:4317" / "4328:4318"; a plain `ports:` would MERGE and keep them.
+    ports: !override []
+    # Same /hostfs mount as telemetry.compose.yml (compose merges volumes by
+    # container path, so this REPLACES that entry), plus `rslave`: a disk
+    # mounted on the host after the collector started then appears under
+    # /hostfs too. Without it the filesystem scraper would statfs the empty
+    # directory underneath and report the ROOT disk's usage under the new
+    # mount point, and a disk unmounted on the host would stay pinned busy by
+    # the collector's private copy until it restarted. A VPS's / is a shared
+    # mount (systemd), which `rslave` requires.
+    volumes:
+      - /:/hostfs:ro,rslave
+    # Uptime and certificate expiry of the PUBLIC origin (issue #599): the
+    # httpcheck receiver's third target, through DNS, the shared host proxy
+    # and the certificate it serves, exactly as a browser arrives. REPLACES
+    # telemetry.compose.yml's development value (compose merges environment
+    # by key). APP_URL is derived by the CLI's `deploy` as https://<domain>; the
+    # fallback only keeps a hand-built .env without it from failing `up`, and
+    # then probes the stack's own nginx instead. Note that the collector
+    # reaches the domain from INSIDE the host (NAT hairpin): a network that
+    # blocks that shows up as httpcheck_error rows for this URL alone.
+    environment:
+      - UPTIME_PUBLIC_URL=${APP_URL:-http://nginx}/api/health/live
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # GreptimeDB - PostgreSQL wire protocol on loopback only
+  # ---------------------------------------------------------------------------
+  greptimedb:
+    # Only the PostgreSQL wire protocol is published, and only on 127.0.0.1:
+    # an analyst reaches it through an SSH tunnel
+    # (`ssh -L 14003:127.0.0.1:14003 <host>`), then logs in as
+    # GREPTIME_READER_USER. The HTTP API / SQL dashboard (4000) is NOT
+    # published: it accepts the same credentials over plain HTTP, and the
+    # tunnelled psql session already covers the read use case.
+    #
+    # Verify with `docker compose ... config`: ONE entry, host_ip 127.0.0.1.
+    ports: !override
+      - "127.0.0.1:${GREPTIME_BIND_PG_PORT:-14003}:4003"
+    restart: unless-stopped
+    # telemetry.compose.yml already caps GreptimeDB at 1G; restated here so the
+    # production limit does not silently follow a development tweak there.
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

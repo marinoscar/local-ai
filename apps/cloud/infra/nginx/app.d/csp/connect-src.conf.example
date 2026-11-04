@@ -1,0 +1,20 @@
+# =============================================================================
+# Example: allow one more connect-src source (APP-OWNED, never applied as is)
+# =============================================================================
+# Copy this file to connect-src.conf (the .example suffix keeps it inert) and
+# edit the value. The file is the BODY of a map keyed on the request path
+# (see the "App extension of the policy" block in ../../csp.conf).
+#
+# The default policy already allows connect-src 'self' https:, so the usual
+# reason to add a source is a WebSocket host (wss:) or a plain-http one. The
+# value is APPENDED to the directive, so it starts with a space.
+#
+# Other files work the same way, one `default` per directive:
+#   img-src*.conf, media-src*.conf, font-src*.conf, style-src*.conf
+#   extra*.conf   whole new directives, value starts with "; " (frame-src ...)
+#
+# There is deliberately no script-src include: widening script execution is an
+# edit of the policy itself, not an include.
+# =============================================================================
+
+default " wss://realtime.example.com";

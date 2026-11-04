@@ -1,0 +1,26 @@
+-- =============================================================================
+-- `database_backup_runs.pg_dump_version` (issue #352, epic #345)
+-- =============================================================================
+-- The fourth member of this table's audit block: WHICH `pg_dump` wrote the
+-- archive.
+--
+-- It was worth nothing while the dump could only run in the API process — the
+-- client is whatever `apps/api/Dockerfile` installed, the same for every run,
+-- and the node-credential preflight already reports it. #352 makes the dump
+-- claimable by a worker node, and on that path the binary lives on a machine
+-- this deployment may not own and cannot inspect after the fact. Without this
+-- column, nothing anywhere records which client produced the file, and
+-- "`pg_restore` cannot read an archive written by a NEWER `pg_dump`" becomes a
+-- fact an operator discovers during a restore rather than one they can check
+-- before starting it (see docs/runbooks/postgres-client-version.md).
+--
+-- Nullable, no default, NO BACKFILL. Every existing row was written by a
+-- client nobody recorded, and inventing this deployment's CURRENT client
+-- version for them would be a lie that reads exactly like evidence. NULL means
+-- "not recorded", which is the truth for every run taken before this migration
+-- and for any run whose `pg_dump --version` could not be read — the same
+-- "warn and proceed" rule the other three audit columns already follow.
+-- =============================================================================
+
+-- AlterTable
+ALTER TABLE "database_backup_runs" ADD COLUMN "pg_dump_version" TEXT;

@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Typecheck, test, build, platform checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: local_ai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # The API builds its connection from POSTGRES_*; it runs as the ordinary
+      # role created below, because row-level security is inert for a superuser.
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: local_ai_test
+      POSTGRES_SSL: 'false'
+      JWT_SECRET: ci-jwt-secret-not-a-real-secret-0000000000
+      COOKIE_SECRET: ci-cookie-secret-not-a-real-secret
+      GOOGLE_CLIENT_ID: ci-google-client-id
+      GOOGLE_CLIENT_SECRET: ci-google-client-secret
+      GOOGLE_CALLBACK_URL: http://127.0.0.1:3000/api/auth/google/callback
+      INITIAL_ADMIN_EMAIL: admin@example.test
+      OTEL_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Create the ordinary application role
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h 127.0.0.1 -U postgres -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 <<SQL
+          CREATE ROLE app LOGIN PASSWORD 'postgres' NOSUPERUSER NOBYPASSRLS CREATEDB CREATEROLE;
+          ALTER DATABASE "$POSTGRES_DB" OWNER TO app;
+          ALTER SCHEMA public OWNER TO app;
+          SQL
+
+      - run: npm ci
+
+      # The platform's lock and drift checks: installed migrations, the
+      # composed schema and the infra fragments equal what the packages ship.
+      - run: npm run platform:check
+
+      - run: npm run prisma:generate --workspace=api
+      - run: npm run prisma:validate --workspace=api
+      - run: npm run typecheck
+      # Unit tests, runPlatformConformance(), web and CLI suites.
+      - run: npm test
+      - run: npm run build
+
+      # The db tier: the whole app against the migrated, seeded database.
+      - run: npm run prisma:migrate --workspace=api
+      - run: npm run prisma:seed --workspace=api
+      - run: npm run test:db --workspace=api

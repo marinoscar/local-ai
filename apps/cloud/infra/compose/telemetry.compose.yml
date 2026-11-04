@@ -1,0 +1,161 @@
+# GENERATED from @marinoscar/platform-infra@0.1.0-next.21 (telemetry) — do not edit; extend through infra/otel/app-collector.yaml or a compose overlay
+# Source of truth: @marinoscar/platform-infra/telemetry/compose/telemetry.compose.yml; re-materialise with `npx platform-infra sync`
+# =============================================================================
+# Docker Compose - Telemetry Stack (OpenTelemetry Collector + GreptimeDB)
+# =============================================================================
+# Usage (run from infra/compose folder):
+#   docker compose -f base.compose.yml -f dev.compose.yml [-f devdb.compose.yml] -f telemetry.compose.yml up
+#
+# Services:
+#   - OpenTelemetry Collector: receives OTLP from the API, redacts credential
+#     headers, and writes traces, metrics and logs into GreptimeDB
+#   - GreptimeDB (standalone): stores the telemetry; the API reads it back over
+#     the PostgreSQL wire protocol for the telemetry explorer and AI assistant
+#
+# Host ports (development):
+#   - http://localhost:14000/dashboard   GreptimeDB HTTP API and SQL dashboard
+#   - localhost:14003                    PostgreSQL wire protocol (psql, BI
+#                                        tools; log in as GREPTIME_READER_USER)
+#   - localhost:4327 / localhost:4328    collector OTLP gRPC / HTTP
+#
+# Accounts (static user provider, all from .env):
+#   - GREPTIME_WRITER_USER  collector ingest only
+#   - GREPTIME_READER_USER  read-only: explorer, AI assistant, BI tools
+#   - GREPTIME_ADMIN_USER   DDL: used only to set retention (TTL)
+#
+# Passwords have NO compose-level default, unlike the old Uptrace overlay: a
+# missing GREPTIME_*_PASSWORD fails `docker compose` with a message naming the
+# key, rather than silently booting a telemetry store with a well-known
+# password. .env.example (and therefore the CLI's `init`) supplies development
+# placeholders, so a fresh local setup still starts without extra steps.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # API - enable OTEL export and point telemetry reads at GreptimeDB
+  # ---------------------------------------------------------------------------
+  api:
+    environment:
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - GREPTIME_HOST=${GREPTIME_HOST:-greptimedb}
+      - GREPTIME_PG_PORT=${GREPTIME_PG_PORT:-4003}
+      - GREPTIME_DB=${GREPTIME_DB:-public}
+      - GREPTIME_READER_USER=${GREPTIME_READER_USER:-reader}
+      - GREPTIME_READER_PASSWORD=${GREPTIME_READER_PASSWORD:?set GREPTIME_READER_PASSWORD in infra/compose/.env}
+      - GREPTIME_ADMIN_USER=${GREPTIME_ADMIN_USER:-admin}
+      - GREPTIME_ADMIN_PASSWORD=${GREPTIME_ADMIN_PASSWORD:?set GREPTIME_ADMIN_PASSWORD in infra/compose/.env}
+    depends_on:
+      - otel-collector
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.145.0
+    # TWO config files, merged in this order: the platform base, then the
+    # app-owned overlay. Maps merge; lists are REPLACED, so an overlay adds a
+    # new named pipeline (metrics/app) rather than restating a platform one.
+    # infra/otel/app-collector.yaml ships behaviour-neutral (comments only)
+    # and documents the rules; `platform-infra sync` creates it once and never
+    # overwrites it.
+    command: ["--config=/etc/otelcol/platform.yaml", "--config=/etc/otelcol/app.yaml"]
+    volumes:
+      - ../otel/otel-collector-config.yaml:/etc/otelcol/platform.yaml:ro
+      - ../otel/app-collector.yaml:/etc/otelcol/app.yaml:ro
+      # Host metrics (issue #597): the hostmetrics receiver reads the host's
+      # /proc, /sys and mount table here (root_path: /hostfs), and the host's
+      # /etc/hostname for host.name. Read-only; the collector still runs as
+      # its image's unprivileged user (10001), with no privileged mode, no
+      # pid: host and no Docker socket. Propagation is left at Docker's
+      # default here because `rslave` fails outright on a host whose / is a
+      # private mount (Docker Desktop, some VMs); vps.telemetry.compose.yml
+      # adds it for VPS hosts, where / is shared.
+      - /:/hostfs:ro
+    # Hides the host's /run beneath /hostfs, and with it /run/docker.sock and
+    # /run/containerd: the hostmetrics scrapers never read it, and user 10001
+    # being outside the docker group should not be the only thing between
+    # the collector and the socket.
+    tmpfs:
+      - /hostfs/run:size=1m,mode=0555
+    environment:
+      - GREPTIME_DB=${GREPTIME_DB:-public}
+      - GREPTIME_WRITER_USER=${GREPTIME_WRITER_USER:-writer}
+      - GREPTIME_WRITER_PASSWORD=${GREPTIME_WRITER_PASSWORD:?set GREPTIME_WRITER_PASSWORD in infra/compose/.env}
+      # PostgreSQL metrics (issue #598): the database the API uses, with the
+      # same defaults as base.compose.yml's api block, so the collector
+      # scrapes whatever server the application is actually talking to.
+      - POSTGRES_HOST=${POSTGRES_HOST:-db}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-appdb}
+      - POSTGRES_SSL=${POSTGRES_SSL:-false}
+      # A least-privilege pg_monitor role when .env names one; blank or absent
+      # falls back to the API's own login (`:-` treats empty as unset).
+      - POSTGRES_MONITOR_USER=${POSTGRES_MONITOR_USER:-${POSTGRES_USER:-postgres}}
+      - POSTGRES_MONITOR_PASSWORD=${POSTGRES_MONITOR_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
+      # A CONSTANT, not a setting: how otel-collector-config.yaml turns
+      # POSTGRES_SSL=true into the receiver's inverse `tls.insecure: false`
+      # (see the comment on the postgresql receiver). Do not move it to .env.
+      - POSTGRES_TLS_INSECURE_WHEN_SSL_true=false
+      # The httpcheck receiver's PUBLIC target (issue #599). Not an .env key:
+      # outside a VPS there is no public origin the collector can reach
+      # (APP_URL=http://localhost:3535 is the collector itself in here), so it
+      # checks nginx's own health route instead. vps.telemetry.compose.yml
+      # replaces it with <APP_URL>/api/health/live, which adds TLS expiry.
+      - UPTIME_PUBLIC_URL=http://nginx/nginx-health
+    ports:
+      - "4327:4317"   # OTLP gRPC receiver (remapped to avoid conflict)
+      - "4328:4318"   # OTLP HTTP receiver (remapped to avoid conflict)
+    depends_on:
+      greptimedb:
+        condition: service_healthy
+    networks:
+      - app-network
+      # The same two networks the API uses to reach POSTGRES_HOST: `db`
+      # (devdb.compose.yml) on app-network, the shared `postgres` container
+      # of a multi-app VPS on devnet. Without devnet the postgresql receiver
+      # could not resolve `postgres` there. Nothing is published by joining:
+      # the collector's OTLP ports become reachable from devnet's other
+      # containers, as the API's own port already is.
+      - devnet
+
+  # ---------------------------------------------------------------------------
+  # GreptimeDB - telemetry storage (traces, metrics, logs)
+  # ---------------------------------------------------------------------------
+  greptimedb:
+    image: greptime/greptimedb:v1.2.1
+    command:
+      - standalone
+      - start
+      - --http-addr=0.0.0.0:4000
+      - --rpc-bind-addr=0.0.0.0:4001
+      - --mysql-addr=0.0.0.0:4002
+      - --postgres-addr=0.0.0.0:4003
+      - --user-provider=static_user_provider:cmd:${GREPTIME_ADMIN_USER:-admin}=${GREPTIME_ADMIN_PASSWORD:?set GREPTIME_ADMIN_PASSWORD in infra/compose/.env},${GREPTIME_WRITER_USER:-writer}=${GREPTIME_WRITER_PASSWORD:?set GREPTIME_WRITER_PASSWORD in infra/compose/.env},${GREPTIME_READER_USER:-reader}:readonly=${GREPTIME_READER_PASSWORD:?set GREPTIME_READER_PASSWORD in infra/compose/.env}
+    environment:
+      # GreptimeDB otherwise phones home with usage statistics on startup.
+      - GREPTIMEDB_STANDALONE__ENABLE_TELEMETRY=false
+    volumes:
+      - greptimedb-data:/greptimedb_data
+    ports:
+      - "14000:4000"  # HTTP API + SQL dashboard (/dashboard)
+      - "14003:4003"  # PostgreSQL wire protocol (psql, BI tools)
+    healthcheck:
+      # /health needs no credentials; curl ships in the image.
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    networks:
+      - app-network
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  greptimedb-data:

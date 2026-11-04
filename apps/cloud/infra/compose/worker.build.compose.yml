@@ -1,0 +1,23 @@
+# GENERATED from @marinoscar/platform-infra@0.1.0-next.21 (compose) — do not edit; extend through an infra/compose/app.*.compose.yml overlay
+# Source of truth: @marinoscar/platform-infra/compose/worker.build.compose.yml; re-materialise with `npx platform-infra sync`
+# =============================================================================
+# Build the worker image from source  (issue #278, epic #254)
+# =============================================================================
+# Overlay for worker.compose.yml, for developing on the worker itself:
+#
+#   docker compose -f worker.compose.yml -f worker.build.compose.yml up --build
+#
+# Separate from the main file so the ordinary path stays image-only — running a
+# fleet must not require a checkout of this repository.
+# =============================================================================
+
+services:
+  worker:
+    build:
+      # The REPOSITORY ROOT, not apps/cli: npm workspace linking needs the root
+      # package.json, the lockfile and packages/shared in one install. Relative
+      # to this file, that is two levels up.
+      context: ../..
+      dockerfile: apps/cli/Dockerfile
+      target: production
+    image: worker:local

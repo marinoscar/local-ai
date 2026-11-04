@@ -1,0 +1,92 @@
+-- =============================================================================
+-- jobs.claim_token — per-claim identity, closing the two-replica lease hole
+-- (issue #361)
+-- =============================================================================
+-- `heldLeaseWhere` (`src/jobs/job-lease.service.ts`) answers "does the caller
+-- still hold this row" as `{ id, status: 'running', leaseExpiresAt: { gt: now
+-- }, claimedByNodeId }`. That predicate identifies a CLAIMANT KIND — "a node"
+-- (a real `WorkerNode.id`) vs. "the server" (`claimedByNodeId: null`) — not a
+-- particular claim. Every API replica claims with `claimedByNodeId: null`, so
+-- two server replicas produce the exact same `heldLeaseWhere` predicate for
+-- the same job. Concretely: replica A claims a job, then stalls long enough
+-- for the lease reaper to reclaim it as abandoned; replica B claims the
+-- now-pending job and starts running it; replica A, still alive and unaware
+-- it lost the row, calls `renew` — which matches `heldLeaseWhere` (status is
+-- `running`, `claimedByNodeId` is `null`, and the lease B just set is still
+-- in the future) and happily extends B's lease. A never learns it lost the
+-- job, and now believes it owns work it does not.
+--
+-- The fix is a column that identifies ONE CLAIM, not one KIND of claimant:
+-- `claim_token`, minted fresh (`gen_random_uuid()`) by the claim statement
+-- itself and folded into `heldLeaseWhere` alongside `claimedByNodeId` (wiring
+-- lands in a later slice — this migration and its schema.prisma companion are
+-- schema-only, per the issue's stated scope). Once every renew/settle/reap
+-- statement also matches on `claim_token`, replica A's renewal after losing
+-- the row targets a token that is no longer on the row (B's claim overwrote
+-- it with a new one) and the `UPDATE` matches zero rows, exactly like a node
+-- losing a lease already does today.
+--
+-- -----------------------------------------------------------------------------
+-- Why NULLABLE, with no DEFAULT
+-- -----------------------------------------------------------------------------
+-- The invariant this codebase will maintain from here on is `claim_token IS
+-- NOT NULL` IFF the row is currently held under a claim. A `pending` job has
+-- no claimant at all, so writing it a token would assert a claim that does
+-- not exist — a lie the column has no business telling. `DEFAULT
+-- gen_random_uuid()` would do exactly that: every row, including ones freshly
+-- enqueued and never claimed, would carry a token that means nothing,
+-- indistinguishable from a real one to anybody reading the column.
+--
+-- No backfill, and none is wanted. Every row that exists at deploy time is
+-- either not currently claimed (`pending`, `succeeded`, `failed` — `NULL` is
+-- simply correct) or `running` under a claim taken by a REPLICA RUNNING THE
+-- OLD CODE, which never wrote a token and has no token to reconcile against.
+-- `NULL` is still correct there, but the reason an old replica keeps renewing
+-- successfully has nothing to do with NULL comparison semantics — it is
+-- simpler than that: an old replica is running the OLD `heldLeaseWhere`,
+-- which has no `claim_token` clause at all, so it never passes a token,
+-- remembered or otherwise, and this column is invisible to its predicate.
+-- The later slice's `heldLeaseWhere(jobId, { nodeId?, claimToken? })` treats
+-- `claimToken` the same three-valued way `nodeId` already works: a string
+-- constrains the match to that one claim, `undefined` omits the clause
+-- entirely (what the node control plane and this migration-era code both do),
+-- and `null` is passed straight through to Prisma and renders as an actual
+-- `claim_token IS NULL` check — matching only a row that carries no token.
+--
+-- That makes the rolling-deploy story a narrowing, not a full close, and only
+-- in one direction: a NEW replica's claim writes a real token, so no other
+-- NEW replica can renew it out from under the claimant — the hole
+-- is closed between new replicas from the moment this ships. An OLD
+-- replica's `renew` still ignores `claim_token` altogether, so an old
+-- replica that lost a row to the reaper can still extend a NEW replica's
+-- lease for as long as the old replica keeps ticking — the same failure mode
+-- this column exists to fix, just now confined to "one side of the pair is
+-- still running pre-#361 code" instead of "always". That window is bounded
+-- and ordinary: it closes for good once the last old replica has rolled off,
+-- the same way any predicate change behaves during a rolling deploy, and is
+-- not a reason to change this design.
+--
+-- -----------------------------------------------------------------------------
+-- Why no index
+-- -----------------------------------------------------------------------------
+-- `claim_token` is never queried on its own — every read of it is one more
+-- predicate bolted onto a single-row lookup already keyed by `jobs`'s primary
+-- key (`WHERE id = $1 AND claim_token = $2 AND ...`), the same shape
+-- `heldLeaseWhere` already has for `claimedByNodeId` and `leaseExpiresAt`,
+-- neither of which is indexed on its own either. An index earns its keep by
+-- narrowing a scan that would otherwise be large; there is no query here that
+-- scans `jobs` by `claim_token` and needs narrowing. Adding one would be pure
+-- write overhead on the hottest path this table has — every claim, every
+-- renewal, every settle — for a lookup nothing performs.
+--
+-- -----------------------------------------------------------------------------
+-- Online-safety
+-- -----------------------------------------------------------------------------
+-- `ADD COLUMN` of a NULLABLE column with NO DEFAULT is a metadata-only change
+-- on PostgreSQL 11+: no table rewrite, no full-table scan to populate a
+-- default, just a brief ACCESS EXCLUSIVE lock to update the catalog. Safe to
+-- run against a live, populated `jobs` table with no maintenance window.
+-- =============================================================================
+
+-- AlterTable
+ALTER TABLE "jobs" ADD COLUMN "claim_token" UUID;

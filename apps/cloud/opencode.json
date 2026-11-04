@@ -1,0 +1,48 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "local/local-coder",
+  "small_model": "local/local-coder",
+  "provider": {
+    "local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Local llama.cpp",
+      "options": {
+        "baseURL": "{env:OPENCODE_LOCAL_BASE_URL}"
+      },
+      "models": {
+        "local-coder": {
+          "name": "Local coder (Qwen3-Coder)",
+          "tool_call": true,
+          "limit": {
+            "context": 98304,
+            "output": 16384
+          }
+        }
+      }
+    }
+  },
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 8000
+  },
+  "share": "disabled",
+  "autoupdate": "notify",
+  "watcher": {
+    "ignore": [
+      "node_modules",
+      "dist",
+      "coverage",
+      "apps/api/prisma/schema",
+      ".turbo"
+    ]
+  },
+  "permission": {
+    "bash": {
+      "git push*": "ask",
+      "git commit*": "ask",
+      "rm -rf*": "ask"
+    },
+    "webfetch": "ask"
+  }
+}
