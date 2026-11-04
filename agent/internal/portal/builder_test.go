@@ -62,18 +62,18 @@ func row(id, engine string, roles []string, inProfile, loadable bool) statusapi.
 
 // fullRig is a builder over a complete fake node (profile small-8gb: alpha and gamma-vl are survival models).
 type fullRig struct {
-	b                *portal.Builder
-	models           *fakeModels
-	rt               *fakeRouter
-	hw               *hwfake.Sampler
-	health           *fakeHealth
-	llama            *fakeLlama
-	ark              *fakeArk
-	docs             *fakeDocs
-	alerts           *fakeAlerts
-	cfg              *config.Store
-	cat              *catalog.Catalog
-	buildTime        time.Time
+	b         *portal.Builder
+	models    *fakeModels
+	rt        *fakeRouter
+	hw        *hwfake.Sampler
+	health    *fakeHealth
+	llama     *fakeLlama
+	ark       *fakeArk
+	docs      *fakeDocs
+	alerts    *fakeAlerts
+	cfg       *config.Store
+	cat       *catalog.Catalog
+	buildTime time.Time
 }
 
 func newFullRig(t *testing.T) *fullRig {
