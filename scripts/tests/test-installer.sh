@@ -17,6 +17,35 @@ w="$(mktemp -d)"; trap 'rm -rf "$w"' EXIT
 export TMPDIR="$w/tmp"; mkdir -p "$TMPDIR"
 fakecred="nod_$(printf 'FAKEFAKEFAKE')1234"       # generated fake credential, never a real one
 fakehex="$(printf 'ab%.0s' $(seq 32))"             # 64 hex characters
+# Dev hooks of the INST-06 phases (honoured only with LAI_INSTALLER_DEV=1): never the real agent, aictl or /etc.
+# Fakes stand in for the agent, aictl, systemctl and journalctl: they log their arguments to $FAKE_LOG and record stdin.
+FB="$w/fakebin"; mkdir -p "$FB"
+export FAKE_LOG="$w/fake.log" FAKE_STDIN_DIR="$w/fakestdin"; mkdir -p "$FAKE_STDIN_DIR"
+cat >"$FB/aiagent" <<'FAKE'
+#!/bin/sh
+echo "aiagent $*" >>"$FAKE_LOG"
+[ "$2" = "--help" ] && exit 0
+if [ -n "${FAKE_AIAGENT_RC:-}" ] && { [ -z "${FAKE_AIAGENT_STEP:-}" ] || [ "$2" = "$FAKE_AIAGENT_STEP" ]; }; then echo "${FAKE_AIAGENT_MSG:-}"; exit "$FAKE_AIAGENT_RC"; fi
+echo "fake aiagent $2 ok"
+FAKE
+cat >"$FB/aictl" <<'FAKE'
+#!/bin/sh
+echo "aictl $*" >>"$FAKE_LOG"
+cat >"$FAKE_STDIN_DIR/$1-$2"
+if [ -n "${FAKE_AICTL_RC:-}" ]; then echo "${FAKE_AICTL_MSG:-failed} $(cat "$FAKE_STDIN_DIR/$1-$2")"; exit "$FAKE_AICTL_RC"; fi
+echo "fake aictl $1 $2 ok"
+FAKE
+printf '#!/bin/sh
+echo "systemctl $*" >>"$FAKE_LOG"
+' >"$FB/systemctl"
+printf '#!/bin/sh
+echo "journalctl $*" >>"$FAKE_LOG"; echo "fake journal line"
+' >"$FB/journalctl"
+chmod +x "$FB"/*
+export PATH="$FB:$PATH"
+export LAI_ETC_DIR="$w/etc-localai"
+export LAI_HEALTH_URL="file://$w/health" LAI_HEALTH_WAIT=2
+echo ok >"$w/health"; mkdir -p "$LAI_ETC_DIR"
 
 # shellcheck source=scripts/tests/test-installer-p5p6-fixtures.sh
 source "$SRC/scripts/tests/test-installer-p5p6-fixtures.sh"
@@ -110,8 +139,8 @@ mkdir -p "$w/tmp"; before="$(find "$w" -mindepth 1 -not -path "$w/tmp*" -not -na
 dryout="$(dry --node-id ai-n9 2>&1)"; rc=$?
 t "dry run exits 0" 0 "" test $rc -eq 0
 t "prints all 15 phase headers" 0 "" bash -c 'for n in $(seq 1 15); do grep -q "^==> \[$n/15\]" <<<"$1" || exit 1; done' _ "$dryout"
-# In a dry run P5, P6 (INST-04), P7, P8 (INST-05), P11, P14 and P15 (INST-07) are implemented; 8 phases are still stubs. Lower this as items land.
-STUBS_IN_DRY_RUN=8
+# Implemented so far: P5, P6 (INST-04), P7, P8 (INST-05), P9, P10, P12, P13 (INST-06), P11, P14, P15 (INST-07); 4 phases are still stubs. Lower this as items land.
+STUBS_IN_DRY_RUN=4
 t "every phase that is not implemented says so" 0 "" test "$(grep -c '^NOT IMPLEMENTED YET: this phase' <<<"$dryout")" = "$STUBS_IN_DRY_RUN"
 t "phases 7 and 8 are implemented, not stubs" 0 "" bash -c '! sed -n "/^==> \[7\/15\]/,/^==> \[9\/15\]/p" <<<"$1" | grep -q "NOT IMPLEMENTED"' _ "$dryout"
 t "says the installer is incomplete" 0 "" grep -q "THIS INSTALLER IS INCOMPLETE" <<<"$dryout"
@@ -138,7 +167,7 @@ t "state.json exists, 0600" 0 "" test "$(stat -c %a "$s")" = 600
 t "state.json is valid JSON when python is present" 0 "" bash -c 'command -v python3 >/dev/null || exit 0; python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); assert len(d[\"phases\"])==15" "$1"' _ "$s"
 # Phases whose real implementation has landed (INST-04: P5, P6; INST-07: P11, P14 under the skeleton's defaults). Every other phase
 # is still a stub and must be recorded as not-implemented; add a phase id here when its item is merged.
-IMPLEMENTED="P5 P6 P7 P8 P11 P14"
+IMPLEMENTED="P5 P6 P7 P8 P9 P10 P11 P12 P13 P14"
 t "every phase has status, version, finished_at, details" 0 "" bash -c '[ "$(grep -cE "\"status\":\"(not-implemented|done)\",\"version\":\"9.9.9-test\",\"finished_at\":\"20[0-9-]*T[0-9:]*Z\",\"details\":" "$1")" = 15 ]' _ "$s"
 t "a stub is never recorded as done" 0 "" bash -c 'for i in $(seq 1 15); do case " $2 " in *" P$i "*) continue ;; esac; grep -q "\"P$i\": .*\"status\":\"done\"" "$1" && exit 1; done; exit 0' _ "$s" "$IMPLEMENTED"
 t "atomic: no temp file left behind" 0 "" test -z "$(find "$w/rstate" -name '.state.*')"
@@ -148,7 +177,7 @@ t "second run is a re-run" 0 "kind: re-run" grep -F "kind: re-run" <<<"$rerun"
 touch "$w/systemd/llama-qwen.service"
 t "legacy llama-qwen.service means migration" 0 "kind: migration" bash -c 'env "${@:5}" LAI_INSTALL_STATE_DIR="$2" LAI_INSTALL_SYSTEMD_DIR="$3" "$1" --yes --log "$4" 2>&1' _ "$STAMPED" "$w/rstate" "$w/systemd" "$w/real.log" "${llhooks[@]}"
 rm -f "$w/systemd/llama-qwen.service"
-t "state load reads what state write wrote" 0 "" bash -c 'source "$1"; STATE_FILE="$2"; state_load; [ "${PH_STATUS[P6]}" = done ] && [ "${PH_STATUS[P7]}" = done ] && [ "${#PH_STATUS[@]}" = 15 ]' _ "$INST" "$s"
+t "state load reads what state write wrote" 0 "" bash -c 'source "$1"; STATE_FILE="$2"; state_load; [ "${PH_STATUS[P6]}" = done ] && [ "${PH_STATUS[P7]}" = done ] && [ "${PH_STATUS[P9]}" = done ] && [ "${#PH_STATUS[@]}" = 15 ]' _ "$INST" "$s"
 # A phase that is done and whose check passes reports "already done" (the hook later items use).
 t "idempotency: a done phase with a passing check says 'already done'" 0 "already done" bash -c '
   source "$1"; DRY_RUN=1; STATE_FILE="$2/none"; PH_STATUS[P1]=done; check_preflight() { return 0; }
@@ -156,6 +185,109 @@ t "idempotency: a done phase with a passing check says 'already done'" 0 "alread
 t "a failing phase marks failed, exits 1 and resumes later" 1 "FAILED (exit 7)" bash -c '
   source "$1"; set -Eeuo pipefail; DRY_RUN=1; STATE_FILE="$2/none"; LOG_OPEN=; phase_preflight() { return 7; }
   run_phase 1 "${PHASE_TABLE[0]}"' _ "$INST" "$w"
+
+echo "== INST-06: P9 agent/node.yaml/units, P10 API key, P12 admin PIN, P13 enrollment (fakes, dev hooks)"
+n6=0
+# r6 <args...>: a real run of the stamped copy against the fakes, in its own state folder. Output to $w/r6.out.
+h6=(env "${llhooks[@]}" LAI_INSTALL_AIAGENT="$FB/aiagent" LAI_INSTALL_AICTL="$FB/aictl" LAI_INSTALL_LLAMA_ROOT="$w/llama6")  # INST-05 fixtures, with this item's fakes and llama root
+r6() { n6=$((n6 + 1)); : >"$FAKE_LOG"; rm -rf "${FAKE_STDIN_DIR:?}"/*; mkdir -p "$w/sd6"
+  "${h6[@]}" LAI_INSTALL_STATE_DIR="$w/s6-$n6" LAI_INSTALL_SYSTEMD_DIR="$w/sd6" "$STAMPED" --log "$w/r6-$n6.log" --no-tailscale --no-sync "$@" >"$w/r6.out" 2>&1; }
+l6() { cat "$w/r6-$n6.log"; }
+pin8=73190846; pinf="$w/pin.txt"; printf '%s\n' "$pin8" >"$pinf"
+credf="$w/cred.txt"; printf '%s\n' "$fakecred" >"$credf"
+rm -rf "$LAI_ETC_DIR"; mkdir -p "$LAI_ETC_DIR" "$w/llama6/builds/${C40:0:9}-cpu/bin"
+printf '#!/bin/sh\necho "version: 1 (%s)"\n' "${C40:0:7}" >"$w/llama6/builds/${C40:0:9}-cpu/bin/llama-server"; chmod +x "$w/llama6/builds/${C40:0:9}-cpu/bin/llama-server"
+
+r6 --node-id ai-n9 --profile desk-small --backend cpu --serve-pattern A --inventory "$INST" --pin-file "$pinf" --enroll-file "$credf" --no-ssh; rc=$?
+t "full run with the fakes exits 0" 0 "" test $rc -eq 0
+t "P9 passes node.yaml flags to aiagent setup node-yaml" 0 "aiagent setup node-yaml --node-id ai-n9 --profile desk-small --backend cpu --serve-pattern A --inventory $INST" cat "$FAKE_LOG"
+t "P9 runs aiagent setup units" 0 "aiagent setup units --backup-dir" cat "$FAKE_LOG"
+t "P9 restarts the agent, then waits for health" 0 "systemctl restart localai-agent.service" cat "$FAKE_LOG"
+t "P9 says the agent is healthy" 0 "the agent is healthy" cat "$w/r6.out"
+t "P9 activates the build P7 made for this node" 0 "builds/${C40:0:9}-cpu" bash -c 'readlink "$1/current"' _ "$w/llama6"
+t "P9 starts localai-llama after activating it" 0 "systemctl start localai-llama.service" cat "$FAKE_LOG"
+t "P10 runs aiagent setup api-key" 0 "aiagent setup api-key" cat "$FAKE_LOG"
+t "P12 pipes the PIN to aictl pin set --pin-stdin" 0 "aictl pin set --pin-stdin" cat "$FAKE_LOG"
+t "P12 delivered the PIN on stdin" 0 "$pin8" cat "$FAKE_STDIN_DIR/pin-set"
+t "the PIN is not in any argument" 0 "" bash -c '! grep -q "$1" "$2"' _ "$pin8" "$FAKE_LOG"
+t "the PIN is not on the screen" 0 "" bash -c '! grep -q "$1" "$2"' _ "$pin8" "$w/r6.out"
+t "the PIN is not in the log" 0 "" bash -c '! grep -q "$1" "$2"' _ "$pin8" "$w/r6-$n6.log"
+t "P13 enrolls with the credential on stdin only" 0 "aictl cloud enroll --url https://ai.marin.cr --credential-stdin" cat "$FAKE_LOG"
+t "the credential reached aictl's stdin" 0 "$fakecred" cat "$FAKE_STDIN_DIR/cloud-enroll"
+t "the credential is not in any argument, screen or log" 0 "" bash -c '! grep -q FAKEFAKEFAKE "$1" "$2" "$3"' _ "$FAKE_LOG" "$w/r6.out" "$w/r6-$n6.log"
+t "state.json records P9 P10 P12 P13 as done" 0 "" bash -c 'for p in P9 P10 P12 P13; do grep "\"$p\"" "$1" | grep -q "\"status\":\"done\"" || exit 1; done' _ "$w/s6-$n6/state.json"
+
+# -v must not put the PIN or credential in the log through set -x
+r6 -v --node-id ai-n9 --pin-file "$pinf" --enroll-file "$credf"; rc=$?
+t "-v run exits 0" 0 "" test $rc -eq 0
+t "-v: the PIN is not in the log" 0 "" bash -c '! grep -q "$1" "$2"' _ "$pin8" "$w/r6-$n6.log"
+t "-v: the credential is not in the log" 0 "" bash -c '! grep -q FAKEFAKEFAKE "$1"' _ "$w/r6-$n6.log"
+t "-v: the trace itself is in the log (so the test means something)" 0 "" grep -q '^+ phase_agent' "$w/r6-$n6.log"
+
+# P9 failures
+echo >"$w/health"; rm -f "$w/health"
+r6 --node-id ai-n9; rc=$?
+t "agent never healthy -> exit 1" 0 "" test $rc -eq 1
+t "agent never healthy -> LAI-INS-034 with the journal" 0 "LAI-INS-034" cat "$w/r6.out"
+t "agent never healthy -> journalctl -u localai-agent -n 50 was shown" 0 "journalctl -u localai-agent -n 50" cat "$FAKE_LOG"
+echo ok >"$w/health"
+FAKE_AIAGENT_RC=1 FAKE_AIAGENT_STEP=node-yaml FAKE_AIAGENT_MSG="ERROR LAI-INS-020: this computer already has the node id ai-n4" r6 --node-id ai-n9; rc=$?
+t "a different node id -> exit 1 with LAI-INS-020" 0 "LAI-INS-020" bash -c 'test '"$rc"' -eq 1 && cat "$1"' _ "$w/r6.out"
+t "a different node id stops before the units are written" 0 "" bash -c '! grep -q "setup units" "$1"' _ "$FAKE_LOG"
+FAKE_AIAGENT_RC=1 FAKE_AIAGENT_STEP=units FAKE_AIAGENT_MSG="boom" r6 --node-id ai-n9; rc=$?
+t "units failure -> exit 1, agent not restarted" 0 "" bash -c 'test '"$rc"' -eq 1 && ! grep -q "restart localai-agent" "$1"' _ "$FAKE_LOG"
+
+# P10..P13 behaviour
+echo hash >"$LAI_ETC_DIR/admin-pin"
+r6 --node-id ai-n9 --pin-file "$pinf"; rc=$?
+t "PIN already set: not asked, not changed" 0 "the admin PIN is already set" bash -c 'test '"$rc"' -eq 0 && cat "$1"' _ "$w/r6.out"
+t "PIN already set: aictl pin set not called" 0 "" bash -c '! grep -q "pin set" "$1"' _ "$FAKE_LOG"
+rm -f "$LAI_ETC_DIR/admin-pin"
+printf '12\n' >"$w/badpin"
+r6 --node-id ai-n9 --pin-file "$w/badpin"; rc=$?
+t "bad PIN file -> warning LAI-INS-060, install continues (exit 0)" 0 "LAI-INS-060" bash -c 'test '"$rc"' -eq 0 && cat "$1"' _ "$w/r6.out"
+t "bad PIN file: aictl pin set not called" 0 "" bash -c '! grep -q "pin set" "$1"' _ "$FAKE_LOG"
+: >"$FAKE_LOG"
+t "no tty and no file -> skip with LAI-INS-060 (exit 0)" 0 "LAI-INS-060" bash -c '"${@:5}" LAI_INSTALL_STATE_DIR="$2" LAI_INSTALL_SYSTEMD_DIR="$3" setsid -w "$1" --log "$4" --no-tailscale --no-sync --node-id ai-n9 </dev/null 2>&1' _ "$STAMPED" "$w/s6-notty" "$w/sd6" "$w/notty.log" "${h6[@]}"
+FAKE_AICTL_RC=1 FAKE_AICTL_MSG="cannot store PIN" r6 --node-id ai-n9 --pin-file "$pinf"; rc=$?
+t "aictl pin set failing -> warning, exit 0" 0 "LAI-INS-060" bash -c 'test '"$rc"' -eq 0 && cat "$1"' _ "$w/r6.out"
+t "aictl output that echoes the PIN is masked" 0 "<pin>" cat "$w/r6.out"
+t "...and the PIN itself never shows" 0 "" bash -c '! grep -q "$1" "$2" "$3"' _ "$pin8" "$w/r6.out" "$w/r6-$n6.log"
+touch "$LAI_ETC_DIR/cloud-credential"
+r6 --node-id ai-n9 --enroll-file "$credf"; rc=$?
+t "already enrolled -> skipped" 0 "already enrolled" bash -c 'test '"$rc"' -eq 0 && cat "$1"' _ "$w/r6.out"
+t "already enrolled: aictl cloud enroll not called" 0 "" bash -c '! grep -q "cloud enroll" "$1"' _ "$FAKE_LOG"
+rm -f "$LAI_ETC_DIR/cloud-credential"
+FAKE_AICTL_RC=1 FAKE_AICTL_MSG="LAI-CLD-053 the cloud said no" r6 --node-id ai-n9 --enroll-file "$credf"; rc=$?
+t "enroll failure does not fail the install" 0 "" test $rc -eq 0
+t "enroll failure shows the code and the retry command" 0 "sudo aictl cloud enroll --url https://ai.marin.cr --credential-stdin" cat "$w/r6.out"
+t "enroll failure keeps the cloud's code" 0 "WARNING LAI-CLD-053" cat "$w/r6.out"
+t "enroll failure: the credential is not shown" 0 "" bash -c '! grep -q FAKEFAKEFAKE "$1" "$2"' _ "$w/r6.out" "$w/r6-$n6.log"
+printf 'not-a-credential\n' >"$w/badcred"
+r6 --node-id ai-n9 --enroll-file "$w/badcred"; rc=$?
+t "a malformed credential -> warning, install continues, aictl not called" 0 "" bash -c 'test '"$rc"' -eq 0 && grep -q "WARNING LAI-CLD-051" "$2" && ! grep -q "cloud enroll" "$1"' _ "$FAKE_LOG" "$w/r6.out"
+r6 --node-id ai-n9; rc=$?
+t "no --enroll: enrollment is skipped quietly" 0 "enrollment not requested" bash -c 'test '"$rc"' -eq 0 && cat "$1"' _ "$w/r6.out"
+
+# migration: the llama build is activated by P8, so P9 does not do it
+t "migration_ran follows MIGRATION_RAN of P8" 0 "" bash -c 'source "$1"; MIGRATION_RAN=1; migration_ran && { MIGRATION_RAN=0; ! migration_ran; }' _ "$INST"
+t "an active llama build is left alone" 0 "already active" bash -c 'source "$1"; DEV=1; export LAI_INSTALLER_DEV=1; LAI_INSTALL_LLAMA_ROOT="$2"; inst06_env; say() { echo "$*"; }; mkdir -p "$2/builds/abc123-cuda/bin"; printf "#!/bin/sh\n" >"$2/builds/abc123-cuda/bin/llama-server"; chmod +x "$2/builds/abc123-cuda/bin/llama-server"; ln -sfn builds/abc123-cuda "$2/current"; activate_llama' _ "$INST" "$w/llama6b"
+
+# check_ hooks
+t "check_api_key: true for 64 hex, false for junk" 0 "" bash -c 'source "$1"; DEV=1; LAI_ETC_DIR="$2"; inst06_env; printf "%s\n" "$3" >"$2/api-key"; check_api_key || exit 1; echo junk >"$2/api-key"; ! check_api_key' _ "$INST" "$LAI_ETC_DIR" "$fakehex"
+t "check_pin follows /etc/localai/admin-pin" 0 "" bash -c 'source "$1"; DEV=1; LAI_ETC_DIR="$2"; inst06_env; rm -f "$2/admin-pin"; ! check_pin || exit 1; echo x >"$2/admin-pin"; check_pin' _ "$INST" "$LAI_ETC_DIR"
+rm -f "$LAI_ETC_DIR/admin-pin" "$LAI_ETC_DIR/api-key"
+
+# dry run: aiagent steps get --dry-run, nothing mutating runs, no secret is read
+: >"$FAKE_LOG"
+dryout="$("${h6[@]}" LAI_INSTALL_STATE_DIR="$w/dstate6" "$INST" --dry-run --log "$w/dry6.log" --node-id ai-n9 --pin-file "$pinf" --enroll-file "$credf" 2>&1)"; rc=$?
+t "dry run exits 0" 0 "" test $rc -eq 0
+t "dry run: every aiagent call carries --dry-run" 0 "" bash -c 'grep "^aiagent setup [a-z-]* " "$1" | grep -v -e "--dry-run" | wc -l | grep -qx 0' _ "$FAKE_LOG"
+t "dry run: systemctl was never called" 0 "" bash -c '! grep -q "^systemctl" "$1"' _ "$FAKE_LOG"
+t "dry run: aictl was never called" 0 "" bash -c '! grep -q "^aictl" "$1"' _ "$FAKE_LOG"
+t "dry run says what it would do for P9, P12, P13" 0 "" bash -c 'grep -q "would run: systemctl restart localai-agent.service" <<<"$1" && grep -q "would set the admin PIN" <<<"$1" && grep -q "would enroll with" <<<"$1"' _ "$dryout"
+t "dry run: no PIN or credential on screen or in the log" 0 "" bash -c '! grep -qE "$1|FAKEFAKEFAKE" <<<"$2" "$3"' _ "$pin8" "$dryout" "$w/dry6.log"
+t "dry run with no agent installed still exits 0 and says would run" 0 "[dry-run] would run: $w/none/aiagent setup node-yaml" bash -c 'LAI_INSTALL_AIAGENT="$2/none/aiagent" LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$2/dstate7" "$1" --dry-run --log "$2/dry7.log" --node-id ai-n9 2>&1' _ "$INST" "$w"
 
 echo "== lock"
 mkdir -p "$w/lk"; : >"$w/lk/lock"
@@ -485,7 +617,7 @@ t "offline: the kit's pins.json is read before the installed catalog" 0 "$C40B" 
 t "backend: --backend wins" 0 "cuda" llrun 'OPT_BACKEND=cuda; llama_resolve; echo $LLAMA_BACKEND'
 t "backend: defaults to cpu" 0 "cpu" llrun 'llama_resolve; echo $LLAMA_BACKEND'
 echo "-- reuse"
-b9="$LL/builds/${C40:0:9}-cpu"; rm -rf "$LL/builds/"* "$LL/src/"*
+b9="$LL/builds/${C40:0:9}-cpu"; rm -rf "$LL/builds/"* "$LL/src/"* "$LL/current"
 t "no commit, real run -> exit 1 LAI-INS-032" 1 "LAI-INS-032" llenvrun LAI_INSTALL_NODE_YAML="$NONE" LAI_INSTALL_PINS="$w/nope.json" -- 'phase_llama'
 t "first run builds with the shared builder" 0 "build finished" llrun 'OPT_YES=1; phase_llama'
 t "aictl got commit, backend, the one source folder, --no-activate" 0 "" grep -qF "aictl rebuild-llama --commit $C40 --backend cpu --source $LL/src/$C40 --no-activate" "$FAKE_LOG"

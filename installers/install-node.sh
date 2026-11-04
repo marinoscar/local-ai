@@ -646,6 +646,292 @@ phase_migration() {
   esac
 }
 # ===============================================================================================================
+# INST-06 (issue #153): P9 agent, node.yaml, units | P10 API key | P12 admin PIN | P13 cloud enrollment
+# Spec: installer.md section 4.3. These definitions replace the stubs above. Secrets (PIN, credential) are read
+# from /dev/tty or a file, live only in local shell variables, reach a command only on its stdin and never reach
+# say(), the log or xtrace.
+# ===============================================================================================================
+ENROLL_FAILED=""          # set by P13 when enrollment failed: "LAI-CLD-nnn: message" (shown by the summary, INST-07)
+ENROLL_RETRY=""           # the command to retry it (never contains the credential)
+PIN_SKIPPED=0             # 1 when P12 skipped with LAI-INS-060 (shown by the summary)
+
+# inst06_env: where things are. The program, llama and node.yaml paths come from llama_init_paths (INST-05, its
+# LAI_INSTALL_* hooks); LAI_ETC_DIR, LAI_HEALTH_URL and LAI_HEALTH_WAIT are this item's. Overridable ONLY with
+# LAI_INSTALLER_DEV=1 (tests); a node install never reads them.
+inst06_env() {
+  llama_init_paths
+  AIAGENT_BIN="$AIAGENT"; AICTL_BIN="$AICTL"; LAI_ETC=/etc/localai
+  HEALTH_URL=http://127.0.0.1:7070/api/v1/health; HEALTH_WAIT=30
+  if ((DEV)); then
+    LAI_ETC="${LAI_ETC_DIR:-$LAI_ETC}"; HEALTH_URL="${LAI_HEALTH_URL:-$HEALTH_URL}"; HEALTH_WAIT="${LAI_HEALTH_WAIT:-$HEALTH_WAIT}"
+  fi
+}
+
+# setup_step <step> [args...]: `aiagent setup <step>`; a dry run passes --dry-run on (installer.md section 4.2).
+# When the agent program is not installed yet, a dry run only says what it would run.
+setup_step() {
+  local step="$1"
+  shift
+  local -a cmd=("$AIAGENT_BIN" setup "$step" "$@")
+  ((DRY_RUN)) && cmd+=(--dry-run)
+  # A dry run must not depend on an older agent that has no 'setup' command (probe: --help exits 0).
+  if [[ ! -x "$AIAGENT_BIN" ]] || { ((DRY_RUN)) && ! "$AIAGENT_BIN" setup --help >/dev/null 2>&1; }; then
+    if ((DRY_RUN)); then
+      say "[dry-run] would run: $(quote_cmd "${cmd[@]}")"
+      return 0
+    fi
+    say "ERROR: the agent program $AIAGENT_BIN is not installed, so 'aiagent setup $step' cannot run. Re-run the installer; if it repeats, report this."
+    return 1
+  fi
+  say "run: $(quote_cmd "${cmd[@]}")"
+  local rc=0
+  run_logged "${cmd[@]}" || rc=$?
+  return "$rc"
+}
+
+# agent_healthy: one probe of the local health endpoint.
+agent_healthy() { curl -fsS --max-time 2 -o /dev/null "$HEALTH_URL" 2>/dev/null; }
+
+# migration_ran: P8 migrated llama-qwen in this install (then it already activated the llama build).
+migration_ran() { [[ "${MIGRATION_RAN:-0}" == "1" ]]; }
+
+# activate_llama: point /opt/localai/llama.cpp/current at the build P7 made for this node's commit (else the newest
+# finished build) when it points nowhere.
+activate_llama() {
+  local cur="$LLAMA_ROOT/current" want="" d
+  if [[ -x "$cur/bin/llama-server" ]]; then
+    say "the llama.cpp build is already active: $(readlink "$cur" 2>/dev/null || echo current)"
+    return 0
+  fi
+  # shellcheck disable=SC2310
+  if llama_resolve && [[ -x "$LLAMA_BUILD_DIR/bin/llama-server" ]]; then want="$LLAMA_BUILD_DIR"; fi
+  if [[ -z "$want" ]]; then
+    for d in "$LLAMA_ROOT"/builds/*/; do
+      d="${d%/}"
+      case "$d" in *.tmp | *.tmp.failed | *.old-*) continue ;; esac
+      [[ -x "$d/bin/llama-server" ]] && want="$d"
+    done
+  fi
+  if [[ -z "$want" ]]; then
+    say "WARNING: no finished llama.cpp build was found under $LLAMA_ROOT/builds, so the model server is not started. Run 'sudo install-node.sh --repair' to build it."
+    return 1
+  fi
+  run_or_say ln -sfn "builds/$(basename "$want")" "$cur.tmp" || return 1
+  run_or_say mv -T "$cur.tmp" "$cur"
+}
+
+check_agent() {
+  inst06_env
+  [[ -f "$SYSTEMD_DIR/localai-agent.service" && -f "$LAI_ETC/node.yaml" ]] && agent_healthy
+}
+
+phase_agent() {
+  inst06_env
+  local -a ny=()
+  [[ -n "$OPT_NODE_ID" ]] && ny+=(--node-id "$OPT_NODE_ID")
+  [[ -n "$OPT_PROFILE" ]] && ny+=(--profile "$OPT_PROFILE")
+  [[ -n "$OPT_BACKEND" ]] && ny+=(--backend "$OPT_BACKEND")
+  [[ -n "$OPT_SERVE_PATTERN" ]] && ny+=(--serve-pattern "$OPT_SERVE_PATTERN")
+  [[ -n "$OPT_INVENTORY" ]] && ny+=(--inventory "$OPT_INVENTORY")
+  say "1. node.yaml: $LAI_ETC/node.yaml (only missing keys are filled; the node id never changes)"
+  local rc=0
+  setup_step node-yaml "${ny[@]}" || rc=$?
+  if ((rc != 0)); then
+    if printf '%s\n' "${LAST_OUTPUT[@]}" | grep -q 'LAI-INS-020'; then
+      fail 1 LAI-INS-020 "this computer already has a different node id. Keep the old id, or uninstall with --purge-config first."
+    fi
+    return "$rc"
+  fi
+  say "2. units: writing the Local AI service files and enabling them"
+  setup_step units --backup-dir "$STATE_DIR/backup" || return $?
+  say "3. starting the agent"
+  svc_or_say restart localai-agent.service || return $?
+  if ((DRY_RUN)); then
+    say "[dry-run] would wait up to ${HEALTH_WAIT}s for $HEALTH_URL"
+  else
+    local waited=0
+    until agent_healthy; do
+      if ((waited >= HEALTH_WAIT)); then
+        say "The agent did not answer within ${HEALTH_WAIT} seconds. Its last log lines:"
+        run_logged journalctl -u localai-agent -n 50 --no-pager || true
+        fail 1 LAI-INS-034 "the agent didn't start. Run 'journalctl -u localai-agent -n 50' and 'sudo install-node.sh --repair'."
+      fi
+      sleep 1
+      waited=$((waited + 1))
+    done
+    say "the agent is healthy after ${waited}s"
+    if [[ -e "$LAI_ETC/agent-token" ]]; then say "agent token: present (created by the agent on first start)"; else say "WARNING: $LAI_ETC/agent-token does not exist yet; the agent creates it on first start."; fi
+  fi
+  say "4. llama server"
+  if migration_ran; then
+    say "the migration already activated the llama build and started localai-llama"
+  else
+    if activate_llama; then svc_or_say start localai-llama.service || return $?; fi
+  fi
+  return 0
+}
+
+check_api_key() {
+  inst06_env
+  [[ -f "$LAI_ETC/api-key" ]] && grep -qE '^[0-9a-f]{64}$' "$LAI_ETC/api-key" 2>/dev/null
+}
+
+phase_api_key() {
+  inst06_env
+  setup_step api-key
+}
+
+# secret_xtrace_off / _on: keep a secret out of "set -x" (-v) output, which is written to the log.
+SECRET_XT=0
+secret_xtrace_off() { SECRET_XT=0; [[ $- == *x* ]] && SECRET_XT=1; { set +x; } 2>/dev/null; return 0; }
+secret_xtrace_on() { if ((SECRET_XT)); then set -x; fi; return 0; }
+
+# tty_available: a terminal we can ask on.
+tty_available() { { : </dev/tty; } 2>/dev/null; }
+
+# read_secret_file <path> <varname>: the first line of the file (or /dev/stdin) into the named variable.
+read_secret_file() {
+  local line=""
+  IFS= read -r line <"$1" || [[ -n "$line" ]] || true
+  printf -v "$2" '%s' "${line%$'\r'}"
+}
+
+check_pin() {
+  inst06_env
+  [[ -s "$LAI_ETC/admin-pin" ]]
+}
+
+# pin_skip <reason>: P12 never fails the install; it records the warning for the summary.
+pin_skip() {
+  PIN_SKIPPED=1
+  say "WARNING LAI-INS-060: $1 The admin PIN isn't set; run 'sudo aictl pin set'."
+  return 0
+}
+
+phase_pin() {
+  inst06_env
+  if [[ -s "$LAI_ETC/admin-pin" ]]; then
+    say "the admin PIN is already set"
+    return 0
+  fi
+  local pin="" pin2="" source="" rc=0 tries
+  secret_xtrace_off
+  if [[ -n "$OPT_PIN_FILE" ]]; then
+    read_secret_file "$OPT_PIN_FILE" pin
+    source="file"
+    if [[ ! "$pin" =~ ^[0-9]{4,8}$ ]]; then
+      pin=""; secret_xtrace_on
+      pin_skip "The PIN file must hold 4 to 8 digits on its first line."
+      return 0
+    fi
+  elif tty_available && ! ((DRY_RUN)); then
+    source="prompt"
+    printf '%s\n' "Choose an admin PIN, 4 to 8 digits. You'll need it to delete things or leave survival mode." >/dev/tty
+    for tries in 1 2 3; do
+      printf 'PIN: ' >/dev/tty; IFS= read -rs pin </dev/tty; printf '\n' >/dev/tty
+      printf 'Type it again: ' >/dev/tty; IFS= read -rs pin2 </dev/tty; printf '\n' >/dev/tty
+      if [[ "$pin" =~ ^[0-9]{4,8}$ && "$pin" == "$pin2" ]]; then break; fi
+      printf '%s\n' "That didn't work: use 4 to 8 digits, the same twice. Try again." >/dev/tty
+      pin=""
+    done
+    pin2=""
+  elif tty_available; then
+    secret_xtrace_on
+    say "[dry-run] would ask for an admin PIN (4 to 8 digits, twice, hidden) and set it with: aictl pin set --pin-stdin"
+    return 0
+  fi
+  if [[ -z "$pin" ]]; then
+    secret_xtrace_on
+    pin_skip "No PIN was given (no terminal and no --pin-file, or three bad tries)."
+    return 0
+  fi
+  if ((DRY_RUN)); then
+    pin=""; secret_xtrace_on
+    say "[dry-run] would set the admin PIN from the $source with: aictl pin set --pin-stdin"
+    return 0
+  fi
+  if [[ ! -x "$AICTL_BIN" ]]; then
+    pin=""; secret_xtrace_on
+    pin_skip "The aictl program is not installed at $AICTL_BIN."
+    return 0
+  fi
+  local out=""
+  out="$(printf '%s\n' "$pin" | "$AICTL_BIN" pin set --pin-stdin 2>&1)" || rc=$?
+  out="${out//"$pin"/<pin>}"
+  pin=""
+  secret_xtrace_on
+  [[ -z "$out" ]] || say "aictl pin set: $out"
+  if ((rc != 0)); then
+    pin_skip "'aictl pin set' failed (exit $rc)."
+    return 0
+  fi
+  say "the admin PIN is set (stored as an argon2id hash; it is never logged)"
+  return 0
+}
+
+check_enroll() {
+  inst06_env
+  ((OPT_ENROLL || ${#OPT_ENROLL_FILE} > 0)) || return 0
+  [[ -e "$LAI_ETC/cloud-credential" ]]
+}
+
+# enroll_fail <code> <message>: enrollment never fails the install; the summary shows this and the retry command.
+enroll_fail() {
+  ENROLL_FAILED="$1: $2"
+  ENROLL_RETRY="sudo aictl cloud enroll --url $OPT_CLOUD_URL --credential-stdin"
+  say "WARNING $1: $2"
+  say "The install continues. Retry later with: $ENROLL_RETRY   (paste the credential, then press Ctrl-D)"
+  return 0
+}
+
+phase_enroll() {
+  inst06_env
+  if ! ((OPT_ENROLL || ${#OPT_ENROLL_FILE} > 0)); then
+    say "enrollment not requested (add --enroll or --enroll-file to join the cloud app)"
+    return 0
+  fi
+  if [[ -e "$LAI_ETC/cloud-credential" ]]; then
+    say "already enrolled ($LAI_ETC/cloud-credential exists): skipped"
+    return 0
+  fi
+  if ((DRY_RUN)); then
+    say "[dry-run] would enroll with: aictl cloud enroll --url $OPT_CLOUD_URL --credential-stdin"
+    return 0
+  fi
+  local cred="" rc=0 out=""
+  secret_xtrace_off
+  if [[ -n "$OPT_ENROLL_FILE" ]]; then
+    read_secret_file "$OPT_ENROLL_FILE" cred
+  elif tty_available; then
+    printf 'Node credential (starts with nod_, hidden): ' >/dev/tty
+    IFS= read -rs cred </dev/tty
+    printf '\n' >/dev/tty
+  fi
+  if [[ ! "$cred" =~ ^nod_[A-Za-z0-9_-]{8,}$ ]]; then
+    cred=""; secret_xtrace_on
+    enroll_fail LAI-CLD-051 "no valid node credential was given (it starts with nod_). Copy it from the cloud app's add-node dialog."
+    return 0
+  fi
+  if [[ ! -x "$AICTL_BIN" ]]; then
+    cred=""; secret_xtrace_on
+    enroll_fail LAI-CLD-054 "the aictl program is not installed at $AICTL_BIN."
+    return 0
+  fi
+  out="$(printf '%s\n' "$cred" | "$AICTL_BIN" cloud enroll --url "$OPT_CLOUD_URL" --credential-stdin 2>&1)" || rc=$?
+  out="${out//"$cred"/<credential>}"
+  cred=""
+  secret_xtrace_on
+  [[ -z "$out" ]] || say "aictl cloud enroll: $out"
+  if ((rc != 0)); then
+    local code
+    code="$(grep -oE 'LAI-CLD-0(51|53|54|62)' <<<"$out" | head -n1 || true)"
+    enroll_fail "${code:-LAI-CLD-054}" "enrollment did not complete (exit $rc). The node works without the cloud."
+    return 0
+  fi
+  say "enrolled with $OPT_CLOUD_URL"
+  return 0
+}
+# ===================================== end of INST-06 ==========================================================
 
 # INST-04 (issue #149): P5 users, groups and directories, P6 packages and companion programs.
 # Spec: docs/specs/installer.md section 4.3 P5 and P6. These definitions replace the stubs above.
