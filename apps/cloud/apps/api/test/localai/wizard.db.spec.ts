@@ -233,7 +233,9 @@ describe('POST /api/localai/nodes', () => {
       expect(later.body).not.toContain(token);
     }
     const audits = await prisma.auditEvent.findMany({ where: { targetId: nodeId } });
-    expect(audits.map((a) => a.action).sort()).toEqual(['localai.node.created', 'localai.node.credential_minted']);
+    // The one `?reveal=tailnet` above is itself audited (CLOUD-12), once, with empty meta.
+    expect(audits.map((a) => a.action).sort()).toEqual(['localai.node.created', 'localai.node.credential_minted', 'localai.node.tailnet_revealed']);
+    expect(audits.find((a) => a.action === 'localai.node.tailnet_revealed')?.meta ?? {}).toEqual({});
     expect(JSON.stringify(audits)).not.toContain(token);
     expect(JSON.stringify(audits)).not.toContain(TAILNET_IP);
     expect(audits.find((a) => a.action === 'localai.node.credential_minted')).toMatchObject({ actorUserId: adminId, targetType: 'localai_node', meta: { credentialId: stored.id, credentialPrefix: created.credential.prefix } });
