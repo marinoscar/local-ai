@@ -46,7 +46,7 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
    Full list: [cloud-app.md §8](../specs/cloud-app.md#8-doctor-codes-lai-cld).
 5. **Catalog** (`/lab/catalog`): the approved version, how many nodes use it, drafts and old versions. Part 3.
 6. **API keys / Usage / Models** (`/gateway/keys`, `/gateway/usage`, `/gateway/models`): Part 5.
-7. **Audit** (`/lab/audit`, owner): who did what and when (commands, key reveals, approvals, retirements). Filter by node, action and date.
+7. **Audit** (`/lab/audit`, owner; the **Audit trail** button on the Lab page): who did what and when (commands, key reveals, approvals, retirements), newest first. Filter by node, action and date; with no From date it shows the last 30 days. Click the target of a row to open that node, command or catalog. **What you should see:** a table of time, actor (an email, `node ai-n3` for something the computer itself did, or `system`), action, target and a one-line summary. **If it doesn't work:** a page that says "Could not load the audit trail" has a **Try again** button; if you see "not allowed", you are not the lab owner.
 
 ---
 
