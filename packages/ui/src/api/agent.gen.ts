@@ -2205,6 +2205,8 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             key_synced?: boolean;
+            /** @description True while a drill runs: the link sends nothing and keeps its session. */
+            paused?: boolean;
         };
         CloudEnrollRequest: {
             url: string;
