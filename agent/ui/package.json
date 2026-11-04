@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src e2e scripts",
+    "lint": "eslint src e2e",
     "test": "vitest run",
     "e2e": "npm run build && playwright test"
   },
