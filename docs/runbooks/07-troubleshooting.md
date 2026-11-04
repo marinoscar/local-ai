@@ -45,7 +45,7 @@ Do this first, for every problem.
    - `command not found`: Local AI isn't installed on this computer, or the link is missing. Try `sudo /opt/localai/bin/aiagent ctl doctor`. Otherwise see [05](05-add-a-node.md) or [06](06-rebuild-a-node-offline.md).
 4. **See and control the three services** (AI `llama`, library `kiwix`, speech `whisper`): `aictl services` lists them; `aictl services start <name>`, `aictl services stop <name>` and `aictl services restart <name>` act on one (`aictl restart <name>` is the same as `services restart`). Stopping `llama` in Survival mode needs `--force`, on purpose.
 5. **Look at the logs** of one part: `aictl logs --unit llama` (also `agent`, `kiwix`, `whisper`, `sync`, `drill`). Keys and tokens are already removed from them, so they are safe to share.
-6. **Desktop app problems:** run `ai-desktop --diagnose` in a terminal. It prints what it checked, with codes and fixes.
+6. **Desktop app problems:** run `ai-desktop --diagnose` in a terminal (it opens no window and works over ssh). It prints what it checked as JSON, and the `checks` list at the end names every problem with its `LAI-DSK` code and the fix. `"checks": []` means nothing is wrong. It always ends without an error, even when it found problems; read the list, not the exit code. Add `| jq .checks` to see only the list.
 
 ---
 

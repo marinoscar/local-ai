@@ -3,8 +3,14 @@ import { GatewayError } from './errors';
 
 /** JSON endpoints (chat, completions, embeddings). Fastify's own default is 1 MiB, so the routes set this explicitly. */
 export const GATEWAY_JSON_BODY_LIMIT = 8 * 1024 * 1024;
-/** `/v1/audio/transcriptions` (multipart). */
+/** `/v1/audio/transcriptions`: the largest FILE part (multipart, spec section 6). */
 export const GATEWAY_AUDIO_BODY_LIMIT = 25 * 1024 * 1024;
+/**
+ * `/v1/audio/transcriptions`: the route's `bodyLimit`, checked by Fastify against `Content-Length` before anything is read.
+ * One MiB above the file limit (the multipart framing and the text fields), the same headroom as nginx's
+ * `client_max_body_size 26m`: a file of exactly 25 MiB must get through, one byte more is refused by the file limit.
+ */
+export const GATEWAY_AUDIO_REQUEST_LIMIT = GATEWAY_AUDIO_BODY_LIMIT + 1024 * 1024;
 
 export interface InferenceBody {
   /** The `model` exactly as sent (an id or an alias). */

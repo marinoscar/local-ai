@@ -8,7 +8,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 const theme = createTheme({
-  typography: { fontFamily: '"Atkinson Hyperlegible", system-ui, sans-serif' },
+  typography: { fontFamily: '"Atkinson Hyperlegible", system-ui, sans-serif', button: { textTransform: 'none' } },
 });
 
 /** Mounts a shell page into #root. */

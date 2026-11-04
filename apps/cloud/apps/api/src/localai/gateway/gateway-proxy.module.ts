@@ -6,7 +6,7 @@
 //   GATEWAY_LIMITS          GW-08: RPM, concurrency, daily budget
 //   GATEWAY_USAGE_SINK      GW-08: the usage recorder
 //   GATEWAY_STREAM_HANDLER  GW-07: SSE passthrough (StreamProxy, bound below)
-//   UPSTREAM_TRANSPORT      GW-10: tailnet mode
+//   UPSTREAM_TRANSPORT      GW-10: chosen by LOCALAI_GATEWAY_UPSTREAM (public | tailnet), see upstream/transport.factory.ts
 //   GATEWAY_ATTEMPT_HOOKS / GATEWAY_CANDIDATE_SOURCE  GW-07/GW-09: observe the loop / on-demand load
 import { Logger, Module } from '@nestjs/common';
 import { resolveApiVersion } from '@marinoscar/platform-api/host';
@@ -25,6 +25,7 @@ import { GATEWAY_STREAM_HANDLER, type StreamProxyHandler } from './stream-handle
 import { StreamProxy } from './stream/stream-proxy';
 import { createUpstreamTransport } from './upstream/transport.factory';
 import { UPSTREAM_TRANSPORT, type UpstreamTransport } from './upstream/client';
+import { PrismaTailnetSuffixReader } from './upstream/tailnet-suffix';
 import { GATEWAY_USAGE_SINK, noopUsageSink } from './usage/usage-sink';
 
 /** Optional providers: bind these tokens to observe the attempt loop or to replace the candidate source. */
@@ -36,6 +37,7 @@ export const GATEWAY_CANDIDATE_SOURCE = Symbol('LOCALAI_GATEWAY_CANDIDATE_SOURCE
   providers: [
     CatalogModelResolver,
     PrismaProxySettingsReader,
+    PrismaTailnetSuffixReader,
     { provide: GATEWAY_MODEL_RESOLVER, useExisting: CatalogModelResolver },
     { provide: GATEWAY_PROXY_SETTINGS, useExisting: PrismaProxySettingsReader },
     { provide: GATEWAY_LIMITS, useValue: noopLimits },
@@ -47,7 +49,11 @@ export const GATEWAY_CANDIDATE_SOURCE = Symbol('LOCALAI_GATEWAY_CANDIDATE_SOURCE
       inject: [RoutingTable],
       useFactory: (table: RoutingTable): CandidateSource => new TableCandidateSource(table),
     },
-    { provide: UPSTREAM_TRANSPORT, useFactory: (): UpstreamTransport => createUpstreamTransport({ version: resolveApiVersion(__dirname) }) },
+    {
+      provide: UPSTREAM_TRANSPORT,
+      inject: [PrismaTailnetSuffixReader],
+      useFactory: (tailnetSuffix: PrismaTailnetSuffixReader): UpstreamTransport => createUpstreamTransport({ version: resolveApiVersion(__dirname), tailnetSuffix }),
+    },
     {
       provide: AttemptLoop,
       inject: [RoutingTable, NodeKeyProvider, UPSTREAM_TRANSPORT, GATEWAY_CANDIDATE_SOURCE, GATEWAY_ATTEMPT_HOOKS],

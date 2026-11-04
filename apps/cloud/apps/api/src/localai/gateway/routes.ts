@@ -14,10 +14,10 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from '@nestjs/common';
 import { MaintenanceModeService } from '@marinoscar/platform-api/host';
-import type { FastifyInstance, FastifyReply, FastifyRequest, HTTPMethods } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest, HTTPMethods, RouteOptions } from 'fastify';
 
 import { clientIp, GatewayAuthenticator, type GatewayPrincipal } from './auth';
-import { GATEWAY_AUDIO_BODY_LIMIT, GATEWAY_JSON_BODY_LIMIT, bodyErrorToGatewayError, parseInferenceBody } from './body';
+import { GATEWAY_AUDIO_REQUEST_LIMIT, GATEWAY_JSON_BODY_LIMIT, bodyErrorToGatewayError, parseInferenceBody } from './body';
 import { corsHeaders } from './cors';
 import { GatewayError, sendGatewayError } from './errors';
 import { GatewaySettingsReader, type GatewayConfig } from './gateway-settings';
@@ -27,6 +27,8 @@ import { buildGatewayIndex } from './index-route';
 import { ModelListing } from './models/listing';
 import { modelsHandlers } from './models-route';
 import { resolveRequestId } from './request-id';
+import { RoutingTable } from './routing/routing-table';
+import { audioCapabilityOf, registerAudioMultipart, transcriptionsHandlers } from './transcriptions-route';
 import { formatRequestLog, newRequestLog, type GatewayLogSink, type GatewayRequestLog } from './request-log';
 
 /** Where the scope is mounted; the public path is `/v1/...`. */
@@ -56,7 +58,7 @@ export interface GatewayHandlers {
   transcriptions: GatewayHandler;
 }
 
-/** The endpoints are stubs until the item that serves them replaces them (chat, completions and embeddings are served by `GatewayService`). */
+/** The endpoints are stubs until the item that serves them replaces them (chat, completions, embeddings and transcriptions are served by `GatewayService`). */
 const notBuiltYet: GatewayHandler = async () => {
   throw new GatewayError('LAI-GW-051', { message: 'This gateway endpoint is not available yet.' });
 };
@@ -188,14 +190,14 @@ export async function registerGatewayRoutesOn(instance: FastifyInstance, deps: G
       const define = (
         method: HTTPMethods | HTTPMethods[],
         url: string,
-        options: { endpoint: string; public?: boolean; bodyLimit?: number; inferenceBody?: boolean },
+        options: { endpoint: string; public?: boolean; bodyLimit?: number; inferenceBody?: boolean; multipart?: boolean },
         handler: GatewayHandler,
       ): void => {
-        scope.route({
+        const definition: RouteOptions = {
           method,
           url,
           bodyLimit: options.bodyLimit ?? GATEWAY_JSON_BODY_LIMIT,
-          config: { gatewayPublic: options.public === true, gatewayEndpoint: options.endpoint } satisfies RouteConfig,
+          config: { gatewayPublic: options.public === true, gatewayEndpoint: options.endpoint } as RouteConfig as RouteOptions['config'],
           ...ROUTE_LOGGING,
           handler: async (request, reply) => {
             const ctx = contextOf(request);
@@ -206,7 +208,16 @@ export async function registerGatewayRoutesOn(instance: FastifyInstance, deps: G
             const result = await handler({ ...ctx, reply });
             return result === undefined ? reply : result;
           },
-        });
+        };
+        // A multipart route gets its own child scope, so the plugin (and its content-type parser) exists for that route only.
+        if (options.multipart) {
+          void scope.register(async (child) => {
+            await registerAudioMultipart(child);
+            child.route(definition);
+          });
+        } else {
+          scope.route(definition);
+        }
       };
 
       define('GET', '/', { endpoint: 'index', public: true }, async ({ reply }) => reply.code(200).send(buildGatewayIndex()));
@@ -215,7 +226,7 @@ export async function registerGatewayRoutesOn(instance: FastifyInstance, deps: G
       define('POST', '/chat/completions', { endpoint: 'chat.completions', inferenceBody: true }, handlers.chatCompletions);
       define('POST', '/completions', { endpoint: 'completions', inferenceBody: true }, handlers.completions);
       define('POST', '/embeddings', { endpoint: 'embeddings', inferenceBody: true }, handlers.embeddings);
-      define('POST', '/audio/transcriptions', { endpoint: 'audio.transcriptions', bodyLimit: GATEWAY_AUDIO_BODY_LIMIT }, handlers.transcriptions);
+      define('POST', '/audio/transcriptions', { endpoint: 'audio.transcriptions', bodyLimit: GATEWAY_AUDIO_REQUEST_LIMIT, multipart: true }, handlers.transcriptions);
       // Preflight: answered by the pipeline hook (it ends there); the route exists so Fastify routes the method.
       define('OPTIONS', '/*', { endpoint: 'preflight' }, async ({ reply }) => reply.code(204).send());
       // Anything else under /v1/ is not served. It authenticates first, like every route, so an anonymous probe learns nothing.
@@ -239,6 +250,7 @@ export async function registerGatewayRoutes(app: NestFastifyApplication): Promis
     handlers: {
       ...modelsHandlers(app.get(ModelListing, { strict: false })),
       ...proxyHandlers(app.get(GatewayService, { strict: false })),
+      ...transcriptionsHandlers(app.get(GatewayService, { strict: false }), audioCapabilityOf({ healthyCandidates: (modelId) => app.get(RoutingTable, { strict: false }).healthyCandidates(modelId) })),
     },
   });
 }

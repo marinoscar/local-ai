@@ -56,6 +56,8 @@ apps/desktop/
     index.ts                   app lifecycle, single instance, wiring
     agent-client.ts            health, token read, session, status/events (main side only)
     agent-supervisor.ts        systemctl/pkexec start, group-membership diagnosis
+    startup.ts                 the start-up sequence, 401 recovery and error-page actions (DSK-03; no Electron import)
+    log.ts                     main.log: JSON lines, rotated (DSK-03)
     windows.ts                 main window (BaseWindow + 2 WebContentsViews), chat/library/maps windows
     navigation.ts              will-navigate / window-open / redirect allowlists
     egress-guard.ts            session webRequest guard + main-process socket guard
@@ -69,7 +71,7 @@ apps/desktop/
     cloud-link.ts              device flow (RFC 8628), token storage
     cloud-api.ts               allowlisted cloud API proxy for the Lab view
     secret-store.ts            safeStorage wrapper + consent
-    settings.ts                ~/.config/ai-desktop/settings.json
+    settings.ts                ~/.config/ai-desktop/settings.json (read/write, unknown keys kept: DSK-03)
     updates.ts                 opt-in electron-updater (off by default)
     i18n.ts                    en + es strings for main-process dialogs, tray and notifications
     diagnose.ts                `ai-desktop --diagnose` (JSON doctor report on stdout)
@@ -181,6 +183,7 @@ interface LocalaiDesktop {
   lang(): 'en' | 'es';
 }
 ```
+**As built (DSK-03).** Until DSK-04 writes the bridge above, `window.localaiDesktop` has exactly one member, `errorAction(action, code)`, used by the error page (`src/renderer/error/`). It is one `ipcRenderer.invoke` on the channel `localai:error-action`. The main process (`startup.ts`, `handleErrorAction`) accepts it only from a frame whose URL is `localai://app/error/` (the Vite dev origin's `/error/` when unpackaged), only for an `action` that the `code`'s page has (`copy-command`, `logout`, `start-agent`, `open-portal`, `open-browser`), and never takes text or a URL from the page: **Copy command** copies the command the catalog (`src/main/i18n.ts`) holds for that code. DSK-04 folds this call into the full bridge and keeps the origin check.
 `window.localaiDesktopHost` (agent pages, so the agent UI can adapt): `{ isDesktop: true, version: string, copyApiKey(), openWindow(which), connectionInfo() }`. Nothing else. Each IPC handler checks `event.senderFrame.url` origin (shell handlers accept only `localai://app`; host handlers only `http://127.0.0.1:7070`).
 
 ### 3.6 Navigation and egress allowlists
@@ -227,6 +230,8 @@ X-Content-Type-Options: nosniff
 ### 3.9 CLI flags
 `ai-desktop` (normal), `ai-desktop --hidden` (start in tray; used by autostart), `ai-desktop --portal` (open the Portal full screen), `ai-desktop --diagnose` (print the §8 checks as JSON and exit, no window).
 
+**As built (DSK-03), `--diagnose`.** Handled in `src/main/index.ts` before the single-instance lock, so it works while the app is running. It prints the object of section 7 as indented JSON on stdout and nothing else (Chromium's own noise goes to stderr), and **always exits 0**; a problem is a `checks` entry with a severity, never an exit code (an internal failure of the command itself exits 1). Electron on Linux cannot start its UI platform without a display, so with neither `DISPLAY` nor `WAYLAND_DISPLAY` the process runs a second copy of itself with `--ozone-platform=headless --disable-gpu` and relays its output and exit code; with a display it runs in place. No window is ever created. Keys: `agent.unit_state` is `systemctl is-active localai-agent.service` (`unknown` when systemd does not answer); `token.group_member` is whether `getent group localai-operators` lists the user (or it is their primary group), `needs_relogin` is true when the file is unreadable (`EACCES`), the user is listed and this login session lacks the group; `session` is `ok` when the agent accepts the token on `GET /status`, `refused` on a 401, `skipped` when it could not be asked (the command opens no session of its own); `tray` is `unknown` until DSK-06 can tell; `cloud.reachable` is `null` (no connection is made; DSK-10); `egress_blocked_total` is the last `blocked_total` of an egress line in `main.log` (blocks since the running app started, 0 when none); `autostart` is `{ enabled, file_present }`; a check is `{ code, severity, title, fix }` in the language of `settings.lang` (the fix text ends with the command to run, when there is one). LAI-DSK-015 is raised only for an installed (packaged) app, when `kernel.apparmor_restrict_unprivileged_userns` is `1` and the profile is not in `/sys/kernel/security/apparmor/profiles`; that file is readable by root only, so for other users the check falls back to the absence of `/etc/apparmor.d/ai-desktop`.
+
 ## 4. Behaviour
 
 ### 4.1 Start-up sequence
@@ -251,6 +256,14 @@ subscribe GET /api/v1/events (SSE, bearer, main process) ─► tray + top bar u
 ```
 The token is read by the main process only, kept in memory, never sent to a renderer. The agent session cookie (HttpOnly, SameSite=Strict, set by the agent on `127.0.0.1:7070`) lives in `persist:agent`, which uses cookie encryption (fuse). On any `401` seen by `webRequest.onCompleted` for `http://127.0.0.1:7070/api/v1/*` in the agent partition, the main process re-reads the token file (it may have been rotated, [security-model.md](../architecture/security-model.md) §2), re-creates the session and reloads the content view (at most once per 30 s).
 
+**As built (DSK-03).** The sequence is `runStartup()` in `src/main/startup.ts` (no Electron import; the window, the survival hook, the client and the supervisor are injected); `src/main/index.ts` wires it. Choices the text left open:
+- The window is created hidden and shown by the first screen. Until DSK-04 it is one `BrowserWindow` (its own page is the DSK-01 top bar placeholder, which must load something: Playwright cannot attach to a webContents that never navigated) plus one `WebContentsView` in `persist:agent` for the agent UI and the Portal (`windows.ts`, `createTemporaryHost`, replaced by DSK-04). Error pages load in the window's own page (default session).
+- `health()` is 3 tries 1 s timeout 300 ms apart. An agent that answers with `starting: true` is polled once a second for up to 10 s before the token is read. A version whose major is not `SUPPORTED_API_MAJOR` (0) shows LAI-DSK-006 before the token file is touched; an unparsable version counts as a mismatch. A session request answered `503` is retried (5 × 1 s); an unreachable agent at that point is LAI-DSK-004, any other refusal is LAI-DSK-007.
+- Reading the token: `EACCES` runs the group diagnosis; `ENOENT`, an empty file and a file that is not `lat_` + 43 characters of base64url are all LAI-DSK-003. Both unreadable and rotated tokens are re-read exactly once on a 401 from `POST /session`.
+- `AgentClient` (`agent-client.ts`) keeps the token in a private field; `request(path)` adds the bearer and refuses any path that is not `/api/v1/...` on the agent origin, so the token cannot be sent elsewhere. It re-reads the token file on a 401 and repeats the request once if the token changed. `events()` is the SSE reader of section 3.10 of agent.md: `Last-Event-ID` on reconnect, backoff 1, 2, 4, ... 30 s, reset by a stream that opened, a stall limit of 45 s without a byte (the agent pings every 15 s), a 200 that is not `text/event-stream` counts as a failure. `AgentFeed` wraps it for the tray and top bar (DSK-06, DSK-04): it re-reads `/status` after a `resync` and after every reconnect and emits `event`, `connection` and `status` messages.
+- 401 recovery (`SessionRecovery`): `webRequest.onCompleted` on `persist:agent` for `http://127.0.0.1:7070/api/v1/*`, status 401, except the login calls themselves (`/api/v1/session*`, `/api/v1/health`), and only while the agent view shows the dashboard (not the Portal, not an error page). At most one recovery per 30 s; one running at a time. A recovery that fails shows LAI-DSK-007, LAI-DSK-004 or the token-file page.
+- The survival branch calls `survival.enter()` (a no-op until DSK-09) and loads `/portal`.
+
 ### 4.2 Token-file errors and "Start agent"
 **Group diagnosis** on `EACCES`:
 - user listed in `getent group localai-operators` but `process.getgroups()` lacks its gid → **LAI-DSK-002**: "You were added to the Local AI operators group, but you need to log out and log back in once." / "Te agregaron al grupo de operadores de Local AI, pero debes cerrar sesión y volver a entrar una vez." Button **Log out now** (`gnome-session-quit --logout` if present, else instructions).
@@ -261,6 +274,7 @@ The token is read by the main process only, kept in memory, never sent to a rend
 2. If it fails with an authorization error: `execFile('/usr/bin/pkexec', ['/usr/bin/systemctl', 'start', 'localai-agent.service'])`: the system asks for the administrator password. Exit 126/127 = cancelled/not authorised → LAI-DSK-005.
 3. Poll `/api/v1/health` every 1 s for 30 s, then continue the start-up sequence. If still down: show `systemctl status localai-agent.service --no-pager -n 20` output (read-only, no privilege) and the fix "Run `sudo aictl doctor` in a terminal".
 No shell is ever used; arguments are fixed.
+**As built (DSK-03).** The group diagnosis is `diagnoseGroupAccess()` in `agent-supervisor.ts`: `getent group localai-operators` (fixed path `/usr/bin/getent`, `execFile`) lists the user, or the user's primary gid is the group's, and `process.getgroups()` is compared with the group's gid. Result `not-member` is LAI-DSK-001, `needs-relogin` LAI-DSK-002, and `member-active` (the group is not the cause; the file's own mode is wrong) is shown as LAI-DSK-001 too, since its fix is the closest one. **Log out now** runs `/usr/bin/gnome-session-quit --logout` when it exists and otherwise the page says how to log out by hand. **Start agent** is on the LAI-DSK-003 and 004 pages, but `AgentSupervisor.start` is DSK-05's: until it exists the button answers LAI-DSK-005 ("run `sudo aictl doctor`"). **Open in browser** (LAI-DSK-007) opens `http://127.0.0.1:7070/` in the default browser, the one loopback exception to the external-URL list of section 6; the page tells the user to get a login code with `aictl ui-code`. **Open Survival Portal** loads `http://127.0.0.1:7070/portal` in the agent view, with no token.
 
 ### 4.3 Tray
 Status colour (icon file) and meaning, computed from the agent status and events:
@@ -398,7 +412,7 @@ Signing note: Linux installers are not code-signed; integrity comes from `SHA256
 - A stolen desktop session gives at most what a `localai-operators` member already has; destructive actions still need the PIN.
 
 ## 7. Observability
-- `~/.config/ai-desktop/logs/main.log`, JSON lines: `ts, level, msg, component (agent|tray|egress|cloud|updates|survival), code`. Egress blocks: `{component: "egress", host, blocked_total}`. Never paths with tokens, never keys, never PIN.
+- `~/.config/ai-desktop/logs/main.log`, JSON lines: `ts, level, msg, component (app|agent|tray|egress|cloud|updates|survival), code`. **As built (DSK-03):** `log.ts`; the file (0600, folder 0700) rotates when the next line would pass 5 MB, keeping `main.log`, `main.log.1` and `main.log.2` (15 MB at most); each line is also written to stderr; every line is scrubbed of anything shaped like a token (`lat_`, `lai_`, `nod_`, `pat_`, `pg_`), a bearer header or a session cookie before it is written. `XDG_CONFIG_HOME` moves the whole `ai-desktop` folder (settings, logs), as it does Electron's own data folder. Egress blocks: `{component: "egress", host, blocked_total}`. Never paths with tokens, never keys, never PIN.
 - `ai-desktop --diagnose` prints `{ version, electron, agent: {reachable, version, unit_state}, token: {readable, group_member, needs_relogin}, session: ok, tray: supported, safe_storage_backend, cloud: {linked, reachable}, egress_blocked_total, autostart, checks: [{code, severity, title, fix}] }`. The local UI's Doctor page and [runbooks/07-troubleshooting.md](../runbooks/07-troubleshooting.md) tell users to run it.
 
 ## 8. Doctor codes (`LAI-DSK`)
@@ -439,7 +453,7 @@ Signing note: Linux installers are not code-signed; integrity comes from `SHA256
 | CSP/protocol | traversal refused; CSP header present on every response |
 
 ### E2E (Playwright for Electron, `tests/e2e/`, against `fake-agent.ts` on 127.0.0.1:7070 and `fake-cloud.ts`)
-- `smoke.spec.ts`: launch → session created (fake agent sees `POST /api/v1/session` with the token from a temp token file via `LOCALAI_DESKTOP_TOKEN_PATH`, honoured only when `!app.isPackaged` or in the test copy) → dashboard visible; Chat window opens at `/chat/`.
+- `smoke.spec.ts` (**as built, DSK-03**: also the session cookie in `persist:agent`, the bearer SSE connection, the token absent from every renderer and from `main.log`, and the 401 recovery with its 30 s limit; `startup-errors.spec.ts`: LAI-DSK-003, 004, 006 and 007 pages from the real start-up sequence, **Copy command**, **Open Survival Portal**, and every error page in both languages; `diagnose.spec.ts`: `--diagnose` with no display; the Chat window half arrives with DSK-04): launch → session created (fake agent sees `POST /api/v1/session` with the token from a temp token file via `LOCALAI_DESKTOP_TOKEN_PATH`, honoured only when `!app.isPackaged` or in the test copy) → dashboard visible; Chat window opens at `/chat/`.
 - `agent-down.spec.ts`: no fake agent → LAI-DSK-004 page; start fake agent and click Start agent (systemctl stubbed through `LOCALAI_DESKTOP_SYSTEMCTL` in test builds) → dashboard.
 - `survival.spec.ts`: fake agent emits `mode.changed: survival` → window full screen on `/portal`; close → hidden; tray "Open" → full screen again.
 - `egress.spec.ts` (**as built, DSK-02**: the offline cases run in `desktop-ci` against the packaged test copy under Xvfb; the connected cases arrive with DSK-10; the counter is read from the JSON log lines on stderr, the probe page is served by `fake-agent.ts` at `/egress-probe`): (offline) agent page tries `fetch('https://example.com')`, `<img src=https://…>`, WebSocket → all blocked, counter = 3; main-process `fetch('https://ai.marin.cr')` throws `EgressBlockedError`; (connected, fake cloud via hosts mapping in test) Lab loads; switch fake agent to offline → next Lab request refused without a socket.

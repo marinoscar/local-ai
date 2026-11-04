@@ -8,10 +8,11 @@ import type { GatewayRequestContext } from './routes';
 import type { AdmissionTicket } from './limits';
 import { RequestAbortReason } from './attempts';
 import type { ResolvedGatewayModel } from './model-resolver';
+import type { SelectedCandidate } from './routing/routing.types';
 import type { GatewayTimeouts } from './proxy-settings';
 import type { UsageRecord, UsageSink, UsageSource } from './usage/usage-sink';
 
-export type ProxyEndpointName = 'chat.completions' | 'completions' | 'embeddings';
+export type ProxyEndpointName = 'chat.completions' | 'completions' | 'embeddings' | 'audio.transcriptions';
 
 export interface ProxyEndpointSpec {
   name: ProxyEndpointName;
@@ -26,6 +27,7 @@ export const PROXY_ENDPOINTS: Readonly<Record<ProxyEndpointName, ProxyEndpointSp
   'chat.completions': { name: 'chat.completions', upstreamPath: '/v1/chat/completions', supportsStream: true, forceUsageChunk: true },
   completions: { name: 'completions', upstreamPath: '/v1/completions', supportsStream: true, forceUsageChunk: false },
   embeddings: { name: 'embeddings', upstreamPath: '/v1/embeddings', supportsStream: false, forceUsageChunk: false },
+  'audio.transcriptions': { name: 'audio.transcriptions', upstreamPath: '/v1/audio/transcriptions', supportsStream: false, forceUsageChunk: false },
 };
 
 /** How a request ended; `ProxyRequest.settle` turns it into the usage record, the limits settle and the log fields. */
@@ -68,6 +70,10 @@ export class ProxyRequest {
   resolved: ResolvedGatewayModel | null = null;
   ticket: AdmissionTicket | null = null;
   upstreamBody: Buffer = Buffer.alloc(0);
+  /** The `Content-Type` of {@link upstreamBody}: JSON, or the multipart type (with its new boundary) of a transcription. */
+  upstreamContentType = 'application/json';
+  /** Candidates this request can use at all (GW-10: audio-capable nodes for a transcription); absent means every one. */
+  eligible?: (candidate: SelectedCandidate) => boolean;
   timeouts!: Pick<GatewayTimeouts, 'connectMs' | 'firstByteMs' | 'idleMs' | 'totalMs'>;
   maxAttempts = 1;
   /** Did the client itself ask for `stream_options.include_usage`? GW-07 forwards the usage chunk only then. */
