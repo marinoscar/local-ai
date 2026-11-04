@@ -554,6 +554,9 @@ func (d *Daemon) stepPeriodic(ctx context.Context) error {
 	if d.ark != nil {
 		d.startWorker(d.ark.ready) // READY.json now and every 6 hours
 	}
+	if d.firstAid != nil {
+		d.startWorker(d.firstAid) // first-aid article availability, off the request path
+	}
 	d.startWorker(c.Tailscale)
 	d.startWorker(c.Health)
 	d.bg.Add(1)

@@ -1,11 +1,15 @@
 package app
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 	"github.com/marinoscar/local-ai/agent/internal/ark/ready"
+	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/portal"
+	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 )
 
 // portalBuilder is the body builder of GET /portal/status over the daemon's cached views
@@ -24,6 +28,22 @@ func (d *Daemon) portalBuilder(sup portal.HealthView) *portal.Builder {
 	if d.ark != nil && d.ark.ready != nil {
 		src.Ark = readyArk{d.ark.ready}
 	}
+	d.firstAid = portal.NewFirstAidResolver(portal.FirstAidConfig{
+		Prober: portal.HTTPProber{Base: fmt.Sprintf("http://127.0.0.1:%d", c.Config.Get().Ports.Kiwix)},
+		Inputs: func() (*catalog.Catalog, health.Record) {
+			var rec health.Record
+			if sup != nil {
+				for _, r := range sup.Records(context.Background()) {
+					if r.Name == "kiwix" {
+						rec = r
+					}
+				}
+			}
+			return c.Catalog.Get().Catalog, rec
+		},
+		Alerts: c.Doctor, Bus: c.Bus, Logger: d.log,
+	})
+	src.FirstAid = d.firstAid
 	return portal.NewBuilder(src)
 }
 
