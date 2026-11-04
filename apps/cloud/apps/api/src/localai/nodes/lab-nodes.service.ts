@@ -29,7 +29,7 @@ export class LabNodesService {
     const row = await this.prisma.localaiNode.findUnique({ where: { nodeId } });
     if (!row || row.phase === 'retired') throw new NotFoundException({ message: 'No Local AI node has this id' });
     const { cards } = await this.cardsFor([row], now);
-    const detail: NodeDetailDto = { ...cards[0]!, lastState: row.lastState ?? null };
+    const detail: NodeDetailDto = { ...cards[0]!, lastState: row.lastState ?? null, keyReceived: row.keyReportedAt !== null };
     if (revealTailnet) detail.tailnetIp = row.tailnetIp ?? null;
     return detail;
   }
