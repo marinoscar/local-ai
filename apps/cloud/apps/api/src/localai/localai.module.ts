@@ -8,11 +8,12 @@ import { CatalogModule } from './catalog/catalog.module';
 import { CommandsModule } from './commands/commands.module';
 import { LocalaiDoctorModule } from './doctor';
 import { GatewayCoreModule } from './gateway/gateway-core.module';
+import { GatewayRoutingModule } from './gateway/routing/routing.module';
 import { LabNodesModule } from './nodes/lab-nodes.module';
 import { LocalaiNodesModule } from './nodes/nodes.module';
 import { NodeLinkModule } from './node-link/node-link.module';
 import { VpsModule } from './vps/vps.module';
 import { WizardModule } from './wizard/wizard.module';
 
-@Module({ imports: [NodeLinkModule, LocalaiNodesModule, CatalogModule, CommandsModule, LabNodesModule, LocalaiDoctorModule, WizardModule, AlertsModule, VpsModule, LocalaiAuditModule, GatewayCoreModule] })
+@Module({ imports: [NodeLinkModule, LocalaiNodesModule, CatalogModule, CommandsModule, LabNodesModule, LocalaiDoctorModule, WizardModule, AlertsModule, VpsModule, LocalaiAuditModule, GatewayRoutingModule, GatewayCoreModule] })
 export class LocalaiModule {}
