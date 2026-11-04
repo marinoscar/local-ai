@@ -973,7 +973,7 @@ if [[ $REAL_MS == 1 ]]; then
   (cd "$I2_RELR" && sha256sum aiagent-linux-amd64 aiagent-linux-arm64 install-node.sh >SHA256SUMS && printf 'pw-test\n' | minisign -S -s "$w/i2-r.key" -m SHA256SUMS -x SHA256SUMS.minisig >/dev/null 2>&1)
   mkdir -p "$w/i2-fakebin-real"; cp -a "$I2_FB"/. "$w/i2-fakebin-real/"; rm -f "$w/i2-fakebin-real/minisign"
   I2_RPATH="$w/i2-fakebin-real:${PATH#"$I2_FB":}"
-  i2_realr() { env PATH="$I2_RPATH" LAI_RELEASE_BASE_URL="file://$1" LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$w/i2-vstate" LAI_INSTALL_SYSTEMD_DIR="$w/i2-vsystemd" "$I2_RSTAMP" --log "$w/i2-realv.log" "${I2_RA[@]}"; }
+  i2_realr() { env PATH="$I2_RPATH" "${llhooks[@]}" LAI_RELEASE_BASE_URL="file://$1" LAI_INSTALL_STATE_DIR="$w/i2-vstate" LAI_INSTALL_SYSTEMD_DIR="$w/i2-vsystemd" "$I2_RSTAMP" --log "$w/i2-realv.log" "${I2_RA[@]}"; }
   i2_fresh
   t "real minisign: a good signature installs" 0 "signature of SHA256SUMS is good" i2_realr "$I2_RELR"
   I2_RELT="$w/i2-rel-real-bad"; cp -a "$I2_RELR" "$I2_RELT"; echo "tampered" >>"$I2_RELT/SHA256SUMS"
