@@ -1356,14 +1356,14 @@ p2_link() {
 }
 
 p2_place() {
-  local bin="$INSTALL_PFX/opt/localai/bin" inst="$INSTALL_PFX/opt/localai/installers" owner=()
-  ((${FAKE_EUID:-$EUID} == 0)) && owner=(-o root -g root)
+  local bin="$INSTALL_PFX/opt/localai/bin" inst="$INSTALL_PFX/opt/localai/installers" own_args=()
+  ((${FAKE_EUID:-$EUID} == 0)) && own_args=(-o root -g root)
   local src="$P2_TMP/aiagent-linux-$P1_ARCH"
   if [[ -x "$bin/aiagent" ]] && cmp -s "$src" "$bin/aiagent"; then
     say "the agent in $bin/aiagent is already this version"
   else
     run_or_say mkdir -p "$bin"
-    run_or_say install -m 0755 "${owner[@]}" "$src" "$bin/aiagent.new"
+    run_or_say install -m 0755 "${own_args[@]}" "$src" "$bin/aiagent.new"
     if ((!DRY_RUN)); then
       "$bin/aiagent.new" version >/dev/null 2>&1 || { rm -f "$bin/aiagent.new"; p_fail 1 LAI-INS-021 "the downloaded agent does not run on this computer."; }
       say "the new agent runs: $("$bin/aiagent.new" version 2>&1 | head -n 1)"
@@ -1376,7 +1376,7 @@ p2_place() {
   if [[ -f "$inst/install-node.sh" ]] && cmp -s "$P2_TMP/install-node.sh" "$inst/install-node.sh"; then
     say "the installer in $inst/install-node.sh is already this version"
   else
-    run_or_say install -m 0755 "${owner[@]}" "$P2_TMP/install-node.sh" "$inst/install-node.sh"
+    run_or_say install -m 0755 "${own_args[@]}" "$P2_TMP/install-node.sh" "$inst/install-node.sh"
   fi
   p2_link /opt/localai/installers/install-node.sh "$INSTALL_PFX/usr/local/sbin/install-node.sh"
 }
