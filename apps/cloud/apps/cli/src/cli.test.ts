@@ -33,6 +33,12 @@ runPlatformConformance({
   testApi: { describe, it, expect },
 });
 
+describe('the gateway stream path', () => {
+  it('declares /v1/ to the edge vhost with the gateway timeout', () => {
+    expect(APP_CLI_OPTIONS.proxy?.streamPaths).toEqual([{ path: '/v1/', timeoutSeconds: 1800 }]);
+  });
+});
+
 describe('the CLI identity', () => {
   it('takes its name from identity.json, and package.json bin is that one name', () => {
     const manifest = JSON.parse(read(new URL('../package.json', import.meta.url))) as { bin: Record<string, string> };
