@@ -110,6 +110,10 @@ var (
 	migrateInteractive           = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 )
 
+// migrateRolledBack is set when the last runMigrate ended in a failure that the engine rolled back; `aiagent
+// setup migrate` reads it to tell the installer (exit setupExitRolledBack).
+var migrateRolledBack bool
+
 type migrateError struct {
 	code, msg string
 	exit      int
@@ -120,6 +124,7 @@ func (e *migrateError) Error() string { return e.code + ": " + e.msg }
 // runMigrate is `aiagent migrate`. Exit 0: done, nothing to do, a dry run that would pass. 1: it failed
 // or was refused (the code and the fix are on stderr). 2: bad usage or no confirmation.
 func runMigrate(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	migrateRolledBack = false
 	f, err := parseMigrateArgs(args)
 	if err != nil {
 		fmt.Fprintf(stderr, "aiagent migrate: %v (%s)\n\n%s", err, doctor.CLI005, migrateUsage)
@@ -232,6 +237,7 @@ func reportMigrateError(stderr io.Writer, err error) int {
 	if errors.As(err, &e) {
 		fmt.Fprintf(stderr, "aiagent migrate: %s\n", e.Error())
 		if e.RolledBack {
+			migrateRolledBack = true
 			fmt.Fprintln(stderr, "The old llama-qwen.service is running again, as before. Nothing else has to be done.")
 		}
 	} else {

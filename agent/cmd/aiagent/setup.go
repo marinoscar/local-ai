@@ -21,6 +21,7 @@ const setupUsage = `usage: aiagent setup <step> [flags]      (internal, root onl
   serve-check  decide the Tailscale serve pattern, LAI-INS-050 on a mismatch with the inventory (P11)
   verify       post-install checks that can pass before a reboot (P15)
   summary      print the install summary and the VPS checklist (P15)
+  migrate      run every pending migration (llama-qwen) with the installer's logging (P8)
 `
 
 // runSetup is `aiagent setup <step>`. Steps owned by other installer items register in setupSteps.
@@ -45,6 +46,7 @@ var setupSteps = map[string]func(args []string, stdout, stderr io.Writer) int{
 	"serve-check": setupServeCheck,
 	"verify":      setupVerify,
 	"summary":     setupSummary,
+	"migrate":     setupMigrate,
 }
 
 type commonFlags struct {
