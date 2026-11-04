@@ -1,10 +1,16 @@
-name: CI
+name: cloud-ci
 
 on:
   push:
     branches: [main]
+    paths: ['apps/cloud/**', 'packages/ui/**', 'catalog/**', '.github/workflows/cloud-ci.yml']
   pull_request:
     branches: [main]
+    paths: ['apps/cloud/**', 'packages/ui/**', 'catalog/**', '.github/workflows/cloud-ci.yml']
+
+defaults:
+  run:
+    working-directory: apps/cloud
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -51,6 +57,7 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
+          cache-dependency-path: apps/cloud/package-lock.json
 
       - name: Create the ordinary application role
         env:
