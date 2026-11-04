@@ -17,8 +17,11 @@ import type { ModelRow, PolicyInput } from './modelsTypes';
 /** How often a visible page refreshes (spec 3.11), so the live state stays current. */
 export const MODELS_POLL_MS = 5000;
 
-/** Below the `sm` breakpoint (600 px, `theme.breakpoints.down('sm')`) the table becomes a list of cards. */
-const NARROW = '(max-width:599.95px)';
+/**
+ * Below 1100 px the table becomes a list of cards. Not one of the shell's five coupled breakpoint gates: the table has seven
+ * columns and the navigation rail takes room from 600 px on, so at 800 px the last columns (Prefer, Edit) would scroll out of sight.
+ */
+const NARROW = '(max-width:1099.95px)';
 
 export interface ModelsPageProps {
   /** Replace the transports (tests). */
