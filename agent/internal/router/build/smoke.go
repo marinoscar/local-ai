@@ -175,10 +175,22 @@ func (r *run) generate(ctx context.Context) *Error {
 		return skip("no model is available to test it with.")
 	}
 	cli := filepath.Join(r.plan.OutDir, "bin", "llama-cli")
-	args := []string{"-m", model, "-n", "8", "-p", "Hello", "-ngl", "99", "--no-warmup"}
-	r.logf("$ %s %s\n", cli, strings.Join(args, " "))
-	res, err := r.m.opt.Exec.Run(ctx, execx.Cmd{Path: cli, Args: args, Timeout: r.m.opt.Timing.Generate, MaxOut: 1 << 20, Env: toolEnv()})
-	r.logf("%s%s", res.Stdout, res.Stderr)
+	run := func(ngl string) (execx.Result, error) {
+		args := []string{"-m", model, "-n", "8", "-p", "Hello", "-ngl", ngl, "--no-warmup"}
+		r.logf("$ %s %s\n", cli, strings.Join(args, " "))
+		res, err := r.m.opt.Exec.Run(ctx, execx.Cmd{Path: cli, Args: args, Timeout: r.m.opt.Timing.Generate, MaxOut: 1 << 20, Env: toolEnv()})
+		r.logf("%s%s", res.Stdout, res.Stderr)
+		return res, err
+	}
+	res, err := run("99")
+	// On a node that is serving a model the GPU is already full: the whole test model does not fit next
+	// to it. That is not a broken build, and --list-devices has already proven the GPU backend, so the
+	// words are generated on the CPU instead (rebuild-kit.md section 4.3.3).
+	if err == nil && res.ExitCode != 0 && ctx.Err() == nil && gpuOutOfMemory(string(res.Stdout)+string(res.Stderr)) {
+		r.warnings = append(r.warnings, "The GPU is busy with the model in use, so the new build wrote its few words on the processor instead.")
+		r.logf("[GPU out of memory: trying again with -ngl 0]\n")
+		res, err = run("0")
+	}
 	command := "llama-cli -m <model> -n 8 -p Hello -ngl 99 --no-warmup"
 	switch {
 	case err != nil && ctx.Err() != nil:
@@ -196,6 +208,12 @@ func (r *run) generate(ctx context.Context) *Error {
 			"cause", "smoke_generate_empty", "command", command)
 	}
 	return nil
+}
+
+// gpuOutOfMemory reports whether llama.cpp's output says the GPU had no room for the model.
+func gpuOutOfMemory(out string) bool {
+	o := strings.ToLower(out)
+	return strings.Contains(o, "out of memory") || strings.Contains(o, "failed to allocate cuda") || strings.Contains(o, "failed to allocate vulkan")
 }
 
 // VersionLine finds the line of `llama-server --version` that carries the first 7 hex characters of
