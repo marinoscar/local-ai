@@ -179,8 +179,8 @@ var ErrDesktopUser = errors.New("the desktop user does not exist")
 var ErrNotADirectory = errors.New("a file is in the way of a folder")
 
 type ids struct {
-	rootUID, localaiUID, localaiGID int
-	localaiPlanned                  bool
+	localaiUID, localaiGID int
+	localaiPlanned         bool
 }
 
 // Run does the work. The returned Report lists what was done up to a failure, so a failed run still tells
