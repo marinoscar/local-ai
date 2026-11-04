@@ -8,6 +8,7 @@ import { LocalaiDoctorModule } from './doctor';
 import { LabNodesModule } from './nodes/lab-nodes.module';
 import { LocalaiNodesModule } from './nodes/nodes.module';
 import { NodeLinkModule } from './node-link/node-link.module';
+import { WizardModule } from './wizard/wizard.module';
 
-@Module({ imports: [NodeLinkModule, LocalaiNodesModule, CatalogModule, CommandsModule, LabNodesModule, LocalaiDoctorModule] })
+@Module({ imports: [NodeLinkModule, LocalaiNodesModule, CatalogModule, CommandsModule, LabNodesModule, LocalaiDoctorModule, WizardModule] })
 export class LocalaiModule {}
