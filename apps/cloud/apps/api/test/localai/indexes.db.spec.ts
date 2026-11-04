@@ -61,7 +61,7 @@ const command = (tx: Tx, nodeId: string, status: 'queued' | 'running' | 'succeed
   });
 
 const alert = (tx: Tx, nodeId: string | null, kind: string, state: 'active' | 'cleared') =>
-  tx.localaiAlert.create({ data: { nodeId, kind, code: 'LAI-CLD-001', severity: 'warning', state, title: 'Node Alpha is quiet' } });
+  tx.localaiAlert.create({ data: { nodeId, kind, code: 'LAI-CLD-004', severity: 'warning', state, title: 'Node Alpha is quiet' } });
 
 afterAll(async () => {
   await prisma.$disconnect();
