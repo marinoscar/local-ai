@@ -42,8 +42,12 @@ var Pins = []Pin{
 	},
 	{
 		Name:         "nvidia-cuda-archive-keyring.gpg",
-		Fingerprints: []string{"EB693B3035CD5710E231E123A4B469963BF863CC"},
-		Vendor:       "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub",
+		// Two keys: the 2022 key that signs the ubuntu2404 repository, and the key that signs ubuntu2604
+		// (found on a real node, issue #312). The second has ONE source only: the cuda-keyring deb in
+		// the ubuntu2604 directory of the vendor's own HTTPS site, and the repository's InRelease verifies
+		// against it. No key server carried it on 2026-11-04.
+		Fingerprints: []string{"EB693B3035CD5710E231E123A4B469963BF863CC", "14BAFBC7562AD710CA04E69905FBB6DA60DF8A40"},
+		Vendor:       "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2604/x86_64/cuda-keyring_1.1-1_all.deb",
 	},
 }
 
