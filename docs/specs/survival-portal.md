@@ -306,7 +306,7 @@ Each problem shows its code, a one-sentence title and the fix, in the UI languag
 │ Switching takes about a minute. Questions in progress will stop.                             │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
-Only `loadable: true` models are listed; survival models first. Pressing **Use this** shows a confirmation ("Switch to *X*? The current brain will stop.") then a progress view driven by `model.loading/loaded/failed` events ("Loading *X* … 35 s"). Failure → `LAI-SVC-107` with "The previous brain was restarted." (the agent reloads the previous default, llama-router.md).
+Only `loadable: true` models are listed; survival models first. Pressing **Use this** shows a confirmation ("Switch to *X*? The current brain will stop.") then a progress view driven by `model.loading/loaded/failed` events ("Loading *X* … 35 s"). Failure → `LAI-SVC-107` with "The previous brain was restarted." (the agent reloads the previous default, llama-router.md). The progress view also ends as loaded when a status poll shows the model in `brain.loaded` (a missed event), and as failed (`LAI-SVC-107`) after 300 s. A refused load (for example `429`) shows the agent's `message`, `fix` and code, and keeps the list usable. A cpu-only node (alert `LAI-SVC-113`) shows `brain.speed.slow` on every model.
 
 #### 4.1.10 First aid (`F`, or "More …")
 A grid of all `first_aid` entries (big buttons, two lines). Each opens the article in the reader. A permanent red-bordered note at the top: "This is not a doctor. If any phone works, call 911. Act fast in an emergency; read later." (`firstaid.disclaimer` + `firstaid.readLater`) Unavailable entries are hidden; if none are available, the panel says "The medical book is not installed. Plug in the ark drive." (`LAI-SVC-109`, shown when the alert is active).
@@ -581,6 +581,16 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `time.hm` | {h} h {m} min | {h} h {m} min |
 | `time.m` | {m} min | {m} min |
 | `status.noBrain` | none | ninguno |
+| `status.cap.ready` | Works | Funciona |
+| `status.cap.degraded` | Works, with a note | Funciona, con una nota |
+| `status.cap.unavailable` | Not available | No disponible |
+| `status.books` | {n} books | {n} libros |
+| `status.mapsDetail` | search {search}, GPS {gps} | búsqueda {search}, GPS {gps} |
+| `status.details` | Details | Detalles |
+| `status.noProblems` | No problems. | Sin problemas. |
+| `status.noErrors` | No errors recorded. | Sin errores registrados. |
+| `brain.none` | No other brain can be started on this computer. | No se puede iniciar otro cerebro en esta computadora. |
+| `brain.ready` | {name} is running. | {name} está funcionando. |
 | `banner.startFailed` | Could not start survival mode. Try again. | No se pudo iniciar el modo supervivencia. Intente otra vez. |
 | `manuals.none` | The manuals are not installed. Plug in the ark drive. | Los manuales no están instalados. Conecte el disco del arca. |
 

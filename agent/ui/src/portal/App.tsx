@@ -7,7 +7,9 @@ import { FirstAid } from "./screens/FirstAid";
 import { Library } from "./screens/Library";
 import { Reader } from "./screens/Reader";
 import { ChatInterstitial } from "./screens/ChatInterstitial";
+import { Brain } from "./screens/Brain";
 import { Home } from "./screens/Home";
+import { Status } from "./screens/Status";
 import { LockDialog } from "./screens/LockDialog";
 import { Stub } from "./screens/Stub";
 import { Talk } from "./screens/Talk";
@@ -101,6 +103,10 @@ export function App() {
           <FirstAid status={status} />
         ) : view.screen === "talk" ? (
           <Talk status={status} />
+        ) : view.screen === "status" && status ? (
+          <Status status={status} />
+        ) : view.screen === "brain" && status ? (
+          <Brain status={status} />
         ) : (
           <Stub screen={view.screen} />
         );
