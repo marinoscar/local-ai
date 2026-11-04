@@ -70,6 +70,21 @@ test('scanDir skips binary fonts and counts text files; the CLI exit codes', () 
   }
 });
 
+test('an external tile URL in the maps viewer bundle (viewer/) fails like any other file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oa-maps-'));
+  try {
+    mkdirSync(join(dir, 'viewer'));
+    writeFileSync(join(dir, 'viewer', 'maps-abc123.js'), 'const s={tiles:["https://tile.example.org/{z}/{x}/{y}.png"]};');
+    const { files, findings } = scanDir(dir);
+    assert.equal(files, 1);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].file, join('viewer', 'maps-abc123.js'));
+    assert.match(findings[0].message, /^https:\/\/tile\.example\.org\//);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('the committed negative fixture is rejected', () => {
   const r = spawnSync('node', [script, join(here, '..', 'testdata', 'offline-assets', 'bad')], { encoding: 'utf8' });
   assert.equal(r.status, 1);

@@ -4,10 +4,13 @@ import { getLang } from "./i18n/i18n";
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
-  constructor(status: number, code: string, message: string) {
+  /** The one-sentence fix of the agent's error envelope, when it sent one. */
+  readonly fix: string;
+  constructor(status: number, code: string, message: string, fix = "") {
     super(message);
     this.status = status;
     this.code = code;
+    this.fix = fix;
   }
 }
 
@@ -40,18 +43,20 @@ export async function apiFetch(
   if (!res.ok) {
     let code = "";
     let message = res.statusText;
+    let fix = "";
     try {
       const body = (await res.json()) as {
-        error?: { code?: string; message?: string };
+        error?: { code?: string; message?: string; fix?: string };
         code?: string;
       };
       code = body.error?.code ?? body.code ?? "";
       message = body.error?.message ?? message;
+      fix = body.error?.fix ?? "";
     } catch {
       // Not JSON: keep the status text.
     }
     if (res.status === 401 && code === CODE_SESSION_ENDED) endedHandler?.();
-    throw new ApiError(res.status, code, message);
+    throw new ApiError(res.status, code, message, fix);
   }
   return res;
 }

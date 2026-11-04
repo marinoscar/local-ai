@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { handleMaps } from "./fake-maps.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = join(here, "..", "dist");
@@ -51,8 +52,40 @@ function defaultStatus() {
         },
       ],
       loading: null,
-      choices: [],
+      choices: [
+        {
+          id: "qwen3.5-9b-q4km",
+          display_name: "Qwen 3.5 9B",
+          summary: "Fast general assistant.",
+          roles: ["chat"],
+          vision: false,
+          loadable: true,
+          survival: true,
+          speed_hint: "fast",
+        },
+        {
+          id: "vlm-4b",
+          display_name: "Vision 4B",
+          summary: "Understands photos. A bit slower.",
+          roles: ["vision"],
+          vision: true,
+          loadable: true,
+          survival: true,
+          speed_hint: "medium",
+        },
+        {
+          id: "huge-70b",
+          display_name: "Huge 70B",
+          summary: "Does not fit.",
+          roles: ["chat"],
+          vision: false,
+          loadable: false,
+          survival: false,
+          speed_hint: "slow",
+        },
+      ],
     },
+    ark: { overall: "yellow", survival_capable: true, drive_connected: true },
     capabilities: {
       chat: { state: "ready" },
       photo: { state: "ready" },
@@ -106,6 +139,8 @@ function defaultStatus() {
 let status = defaultStatus();
 let down = false;
 let seen = [];
+let streams = [];
+let loadAnswer = 202;
 
 function send(res, code, body, headers = {}) {
   res.writeHead(code, headers);
@@ -133,17 +168,32 @@ async function readBody(req) {
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
   const p = url.pathname;
+  if (await handleMaps(req, res, url, CSP)) return;
   if (p.startsWith("/__")) {
     if (p === "/__reset") {
       status = defaultStatus();
       down = false;
       seen = [];
+      loadAnswer = 202;
       return send(res, 200, "ok");
     }
     if (p === "/__status" && req.method === "POST") {
       status = { ...status, ...JSON.parse(await readBody(req)) };
       return send(res, 200, "ok");
     }
+    if (p === "/__emit" && req.method === "POST") {
+      // Push one event to every open /api/v1/events stream: {type, data}.
+      const { type, data } = JSON.parse(await readBody(req));
+      const frame = `event: ${type}\ndata: ${JSON.stringify({ type, data })}\n\n`;
+      for (const r of streams) r.write(frame);
+      return send(res, 200, "ok");
+    }
+    if (p === "/__load") {
+      loadAnswer = Number(url.searchParams.get("status") || 202);
+      return send(res, 200, "ok");
+    }
+    if (p === "/__streams")
+      return send(res, 200, String(streams.length));
     if (p === "/__down") {
       down = url.searchParams.get("on") === "1";
       return send(res, 200, "ok");
@@ -171,12 +221,33 @@ createServer(async (req, res) => {
     status = { ...status, mode: "survival", session: "portal" };
     return send(res, 200, "{}", { "Content-Type": "application/json" });
   }
+  if (/^\/api\/v1\/models\/[^/]+\/load$/.test(p) && req.method === "POST") {
+    seen.push({ path: p, body: await readBody(req) });
+    if (loadAnswer === 429)
+      return send(
+        res,
+        429,
+        JSON.stringify({
+          error: {
+            code: "LAI-SVC-114",
+            message: "Too many switches",
+            fix: "Wait one minute and try again.",
+          },
+        }),
+        { "Content-Type": "application/json" },
+      );
+    return send(res, loadAnswer, "{}", { "Content-Type": "application/json" });
+  }
   if (p === "/api/v1/events") {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
     });
     res.write(": open\n\n");
+    streams.push(res);
+    req.on("close", () => {
+      streams = streams.filter((r) => r !== res);
+    });
     return;
   }
   if (
@@ -226,7 +297,7 @@ createServer(async (req, res) => {
       );
     return send(res, 200, rss, { "Content-Type": "application/rss+xml" });
   }
-  // Other areas of the real agent (chat, library, maps, docs): a page is enough.
+  // Other areas of the real agent (chat, library, docs): a page is enough.
   if (/^\/(chat|library|maps|docs)(\/|$)/.test(p)) {
     return send(res, 200, `<!doctype html><title>${p}</title><p>${p}</p>`, {
       "Content-Type": TYPES[".html"],

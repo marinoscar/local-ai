@@ -247,12 +247,18 @@
     }
   ],
   "platformVersion": "0.1.0-next.19",
-  "rlsPolicies": [
+  "rawSqlIndexes": [
     {
-      "checkSha256": "83e7bb1689b1bd0427e7061bf085f69c35922ba56bedf6275925f52e58cb440b",
-      "name": "documents_org_isolation",
-      "table": "documents",
-      "usingSha256": "83e7bb1689b1bd0427e7061bf085f69c35922ba56bedf6275925f52e58cb440b"
+      "definition": "CREATE UNIQUE INDEX localai_alerts_one_active ON public.localai_alerts USING btree (COALESCE(node_id, '00000000-0000-0000-0000-000000000000'::uuid), kind) WHERE (state = 'active'::\"LocalaiAlertState\")",
+      "name": "localai_alerts_one_active"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX localai_catalog_one_approved ON public.localai_catalog_versions USING btree ((true)) WHERE (status = 'approved'::\"LocalaiCatalogStatus\")",
+      "name": "localai_catalog_one_approved"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX localai_commands_active_dedup ON public.localai_commands USING btree (node_id, dedup_key) WHERE ((status = ANY (ARRAY['queued'::\"LocalaiCommandStatus\", 'running'::\"LocalaiCommandStatus\"])) AND (dedup_key IS NOT NULL))",
+      "name": "localai_commands_active_dedup"
     }
   ]
 }

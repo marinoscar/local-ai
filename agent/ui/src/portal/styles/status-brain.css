@@ -1,0 +1,199 @@
+/* Status and Switch brain screens (survival-portal.md sections 4.1.8, 4.1.9). Classes only. */
+
+.screen-wide {
+  max-width: none;
+}
+.block {
+  display: block;
+}
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+}
+.status-col {
+  min-width: 0;
+  padding: 16px 20px;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.status-h {
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  margin: 0 0 8px;
+}
+.status-col p {
+  margin: 0 0 10px;
+}
+.meter-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.meter {
+  flex: 1;
+  height: 28px;
+  appearance: none;
+  border: 3px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  accent-color: var(--ok);
+}
+.meter::-webkit-progress-bar {
+  background: var(--panel);
+}
+.meter::-webkit-progress-value {
+  background: var(--ok);
+}
+.meter::-moz-progress-bar {
+  background: var(--ok);
+}
+.meter-low::-webkit-progress-value {
+  background: var(--warn);
+}
+.meter-low::-moz-progress-bar {
+  background: var(--warn);
+}
+.meter-critical::-webkit-progress-value {
+  background: var(--bad);
+}
+.meter-critical::-moz-progress-bar {
+  background: var(--bad);
+}
+.meter-text {
+  font-weight: 700;
+  font-size: 1.3rem;
+  white-space: nowrap;
+}
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+.facts dt {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.facts dd {
+  margin: 0;
+}
+.ark-dot {
+  margin-right: 8px;
+}
+.ark-green {
+  color: var(--ok);
+}
+.ark-yellow {
+  color: var(--warn);
+}
+.ark-red {
+  color: var(--bad);
+}
+.warn-text {
+  color: var(--warn);
+  font-weight: 700;
+}
+.works,
+.problems,
+.choices {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+.work {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 4px 0;
+}
+.mark {
+  width: 1.2em;
+  font-weight: 700;
+}
+.work-ready .mark {
+  color: var(--ok);
+}
+.work-degraded .mark {
+  color: var(--warn);
+}
+.work-unavailable .mark {
+  color: var(--bad);
+}
+.work-name {
+  font-weight: 700;
+}
+.problem {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-left: 8px solid var(--line);
+  background: var(--info-bg);
+}
+.problem-warning {
+  background: var(--warn-bg);
+}
+.problem-error,
+.problem-critical {
+  background: var(--bad-bg);
+}
+.details {
+  margin-top: 16px;
+}
+.details summary {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+}
+.details-log {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  max-height: 10rem;
+  border: 2px solid var(--line);
+  background: var(--panel);
+  white-space: pre-wrap;
+  font-size: 0.8rem;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 18px;
+  margin-bottom: 12px;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.choice-name {
+  font-weight: 700;
+  font-size: 1.15rem;
+  margin-right: 12px;
+}
+.tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+.panel {
+  padding: 18px 22px;
+  border: 4px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  margin-bottom: 16px;
+}
+.panel-bad {
+  background: var(--bad-bg);
+}
+.panel .meter {
+  display: block;
+  width: 100%;
+}

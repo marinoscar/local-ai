@@ -306,10 +306,12 @@ Each problem shows its code, a one-sentence title and the fix, in the UI languag
 │ Switching takes about a minute. Questions in progress will stop.                             │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
-Only `loadable: true` models are listed; survival models first. Pressing **Use this** shows a confirmation ("Switch to *X*? The current brain will stop.") then a progress view driven by `model.loading/loaded/failed` events ("Loading *X* … 35 s"). Failure → `LAI-SVC-107` with "The previous brain was restarted." (the agent reloads the previous default, llama-router.md).
+Only `loadable: true` models are listed; survival models first. Pressing **Use this** shows a confirmation ("Switch to *X*? The current brain will stop.") then a progress view driven by `model.loading/loaded/failed` events ("Loading *X* … 35 s"). Failure → `LAI-SVC-107` with "The previous brain was restarted." (the agent reloads the previous default, llama-router.md). The progress view also ends as loaded when a status poll shows the model in `brain.loaded` (a missed event), and as failed (`LAI-SVC-107`) after 300 s. A refused load (for example `429`) shows the agent's `message`, `fix` and code, and keeps the list usable. A cpu-only node (alert `LAI-SVC-113`) shows `brain.speed.slow` on every model.
 
 #### 4.1.10 First aid (`F`, or "More …")
-A grid of all `first_aid` entries (big buttons, two lines). Each opens the article in the reader. A permanent red-bordered note at the top: "This is not a doctor. If any phone works, call 911. Act fast in an emergency; read later." (`firstaid.disclaimer` + `firstaid.readLater`) Unavailable entries are hidden; if none are available, the panel says "The medical book is not installed. Plug in the ark drive." (`LAI-SVC-109`).
+A grid of all `first_aid` entries (big buttons, two lines). Each opens the article in the reader. A permanent red-bordered note at the top: "This is not a doctor. If any phone works, call 911. Act fast in an emergency; read later." (`firstaid.disclaimer` + `firstaid.readLater`) Unavailable entries are hidden; if none are available, the panel says "The medical book is not installed. Plug in the ark drive." (`LAI-SVC-109`, shown when the alert is active).
+
+Resolution and availability (`agent/internal/portal/firstaid.go`): each `portal_links` entry becomes `{key, title, url, available}`, sorted by `order` then `key`, with `url` built on the undated kiwix book name from the kiwix book map. Availability comes from a cached `HEAD` per article (3 s timeout, 4 at a time) taken by a background worker at start, on every drive or kiwix service event, when the catalog or the book set changes, and every 6 h, never per status request. A pass in which kiwix could not be asked is retried after 30 s, and an unchecked entry stays hidden. A missing article of an installed book raises `LAI-SVC-109` with `details.key` (first broken key) and `details.keys`; a book that is not installed is only `available: false` (the library capability reports that). Spanish: `es_item` + `es_article` when that article is available, else the English article, with the Spanish title always. The Home row shows the first 6 available entries; arrow keys move inside it and Enter opens the reader with `back=/portal`.
 
 ### 4.2 Capability states and behaviour when things are missing
 
@@ -380,7 +382,7 @@ If the agent's API stops responding while the Portal is open, the SPA shows a fu
 1. **Record.** `navigator.mediaDevices.getUserMedia({audio: {channelCount: 1, echoCancellation: true, noiseSuppression: true}})`. `http://127.0.0.1` is a secure context, so this works without HTTPS. Record with `MediaRecorder` (`audio/webm;codecs=opus` in Chromium; `audio/ogg;codecs=opus` in Firefox). A live level meter uses an `AnalyserNode`. Auto-stop after 60 s, or after 1.5 s below −45 dBFS once speech was detected. Permission denied → `LAI-SVC-103` screen with "Allow the microphone" instructions for Chromium and Firefox.
 2. **Convert (in the browser, no ffmpeg needed on the node).** Collect the blobs, `AudioContext.decodeAudioData()` them, render through an `OfflineAudioContext(1, ceil(duration × 16000), 16000)` to get 16 kHz mono float samples, and encode a PCM16 WAV in JS (44-byte header). Decode failure → `LAI-SVC-105`. If `MediaRecorder` is missing (very old browser), fall back to an `AudioWorklet` that captures raw PCM directly (`LAI-SVC-104` only if both are missing).
 3. **Transcribe.** `POST /api/v1/speech/stt` with `audio` and `language` (`auto` or the selected one). Show "You said: …". With `autoSend` on (default), continue after 1.5 s unless the user presses **Edit** or **Redo**.
-4. **Think.** `POST /chat/v1/chat/completions` with `model` = the first entry of `brain.loaded[].id` from `/portal/status` (no brain loaded → `LAI-SVC-106` screen with **Switch brain**), `stream: true`, `temperature: 0.5`, `max_tokens: 600`, the Talk system prompt (§4.7) in the transcript's language, and the last 6 turns of in-memory history. If the model's catalog `client_hints.reasoning` is true, also send `"chat_template_kwargs": {"enable_thinking": false}` (fast spoken answers) and ignore any `reasoning_content`.
+4. **Think.** `POST /chat/v1/chat/completions` with `model` = the first entry of `brain.loaded[].id` from `/portal/status` (no brain loaded → `LAI-SVC-106` screen with **Switch brain**), `stream: true`, `temperature: 0.5`, `max_tokens: 600`, the Talk system prompt (§4.7) in the transcript's language, and the last 6 messages (three exchanges) of in-memory history. If the model is a reasoning model (the catalog `client_hints.reasoning` flag; the Portal reads it from `reasoning` in the loaded model's `roles` in `/portal/status`), also send `"chat_template_kwargs": {"enable_thinking": false}` (fast spoken answers) and ignore any `reasoning_content`.
 5. **Speak, pipelined.** As tokens stream in, split on sentence ends (`. ! ? ¿ ¡ …` followed by space or newline, or 220 chars). Each complete sentence is sent to `POST /api/v1/speech/tts` (`language` = the transcript language) with at most 2 requests ahead of playback; the WAVs are played in order through one `HTMLAudioElement` queue. The text is shown as it streams.
 6. **Stop.** `Esc` or **Stop speaking** aborts the fetches (`AbortController`) and clears the audio queue. **Repeat** replays the cached WAVs.
 7. **Errors** at any step show the step, the code and a **Try again** button; the recording is kept so **Try again** doesn't need re-recording.
@@ -493,6 +495,24 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `talk.silent` | I couldn't hear anything. Try again closer to the microphone. | No escuché nada. Intente otra vez más cerca del micrófono. |
 | `talk.textOnly` | Voice output is not installed; read the answer here. | La voz no está instalada; lea la respuesta aquí. |
 | `talk.unavailable` | Voice input is not installed on this computer. | El reconocimiento de voz no está instalado en esta computadora. |
+| `talk.answer` | Answer: | Respuesta: |
+| `talk.stopRecording` | Press SPACE or click to stop | Presione ESPACIO o haga clic para detener |
+| `talk.level` | Microphone level | Nivel del micrófono |
+| `talk.autoSend` | Send automatically | Enviar automáticamente |
+| `talk.sendingIn` | Sending in {s} s … | Enviando en {s} s … |
+| `talk.voice.auto` | Automatic | Automática |
+| `talk.lang.en` | English | English |
+| `talk.lang.es` | Español | Español |
+| `talk.micHelp` | Chrome or Chromium: click the lock icon next to the address, set Microphone to Allow, then press Try again. Firefox: click the microphone icon next to the address, remove the block, then press Try again. | Chrome o Chromium: haga clic en el candado junto a la dirección, ponga Micrófono en Permitir y presione Intentar otra vez. Firefox: haga clic en el icono del micrófono junto a la dirección, quite el bloqueo y presione Intentar otra vez. |
+| `talk.noRecord` | This browser can't record. Use the Local AI app, Chromium or Firefox. | Este navegador no puede grabar. Use la aplicación Local AI, Chromium o Firefox. |
+| `talk.badAudio` | The recording couldn't be processed. Try again. | No se pudo procesar la grabación. Intente otra vez. |
+| `talk.busy` | The voice service is busy. Wait a moment and try again. | El servicio de voz está ocupado. Espere un momento e intente otra vez. |
+| `talk.slow` | Writing down your voice took too long. Try again with a shorter question. | Escribir lo que dijo tardó demasiado. Intente otra vez con una pregunta más corta. |
+| `talk.failed` | Something went wrong. Try again. | Algo salió mal. Intente otra vez. |
+| `talk.step.record` | Problem while recording | Problema al grabar |
+| `talk.step.convert` | Problem while preparing the recording | Problema al preparar la grabación |
+| `talk.step.transcribe` | Problem while writing down what you said | Problema al escribir lo que dijo |
+| `talk.step.think` | Problem while thinking | Problema al pensar |
 | `library.title` | Library | Biblioteca |
 | `library.search` | Search all books | Buscar en todos los libros |
 | `library.results` | Results ({n}) | Resultados ({n}) |
@@ -561,6 +581,16 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `time.hm` | {h} h {m} min | {h} h {m} min |
 | `time.m` | {m} min | {m} min |
 | `status.noBrain` | none | ninguno |
+| `status.cap.ready` | Works | Funciona |
+| `status.cap.degraded` | Works, with a note | Funciona, con una nota |
+| `status.cap.unavailable` | Not available | No disponible |
+| `status.books` | {n} books | {n} libros |
+| `status.mapsDetail` | search {search}, GPS {gps} | búsqueda {search}, GPS {gps} |
+| `status.details` | Details | Detalles |
+| `status.noProblems` | No problems. | Sin problemas. |
+| `status.noErrors` | No errors recorded. | Sin errores registrados. |
+| `brain.none` | No other brain can be started on this computer. | No se puede iniciar otro cerebro en esta computadora. |
+| `brain.ready` | {name} is running. | {name} está funcionando. |
 | `banner.startFailed` | Could not start survival mode. Try again. | No se pudo iniciar el modo supervivencia. Intente otra vez. |
 | `manuals.none` | The manuals are not installed. Plug in the ark drive. | Los manuales no están instalados. Conecte el disco del arca. |
 

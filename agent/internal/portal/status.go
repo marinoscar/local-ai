@@ -52,8 +52,8 @@ type StatusBuilder interface {
 	Build(ctx context.Context, req Request) (Status, error)
 }
 
-// Status is the body (schema PortalStatusV1, survival-portal.md section 3.5). first_aid is emitted empty
-// here: PORTAL-11 fills it.
+// Status is the body (schema PortalStatusV1, survival-portal.md section 3.5). first_aid comes from the
+// FirstAidResolver (firstaid.go).
 type Status struct {
 	SchemaVersion   int          `json:"schema_version"`
 	GeneratedAt     string       `json:"generated_at"`
@@ -116,7 +116,7 @@ type Choice struct {
 	SpeedHint   string   `json:"speed_hint,omitempty"`
 }
 
-// FirstAid is a first-aid entry (filled by PORTAL-11).
+// FirstAid is a first-aid entry (firstaid.go).
 type FirstAid struct {
 	Key       string `json:"key"`
 	Title     string `json:"title"`

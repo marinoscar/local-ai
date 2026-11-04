@@ -31,7 +31,12 @@ import type { Prisma } from '@prisma/client';
 export const APP_USER_DATA_CATEGORIES: readonly UserDataCategoryDef[] = [];
 
 /** One keep-or-delete decision per user-owned model. */
-export const APP_USER_DATA_MODELS: readonly UserDataModelHint<Prisma.ModelName>[] = [];
+export const APP_USER_DATA_MODELS: readonly UserDataModelHint<Prisma.ModelName>[] = [
+  // Lab infrastructure (the user-owned Local AI models; the other two have no user column): the user columns are actors (SetNull), so a user purge detaches them and never deletes the rows.
+  { model: 'LocalaiNode', keep: 'Lab node state: deployment infrastructure that outlives the user who added it.' },
+  { model: 'LocalaiCatalogVersion', keep: 'Lab model catalog: a deployment-wide version history.' },
+  { model: 'LocalaiCommand', keep: 'Lab command history: an audit view of what was asked of a node.' },
+];
 
 /** Narrow scopes, such as "delete my saved views" (none by default: the built-in scopes cover every category). */
 export const APP_USER_DATA_SCOPES: readonly UserDataScopeDef[] = [];

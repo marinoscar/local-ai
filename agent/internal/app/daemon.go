@@ -64,11 +64,13 @@ type StepResult struct {
 // over the subsystems of the other packages. Create it with NewDaemon, call Start, wait for Started, and
 // call Shutdown (or use Serve).
 type Daemon struct {
-	env   Env
-	hooks hookSet
-	c     *Components
-	log   *slog.Logger
-	level *slog.LevelVar
+	// firstAid is the first-aid availability worker (portal_wire.go); started in step 16.
+	firstAid *portal.FirstAidResolver
+	env      Env
+	hooks    hookSet
+	c        *Components
+	log      *slog.Logger
+	level    *slog.LevelVar
 
 	began time.Time
 

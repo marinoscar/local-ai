@@ -3,12 +3,16 @@ import { Shell } from "./components/Shell";
 import { t, useLang } from "./i18n/i18n";
 import { setScale, stepScale, useScale } from "./prefs";
 import { navigate, useLocation, useScreen } from "./router";
+import { FirstAid } from "./screens/FirstAid";
 import { Library } from "./screens/Library";
 import { Reader } from "./screens/Reader";
 import { ChatInterstitial } from "./screens/ChatInterstitial";
+import { Brain } from "./screens/Brain";
 import { Home } from "./screens/Home";
+import { Status } from "./screens/Status";
 import { LockDialog } from "./screens/LockDialog";
 import { Stub } from "./screens/Stub";
+import { Talk } from "./screens/Talk";
 import { Unavailable } from "./screens/Unavailable";
 import { useStatus, type PortalStatus } from "./status";
 import { viewFor } from "./view";
@@ -95,6 +99,14 @@ export function App() {
           <ChatInterstitial status={status} />
         ) : view.screen === "library" ? (
           <Library status={status} />
+        ) : view.screen === "first-aid" ? (
+          <FirstAid status={status} />
+        ) : view.screen === "talk" ? (
+          <Talk status={status} />
+        ) : view.screen === "status" && status ? (
+          <Status status={status} />
+        ) : view.screen === "brain" && status ? (
+          <Brain status={status} />
         ) : (
           <Stub screen={view.screen} />
         );
