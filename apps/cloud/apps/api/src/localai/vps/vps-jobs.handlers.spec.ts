@@ -2,7 +2,7 @@ import { JobHandlerRegistry } from '@marinoscar/platform-api/jobs';
 
 import { VpsPublishHandler, VpsUnpublishHandler } from './vps-jobs.handlers';
 import { JOB_VPS_PUBLISH, JOB_VPS_UNPUBLISH } from './vps.constants';
-import { jobRow } from './vps-test-support';
+import { jobRow } from '../../../test/localai/support/vps-fakes';
 
 const publishResult = { host: 'ai-n3.marin.cr', steps: [{ name: 'dns_upsert', status: 'done', detail: 'ok' }], certificateExpiresAt: null };
 

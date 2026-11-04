@@ -1,5 +1,5 @@
 import { Route53KeyBodySchema, Route53KeyService, Route53KeyUnreadableError } from './route53-key.service';
-import { fakeKey, FakeCredentials } from './vps-test-support';
+import { fakeKey, FakeCredentials } from '../../../test/localai/support/vps-fakes';
 
 describe('Route53KeyService', () => {
   let credentials: FakeCredentials;

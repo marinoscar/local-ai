@@ -1,5 +1,5 @@
 import { VpsSecretBroker, VpsSecretRefusedError, nodeIdOf } from './vps-secret.broker';
-import { fakeKey, fakeTailnet, jobRow } from './vps-test-support';
+import { fakeKey, fakeTailnet, jobRow } from '../../../test/localai/support/vps-fakes';
 import { JOB_VPS_PUBLISH, JOB_VPS_UNPUBLISH } from './vps.constants';
 
 function setup(over: { node?: Record<string, unknown> | null; key?: ReturnType<typeof fakeKey> | null; suffix?: string; suffixValid?: boolean } = {}) {

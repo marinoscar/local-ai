@@ -1,7 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
 import { VpsService } from './vps.service';
-import { fakeTailnet } from './vps-test-support';
+import { fakeTailnet } from '../../../test/localai/support/vps-fakes';
 import { JOB_VPS_PUBLISH, JOB_VPS_UNPUBLISH } from './vps.constants';
 
 interface Options {
@@ -90,11 +90,16 @@ describe('VpsService.status: what blocks a publish', () => {
     expect(status.publish.available).toBe(true);
   });
 
+  it('does not blame the job-secrets switch when the real cause is the missing key', async () => {
+    const status = await setup({ keyConfigured: false, offered: [] }).service.status('ai-n3');
+    expect(codes(status.publish.blockers)).toEqual(['route53_not_configured']);
+  });
+
   it('blocker messages are plain sentences with no address or key', async () => {
     const status = await setup({ keyConfigured: false, offered: [], agent: null, workerMode: 'all', node: { nodeId: 'ai-n3', phase: 'enrolled', servePattern: 'B', tailnetIp: null, tailnetMachine: null } }).service.status('ai-n3');
     const text = JSON.stringify(status);
     expect(text).not.toMatch(/\d+\.\d+\.\d+\.\d+/);
-    expect(status.publish.blockers.length).toBeGreaterThanOrEqual(5);
+    expect(status.publish.blockers.length).toBeGreaterThanOrEqual(4);
   });
 
   it('answers 404 for an unknown node', async () => {

@@ -11,7 +11,7 @@ import { JobsService, JobWorker, NodeOffloadService } from '@marinoscar/platform
 
 import '../../src/platform/registrations';
 import { AppModule } from '../../src/app.module';
-import { fakeKey, fakeTailnet, FakeCredentials } from '../../src/localai/vps/vps-test-support';
+import { fakeKey, fakeTailnet, FakeCredentials } from './support/vps-fakes';
 import { JOB_VPS_PUBLISH, JOB_VPS_UNPUBLISH } from '../../src/localai/vps/vps.constants';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { PrismaSystemService } from '../../src/prisma/prisma-system.service';

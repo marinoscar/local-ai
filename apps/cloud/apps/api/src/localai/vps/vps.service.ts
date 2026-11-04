@@ -166,7 +166,8 @@ export class VpsService {
     if (process.env.JOBS_WORKER_MODE?.trim().toLowerCase() !== 'system' && process.env.JOBS_WORKER_MODE?.trim().toLowerCase() !== 'off') {
       common.push({ code: 'server_worker_claims_jobs', message: 'The API server still runs every job type itself. Set JOBS_WORKER_MODE=system and restart it (runbook 10, part 10).' });
     }
-    const offered = await this.offload.offeredTypes().catch(() => [] as string[]);
+    // With no key stored the platform withholds the types too (the broker is not usable); that is already reported above.
+    const offered = keyStatus?.configured ? await this.offload.offeredTypes().catch(() => [] as string[]) : [JOB_VPS_PUBLISH, JOB_VPS_UNPUBLISH];
     if (!offered.includes(JOB_VPS_PUBLISH) || !offered.includes(JOB_VPS_UNPUBLISH)) {
       common.push({ code: 'secrets_not_offered', message: 'Node job secrets are switched off. Turn on "nodes.jobSecretBrokerEnabled" in the system settings (runbook 10, part 10).' });
     }

@@ -1,5 +1,5 @@
 import { VpsStateService } from './vps-state.service';
-import { fakeKey, fakeTailnet, jobRow } from './vps-test-support';
+import { fakeKey, fakeTailnet, jobRow } from '../../../test/localai/support/vps-fakes';
 import { JOB_VPS_PUBLISH, JOB_VPS_UNPUBLISH } from './vps.constants';
 
 const publishSteps = (over: Record<string, string> = {}) =>
