@@ -3,7 +3,7 @@
 import AddIcon from '@mui/icons-material/Add';
 import HubIcon from '@mui/icons-material/Hub';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
-import { Alert, Box, Button, Chip, CircularProgress, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, Link, Typography } from '@mui/material';
 import { usePermissions } from '@marinoscar/platform-web/identity/headless';
 import { NodeCard, type LabSummaryDto } from '@localai/ui';
 import { Link as RouterLink } from 'react-router-dom';
@@ -50,7 +50,13 @@ export function LabOverviewPage({ fetchNodes, now, timeZone }: LabOverviewPagePr
 
       {data ? (
         <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, justifyContent: 'space-between' }} data-testid="lab-summary">
-          <Typography color="text.secondary">{summaryText(data.summary)}</Typography>
+          <Typography color="text.secondary">
+            {summaryText(data.summary)}
+            {' · '}
+            <Link component={RouterLink} to="/lab/alerts">
+              View alerts
+            </Link>
+          </Typography>
           <Chip
             icon={<HubIcon />}
             color={data.summary.routable > 0 ? 'success' : 'default'}
