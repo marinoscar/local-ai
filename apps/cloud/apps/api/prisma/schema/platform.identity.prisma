@@ -114,6 +114,9 @@ model User {
   // composed from package:webhooks.prisma
   webhookEndpoints WebhookEndpoint[] @relation("WebhookEndpointOwner")
 
+  // composed from app:localai-gateway.prisma
+  localaiGatewayKeys LocalaiGatewayKey[] @relation("LocalaiGatewayKeyOwner")
+
   // composed from app:localai.prisma
   localaiNodesCreated    LocalaiNode[]           @relation("LocalaiNodeCreatedBy")
   localaiCommands        LocalaiCommand[]        @relation("LocalaiCommandRequestedBy")

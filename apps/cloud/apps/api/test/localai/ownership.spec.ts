@@ -11,18 +11,36 @@ import '../../src/platform/registrations';
 const localai = readSchemaDatamodel(join(__dirname, '..', '..', 'prisma', 'schema')).filter((model) => model.name.startsWith('Localai'));
 
 describe('Local AI model ownership', () => {
-  it('finds the five Local AI models in the composed schema', () => {
+  it('finds the nine Local AI models in the composed schema', () => {
     expect(localai.map((model) => model.name).sort()).toEqual([
       'LocalaiAlert',
       'LocalaiCatalogVersion',
       'LocalaiCommand',
+      'LocalaiGatewayKey',
+      'LocalaiGatewayUsage',
+      'LocalaiGatewayUsageDaily',
+      'LocalaiModelPolicy',
       'LocalaiNode',
       'LocalaiNodeModel',
     ]);
   });
 
-  it.each(localai.map((model) => [model.name]))('%s is classified as a deployment-wide (system) model', (name) => {
-    expect(modelOwnershipRegistry.get(name)).toMatchObject({ kind: 'system' });
+  // The gateway key is the one model a person owns (gateway.md section 3.6); the lab and the other gateway tables are deployment-wide.
+  it.each(localai.filter((model) => model.name !== 'LocalaiGatewayKey').map((model) => [model.name]))(
+    '%s is classified as a deployment-wide (system) model',
+    (name) => {
+      expect(modelOwnershipRegistry.get(name)).toMatchObject({ kind: 'system' });
+    },
+  );
+
+  it('classifies the gateway key as user-owned: deleted with its user, exported, never with the hash', () => {
+    expect(modelOwnershipRegistry.get('LocalaiGatewayKey')).toMatchObject({ kind: 'user' });
+    expect(userOwnedModelRegistry.get('LocalaiGatewayKey')).toMatchObject({
+      ownerField: 'userId',
+      purge: 'delete',
+      export: 'include',
+    });
+    expect(userOwnedModelRegistry.get('LocalaiGatewayKey')?.exportOmit).toContain('tokenHash');
   });
 
   it('carries no org_id column on any Local AI table', () => {
@@ -30,7 +48,7 @@ describe('Local AI model ownership', () => {
   });
 
   it('registers every foreign key to User as an actor field that is detached on purge', () => {
-    for (const model of localai) {
+    for (const model of localai.filter((candidate) => candidate.name !== 'LocalaiGatewayKey')) {
       const userKeys = model.fields.filter((field) => field.type === 'User' && field.relation).flatMap((field) => field.relation?.fields ?? []);
       if (userKeys.length === 0) continue;
       const policy = userOwnedModelRegistry.get(model.name);
