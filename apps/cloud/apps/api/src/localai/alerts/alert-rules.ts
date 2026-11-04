@@ -167,7 +167,8 @@ function driveStale(node: RuleNode, ctx: RuleContext): DesiredAlert[] {
 function syncFailed(node: RuleNode, active: ReadonlyMap<string, ActiveAlertView>): DesiredAlert[] {
   const sync = isRecord(node.lastState) && isRecord(node.lastState.sync) ? node.lastState.sync : null;
   const lastRun = sync && isRecord(sync.last_run) ? sync.last_run : null;
-  if (lastRun === null) return held(active, 'sync.failed');
+  // No run on record (the history was reset) proves nothing either way: nothing to alert on.
+  if (lastRun === null) return [];
   const result = asString(lastRun.result);
   if (result === 'skipped') return held(active, 'sync.failed');
   if (result !== 'failed') return [];
