@@ -62,6 +62,14 @@ export function setEgressState(next: EgressState): void {
   state = { connected: next.connected, updates: next.updates };
 }
 
+/**
+ * Changes one half of the state and keeps the other: connected mode (DSK-10, `cloud-link.ts`) and the updater
+ * allowance (DSK-12) are set by different owners, so neither may overwrite the other with a stale copy.
+ */
+export function patchEgressState(patch: Partial<EgressState>): void {
+  setEgressState({ connected: patch.connected ?? state.connected, updates: patch.updates ?? state.updates });
+}
+
 export function getEgressState(): EgressState {
   return { ...state };
 }

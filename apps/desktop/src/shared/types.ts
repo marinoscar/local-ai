@@ -29,6 +29,18 @@ export interface ActionResult {
 /** Can the desktop reach its agent? `starting` covers the start-up sequence and the first event connection. */
 export type AgentReach = 'starting' | 'up' | 'down' | 'unauthorized';
 
+/** Where a link attempt stands (desktop.md 4.8, "As built (DSK-10)"). `pending` lasts until the user approves, denies or the code expires. */
+export type LinkPhase = 'pending' | 'saving' | 'done' | 'denied' | 'expired' | 'failed' | 'unreachable' | 'cancelled';
+
+/** The progress of the latest link attempt; absent when there never was one in this run. Holds no code, no token. */
+export interface LinkProgress {
+  phase: LinkPhase;
+  /** The doctor code to show with the phase: LAI-DSK-009 for `denied`/`expired`. */
+  code?: string;
+  /** The token was kept in memory only (no password keyring and no consent, LAI-DSK-008): it is gone after a restart. */
+  memoryOnly?: boolean;
+}
+
 /** What the desktop knows about the lab link (the PAT itself never leaves the main process). */
 export interface CloudLinkState {
   /** `settings.cloud.linked`. */
@@ -36,6 +48,26 @@ export interface CloudLinkState {
   /** A PAT is held in the main process's memory (DSK-10). */
   tokenHeld: boolean;
   url: string;
+  /** Who is linked: the account's display name, never an email address. Absent until the cloud answered `GET /api/auth/me`. */
+  user?: string;
+  /** When the PAT expires (ISO 8601). */
+  expiresAt?: string;
+  link?: LinkProgress;
+}
+
+/** `cloud.beginLink()` succeeded: the code to show and how long it lasts. */
+export interface LinkBegin {
+  userCode: string;
+  /** Always `https://ai.marin.cr/activate`: the page the user opens on any phone or computer. */
+  verificationUri: string;
+  /** Seconds left. */
+  expiresIn: number;
+}
+
+/** `cloud.beginLink()` was refused. `not_online`: the node is `offline`/`survival` ("Switch this computer to Online first."). */
+export interface LinkRefusal {
+  ok: false;
+  code: 'not_online' | 'already_linked' | 'unreachable' | 'unavailable';
 }
 
 /**
@@ -202,10 +234,10 @@ export interface LocalaiDesktop {
   /** Survival strip (DSK-09): leave a Portal that was opened while the node is not in survival mode. Ignored in survival mode (that needs the PIN). */
   closePortal(): void;
   cloud: {
-    beginLink(): Promise<{ userCode: string; verificationUri: string; expiresIn: number } | NotImplemented>;
+    beginLink(): Promise<LinkBegin | LinkRefusal>;
     openVerification(): void;
     linkState(): Promise<CloudLinkState>;
-    unlink(): Promise<void | NotImplemented>;
+    unlink(): Promise<void>;
     request(req: { method: 'GET' | 'POST' | 'DELETE'; path: string; body?: unknown }): Promise<CloudResponse | NotImplemented>;
   };
   settings: { get(): Promise<ShellSettings>; set(patch: ShellSettingsPatch): Promise<ShellSettings> };
