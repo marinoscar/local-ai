@@ -250,15 +250,6 @@ describe('non-stream proxy: request validation before any node', () => {
     expect(l.llamas['ai-n1']!.requests).toHaveLength(0);
   });
 
-  it('answers stream:true on chat with 400 until the stream path exists', async () => {
-    const l = await setup([{ id: 'ai-n1' }]);
-    const res = await l.post('/chat/completions', { ...CHAT, stream: true });
-    expect(res.status).toBe(400);
-    expect(res.json.error.localai_code).toBe('LAI-GW-003');
-    expect(l.llamas['ai-n1']!.requests).toHaveLength(0);
-    expect(l.sink.records[0]).toMatchObject({ status: 400, errorCode: 'LAI-GW-003', stream: true });
-  });
-
   it('refuses a non-embedding model on /embeddings with 404 LAI-GW-020', async () => {
     const l = await setup([{ id: 'ai-n1' }]);
     const res = await l.post('/embeddings', { model: 'model-a', input: 'x' });
