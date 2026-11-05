@@ -9,6 +9,7 @@ import { formatAgo } from '@localai/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ConfirmDialog } from '../node/ConfirmDialog';
+import { GatewayNav } from './GatewayNav';
 import { usePolledResource } from '../usePolledResource';
 import { CreateKeyDialog } from './CreateKeyDialog';
 import { createKey as defaultCreateKey, DEFAULT_KEY_DEFAULTS, fetchKeyDefaults as defaultFetchDefaults, fetchModelSuggestions, listKeys as defaultListKeys, revokeKey as defaultRevokeKey } from './gatewayApi';
@@ -90,6 +91,7 @@ export function KeysPage({
 
   return (
     <Box component="section" aria-labelledby="keys-title" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <GatewayNav />
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, justifyContent: 'space-between' }}>
         <Typography id="keys-title" variant="h4" component="h1">
           API keys
@@ -145,7 +147,7 @@ export function KeysPage({
       ) : null}
 
       {keys.length > 0 ? (
-        <TableContainer sx={{ border: 1, borderColor: 'divider', borderRadius: 1, maxWidth: '100%' }}>
+        <TableContainer sx={{ position: 'relative' /* keeps the visually hidden Actions header in the scroll container, not the page */, border: 1, borderColor: 'divider', borderRadius: 1, maxWidth: '100%' }}>
           <Table size="small" aria-label="API keys">
             <TableHead>
               <TableRow>
@@ -157,7 +159,7 @@ export function KeysPage({
                 <TableCell>Expires</TableCell>
                 <TableCell>Last used</TableCell>
                 <TableCell>
-                  <Box component="span" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+                  <Box component="span" sx={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
                     Actions
                   </Box>
                 </TableCell>

@@ -124,12 +124,28 @@ describe('Cloud Doctor checks over HTTP', () => {
     arrangeHealthy();
     const response = await report();
     expect(response.statusCode).toBe(200);
-    const checks = checksOf(response.body);
+    // The gateway's four checks (GW-08) share the category; they are covered by their own test below.
+    const checks = checksOf(response.body).filter((check) => !check.id.startsWith('localai.gateway.'));
     expect(checks.map((check) => check.id).sort()).toEqual([...IDS].sort());
     for (const check of checks) {
       expect({ id: check.id, category: check.category, status: check.status }).toEqual({ id: check.id, category: 'localai', status: 'pass' });
     }
     expectNoSecretShapes(response.body);
+  });
+
+  it('also lists the four gateway checks (GW-08); with no node in the routing table only routable warns', async () => {
+    arrangeHealthy();
+    const checks = checksOf((await report()).body).filter((check) => check.id.startsWith('localai.gateway.'));
+    expect(checks.map((check) => [check.id, check.status])).toEqual(
+      expect.arrayContaining([
+        ['localai.gateway.enabled', 'pass'],
+        ['localai.gateway.routable', 'warn'],
+        ['localai.gateway.keys', 'pass'],
+        ['localai.gateway.usage', 'pass'],
+      ]),
+    );
+    expect(checks).toHaveLength(4);
+    expect(byId(checks, 'localai.gateway.routable').data).toMatchObject({ code: 'LAI-GW-021' });
   });
 
   it('needs an administrator', async () => {

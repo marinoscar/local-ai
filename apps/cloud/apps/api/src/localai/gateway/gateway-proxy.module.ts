@@ -3,8 +3,8 @@
 //
 // Every extension point is a provider token with a default here; the item that builds on it rebinds ONE token:
 //   GATEWAY_MODEL_RESOLVER  GW-05: models/resolve.ts adapter (CatalogModelResolver)
-//   GATEWAY_LIMITS          GW-08: RPM, concurrency, daily budget
-//   GATEWAY_USAGE_SINK      GW-08: the usage recorder
+//   GATEWAY_LIMITS          GW-08: RPM, concurrency, daily budget (RateLimiter, bound in usage/usage.module.ts)
+//   GATEWAY_USAGE_SINK      GW-08: the usage recorder (UsageRecorder, same module)
 //   GATEWAY_STREAM_HANDLER  GW-07: SSE passthrough (StreamProxy, bound below)
 //   UPSTREAM_TRANSPORT      GW-10: chosen by LOCALAI_GATEWAY_UPSTREAM (public | tailnet), see upstream/transport.factory.ts
 //   GATEWAY_ATTEMPT_HOOKS / GATEWAY_CANDIDATE_SOURCE  GW-07/GW-09: observe the loop / on-demand load
@@ -13,7 +13,8 @@ import { resolveApiVersion } from '@marinoscar/platform-api/host';
 
 import { AttemptLoop, TableCandidateSource, type AttemptHooks, type CandidateSource } from './attempts';
 import { GatewayService } from './gateway.service';
-import { GATEWAY_LIMITS, noopLimits } from './limits';
+import { GATEWAY_LIMITS } from './limits';
+import { RateLimiter } from './limits/rate-limiter';
 import { GATEWAY_MODEL_RESOLVER } from './model-resolver';
 import { CatalogModelResolver } from './model-resolver.catalog';
 import { GatewayModelsModule } from './models/models.module';
@@ -26,22 +27,24 @@ import { StreamProxy } from './stream/stream-proxy';
 import { createUpstreamTransport } from './upstream/transport.factory';
 import { UPSTREAM_TRANSPORT, type UpstreamTransport } from './upstream/client';
 import { PrismaTailnetSuffixReader } from './upstream/tailnet-suffix';
-import { GATEWAY_USAGE_SINK, noopUsageSink } from './usage/usage-sink';
+import { GATEWAY_USAGE_SINK } from './usage/usage-sink';
+import { UsageRecorder } from './usage/usage-recorder';
+import { GatewayUsageModule } from './usage/usage.module';
 
 /** Optional providers: bind these tokens to observe the attempt loop or to replace the candidate source. */
 export const GATEWAY_ATTEMPT_HOOKS = Symbol('LOCALAI_GATEWAY_ATTEMPT_HOOKS');
 export const GATEWAY_CANDIDATE_SOURCE = Symbol('LOCALAI_GATEWAY_CANDIDATE_SOURCE');
 
 @Module({
-  imports: [GatewayRoutingModule, GatewayModelsModule],
+  imports: [GatewayRoutingModule, GatewayModelsModule, GatewayUsageModule],
   providers: [
     CatalogModelResolver,
     PrismaProxySettingsReader,
     PrismaTailnetSuffixReader,
     { provide: GATEWAY_MODEL_RESOLVER, useExisting: CatalogModelResolver },
     { provide: GATEWAY_PROXY_SETTINGS, useExisting: PrismaProxySettingsReader },
-    { provide: GATEWAY_LIMITS, useValue: noopLimits },
-    { provide: GATEWAY_USAGE_SINK, useValue: noopUsageSink },
+    { provide: GATEWAY_LIMITS, useExisting: RateLimiter },
+    { provide: GATEWAY_USAGE_SINK, useExisting: UsageRecorder },
     { provide: GATEWAY_STREAM_HANDLER, useFactory: (): StreamProxyHandler => new StreamProxy() },
     { provide: GATEWAY_ATTEMPT_HOOKS, useValue: {} satisfies AttemptHooks },
     {
@@ -64,6 +67,6 @@ export const GATEWAY_CANDIDATE_SOURCE = Symbol('LOCALAI_GATEWAY_CANDIDATE_SOURCE
     },
     GatewayService,
   ],
-  exports: [GatewayService, AttemptLoop],
+  exports: [GatewayService, AttemptLoop, GATEWAY_LIMITS, GATEWAY_USAGE_SINK],
 })
 export class GatewayProxyModule {}
