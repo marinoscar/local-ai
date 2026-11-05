@@ -468,7 +468,7 @@ Plain list, also printed in the rebuild runbook:
 ### 9.3 Manual on ai-n3
 1. `aictl kit status` → all parts for `resolute/amd64/cuda sm75` present.
 2. `sudo aictl rebuild-llama --dry-run` → every check ✓.
-3. Network off: `sudo aictl rebuild-llama --from-kit --no-activate` → build completes (~15–25 min), smoke test passes.
+3. Network off: `sudo aictl rebuild-llama --from-kit --no-activate` → build completes, smoke test passes (write down the time: only the processor-only build in CI is measured, about 4.5 minutes on 4 cores; the CUDA build on ai-n3 is not measured yet).
 4. `sudo aictl rebuild-llama --from-kit` → activates; `curl -s http://127.0.0.1:8080/health` OK; `ls -l /opt/localai/llama.cpp/current`.
 5. `aictl kit verify --full` → green.
 

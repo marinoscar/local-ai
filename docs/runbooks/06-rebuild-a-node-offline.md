@@ -6,7 +6,7 @@ Use this when a computer is new, wiped or broken, **there is no internet**, and 
 > - You need: the computer (with its charger), the **AI-ARK drive**, a **USB stick of 8 GB or more** (or one that already has the Ubuntu installer), a keyboard and mouse, and this page (printed, or open on another device).
 > - Helpful: the lab's paper notes (node id, PIN), and another Linux computer if you must make the USB stick.
 > - The drive should have been **green or yellow** the last time it was synced, and synced at least once on a node of the **same Ubuntu version** (the kit's Ubuntu packages are per version).
-> - **Time:** 2 to 4 hours. Ubuntu install 30 to 60 minutes; Local AI install and llama.cpp build 30 to 90 minutes; copying the models and library from the drive about an hour per 100 GB.
+> - **Time:** 2 to 4 hours (an estimate, to be confirmed by the yearly rehearsal). Ubuntu install 30 to 60 minutes; copying the models and library from the drive about an hour per 100 GB. The llama.cpp build is the longest part of the Local AI install and depends on the computer: the processor-only build took about 4 minutes on a 4-core test machine, a graphics-chip build takes longer, and the installer warns that a slow computer can need up to 3 hours.
 
 > 🛠 Verify when implemented (Epic E5 installer and rebuild kit). Everything here follows [installer.md](../specs/installer.md) and [rebuild-kit.md](../specs/rebuild-kit.md); rehearse it once a year on a spare machine.
 
@@ -83,7 +83,7 @@ From [rebuild-kit.md §5](../specs/rebuild-kit.md#5-limits-what-cant-be-rebuilt-
     sudo bash /media/$USER/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/$USER/AI-ARK --node-id ai-nN
     ```
 
-    It works with the network unplugged. In order, it: checks the agent program's signature, installs Ubuntu packages from the kit, installs the companion programs, builds llama.cpp from the kit's source (or reuses a prebuilt one), sets up the services and the API key, applies laptop settings, asks you to **choose an admin PIN**, then starts **copying the models, library and maps from the drive** in the background.
+    It works with the network unplugged. In order, it: checks the agent program's signature, installs Ubuntu packages from the kit, installs the companion programs, builds llama.cpp from the kit's source (or reuses a build of the same version that is already on this computer and passes its test), sets up the services and the API key, applies laptop settings, asks you to **choose an admin PIN**, then starts **copying the models, library and maps from the drive** in the background.
     - **NVIDIA computer without a working driver:** it offers the driver packages from the kit (`LAI-INS-010`). Say **yes**. When it says a reboot is needed, reboot (step 13) and **run the same command again**; it continues where it stopped.
     - **What you should see:** `==> [n/15] …` lines, then `Local AI node ai-nN is installed.`, the brain, `Local UI: http://127.0.0.1:7070`, `Content: import running`, and a **TO DO** list.
     - **If it doesn't work:** the message names the phase and the code. Fix what it says and run the same command again. Common ones: `LAI-INS-021` (the agent program failed its signature check: **don't** continue; use another drive), `LAI-INS-030` (a package couldn't be installed), `LAI-INS-032` (the llama.cpp build failed; Part 5). See [07 → Installer stopped](07-troubleshooting.md#installer-stopped).
