@@ -3,7 +3,7 @@
 //   packaged:    node scripts/dist.mjs --linux --x64 && node scripts/packaged-app.mjs test-copy
 //                LOCALAI_E2E_EXECUTABLE=release/test-copy/ai-desktop xvfb-run -a npx playwright test
 // Needs a display (xvfb) and port 7070 free. As root (a container) Chromium needs --no-sandbox (set automatically).
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { type ElectronApplication, _electron as electron } from '@playwright/test';
@@ -18,19 +18,33 @@ export interface Launched {
   work: string;
   tokenPath: string;
   configHome: string;
+  /** The environment the app runs with (a second launch must share it to reach the first instance). */
+  env: Record<string, string>;
   stderr(): string;
   stop(): Promise<void>;
 }
 
 /** Starts the app with an isolated config folder and, when `token` is given, a token file the app is pointed at. */
-export async function launch(options: { token?: string | null; env?: Record<string, string> } = {}): Promise<Launched> {
+export async function launch(
+  options: {
+    token?: string | null;
+    env?: Record<string, string>;
+    /** Command-line flags of the app (`--hidden`, ...). */
+    args?: string[];
+    /** Runs before the app starts, with `configHome` (XDG_CONFIG_HOME): seeds settings.json or an autostart entry. */
+    seed?: (configHome: string) => Promise<void>;
+  } = {},
+): Promise<Launched> {
   const work = await mkdtemp(join(tmpdir(), 'ai-desktop-e2e-'));
   const tokenPath = join(work, 'agent-token');
   const configHome = join(work, 'config');
   if (options.token) await writeFile(tokenPath, `${options.token}\n`, { mode: 0o600 });
+  await mkdir(configHome, { recursive: true });
+  await options.seed?.(configHome);
   const common = ['--disable-gpu', ...(noSandbox ? ['--no-sandbox'] : [])];
+  const flags = options.args ?? [];
   const env = { ...process.env, XDG_CONFIG_HOME: configHome, LOCALAI_DESKTOP_TOKEN_PATH: tokenPath, ...options.env } as Record<string, string>;
-  const app = await electron.launch(executable ? { executablePath: executable, args: common, env } : { args: [...common, appDir], cwd: appDir, env });
+  const app = await electron.launch(executable ? { executablePath: executable, args: [...common, ...flags], env } : { args: [...common, appDir, ...flags], cwd: appDir, env });
   let stderr = '';
   app.process().stderr?.on('data', (chunk: Buffer) => {
     stderr += chunk.toString('utf8');
@@ -40,6 +54,7 @@ export async function launch(options: { token?: string | null; env?: Record<stri
     work,
     tokenPath,
     configHome,
+    env,
     stderr: () => stderr,
     stop: async () => {
       await app.close().catch(() => undefined);
