@@ -29,7 +29,7 @@ import (
 //     /opt/localai/<tool>/<version>/ with the `current` link repointed atomically and the previous
 //     version kept. kiwix and piper are installed by the functions of their own packages
 //     (svc/kiwix, svc/piper), handed in as TarballInstaller; pmtiles is installed here;
-//   - agent: kit/bin/SHA256SUMS.minisig must verify against the embedded release key (update.VerifyDir)
+//   - agent: kit/bin/release/SHA256SUMS.minisig (or kit/bin/SHA256SUMS.minisig, ReleaseListDir) must verify against the embedded release key (update.VerifyDir)
 //     and the binary for this architecture must match its line of SHA256SUMS. The binary is copied
 //     next to the installed one, started once (`version --json`) and only then swapped in with
 //     aiagent.prev kept; a bad signature changes nothing (LAI-KIT-044).
@@ -454,7 +454,7 @@ func (t *ToolInstaller) installAgent(ctx context.Context, kitDir string) (*ToolR
 	if fi, err := t.FS.Stat(binDir); err != nil || !fi.IsDir() {
 		return nil, toolErr(tool, ErrToolNotInKit, "the kit has no bin/ folder", err)
 	}
-	rep, err := update.VerifyDir(t.FS, binDir, t.Keys, update.DirOptions{IgnoreMissing: true})
+	rep, err := VerifyBin(t.FS, binDir, t.Keys)
 	if err != nil {
 		var mm *update.MismatchError
 		switch {
@@ -463,7 +463,7 @@ func (t *ToolInstaller) installAgent(ctx context.Context, kitDir string) (*ToolR
 		case errors.As(err, &mm):
 			return nil, toolErr(tool, ErrSignature, "these files do not match the signed checksums", nil, mm.Files...)
 		case errors.Is(err, update.ErrNoSums):
-			return nil, toolErr(tool, ErrSignature, "SHA256SUMS or SHA256SUMS.minisig is missing", err)
+			return nil, toolErr(tool, ErrSignature, "the release's SHA256SUMS or SHA256SUMS.minisig is missing (kit/bin/release/)", err)
 		}
 		return nil, toolErr(tool, ErrSignature, "the signature of SHA256SUMS did not verify", err)
 	}

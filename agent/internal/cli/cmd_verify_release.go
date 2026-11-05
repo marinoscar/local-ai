@@ -39,7 +39,8 @@ in SHA256SUMS. Use it for the desktop .deb and the agent files before you instal
 Exit 0: signature and every file are right. Exit 1: a file does not match, the signature is wrong, or it
 was made by a key this program does not know (LAI-AGT-010; LAI-KIT-044 when <dir> is a kit folder: a
 folder that holds kit/MANIFEST.json, or a kit/ folder with a MANIFEST.json). Exit 2: SHA256SUMS or
-SHA256SUMS.minisig is missing.
+SHA256SUMS.minisig is missing. A kit's bin folder is checked from its release/ folder, where the kit keeps the
+release's SHA256SUMS; files that list names but that belong to other kit items are not required.
 Put the global option --json before the command name: aictl --json verify-release <dir>. It prints
 {"signature": "ok|bad", "key_id", "files": [{"name", "status": "ok|mismatch|missing"}], "ok"}.
 Specification: docs/specs/aictl.md section 4.27a`,
@@ -95,7 +96,15 @@ func runVerifyRelease(c *Call) error {
 		code = CodeKitSignature
 	}
 
-	rep, verr := update.VerifyDir(update.OSFS{}, dir, verifyReleaseTrust(), update.DirOptions{})
+	// A kit's bin/ folder keeps the release's signed list in bin/release/ and holds only some of the files
+	// it names (the agent source is in kit/src), so a listed file that is not there is not an error.
+	listDir, opt := dir, update.DirOptions{}
+	if !fileExists(filepath.Join(dir, update.SumsName)) && !fileExists(filepath.Join(dir, update.SigName)) {
+		if l := kit.ReleaseListDir(update.OSFS{}, dir); l != dir {
+			listDir, opt = l, update.DirOptions{ListDir: l, IgnoreMissing: true}
+		}
+	}
+	rep, verr := update.VerifyDir(update.OSFS{}, dir, verifyReleaseTrust(), opt)
 	if errors.Is(verr, update.ErrNoSums) {
 		return c.usageErr(
 			fmt.Sprintf(pick(c.Lang, "SHA256SUMS or SHA256SUMS.minisig is missing in %q.", "Falta SHA256SUMS o SHA256SUMS.minisig en %q."), dir),
@@ -106,7 +115,7 @@ func runVerifyRelease(c *Call) error {
 	doc := releaseReport{Signature: "bad", KeyID: rep.KeyID, Files: []releaseFile{}}
 	if rep.KeyID != "" {
 		doc.Signature = "ok" // VerifyDir fills KeyID only once the signature verified
-	} else if sig, perr := readSignatureID(dir); perr == nil {
+	} else if sig, perr := readSignatureID(listDir); perr == nil {
 		doc.KeyID = sig
 	}
 	for _, f := range rep.Files {

@@ -457,14 +457,32 @@ func newAgentKit(t *testing.T, version string) *agentKit {
 		"aiagent-linux-amd64": agentBinary(version, "amd64"),
 		"aiagent-linux-arm64": agentBinary(version, "arm64"),
 	}
-	dir := putTool(t, k.kitDir, "bin", "node-v"+version, files)
-	sums := updatetest.Sums(files)
-	writeFile(t, filepath.Join(dir, "SHA256SUMS"), string(sums))
-	writeFile(t, filepath.Join(dir, "SHA256SUMS.minisig"), string(k.signer.Sign(sums, updatetest.SignOptions{})))
+	putTool(t, k.kitDir, "bin", "node-v"+version, files)
+	// The release's list names the agent source too, which is in kit/src and not here; the list is kept
+	// where the catalog puts it, in bin/release/ (kit.ReleaseDirName).
+	k.sign(t, map[string][]byte{"local-ai-node-v" + version + "-src.tar.gz": []byte("source")}, files)
 	return k
 }
 
+// sign writes the release's SHA256SUMS and its signature over the files (and the extra ones) into dir.
+func (k *agentKit) sign(t testing.TB, extra ...map[string][]byte) {
+	all := map[string][]byte{}
+	for _, m := range extra {
+		for n, b := range m {
+			all[n] = b
+		}
+	}
+	sums := updatetest.Sums(all)
+	writeFile(t, k.rel("SHA256SUMS"), string(sums))
+	writeFile(t, k.rel("SHA256SUMS.minisig"), string(k.signer.Sign(sums, updatetest.SignOptions{})))
+}
+
 func (k *agentKit) bin(name string) string { return filepath.Join(k.kitDir, "bin", name) }
+
+// rel is a file of the release list folder, kit/bin/release.
+func (k *agentKit) rel(name string) string {
+	return filepath.Join(k.kitDir, "bin", kit.ReleaseDirName, name)
+}
 
 // installedAgent puts a running agent of the given version into <opt>/bin.
 func installedAgent(t *testing.T, opt, version string) {
@@ -570,18 +588,18 @@ func TestInstallAgentRefusesBadSignaturesAndChanges(t *testing.T) {
 		keys   func(k *agentKit) []update.PublicKey
 	}{
 		{"a signature from another key", func(t *testing.T, k *agentKit) {
-			sums := readFile(t, k.bin("SHA256SUMS"))
-			writeFile(t, k.bin("SHA256SUMS.minisig"), string(updatetest.NewSigner().Sign([]byte(sums), updatetest.SignOptions{})))
+			sums := readFile(t, k.rel("SHA256SUMS"))
+			writeFile(t, k.rel("SHA256SUMS.minisig"), string(updatetest.NewSigner().Sign([]byte(sums), updatetest.SignOptions{})))
 		}, nil},
 		{"the checksum file changed after signing", func(t *testing.T, k *agentKit) {
-			writeFile(t, k.bin("SHA256SUMS"), strings.Replace(readFile(t, k.bin("SHA256SUMS")), "  aiagent-linux-amd64", "  aiagent-linux-amd64 ", 1))
+			writeFile(t, k.rel("SHA256SUMS"), strings.Replace(readFile(t, k.rel("SHA256SUMS")), "  aiagent-linux-amd64", "  aiagent-linux-amd64 ", 1))
 		}, nil},
 		{"the binary changed", func(t *testing.T, k *agentKit) {
 			writeFile(t, k.bin("aiagent-linux-amd64"), `{"version":"9.9.9","os":"linux","arch":"amd64"}`)
 		}, nil},
-		{"the signature file is missing", func(t *testing.T, k *agentKit) { os.Remove(k.bin("SHA256SUMS.minisig")) }, nil},
-		{"the checksum file is missing", func(t *testing.T, k *agentKit) { os.Remove(k.bin("SHA256SUMS")) }, nil},
-		{"the signature file is garbage", func(t *testing.T, k *agentKit) { writeFile(t, k.bin("SHA256SUMS.minisig"), "garbage") }, nil},
+		{"the signature file is missing", func(t *testing.T, k *agentKit) { os.Remove(k.rel("SHA256SUMS.minisig")) }, nil},
+		{"the checksum file is missing", func(t *testing.T, k *agentKit) { os.Remove(k.rel("SHA256SUMS")) }, nil},
+		{"the signature file is garbage", func(t *testing.T, k *agentKit) { writeFile(t, k.rel("SHA256SUMS.minisig"), "garbage") }, nil},
 		{"no trusted key is embedded", func(t *testing.T, k *agentKit) {}, func(k *agentKit) []update.PublicKey { return nil }},
 	}
 	for _, tc := range cases {
@@ -630,8 +648,8 @@ func TestInstallAgentRefusesAFailingNewBinary(t *testing.T) {
 			for n, b := range files {
 				writeFile(t, k.bin(n), string(b))
 			}
-			writeFile(t, k.bin("SHA256SUMS"), string(sums))
-			writeFile(t, k.bin("SHA256SUMS.minisig"), string(k.signer.Sign(sums, updatetest.SignOptions{})))
+			writeFile(t, k.rel("SHA256SUMS"), string(sums))
+			writeFile(t, k.rel("SHA256SUMS.minisig"), string(k.signer.Sign(sums, updatetest.SignOptions{})))
 			rn := agentRunner(0)
 			ti, opt := newTools(t, rn)
 			ti.Keys = k.keys
@@ -687,8 +705,8 @@ func TestInstallAgentNotInTheKit(t *testing.T) {
 	os.Remove(k.bin("aiagent-linux-amd64"))
 	files := map[string][]byte{"aiagent-linux-arm64": agentBinary("0.5.0", "arm64")}
 	sums := updatetest.Sums(files)
-	writeFile(t, k.bin("SHA256SUMS"), string(sums))
-	writeFile(t, k.bin("SHA256SUMS.minisig"), string(k.signer.Sign(sums, updatetest.SignOptions{})))
+	writeFile(t, k.rel("SHA256SUMS"), string(sums))
+	writeFile(t, k.rel("SHA256SUMS.minisig"), string(k.signer.Sign(sums, updatetest.SignOptions{})))
 	ti2, _ := newTools(t, agentRunner(0))
 	ti2.Keys = k.keys
 	_, err = ti2.Install(context.Background(), k.kitDir, kit.ToolAgent)

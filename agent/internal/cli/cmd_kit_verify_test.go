@@ -221,7 +221,7 @@ func TestKitVerifyExitCodes(t *testing.T) {
 			}
 			f.k.Reseal("debs/noble-amd64", "kit-debs-noble-amd64")
 		}, ExitErrors, "red"},
-		{"a tampered signature", func(f *verifyFix) { f.k.Corrupt("bin/SHA256SUMS.minisig") }, ExitFailed, "red"},
+		{"a tampered signature", func(f *verifyFix) { f.k.Corrupt("bin/release/SHA256SUMS.minisig") }, ExitFailed, "red"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -287,7 +287,7 @@ func TestKitVerifyShowsAKitBuiltFromUnverifiedRepositories(t *testing.T) {
 
 func TestKitVerifyTamperedSignatureIsCritical(t *testing.T) {
 	f := newVerifyFix(t, kittest.AiN3())
-	f.k.Corrupt("bin/SHA256SUMS.minisig")
+	f.k.Corrupt("bin/release/SHA256SUMS.minisig")
 	r := f.run(t, "kit", "verify")
 	if r.code != ExitFailed || !strings.Contains(unwrap(r.out), doctor.KIT044) || !strings.Contains(unwrap(r.out), "failed their signature check") &&
 		!strings.Contains(unwrap(r.out), "did not verify") {

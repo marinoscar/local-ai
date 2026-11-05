@@ -660,9 +660,9 @@ func (r *run) reportDamage(it *scanItem, problems []Problem) {
 
 // ---- step 2: signatures ---------------------------------------------------------------------------
 
-// signature checks kit/bin/SHA256SUMS.minisig against the embedded keys and every file of SHA256SUMS
-// against the binaries (the same update.VerifyDir as `aictl kit install agent` and `aictl
-// verify-release`). A bad signature, an unknown key, a missing signature file or a binary that does not
+// signature checks the signature of the release's checksum list (kit/bin/release/SHA256SUMS.minisig, see
+// ReleaseListDir) against the embedded keys and every file of the list that is in kit/bin against its
+// line (VerifyBin, the same code as `aictl kit install agent` and `aictl verify-release`). A bad signature, an unknown key, a missing signature file or a binary that does not
 // match is LAI-KIT-044. A program with no release key built in cannot say either way: the report says
 // so and the part is a warning.
 func (r *run) signature(ctx context.Context) error {
@@ -675,7 +675,7 @@ func (r *run) signature(ctx context.Context) error {
 		r.rep.Signature = &SignatureResult{Status: SigAbsent}
 		return nil
 	}
-	rep, err := update.VerifyDir(r.fs, binDir, r.opts.Keys, update.DirOptions{IgnoreMissing: true})
+	rep, err := VerifyBin(r.fs, binDir, r.opts.Keys)
 	if cerr := ctx.Err(); cerr != nil {
 		return cerr
 	}
@@ -689,13 +689,13 @@ func (r *run) signature(ctx context.Context) error {
 	switch {
 	case errors.Is(err, update.ErrNoKeys):
 		sig.Status, sig.Detail = SigUnchecked, "this program has no release key built in"
-		r.note(Note{Kind: NoteUnchecked, Part: PartBin, Names: []string{rel(PartBin, "SHA256SUMS.minisig")}, Detail: sig.Detail})
+		r.note(Note{Kind: NoteUnchecked, Part: PartBin, Names: []string{rel(PartBin, ReleaseDirName+"/SHA256SUMS.minisig")}, Detail: sig.Detail})
 		return nil
 	case errors.As(err, &mm):
 		sig.Status, sig.Bad = SigFailed, mm.Files
 		sig.Detail = "files that do not match the signed checksums"
 	case errors.Is(err, update.ErrNoSums):
-		sig.Status, sig.Detail = SigFailed, "SHA256SUMS or SHA256SUMS.minisig is missing"
+		sig.Status, sig.Detail = SigFailed, "the release's SHA256SUMS or SHA256SUMS.minisig is missing (bin/release/)"
 	default:
 		sig.Status, sig.Detail = SigFailed, "the signature of SHA256SUMS did not verify"
 	}

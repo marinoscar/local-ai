@@ -363,14 +363,14 @@ func TestVerifyFindsWhatIsWrong(t *testing.T) {
 			k.Write("src/llama.cpp-"+kittest.Hex40("a-newer-commit")+".tar.gz", []byte("stray"))
 		}, node: func(n kittest.Node) kittest.Node { n.LlamaSeed = "a-newer-commit"; return n },
 			overall: kit.Red, part: "src", status: kit.StatusDamaged, code: doctor.KIT001, damaged: true},
-		{name: "a tampered signature file", do: func(t *testing.T, k *kittest.Kit) { k.Corrupt("bin/SHA256SUMS.minisig") },
+		{name: "a tampered signature file", do: func(t *testing.T, k *kittest.Kit) { k.Corrupt("bin/release/SHA256SUMS.minisig") },
 			overall: kit.Red, part: "bin", status: kit.StatusDamaged, code: doctor.KIT044, damaged: true},
 		{name: "a signature made with another key", do: func(t *testing.T, k *kittest.Kit) {
 			other := kittest.New(t)
 			other.Provision(n3)
-			k.Write("bin/SHA256SUMS.minisig", other.Read("bin/SHA256SUMS.minisig"))
+			k.Write("bin/release/SHA256SUMS.minisig", other.Read("bin/release/SHA256SUMS.minisig"))
 		}, overall: kit.Red, part: "bin", status: kit.StatusDamaged, code: doctor.KIT044, damaged: true},
-		{name: "the signature file is missing", do: func(t *testing.T, k *kittest.Kit) { k.Remove("bin/SHA256SUMS.minisig") },
+		{name: "the signature file is missing", do: func(t *testing.T, k *kittest.Kit) { k.Remove("bin/release/SHA256SUMS.minisig") },
 			overall: kit.Red, part: "bin", status: kit.StatusDamaged, code: doctor.KIT044, damaged: true},
 		{name: "a binary changed after it was signed", do: func(t *testing.T, k *kittest.Kit) { k.Corrupt("bin/aiagent-linux-amd64") },
 			overall: kit.Red, part: "bin", status: kit.StatusDamaged, code: doctor.KIT044, damaged: true, reason: kit.ReasonChanged},
@@ -817,7 +817,7 @@ func TestVerifyWithoutAKeyCannotCheckTheSignature(t *testing.T) {
 	}
 	// With the key missing from the program a tampered SHA256SUMS.minisig cannot be told from a good one,
 	// but a missing one still can.
-	k.Remove("bin/SHA256SUMS.minisig")
+	k.Remove("bin/release/SHA256SUMS.minisig")
 	if rep := run(t, k, func(o *kit.Options) { facts(n)(o); o.Keys = nil }); !rep.HasCode(doctor.KIT044) {
 		t.Errorf("a missing signature file: %v", codes(rep))
 	}
