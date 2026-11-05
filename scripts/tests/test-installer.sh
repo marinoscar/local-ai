@@ -32,6 +32,7 @@ cat >"$FB/aictl" <<'FAKE'
 #!/bin/sh
 echo "aictl $*" >>"$FAKE_LOG"
 cat >"$FAKE_STDIN_DIR/$1-$2"
+if [ "$1 $2" = "kit export-build" ] && [ -n "${FAKE_EXPORT_RC:-}" ]; then echo "LAI-KIT-049 boom"; exit "$FAKE_EXPORT_RC"; fi
 if [ -n "${FAKE_AICTL_RC:-}" ]; then echo "${FAKE_AICTL_MSG:-failed} $(cat "$FAKE_STDIN_DIR/$1-$2")"; exit "$FAKE_AICTL_RC"; fi
 echo "fake aictl $1 $2 ok"
 FAKE
@@ -277,6 +278,8 @@ t "P9 restarts the agent, then waits for health" 0 "systemctl restart localai-ag
 t "P9 says the agent is healthy" 0 "the agent is healthy" cat "$w/r6.out"
 t "P9 activates the build P7 made for this node" 0 "builds/${C40:0:9}-cpu" bash -c 'readlink "$1/current"' _ "$w/llama6"
 t "P9 starts localai-llama after activating it" 0 "systemctl start localai-llama.service" cat "$FAKE_LOG"
+t "P9 saves the active build in the kit (aictl kit export-build)" 0 "aictl kit export-build" cat "$FAKE_LOG"
+t "...after the model server was started" 0 "" bash -c 'a=$(grep -n "systemctl start localai-llama" "$1" | head -1 | cut -d: -f1); b=$(grep -n "aictl kit export-build" "$1" | head -1 | cut -d: -f1); [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]' _ "$FAKE_LOG"
 t "P10 runs aiagent setup api-key" 0 "aiagent setup api-key" cat "$FAKE_LOG"
 t "P12 pipes the PIN to aictl pin set --pin-stdin" 0 "aictl pin set --pin-stdin" cat "$FAKE_LOG"
 t "P12 delivered the PIN on stdin" 0 "$pin8" cat "$FAKE_STDIN_DIR/pin-set"
@@ -307,6 +310,12 @@ t "a different node id -> exit 1 with LAI-INS-020" 0 "LAI-INS-020" bash -c 'test
 t "a different node id stops before the units are written" 0 "" bash -c '! grep -q "setup units" "$1"' _ "$FAKE_LOG"
 FAKE_AIAGENT_RC=1 FAKE_AIAGENT_STEP=units FAKE_AIAGENT_MSG="boom" r6 --node-id ai-n9; rc=$?
 t "units failure -> exit 1, agent not restarted" 0 "" bash -c 'test '"$rc"' -eq 1 && ! grep -q "restart localai-agent" "$1"' _ "$FAKE_LOG"
+
+# The export is best effort: the build is already in use
+FAKE_EXPORT_RC=1 r6 --node-id ai-n9; rc=$?
+t "a failing kit export is a warning, not a failed install" 0 "WARNING: the build is in use but could not be saved in the kit" bash -c 'test '"$rc"' -eq 0 && cat "$1"' _ "$w/r6.out"
+t "...and it names the command to try later" 0 "sudo aictl kit export-build" cat "$w/r6.out"
+t "export_builds with no active build says so and runs nothing" 0 "nothing to save in the kit yet" bash -c 'source "$1"; DEV=1; export LAI_INSTALLER_DEV=1; LAI_INSTALL_LLAMA_ROOT="$2"; LAI_INSTALL_AICTL="$3"; inst06_env; say() { echo "$*"; }; : >"$FAKE_LOG"; export_builds && ! grep -q "export-build" "$FAKE_LOG"' _ "$INST" "$w/llama6-empty" "$FB/aictl"
 
 # P10..P13 behaviour
 echo hash >"$LAI_ETC_DIR/admin-pin"
@@ -356,6 +365,7 @@ t "dry run exits 0" 0 "" test $rc -eq 0
 t "dry run: every aiagent call carries --dry-run" 0 "" bash -c 'grep "^aiagent setup [a-z-]* " "$1" | grep -v -e "--dry-run" | wc -l | grep -qx 0' _ "$FAKE_LOG"
 t "dry run: systemctl was never called" 0 "" bash -c '! grep -q "^systemctl" "$1"' _ "$FAKE_LOG"
 t "dry run: aictl was never called" 0 "" bash -c '! grep -q "^aictl" "$1"' _ "$FAKE_LOG"
+t "dry run says it would save the build in the kit" 0 "would run: $FB/aictl kit export-build" bash -c 'echo "$1"' _ "$dryout"
 t "dry run says what it would do for P9, P12, P13" 0 "" bash -c 'grep -q "would run: systemctl restart localai-agent.service" <<<"$1" && grep -q "would set the admin PIN" <<<"$1" && grep -q "would enroll with" <<<"$1"' _ "$dryout"
 t "dry run: no PIN or credential on screen or in the log" 0 "" bash -c '! grep -qE "$1|FAKEFAKEFAKE" <<<"$2" "$3"' _ "$pin8" "$dryout" "$w/dry6.log"
 t "dry run with no agent installed still exits 0 and says would run" 0 "[dry-run] would run: $w/none/aiagent setup node-yaml" bash -c 'LAI_INSTALL_AIAGENT="$2/none/aiagent" LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$2/dstate7" "$1" --dry-run --log "$2/dry7.log" --node-id ai-n9 2>&1' _ "$INST" "$w"
