@@ -8,7 +8,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { BrowserWindow, app, clipboard, ipcMain, protocol, session, shell } from 'electron';
 import { AgentFeed, createAgentClient, resolveTokenPath, testHooksAllowed } from './agent-client';
-import { createAgentSupervisor } from './agent-supervisor';
+import { createAgentSupervisor, execFileRunner, resolveStartBinaries } from './agent-supervisor';
 import { runDiagnoseMain } from './diagnose';
 import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, installEgressGuard, installMainProcessGuard, setEgressLogger, type GuardedSessions } from './egress-guard';
 import { ERROR_ACTION_CHANNEL, resolveLang } from './i18n';
@@ -74,7 +74,14 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     sessionFetch: (input, init) => sessions.agent.fetch(input, init),
     log,
   });
-  const supervisor = createAgentSupervisor();
+  const supervisor = createAgentSupervisor({
+    start: {
+      binaries: resolveStartBinaries(process.env, testHooksAllowed(app.isPackaged, process.execPath)),
+      exec: execFileRunner,
+      health: async () => (await client.health({ tries: 1 })).reachable,
+      log,
+    },
+  });
   const host = createTemporaryHost({ window: win, isPackaged: app.isPackaged, preloadDir: join(__dirname, '../preload'), lang: () => lang, shellPageUrl });
   const feed = new AgentFeed(client);
 

@@ -10,6 +10,7 @@ const ERROR_ACTION_CHANNEL = 'localai:error-action';
 if (contextBridge && ipcRenderer) {
   contextBridge.exposeInMainWorld(BRIDGE, {
     /** A button of the error page. The main process checks the sender's page and that the code owns the button. */
-    errorAction: (action: string, code: string): Promise<{ ok: boolean; code?: string }> => ipcRenderer.invoke(ERROR_ACTION_CHANNEL, { action, code }) as Promise<{ ok: boolean; code?: string }>,
+    errorAction: (action: string, code: string): Promise<{ ok: boolean; code?: string; statusExcerpt?: string; busy?: boolean }> =>
+      ipcRenderer.invoke(ERROR_ACTION_CHANNEL, { action, code }) as Promise<{ ok: boolean; code?: string; statusExcerpt?: string; busy?: boolean }>,
   });
 }
