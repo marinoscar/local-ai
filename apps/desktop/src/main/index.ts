@@ -14,7 +14,7 @@ import { createAgentSupervisor, execFileRunner, resolveStartBinaries } from './a
 import { type LaunchArgs, parseArgs } from './args';
 import { AutostartController, applyAutostart, autostartPath } from './autostart';
 import { runDiagnoseMain } from './diagnose';
-import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, installEgressGuard, installMainProcessGuard, setEgressLogger, type GuardedSessions } from './egress-guard';
+import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, getUpdaterSession, installEgressGuard, installMainProcessGuard, runAsUpdater, setEgressLogger, setEgressState, type GuardedSessions } from './egress-guard';
 import { KeyCopier, copyNotification, createKeyActions, createKeyApi } from './clipboard';
 import { DIALOG_TEXT, errorText, pick, resolveLang } from './i18n';
 import { CHANNELS, type SettingsStore, type StartupPhase, buildDesktopStatus, createHostHandlers, createSettingsStore, createShellHandlers, isAllowedOrigin, registerHandlers } from './ipc';
@@ -25,6 +25,7 @@ import { Notifier } from './notify';
 import { PinService, createPinApi } from './pin';
 import { installLocalaiProtocol, registerLocalaiScheme, rendererRoot, shellUrl } from './protocol';
 import { type Settings, type SettingsPatch, configDir, readSettingsFile } from './settings';
+import { UpdateController, describeUpdateStatus, loadElectronUpdater } from './updates';
 import { SessionRecovery, type ActionDeps, type ContentHost, type StartupResult, handleErrorAction, runStartup } from './startup';
 import { SurvivalController, install as installSurvival } from './survival';
 import {
@@ -160,6 +161,24 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     reloadAgentUi: () => windows.reloadAgentUi(),
   };
 
+  // -- opt-in updates (DSK-12): nothing is loaded or requested until "Check for updates" is ticked and the node is online ---
+  const updates = new UpdateController({
+    packaged: app.isPackaged,
+    currentVersion: app.getVersion(),
+    loadUpdater: () => loadElectronUpdater({ session: getUpdaterSession(), log }),
+    // The release feed, through the guarded updater session (the GitHub hosts are open there only while updates are on).
+    fetchText: async (url) => {
+      const response = await getUpdaterSession().fetch(url, { headers: { Accept: 'application/atom+xml' } });
+      if (!response.ok) throw new Error(`HTTP ${response.status} from the release feed`);
+      return response.text();
+    },
+    // `connected` belongs to DSK-10: keep it, change only `updates`.
+    setEgress: (allowed) => setEgressState({ ...getEgressState(), updates: allowed }),
+    runAsUpdater,
+    log,
+  });
+  app.on('will-quit', () => updates.dispose());
+
   // -- status: what the top bar shows ------------------------------------------------------------------------------
   const cloud = (): CloudLinkState => ({ linked: settings.cloud.linked, tokenHeld: false, url: settings.cloud.url }); // DSK-10 holds the token
   const status = () =>
@@ -173,8 +192,10 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
       survival: survival.state((code) => errorText(code, lang).title),
     });
   const push = (): void => {
-    windows.setLabAvailable(status().connected);
-    windows.broadcastToShell(CHANNELS.statusChanged, status());
+    const current = status();
+    windows.setLabAvailable(current.connected);
+    updates.apply({ setting: settings.updates.checkForUpdates, mode: current.mode, connected: current.connected });
+    windows.broadcastToShell(CHANNELS.statusChanged, current);
   };
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   feed.subscribe((message) => {
@@ -284,13 +305,13 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   const notAvailable = (): void => notice('not-available', pick(NOT_AVAILABLE, lang));
   const showMenu = (): void => {
     const template = buildMenuTemplate(
-      { lang, linked: settings.cloud.linked, autostart: settings.autostart, checkForUpdates: settings.updates.checkForUpdates },
+      { lang, linked: settings.cloud.linked, autostart: settings.autostart, checkForUpdates: settings.updates.checkForUpdates, updateLines: describeUpdateStatus(updates.status, lang) },
       {
         connectionInfo: showConnectionInfo,
         connect: notAvailable, // DSK-10
         disconnect: notAvailable, // DSK-10
         setAutostart: (on) => void autostart.set(on),
-        setUpdates: (on) => void store.update({ updates: { checkForUpdates: on } }).catch(() => undefined), // the updater is DSK-12's
+        setUpdates: (on) => void store.update({ updates: { checkForUpdates: on } }).catch(() => undefined), // the settings listener reaches `updates.apply` through push()
         about: () => {
           void dialog.showMessageBox({ type: 'info', title: pick(ABOUT.title, lang), message: pick(ABOUT.message, lang), detail: ABOUT.detail(app.getVersion(), lang), buttons: [pick(ABOUT.close, lang)] });
         },

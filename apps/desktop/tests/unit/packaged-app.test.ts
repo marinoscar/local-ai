@@ -76,6 +76,34 @@ describe('packaged-app verify', () => {
     expect((await verifyPackagedApp(app)).ok).toBe(true);
   });
 
+  describe('the electron-updater chunk is loaded lazily (DSK-12)', () => {
+    const chunk = 'const NET = "electron-updater";';
+    const lazy = 'async function load() { return (await Promise.resolve().then(() => /* @__PURE__ */ __toESM(require("./chunks/main-abc.js").default))).autoUpdater; }';
+    const files = (index: string, extra: Record<string, string> = { 'out/main/chunks/main-abc.js': chunk }) => ({ ...GOOD_ASAR_FILES, 'out/main/index.js': index, ...extra });
+
+    it('passes when the chunk is required only inside Promise.resolve().then()', async () => {
+      const result = await verifyPackagedApp(await fixture({ asarFiles: files(lazy) }));
+      expect(result.problems).toEqual([]);
+      expect(result.checks.join('\n')).toContain('required only lazily');
+    });
+
+    it('fails when the main bundle requires the chunk at the top level', async () => {
+      const result = await verifyPackagedApp(await fixture({ asarFiles: files(`const updater = require("./chunks/main-abc.js");\n${lazy}`) }));
+      expect(result.ok).toBe(false);
+      expect(result.problems.join('\n')).toContain('outside Promise.resolve().then()');
+    });
+
+    it('fails when the chunk is never required (the build changed shape)', async () => {
+      const result = await verifyPackagedApp(await fixture({ asarFiles: files('"use strict";') }));
+      expect(result.problems.join('\n')).toContain('never required');
+    });
+
+    it('ignores other chunks', async () => {
+      const result = await verifyPackagedApp(await fixture({ asarFiles: files('const x = require("./chunks/other.js");', { 'out/main/chunks/other.js': 'module.exports = 1;' }) }));
+      expect(result.problems).toEqual([]);
+    });
+  });
+
   it('fails when the app is not packed in an asar', async () => {
     const app = await fixture({ noAsar: true });
     const result = await verifyPackagedApp(app);
