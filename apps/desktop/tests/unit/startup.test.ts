@@ -220,6 +220,15 @@ describe('error-page actions', () => {
     expect(withStart.log.retried).toBe(1);
   });
 
+  it('start-agent failure carries LAI-DSK-005 and the status excerpt; a busy start does nothing and does not retry', async () => {
+    const failed = deps({ supervisor: { start: async () => ({ ok: false, code: 'LAI-DSK-005', reason: 'not-authorized', statusExcerpt: 'inactive (dead)' }) } });
+    expect(await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, failed.d)).toEqual({ ok: false, code: 'LAI-DSK-005', statusExcerpt: 'inactive (dead)' });
+    expect(failed.log.retried).toBe(0);
+    const busy = deps({ supervisor: { start: async () => ({ ok: false, busy: true }) } });
+    expect(await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, busy.d)).toEqual({ ok: false, busy: true });
+    expect(busy.log.retried).toBe(0);
+  });
+
   it('logout reports whether gnome-session-quit was there', async () => {
     expect(await handleErrorAction({ action: 'logout', code: 'LAI-DSK-002' }, deps({ logout: async () => false }).d)).toEqual({ ok: false });
   });

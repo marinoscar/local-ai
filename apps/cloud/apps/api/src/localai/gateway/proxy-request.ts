@@ -74,7 +74,7 @@ export class ProxyRequest {
   upstreamContentType = 'application/json';
   /** Candidates this request can use at all (GW-10: audio-capable nodes for a transcription); absent means every one. */
   eligible?: (candidate: SelectedCandidate) => boolean;
-  timeouts!: Pick<GatewayTimeouts, 'connectMs' | 'firstByteMs' | 'idleMs'>;
+  timeouts!: Pick<GatewayTimeouts, 'connectMs' | 'firstByteMs' | 'idleMs' | 'totalMs'>;
   maxAttempts = 1;
   /** Did the client itself ask for `stream_options.include_usage`? GW-07 forwards the usage chunk only then. */
   clientWantsUsageChunk = false;
@@ -115,7 +115,7 @@ export class ProxyRequest {
     return this.ctx.requestId;
   }
 
-  /** Aborts the upstream call with the `total` reason once `ms` have passed (`nonStreamTotalMs` here, `totalMs` for GW-07). */
+  /** Aborts the upstream call with the `total` reason once `ms` have passed (`nonStreamTotalMs` for the non-stream path, `totalMs` for the stream path). */
   startTotalTimer(ms: number): void {
     this.clearTotalTimer();
     this.totalTimer = setTimeout(() => {
