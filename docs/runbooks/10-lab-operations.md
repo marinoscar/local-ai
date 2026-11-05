@@ -130,12 +130,50 @@ The agent update is signed and checked; the previous version is kept, and if the
 
 ## Part 5. Gateway keys and usage
 
+The gateway is `https://ai.marin.cr/v1`: one address for every program, with a `lai_` key instead of one node key per node. Keys are made at **API keys**; the requests they make are counted at **API keys → Usage**. Spec: [gateway.md](../specs/gateway.md).
+
 35. **Create a key** for a person or program: **API keys → Create key**: name, models (empty = all), expiry. Copy the `lai_…` key shown once ([02 Part 3](02-chat-and-api-keys.md)).
-36. **Service keys** (owner) for systems like Open WebUI: kind **service**, may have no expiry and higher limits.
-37. **Revoke** a key: **Revoke** on its row. It stops working on the next request.
-38. **Usage:** requests and tokens per day, model or node. Only metadata is stored, never prompts or answers.
+   - **What you should see:** the key box with **Copy**, and a new row in the table with `lai_` and the first six characters.
+   - **If it doesn't work:** no **API keys** entry: that account lacks the `gateway:use` permission.
+36. **Service keys** (owner) for systems like Open WebUI: **Create key** → **Service key (a program such as Open WebUI)**. A service key may have no expiry (leave **Expires in (days)** empty) and takes the higher service limits from the gateway settings (`gateway.defaults.service`: 600 requests a minute, 16 at the same time, no daily token budget). Name it for the program (`open-webui`), one key per program, so **Usage** can tell them apart.
+   - **Create it with the account that will stay.** A key stops working (`LAI-GW-013`) if its owner's account is deactivated or loses the gateway permission.
+   - **What you should see:** the row shows `(service)` next to the name and `never` under **Expires**.
+37. **Revoke** a key: **Revoke** on its row, then **Revoke** in the window that asks. It stops working on the next request.
+   - **Revoking `open-webui` makes every chat in Open WebUI fail** with `LAI-GW-010`. To **replace** it without a gap: create the new key, paste it in Open WebUI (Connections, edit the gateway connection) and in `apps/openwebui/.env`, test a chat, and only then revoke the old one ([02 step 17 and step 20](02-chat-and-api-keys.md#part-5-connect-open-webui)).
+38. **Usage:** requests and tokens per day, model or node. Only metadata is stored, never prompts or answers. Use the **Key** filter to see one key (`open-webui`), **Range** for 7 or 30 days, **Group by** for day, model or node (model and node cover 7 days). Gateway administrators can tick **Show every user's keys**. Requests appear a few seconds after they finish.
 39. **Models (owner):** per model, enable or disable it on the gateway, add aliases, allow **on-demand** loading (the gateway may load it on a node that has it, waiting up to the set time), and set preferred nodes.
 40. **A node shouldn't receive gateway traffic** (maintenance, a laptop on the road): node page → **Settings** → turn **gateway enabled** off. Or put it in offline mode.
+
+### Checklist: move Open WebUI to the one lab connection (once)
+
+Do this once, with the lab owner at the keyboard. The procedure, with every button and command, is [02 Part 5](02-chat-and-api-keys.md#part-5-connect-open-webui); this list is what to confirm before, during and after, and how to go back. Tick the boxes on paper or in the issue ([#146](https://github.com/marinoscar/local-ai/issues/146)); the repository does not record that it was done.
+
+Before:
+- [ ] The cloud runs a version with the API keys, streaming and Usage pages, and **Admin → Settings → Doctor** shows the four gateway checks (`localai.gateway.enabled`, `.routable`, `.keys`, `.usage`) without a red one.
+- [ ] At least two nodes are enrolled, online and have a model loaded (**Lab**), and each has its key in the cloud (`LAI-GW-043` / `LAI-CLD-026` would say otherwise).
+- [ ] From any computer with a `lai_` key (02 Part 3): `scripts/gateway-client.sh check` is all `ok`. This proves the gateway works before Open WebUI depends on it.
+- [ ] You wrote down Open WebUI's current connections (URLs and which nodes they point to) and you can sign in to `https://chat.marin.cr` as admin.
+- [ ] Nobody is in the middle of a long chat.
+
+During (02 steps 15 to 21):
+- [ ] Service key `open-webui` created and stored in a password manager.
+- [ ] Gateway connection added; the lab models appear.
+- [ ] The three per-node connections deleted (`ai-n1`, `ai-n2`, `ai-n3`); OpenAI kept only if used.
+- [ ] Test chat answered, and **Usage** shows it on the `open-webui` key.
+- [ ] `apps/openwebui/.env` in `marin-server-infra` updated (`OPENAI_API_BASE_URL` and `OPENAI_API_KEY`) and the container recreated.
+- [ ] `openwebui-cutover.sh check` and `verify` are `ok` and `200`.
+
+After (the manual tests of [gateway.md §9](../specs/gateway.md#manual)):
+- [ ] `curl -s https://ai.marin.cr/v1/models -H "Authorization: Bearer $LAI_KEY" | jq '.data[].id'` lists the loaded ids.
+- [ ] The same without a key answers `401` with `"localai_code":"LAI-GW-010"`.
+- [ ] A streaming `curl -N …` shows words one at a time; **Ctrl + C** in the middle, then on that node `journalctl -u localai-llama -n 20` shows the request cancelled.
+- [ ] Unload a model on its node from **Lab**, repeat the first test: its id is gone (or shows `loadable`).
+- [ ] OpenCode with the lab provider answers (02 step 14).
+- [ ] Record in the issue: the Open WebUI version, the date, which path you used (Admin Panel or database), and the HTTP code of `verify`.
+
+Rollback (the lab stays usable the whole time, because the nodes themselves were never changed):
+- [ ] Open WebUI shows no models or errors on every chat and you cannot fix it in a few minutes: put the per-node connections back ([02 step 23](02-chat-and-api-keys.md#part-5-connect-open-webui)), either in the Admin Panel or with `openwebui-cutover.sh restore --yes` if you made a backup. Programs that use a `lai_` key directly are not affected.
+- [ ] Tell the issue what failed (with the `LAI-GW-…` code), so it is fixed before the next try.
 
 ---
 

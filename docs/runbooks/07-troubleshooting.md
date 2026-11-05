@@ -304,6 +304,27 @@ The admin PIN protects deletes, key rotation and leaving Survival mode. Starting
 
 ---
 
+## Open WebUI shows no lab models
+
+**You see:** in `https://chat.marin.cr` (Open WebUI) the model list is empty, or every chat answers with an error, after it was moved to the one lab connection ([02 Part 5](02-chat-and-api-keys.md#part-5-connect-open-webui)).
+
+1. **Is the gateway itself working?** From any computer that has a `lai_` key stored ([02 step 12](02-chat-and-api-keys.md)):
+
+   ```
+   scripts/gateway-client.sh check
+   ```
+
+   - `ok   no key -> 401 LAI-GW-010` and `ok   key -> 200, models:` mean the gateway is fine; go to step 2.
+   - `FAIL key -> HTTP 401 (LAI-GW-010)`: that key is wrong, revoked or expired. Create a new one ([02 Part 3](02-chat-and-api-keys.md)).
+   - `LAI-GW-051` (HTTP 503): the gateway is turned off or the site is in maintenance. Admin: check **Admin → Settings → Doctor** and `LOCALAI_GATEWAY_ENABLED`.
+   - `ok   key -> 200` but no models listed: no node can serve one right now (`LAI-GW-021` on a request). In **Lab**, is any node online, with a model loaded and **gateway enabled** on? The Doctor check `localai.gateway.routable` says the same.
+2. **The gateway works but Open WebUI shows nothing.** Admin Panel → Settings → Connections → OpenAI API: click the refresh icon on the gateway connection. Check the URL is exactly `https://ai.marin.cr/v1` and the key is the `open-webui` **lab** key (`lai_…`), not a node key.
+3. **From the VPS (as root):** `./openwebui-cutover.sh verify` ([02 step 21](02-chat-and-api-keys.md)). `401`: the container's key is wrong (`LAI-GW-010`). `502` or `000`: Open WebUI is still starting; wait 20 to 40 seconds.
+4. **Only one model fails:** `LAI-GW-022` (it is loading, wait a minute), `LAI-GW-021` (no node can run it now: pick another or load it, [03](03-swap-a-model.md)), `LAI-GW-023` (busy, try again in seconds), `LAI-GW-012` (the key may not use that model; the `open-webui` key should allow every model).
+5. **Can't fix it quickly?** Go back to one connection per node: [02 step 23](02-chat-and-api-keys.md). The nodes and the programs that use a `lai_` key directly are not affected.
+
+---
+
 ## GPU not detected after update
 
 **You see:** `LAI-HW-001`, `LAI-HW-002`, `LAI-HW-003`, `LAI-HW-018`, `LAI-LLM-022` (running on the processor), or answers became very slow after Ubuntu installed updates.
@@ -376,7 +397,7 @@ Each code is `LAI-<AREA>-<NNN>`. The registry of all codes is [doctor-codes.md](
 | Network / Tailscale | `LAI-NET` | Tailnet publishing, internet checks | [agent.md §8.2](../specs/agent.md#82-lai-net--network-and-tailscale) | [Cloud shows node offline](#cloud-shows-node-offline), [Laptop sleeps](#laptop-sleeps-or-drops-off-the-network) |
 | Cloud link (node side, 050–069) | `LAI-CLD` | The node's connection to ai.marin.cr | [agent.md §8.5](../specs/agent.md#85-lai-cld-050069--agent-side-cloud-link-client) | [Cloud shows node offline](#cloud-shows-node-offline) |
 | Cloud (001–049) | `LAI-CLD` | Alerts and checks in ai.marin.cr | [cloud-app.md §8](../specs/cloud-app.md#8-doctor-codes-lai-cld) | [10](10-lab-operations.md) |
-| Gateway | `LAI-GW` | `https://ai.marin.cr/v1` | [gateway.md §8](../specs/gateway.md#8-doctor-codes-lai-gw) | [API key doesn't work](#api-key-doesnt-work-401) |
+| Gateway | `LAI-GW` | `https://ai.marin.cr/v1` | [gateway.md §8](../specs/gateway.md#8-doctor-codes-lai-gw) | [API key doesn't work](#api-key-doesnt-work-401), [Open WebUI shows no lab models](#open-webui-shows-no-lab-models) |
 | Desktop | `LAI-DSK` | The Local AI app | [desktop.md §8](../specs/desktop.md#8-doctor-codes-lai-dsk) | [The app won't open](#the-app-wont-open) |
 | Installer | `LAI-INS` | `install-node.sh`, laptop settings | [installer.md §8](../specs/installer.md#8-doctor-codes-installer-output-is-terminal-only-english) | [Installer stopped](#installer-stopped), [Laptop sleeps](#laptop-sleeps-or-drops-off-the-network) |
 | Rebuild kit | `LAI-KIT` | Offline rebuild materials and builds | [rebuild-kit.md §8](../specs/rebuild-kit.md#8-doctor-codes-shown-in-the-desktop-english-and-spanish) | [06](06-rebuild-a-node-offline.md) |
