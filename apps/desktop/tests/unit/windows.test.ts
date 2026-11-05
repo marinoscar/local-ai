@@ -9,10 +9,13 @@ import {
   type MainWindowEvent,
   type MainWindowInit,
   type MainWindowLike,
+  type ModalInit,
+  type ModalParent,
   type Rect,
   type ViewKind,
   type ViewLike,
   type WebContentsLike,
+  MODAL_WINDOWS,
   VIEW_SPECS,
   createWindowManager,
   isCloudUrl,
@@ -185,8 +188,14 @@ class FakeChild implements ChildWindowLike {
   onClosed = (listener: () => void) => void this.closed.push(listener);
 }
 
+class FakeModal extends FakeChild {
+  constructor(readonly modal: ModalInit, readonly parent: ModalParent) {
+    super({ width: modal.width, height: modal.height, title: modal.title });
+  }
+}
+
 function setup(options: { saved?: Parameters<typeof createWindowManager>[0]['savedBounds']; startHidden?: boolean; lang?: 'en' | 'es' } = {}) {
-  const made = { main: null as FakeMain | null, views: [] as FakeView[], children: [] as FakeChild[] };
+  const made = { main: null as FakeMain | null, views: [] as FakeView[], children: [] as FakeChild[], modals: [] as FakeModal[] };
   const saves: Array<Record<string, unknown>> = [];
   const quit = vi.fn();
   let lang: 'en' | 'es' = options.lang ?? 'en';
@@ -202,6 +211,11 @@ function setup(options: { saved?: Parameters<typeof createWindowManager>[0]['sav
         const child = new FakeChild(init);
         made.children.push(child);
         return child;
+      },
+      createModalWindow: (init, parent) => {
+        const modal = new FakeModal(init, parent);
+        made.modals.push(modal);
+        return modal;
       },
     },
     lang: () => lang,
@@ -434,6 +448,68 @@ describe('child windows', () => {
   });
 });
 
+describe('modal shell windows (PIN prompt, connection info)', () => {
+  it('opens each page once and focuses it when it is already open', () => {
+    const { manager, main, made } = setup();
+    main.visible = true;
+    const first = manager.openModal('connection-info');
+    expect(made.modals).toHaveLength(1);
+    expect(made.modals[0]!.modal).toMatchObject({ url: 'localai://app/connection-info/', preload: 'shell.js', title: 'Connection info' });
+    expect(manager.openModal('connection-info')).toBe(first);
+    expect(made.modals).toHaveLength(1);
+    expect((first as FakeModal).calls).toEqual(['show', 'focus']);
+    first.close();
+    expect(manager.modalWindow('connection-info')).toBeNull();
+    manager.openModal('connection-info');
+    expect(made.modals).toHaveLength(2);
+  });
+
+  it('the PIN prompt has its own strict preload and carries its query; titles follow the language', () => {
+    const { manager, main, made } = setup({ lang: 'es' });
+    main.visible = true;
+    manager.openModal('pin', '?purpose=rotate-key&lang=es');
+    expect(made.modals[0]!.modal).toMatchObject({ url: 'localai://app/pin/?purpose=rotate-key&lang=es', preload: 'pin.js', title: 'PIN de administrador' });
+    expect(MODAL_WINDOWS.pin.preload).toBe('pin.js');
+  });
+
+  it('is modal to the main window while that is visible, to nothing when it is hidden or minimised', () => {
+    const { manager, main, made } = setup();
+    manager.openModal('connection-info');
+    expect(made.modals[0]!.parent).toBeNull();
+    made.modals[0]!.close();
+    main.visible = true;
+    manager.openModal('connection-info');
+    expect(made.modals[1]!.parent).toEqual({ main });
+    made.modals[1]!.close();
+    main.minimized = true;
+    manager.openModal('connection-info');
+    expect(made.modals[2]!.parent).toBeNull();
+  });
+
+  it('the PIN prompt over the connection info is modal to the connection info', () => {
+    const { manager, main, made } = setup();
+    main.visible = true;
+    const info = manager.openModal('connection-info');
+    manager.openModal('pin');
+    expect(made.modals[1]!.parent).toEqual({ child: info });
+  });
+
+  it('every modal is registered as a shell page with the navigation guard', () => {
+    const { manager, main } = setup();
+    main.visible = true;
+    expect(viewOf(manager.openModal('pin').webContents as never)).toBe('shell');
+  });
+
+  it('closing the main window closes the modals too', async () => {
+    const { manager, main } = setup();
+    main.visible = true;
+    const pin = manager.openModal('pin');
+    main.close();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(pin.isDestroyed()).toBe(true);
+  });
+});
+
 describe('closing the main window', () => {
   it('quits by default, after saving the bounds', async () => {
     const { main, saves, quit } = setup();
@@ -500,7 +576,7 @@ describe('window bounds', () => {
     const main = setup();
     // A second manager whose store rejects.
     const failing = createWindowManager({
-      factory: { createMainWindow: (init) => new FakeMain(init), createView: (k) => new FakeView(k), createChildWindow: (i) => new FakeChild(i) },
+      factory: { createMainWindow: (init) => new FakeMain(init), createView: (k) => new FakeView(k), createChildWindow: (i) => new FakeChild(i), createModalWindow: (i, p) => new FakeModal(i, p) },
       lang: () => 'en',
       shellPageUrl: (p) => `localai://app/${p}/`,
       isShellUrl: () => true,

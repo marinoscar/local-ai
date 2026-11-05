@@ -1,4 +1,4 @@
-// Three builds (desktop.md section 3.1): main, preload (shell.ts + agent.ts) and the renderer (the shell pages).
+// Three builds (desktop.md section 3.1): main, preload (shell.ts, agent.ts, pin.ts) and the renderer (the shell pages).
 // Dependencies are bundled into out/ (they are all devDependencies), so app.asar holds only out/** and package.json.
 // The renderer must load nothing from the network: fonts come from @fontsource packages bundled by Vite, and the
 // offline-asset test (tests/unit/renderer-offline.test.ts) scans the built HTML and CSS for remote URLs.
@@ -26,6 +26,7 @@ export default defineConfig({
         input: {
           shell: resolve(__dirname, 'src/preload/shell.ts'),
           agent: resolve(__dirname, 'src/preload/agent.ts'),
+          pin: resolve(__dirname, 'src/preload/pin.ts'),
         },
       },
     },
