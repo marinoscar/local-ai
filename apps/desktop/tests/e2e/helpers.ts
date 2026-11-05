@@ -6,7 +6,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { type ElectronApplication, _electron as electron } from '@playwright/test';
+import { type ElectronApplication, type Page, _electron as electron } from '@playwright/test';
 
 export const appDir = resolve(__dirname, '..', '..');
 export const executable = process.env['LOCALAI_E2E_EXECUTABLE'] ? resolve(process.env['LOCALAI_E2E_EXECUTABLE']) : undefined;
@@ -130,3 +130,17 @@ export async function openProbeWindow(app: ElectronApplication, options: { url: 
     options,
   );
 }
+
+/** Polls until a window (a BrowserWindow: the modal PIN prompt and connection info are) shows a URL that passes `match`. */
+export async function waitForWindowPage(app: ElectronApplication, match: (url: string) => boolean, timeoutMs = 20_000): Promise<Page> {
+  const end = Date.now() + timeoutMs;
+  for (;;) {
+    const found = app.windows().find((page) => !page.isClosed() && match(page.url()));
+    if (found) return found;
+    if (Date.now() > end) throw new Error(`no window matched; windows: ${JSON.stringify(app.windows().map((p) => p.url()))}`);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
+export const isPinWindow = (url: string): boolean => url.startsWith('localai://app/pin/');
+export const isConnectionInfo = (url: string): boolean => url.startsWith('localai://app/connection-info/');
