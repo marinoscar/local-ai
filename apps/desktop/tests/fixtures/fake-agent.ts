@@ -35,6 +35,20 @@ export interface FakeAgent {
   token: string;
   /** Every `GET /api/v1/events` connection: the Last-Event-ID it sent and the credential it used. */
   readonly eventConnections: Array<{ lastEventId: string | undefined; via: 'bearer' | 'cookie' }>;
+  /** Every `POST /api/v1/mode` and `POST /api/v1/mode/survival` the fake saw: the body, the bearer and the PIN grant header. */
+  readonly modeRequests: Array<{ path: string; body: unknown; authorization: string | undefined; pinGrant: string | undefined; contentType: string | undefined }>;
+  /** Alerts reported by /status. */
+  alerts: Array<{ code: string; severity: string; title: string; fix: string }>;
+  /** Connectivity reported by /status and /mode. */
+  connectivity: { value: string; none_since: string | null };
+  /** `suggest_survival` of GET /mode. */
+  suggestSurvival: boolean;
+  /** Models reported by /status as loaded, and the default one. */
+  models: { default: string | null; loaded: string[] };
+  /** Answer the next mode change with this error instead of accepting it (then back to accepting). */
+  failNextModeChange: { status: number; code: string; details?: Record<string, unknown> } | null;
+  /** The PIN grant the fake accepts for leaving survival. Default: none is valid. */
+  validPinGrant: string | null;
   /** Mode reported by /health and /status. */
   mode: string;
   /** Health `version`. */
@@ -106,6 +120,7 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
   const requests: FakeAgent['requests'] = [];
   const probeResults: FakeAgent['probeResults'] = [];
   const sessionRequests: FakeAgent['sessionRequests'] = [];
+  const modeRequests: FakeAgent['modeRequests'] = [];
   const eventConnections: FakeAgent['eventConnections'] = [];
   const sessions = new Set<string>();
   const streams = new Set<ServerResponse>();
@@ -119,6 +134,12 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     version: options.version ?? '0.1.0',
     rejectLogin: false,
     unauthorizedAll: false,
+    alerts: [] as FakeAgent['alerts'],
+    connectivity: { value: 'not_checked', none_since: null } as FakeAgent['connectivity'],
+    suggestSurvival: false,
+    models: { default: null, loaded: [] } as FakeAgent['models'],
+    failNextModeChange: null as FakeAgent['failNextModeChange'],
+    validPinGrant: null as string | null,
   };
 
   const json = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void => {
@@ -164,11 +185,11 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
   const statusBody = (): unknown => ({
     node: { id: 'ai-n3', display_name: 'Fake node (ai-n3)', hostname: 'fake-host', agent_version: state.version, uptime_s: 1 },
     mode: { value: state.mode, since: null, transition: null },
-    connectivity: { value: 'not_checked', checked_at: null, none_since: null },
+    connectivity: { value: state.connectivity.value, checked_at: null, none_since: state.connectivity.none_since },
     services: [],
-    models: { default: null, loaded: [], loading: [], present: 0, loadable: 0, models_max: 1 },
+    models: { default: state.models.default, loaded: state.models.loaded, loading: [], present: 0, loadable: 0, models_max: 1 },
     cloud: { enrolled: false, state: 'unenrolled', url: null, last_heartbeat_at: null },
-    alerts: [],
+    alerts: state.alerts,
   });
 
   const publish = (type: string, data: unknown): number => {
@@ -254,6 +275,78 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
       return;
     }
 
+    if (method === 'GET' && path === '/api/v1/mode') {
+      if (credential(req) === null) {
+        error(res, 401, 'LAI-SEC-001', 'Missing or invalid credentials');
+        return;
+      }
+      json(res, 200, {
+        mode: state.mode,
+        since: null,
+        transition: null,
+        allowed_targets: ['online', 'offline', 'survival'].filter((m) => m !== state.mode),
+        leave_requires_admin: state.mode === 'survival',
+        connectivity: state.connectivity.value,
+        suggest_survival: state.suggestSurvival,
+      });
+      return;
+    }
+
+    if (method === 'POST' && (path === '/api/v1/mode' || path === '/api/v1/mode/survival')) {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        let body: unknown = null;
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        } catch {
+          // recorded as null
+        }
+        const pinGrant = req.headers['x-localai-pin-grant'];
+        modeRequests.push({
+          path,
+          body,
+          authorization: req.headers.authorization,
+          pinGrant: Array.isArray(pinGrant) ? pinGrant[0] : pinGrant,
+          contentType: req.headers['content-type'],
+        });
+        if (!(req.headers['content-type'] ?? '').startsWith('application/json')) {
+          error(res, 415, 'LAI-AGT-020', 'Content-Type must be application/json');
+          return;
+        }
+        const target = path === '/api/v1/mode/survival' ? 'survival' : (body as { target?: string } | null)?.target;
+        // /mode/survival needs no credential; /mode needs an operator.
+        if (path === '/api/v1/mode' && credential(req) === null) {
+          error(res, 401, 'LAI-SEC-001', 'Missing or invalid credentials');
+          return;
+        }
+        if (target !== 'online' && target !== 'offline' && target !== 'survival') {
+          error(res, 400, 'LAI-AGT-020', 'Unknown target');
+          return;
+        }
+        const failure = path === '/api/v1/mode' ? state.failNextModeChange : null;
+        if (failure) {
+          state.failNextModeChange = null;
+          json(res, failure.status, { error: { code: failure.code, message: 'Another operation is already running', fix: 'Wait for it to finish, then try again.', details: failure.details ?? {} } });
+          return;
+        }
+        const pin = req.headers['x-localai-pin-grant'];
+        if (path === '/api/v1/mode' && state.mode === 'survival' && (state.validPinGrant === null || pin !== state.validPinGrant)) {
+          json(res, 403, { error: { code: 'LAI-SEC-002', message: 'This action needs the admin PIN', fix: 'Enter the admin PIN when asked.', details: { pin_required: true } } });
+          return;
+        }
+        if (state.mode === target) {
+          json(res, 200, { mode: target, already: true });
+          return;
+        }
+        const from = state.mode;
+        state.mode = target;
+        publish('mode.changed', { from, to: target, op_id: 'op_fake', warnings: [] });
+        json(res, 202, target === 'survival' ? { op_id: 'op_fake', target } : { op_id: 'op_fake', from, target, transition: { step: 'link_stop', started_at: new Date().toISOString() } });
+      });
+      return;
+    }
+
     if (method === 'GET' && path === '/api/v1/events') {
       const via = credential(req);
       if (via === null) {
@@ -294,7 +387,44 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     requests,
     probeResults,
     sessionRequests,
+    modeRequests,
     eventConnections,
+    get alerts() {
+      return state.alerts;
+    },
+    set alerts(value: FakeAgent['alerts']) {
+      state.alerts = value;
+    },
+    get connectivity() {
+      return state.connectivity;
+    },
+    set connectivity(value: FakeAgent['connectivity']) {
+      state.connectivity = value;
+    },
+    get suggestSurvival() {
+      return state.suggestSurvival;
+    },
+    set suggestSurvival(value: boolean) {
+      state.suggestSurvival = value;
+    },
+    get models() {
+      return state.models;
+    },
+    set models(value: FakeAgent['models']) {
+      state.models = value;
+    },
+    get failNextModeChange() {
+      return state.failNextModeChange;
+    },
+    set failNextModeChange(value: FakeAgent['failNextModeChange']) {
+      state.failNextModeChange = value;
+    },
+    get validPinGrant() {
+      return state.validPinGrant;
+    },
+    set validPinGrant(value: string | null) {
+      state.validPinGrant = value;
+    },
     get token() {
       return state.token;
     },
