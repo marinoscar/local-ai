@@ -20,6 +20,8 @@ import type {
   ConnectionInfoResult,
   CopyKeyResult,
   DesktopStatus,
+  LinkBegin,
+  LinkRefusal,
   NodeMode,
   NotImplemented,
   PinResult,
@@ -430,6 +432,14 @@ export function isShellPage(url: string, page: string, devOrigin?: string): bool
   return dev !== null && parsed.origin === dev.origin && onPage(parsed.pathname);
 }
 
+/** What the bridge's `cloud.*` members need from the cloud session (cloud-link.ts, DSK-10). */
+export interface CloudBridge {
+  state(): CloudLinkState;
+  beginLink(): Promise<LinkBegin | LinkRefusal>;
+  openVerification(): void;
+  unlink(): Promise<unknown>;
+}
+
 export interface BridgeDeps {
   policy: OriginPolicy;
   version: string;
@@ -443,6 +453,8 @@ export interface BridgeDeps {
   /** Pops up the top bar's native menu. */
   showMenu(): void;
   settings: SettingsStore;
+  /** The lab link (DSK-10). Absent: `beginLink` answers `unavailable` and `linkState` the status's `cloud`. */
+  cloud?: CloudBridge;
   /** Switches the node's mode (DSK-06's `ModeController`, the same path as the tray). Absent: `setMode` answers `not_implemented`. */
   setMode?(target: NodeMode): Promise<ActionResult>;
   /** The window id of the PIN prompt (DSK-08), or null while there is none: `pinSubmit` is refused from every other page. */
@@ -540,11 +552,22 @@ export function createShellHandlers(deps: BridgeDeps): HandlerTable {
     [CHANNELS.connectionInfo]: deps.keys ? { kind: 'invoke', origin: 'shell', accept: onConnectionInfoPage, run: () => deps.keys!.info() } : stub(),
     [CHANNELS.revealKey]: deps.keys ? { kind: 'invoke', origin: 'shell', accept: onConnectionInfoPage, run: () => deps.keys!.reveal() } : stub(),
     [CHANNELS.rotateKey]: deps.keys ? { kind: 'invoke', origin: 'shell', accept: onConnectionInfoPage, run: () => deps.keys!.rotate() } : stub(),
-    [CHANNELS.cloudBeginLink]: stub(), // DSK-10
-    [CHANNELS.cloudOpenVerification]: stub('send'), // DSK-10
-    [CHANNELS.cloudUnlink]: stub(), // DSK-10
+    // DSK-10: the lab link. No argument is read from the page: the code, the URL and the token live in the main process.
+    [CHANNELS.cloudBeginLink]: {
+      kind: 'invoke',
+      origin: 'shell',
+      run: async () => (deps.cloud ? deps.cloud.beginLink() : ({ ok: false, code: 'unavailable' } satisfies LinkRefusal)),
+    },
+    [CHANNELS.cloudOpenVerification]: { kind: 'send', origin: 'shell', run: () => deps.cloud?.openVerification() },
+    [CHANNELS.cloudUnlink]: {
+      kind: 'invoke',
+      origin: 'shell',
+      run: async () => {
+        await deps.cloud?.unlink();
+      },
+    },
     [CHANNELS.cloudRequest]: stub(), // DSK-11
-    [CHANNELS.cloudLinkState]: { kind: 'invoke', origin: 'shell', run: () => deps.status().cloud },
+    [CHANNELS.cloudLinkState]: { kind: 'invoke', origin: 'shell', run: () => (deps.cloud ? deps.cloud.state() : deps.status().cloud) },
   };
 }
 
