@@ -34,6 +34,9 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     plugins: [react()],
+    // @localai/ui is a `file:` link to packages/ui, which has no node_modules: its imports (React, MUI, the icons) must resolve
+    // from apps/desktop/node_modules, i.e. from the symlink's own path (the same setting as apps/cloud/apps/web).
+    resolve: { preserveSymlinks: true },
     build: {
       outDir: resolve(__dirname, 'out/renderer'),
       emptyOutDir: true,

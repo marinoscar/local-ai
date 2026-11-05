@@ -745,6 +745,11 @@ export class TrayController {
     };
   }
 
+  /** Re-reads the optional menu features (DSK-11: the Lab item follows connected mode). A no-op when the menu did not change. */
+  refresh(): void {
+    this.#render();
+  }
+
   #render(): void {
     if (this.#disposed) return;
     const view = this.view();

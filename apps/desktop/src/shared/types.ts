@@ -2,6 +2,8 @@
 // Everything here is plain data (structured-clone safe): it crosses the IPC boundary. No runtime code lives in this
 // file, so a sandboxed preload can import it for the types without pulling a module into its bundle.
 
+import type { LabSummaryDto, NodeCardDto } from '@localai/ui/lab/types';
+
 export type Lang = 'en' | 'es';
 export type LangSetting = 'auto' | Lang;
 /** The node's mode (modes.md). */
@@ -177,10 +179,37 @@ export interface PinResult {
   retryAfterS?: number;
 }
 
+/** An answer from the cloud, as the proxy got it (EAB's `{ data }` envelope included). `ok` is a 2xx status. */
 export interface CloudResponse {
   ok: boolean;
   status: number;
   body: unknown;
+}
+
+/**
+ * Why a Lab request produced no answer (desktop.md 4.8, "As built (DSK-11)"). `refused`: the allowlist said no, nothing
+ * was sent. `offline`: connected mode is not active (the node is `offline`/`survival`, or not linked). `aborted`: the
+ * node left `online` while the request was in flight. `timeout`: no answer within 10 s. `unreachable`: network error.
+ * `unauthorized`: the cloud answered 401 (the link was removed, LAI-DSK-011). `unavailable`: this build has no proxy.
+ */
+export type CloudFailureKind = 'refused' | 'offline' | 'aborted' | 'timeout' | 'unreachable' | 'unauthorized' | 'unavailable';
+
+export interface CloudFailure {
+  ok: false;
+  error: CloudFailureKind;
+  /** `refused` only: which check said no (`path`, `method`, `query`, `command_type`, `body`, `bad_request`). Never the text the page sent. */
+  reason?: string;
+}
+
+/** `cloud.request()` answers a `CloudResponse` (the cloud replied, whatever the status) or a `CloudFailure` (it did not). */
+export type CloudResult = CloudResponse | CloudFailure;
+
+/** The node cards of the last good `GET /api/localai/nodes`, read back from `lab-cache.json` (no secrets, bounded). */
+export interface LabCacheView {
+  /** When the cards were fetched (ISO 8601). */
+  savedAt: string;
+  summary: LabSummaryDto;
+  nodes: NodeCardDto[];
 }
 
 /** The bounds of the main window as saved in `settings.window.bounds` (desktop.md 3.8). Every field is optional: an empty object means "never saved". */
@@ -238,7 +267,12 @@ export interface LocalaiDesktop {
     openVerification(): void;
     linkState(): Promise<CloudLinkState>;
     unlink(): Promise<void>;
-    request(req: { method: 'GET' | 'POST' | 'DELETE'; path: string; body?: unknown }): Promise<CloudResponse | NotImplemented>;
+    /** The Lab view only. An allowlisted (method, path) pair; anything else answers `{ ok: false, error: 'refused' }` with no network call. */
+    request(req: { method: 'GET' | 'POST' | 'DELETE'; path: string; body?: unknown }): Promise<CloudResult>;
+    /** The Lab view only (DSK-11): the last cached node cards, or null when there is none. Reads a local file; no network. */
+    cached(): Promise<LabCacheView | null>;
+    /** The Lab view only (DSK-11): opens `https://ai.marin.cr/lab/nodes/<nodeId>` in the default browser (connected mode only). */
+    openNode(nodeId: string): void;
   };
   settings: { get(): Promise<ShellSettings>; set(patch: ShellSettingsPatch): Promise<ShellSettings> };
   pinSubmit(pin: string): Promise<PinResult>;

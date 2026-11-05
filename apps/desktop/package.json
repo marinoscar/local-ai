@@ -30,6 +30,7 @@
     "@emotion/styled": "11.14.1",
     "@fontsource/atkinson-hyperlegible": "5.3.0",
     "@localai/ui": "file:../../packages/ui",
+    "@mui/icons-material": "9.5.0",
     "@mui/material": "9.5.0",
     "@playwright/test": "1.64.1",
     "@types/node": "24.19.2",

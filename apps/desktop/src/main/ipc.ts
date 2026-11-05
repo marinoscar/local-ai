@@ -17,8 +17,10 @@ import type {
   AgentReach,
   ChildWindowName,
   CloudLinkState,
+  CloudResult,
   ConnectionInfoResult,
   CopyKeyResult,
+  LabCacheView,
   DesktopStatus,
   LinkBegin,
   LinkRefusal,
@@ -60,6 +62,8 @@ export const CHANNELS = {
   cloudLinkState: 'localai:cloud-link-state',
   cloudUnlink: 'localai:cloud-unlink',
   cloudRequest: 'localai:cloud-request',
+  cloudCached: 'localai:cloud-cached',
+  cloudOpenNode: 'localai:cloud-open-node',
   settingsGet: 'localai:settings-get',
   settingsSet: 'localai:settings-set',
   pinSubmit: 'localai:pin-submit',
@@ -440,6 +444,15 @@ export interface CloudBridge {
   unlink(): Promise<unknown>;
 }
 
+/** What the Lab's `cloud.request/cached/openNode` need (DSK-11: cloud-api.ts's proxy, and the browser). */
+export interface LabBridge {
+  /** The allowlisted proxy; `raw` is whatever the page sent. */
+  request(raw: unknown): Promise<CloudResult>;
+  cached(): Promise<LabCacheView | null>;
+  /** Opens the node's page in the cloud in the default browser; the id is checked by the implementation. */
+  openNode(nodeId: unknown): void;
+}
+
 export interface BridgeDeps {
   policy: OriginPolicy;
   version: string;
@@ -455,6 +468,8 @@ export interface BridgeDeps {
   settings: SettingsStore;
   /** The lab link (DSK-10). Absent: `beginLink` answers `unavailable` and `linkState` the status's `cloud`. */
   cloud?: CloudBridge;
+  /** The Lab's cloud proxy (DSK-11). Absent: `cloud.request` answers `{ ok: false, error: 'unavailable' }`. */
+  lab?: LabBridge;
   /** Switches the node's mode (DSK-06's `ModeController`, the same path as the tray). Absent: `setMode` answers `not_implemented`. */
   setMode?(target: NodeMode): Promise<ActionResult>;
   /** The window id of the PIN prompt (DSK-08), or null while there is none: `pinSubmit` is refused from every other page. */
@@ -474,6 +489,7 @@ const asChild = (value: unknown): ChildWindowName | null => (typeof value === 's
 /** `window.localaiDesktop`: every member of the spec's interface, the ones whose item has not landed answering `not_implemented`. */
 export function createShellHandlers(deps: BridgeDeps): HandlerTable {
   const stub = (kind: HandlerKind = 'invoke'): HandlerSpec => ({ kind, origin: 'shell', run: () => NOT_IMPLEMENTED });
+  const onLabPage = (event: SenderEvent): boolean => isShellPage(event.senderFrame?.url ?? '', 'lab', deps.policy.devOrigin);
   const onConnectionInfoPage = (event: SenderEvent): boolean => isShellPage(event.senderFrame?.url ?? '', 'connection-info', deps.policy.devOrigin);
   return {
     [CHANNELS.status]: { kind: 'invoke', origin: 'shell', run: () => deps.status() },
@@ -566,7 +582,16 @@ export function createShellHandlers(deps: BridgeDeps): HandlerTable {
         await deps.cloud?.unlink();
       },
     },
-    [CHANNELS.cloudRequest]: stub(), // DSK-11
+    // DSK-11: the Lab view only (the bridge exists in every shell page). The page names a method and an allowlisted path; the
+    // main process adds the token, judges the path and the body (cloud-api.ts) and never forwards a URL or a header.
+    [CHANNELS.cloudRequest]: {
+      kind: 'invoke',
+      origin: 'shell',
+      accept: onLabPage,
+      run: (_event, req) => (deps.lab ? deps.lab.request(req) : ({ ok: false, error: 'unavailable' } satisfies CloudResult)),
+    },
+    [CHANNELS.cloudCached]: { kind: 'invoke', origin: 'shell', accept: onLabPage, run: () => (deps.lab ? deps.lab.cached() : null) },
+    [CHANNELS.cloudOpenNode]: { kind: 'send', origin: 'shell', accept: onLabPage, run: (_event, nodeId) => deps.lab?.openNode(nodeId) },
     [CHANNELS.cloudLinkState]: { kind: 'invoke', origin: 'shell', run: () => (deps.cloud ? deps.cloud.state() : deps.status().cloud) },
   };
 }

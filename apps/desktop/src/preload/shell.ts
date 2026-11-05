@@ -29,6 +29,8 @@ const C = {
   cloudLinkState: 'localai:cloud-link-state',
   cloudUnlink: 'localai:cloud-unlink',
   cloudRequest: 'localai:cloud-request',
+  cloudCached: 'localai:cloud-cached',
+  cloudOpenNode: 'localai:cloud-open-node',
   settingsGet: 'localai:settings-get',
   settingsSet: 'localai:settings-set',
   pinSubmit: 'localai:pin-submit',
@@ -83,6 +85,10 @@ export function createShellBridge(ipc: IpcRendererLike): LocalaiDesktop {
       linkState: () => invoke(C.cloudLinkState),
       unlink: () => invoke(C.cloudUnlink),
       request: (req) => invoke(C.cloudRequest, req),
+      cached: () => invoke(C.cloudCached),
+      openNode: (nodeId) => {
+        ipc.send(C.cloudOpenNode, nodeId);
+      },
     },
     settings: {
       get: () => invoke(C.settingsGet),
