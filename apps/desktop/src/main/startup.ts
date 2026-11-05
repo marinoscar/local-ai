@@ -188,7 +188,14 @@ export interface ActionDeps {
   log?: Logger;
 }
 
-export type ActionResult = { ok: boolean; code?: string };
+export interface ActionResult {
+  ok: boolean;
+  code?: string;
+  /** "Start agent" failed (LAI-DSK-005): the read-only `systemctl status` excerpt, already scrubbed. */
+  statusExcerpt?: string;
+  /** "Start agent" was pressed while a start was already running: nothing was done. */
+  busy?: boolean;
+}
 
 export function parseActionRequest(payload: unknown): { action: ErrorAction; code: DskCode } | null {
   if (typeof payload !== 'object' || payload === null) return null;
@@ -218,8 +225,13 @@ export async function handleErrorAction(request: { action: ErrorAction; code: Ds
     case 'start-agent': {
       if (deps.supervisor.start === undefined) return { ok: false, code: 'LAI-DSK-005' };
       const result = await deps.supervisor.start();
-      if (result.ok) deps.retry();
-      return result.ok ? { ok: true } : { ok: false, code: result.code };
+      if (result.ok) {
+        // Continue the start-up sequence: token, session, status, events.
+        deps.retry();
+        return { ok: true };
+      }
+      if (result.code === undefined) return { ok: false, busy: true };
+      return { ok: false, code: result.code, ...(result.statusExcerpt !== undefined ? { statusExcerpt: result.statusExcerpt } : {}) };
     }
   }
 }

@@ -190,6 +190,13 @@ export const PAGE_STRINGS = {
     es: 'Si no pasa nada, cierra sesión desde el menú del sistema (arriba a la derecha) y vuelve a entrar.',
   },
   startAgent: { en: 'Start agent', es: 'Iniciar agente' },
+  starting: { en: 'Starting…', es: 'Iniciando…' },
+  startingHint: {
+    en: 'If a password window appears, enter the administrator password. This can take up to 30 seconds.',
+    es: 'Si aparece una ventana de contraseña, ingresa la contraseña de administrador. Puede tardar hasta 30 segundos.',
+  },
+  statusExcerpt: { en: 'Service status (read-only)', es: 'Estado del servicio (solo lectura)' },
+  noStatusExcerpt: { en: 'The service status could not be read.', es: 'No se pudo leer el estado del servicio.' },
   openPortal: { en: 'Open Survival Portal', es: 'Abrir el Portal de Supervivencia' },
   openBrowser: { en: 'Open in browser', es: 'Abrir en el navegador' },
   browserHint: {

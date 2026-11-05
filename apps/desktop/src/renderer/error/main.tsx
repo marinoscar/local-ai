@@ -4,7 +4,7 @@ import { mountPage } from '../shared/mount';
 import { ErrorPage } from './ErrorPage';
 
 interface Bridge {
-  errorAction(action: string, code: string): Promise<{ ok: boolean; code?: string }>;
+  errorAction(action: string, code: string): Promise<{ ok: boolean; code?: string; statusExcerpt?: string; busy?: boolean }>;
 }
 declare global {
   interface Window {

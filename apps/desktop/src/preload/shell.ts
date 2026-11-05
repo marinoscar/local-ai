@@ -12,7 +12,8 @@ const SET_MODE_CHANNEL = 'localai:set-mode';
 if (contextBridge && ipcRenderer) {
   contextBridge.exposeInMainWorld(BRIDGE, {
     /** A button of the error page. The main process checks the sender's page and that the code owns the button. */
-    errorAction: (action: string, code: string): Promise<{ ok: boolean; code?: string }> => ipcRenderer.invoke(ERROR_ACTION_CHANNEL, { action, code }) as Promise<{ ok: boolean; code?: string }>,
+    errorAction: (action: string, code: string): Promise<{ ok: boolean; code?: string; statusExcerpt?: string; busy?: boolean }> =>
+      ipcRenderer.invoke(ERROR_ACTION_CHANNEL, { action, code }) as Promise<{ ok: boolean; code?: string; statusExcerpt?: string; busy?: boolean }>,
     /** Asks the main process to switch the node's mode (the same path as the tray). Survival needs no PIN; leaving it does. */
     setMode: (target: 'online' | 'offline' | 'survival'): Promise<{ ok: boolean; code?: string }> => ipcRenderer.invoke(SET_MODE_CHANNEL, target) as Promise<{ ok: boolean; code?: string }>,
   });

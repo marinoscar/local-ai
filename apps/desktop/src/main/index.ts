@@ -8,7 +8,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { BrowserWindow, Menu, Notification, Tray, app, clipboard, dialog, ipcMain, nativeImage, protocol, session, shell } from 'electron';
 import { AgentFeed, createAgentClient, resolveTokenPath, testHooksAllowed } from './agent-client';
-import { createAgentSupervisor } from './agent-supervisor';
+import { createAgentSupervisor, execFileRunner, resolveStartBinaries } from './agent-supervisor';
 import { runDiagnoseMain } from './diagnose';
 import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, installEgressGuard, installMainProcessGuard, setEgressLogger, type GuardedSessions } from './egress-guard';
 import { DIALOG_TEXT, ERROR_ACTION_CHANNEL, errorText, pick, resolveLang } from './i18n';
@@ -96,7 +96,14 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     sessionFetch: (input, init) => sessions.agent.fetch(input, init),
     log,
   });
-  const supervisor = createAgentSupervisor();
+  const supervisor = createAgentSupervisor({
+    start: {
+      binaries: resolveStartBinaries(process.env, testHooksAllowed(app.isPackaged, process.execPath)),
+      exec: execFileRunner,
+      health: async () => (await client.health({ tries: 1 })).reachable,
+      log,
+    },
+  });
   const host = createTemporaryHost({ window: win, isPackaged: app.isPackaged, preloadDir: join(__dirname, '../preload'), lang: () => lang, shellPageUrl });
   const feed = new AgentFeed(client);
 
@@ -194,9 +201,11 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
         quit: () => app.quit(),
         startAgent: async () => {
           const result = await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, actionDeps);
-          if (result.ok) return;
+          // `busy`: a start is already running (the error page's button, or an earlier click): nothing to say.
+          if (result.ok || result.busy === true) return;
           const copy = errorText('LAI-DSK-005', lang);
-          await dialogs.alert({ title: copy.title, message: copy.message, detail: `${copy.fix} ${copy.command ?? ''}\n\n${copy.code}`, okLabel: pick(DIALOG_TEXT.ok, lang) });
+          const excerpt = result.statusExcerpt !== undefined ? `\n\n${result.statusExcerpt}` : '';
+          await dialogs.alert({ title: copy.title, message: copy.message, detail: `${copy.fix} ${copy.command ?? ''}${excerpt}\n\n${copy.code}`, okLabel: pick(DIALOG_TEXT.ok, lang) });
         },
       },
       log,
