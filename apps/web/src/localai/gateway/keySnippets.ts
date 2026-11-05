@@ -12,7 +12,7 @@ export const KEY_FILE = '~/.config/opencode/localai-gateway-key';
 export function curlSnippet(baseUrl: string): string {
   return [
     `export LAI_KEY="$(cat ${KEY_FILE})"`,
-    `curl -s ${baseUrl}/models -H "Authorization: Bearer $LAI_KEY" | jq '.data[].id'`,
+    `curl -s ${baseUrl}/models -H "Authorization: Bearer $LAI_KEY" | jq '.data[] | {id, state: .["x-localai"].state}'`,
   ].join('\n');
 }
 
@@ -21,10 +21,33 @@ export function storeKeySnippet(): string {
   return `mkdir -p ~/.config/opencode\ninstall -m 600 /dev/stdin ${KEY_FILE}`;
 }
 
-/** The `localai-lab` provider block of Appendix A.2, for the given model ids (a placeholder when none are known). */
+interface OpenCodeModelEntry {
+  name: string;
+  limit?: { context: number; output: number };
+}
+
+/** The two models Appendix A.2 spells out, with the name and limits it gives them. Any other id gets a plain entry. */
+const REFERENCE_MODELS: Readonly<Record<string, OpenCodeModelEntry>> = {
+  'qwen3-coder-next-q4km': { name: 'Qwen3 Coder Next (lab)', limit: { context: 131072, output: 8192 } },
+  'qwen3.5-9b-q4km': { name: 'Qwen 3.5 9B (lab)', limit: { context: 32768, output: 8192 } },
+};
+
+function labName(baseUrl: string): string {
+  try {
+    return `Local AI lab (${new URL(baseUrl).host})`;
+  } catch {
+    return 'Local AI lab';
+  }
+}
+
+/**
+ * The `localai-lab` provider block of Appendix A.2, for the given model ids (a placeholder when none are known). For the
+ * lab's own origin and the two models the spec names, the output equals the spec's block exactly
+ * (`docs/templates/gateway/opencode.localai-lab.json`, proved by keySnippets.test.ts).
+ */
 export function opencodeSnippet(baseUrl: string, models: readonly string[]): string {
   const ids = models.length > 0 ? models : ['MODEL_ID'];
-  const entries = Object.fromEntries(ids.map((id) => [id, { name: `${id} (lab)` }]));
+  const entries = Object.fromEntries(ids.map((id) => [id, REFERENCE_MODELS[id] ?? { name: `${id} (lab)` }]));
   return JSON.stringify(
     {
       $schema: 'https://opencode.ai/config.json',
@@ -32,7 +55,7 @@ export function opencodeSnippet(baseUrl: string, models: readonly string[]): str
       provider: {
         'localai-lab': {
           npm: '@ai-sdk/openai-compatible',
-          name: 'Local AI lab',
+          name: labName(baseUrl),
           options: { baseURL: baseUrl, apiKey: `{file:${KEY_FILE}}`, timeout: 600000 },
           models: entries,
         },

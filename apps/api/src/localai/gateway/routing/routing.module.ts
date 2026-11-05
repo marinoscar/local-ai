@@ -5,9 +5,11 @@ import { Module } from '@nestjs/common';
 
 import { AlertsModule } from '../../alerts/alerts.module';
 import { LOCALAI_CLOCK, systemLocalaiClock } from '../../commands/command-events';
+import { NodeKeyService } from '../../keys/node-key.service';
 import { NodeKeysModule } from '../../keys/node-keys.module';
 import { LabNodesModule } from '../../nodes/lab-nodes.module';
 import { AlertsServiceEndpointAlerts, ENDPOINT_ALERTS } from './endpoint-alerts.port';
+import { endpointAlertsFor, healthClientFor, nodeKeysFor, routingSourceFor } from './fake-upstream.seed';
 import { NodeKeyProvider } from './node-key.provider';
 import { EndpointProbe, fetchHealthClient, HEALTH_CLIENT } from './probe';
 import { PrismaRoutingSource, ROUTING_SOURCE } from './routing-source';
@@ -18,12 +20,13 @@ import { ROUTING_OPTIONS, RoutingTable, routingOptionsFromEnv } from './routing-
   providers: [
     RoutingTable,
     EndpointProbe,
-    NodeKeyProvider,
     PrismaRoutingSource,
     AlertsServiceEndpointAlerts,
-    { provide: ROUTING_SOURCE, useExisting: PrismaRoutingSource },
-    { provide: ENDPOINT_ALERTS, useExisting: AlertsServiceEndpointAlerts },
-    { provide: HEALTH_CLIENT, useValue: fetchHealthClient },
+    // The four seams below are the real providers unless the load-test flag is on (fake-upstream.seed.ts, refused in production).
+    { provide: NodeKeyProvider, inject: [NodeKeyService], useFactory: (keys: NodeKeyService) => nodeKeysFor(new NodeKeyProvider(keys)) },
+    { provide: ROUTING_SOURCE, inject: [PrismaRoutingSource], useFactory: (real: PrismaRoutingSource) => routingSourceFor(real) },
+    { provide: ENDPOINT_ALERTS, inject: [AlertsServiceEndpointAlerts], useFactory: (real: AlertsServiceEndpointAlerts) => endpointAlertsFor(real) },
+    { provide: HEALTH_CLIENT, useFactory: () => healthClientFor(fetchHealthClient) },
     { provide: ROUTING_OPTIONS, useFactory: () => routingOptionsFromEnv() },
     { provide: LOCALAI_CLOCK, useValue: systemLocalaiClock },
   ],

@@ -17,6 +17,7 @@ import { STORAGE_OPTIONS, simpleUploadFileSizeLimit, type ResolvedStorageModuleO
 
 import { AppModule } from './app.module';
 import { raiseCatalogDraftBodyLimit } from './localai/catalog/catalog-body-limit';
+import { assertFakeUpstreamAllowed } from './localai/gateway/routing/fake-upstream.seed';
 import { registerGatewayRoutes } from './localai/gateway/routes';
 import { registerNodeLinkBodyLimits } from './localai/node-link/node-link.body-limits';
 import { isSliceEnabled } from './platform/slices/manifest';
@@ -66,6 +67,8 @@ async function bootstrap(): Promise<void> {
   if (process.env.NODE_ENV === 'production' && process.env.TEST_AUTH_ENABLED === 'true') {
     throw new Error('TEST_AUTH_ENABLED must not be true in production');
   }
+  // The gateway's load-test flag replaces every real node with a synthetic one: never in production.
+  assertFakeUpstreamAllowed(process.env);
   // Fail fast, before a port is bound: a bad TENANCY_MODE, or stored
   // credentials without the SECRETS_ENCRYPTION_KEY that decrypts them.
   verifyTenancyModeAtStartup(process.env, logger);

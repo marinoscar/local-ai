@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "jest --config ./test/jest.config.js --testPathIgnorePatterns='\\.db\\.spec\\.ts$'",
     "test:db": "jest --config ./test/jest.config.js --testRegex '\\.db\\.spec\\.ts$' --runInBand",
+    "load:gateway": "k6 run test/load/gateway-load.k6.js",
     "prisma": "node scripts/prisma-env.js",
     "prisma:generate": "node scripts/prisma-env.js generate",
     "prisma:validate": "node scripts/prisma-env.js validate",
