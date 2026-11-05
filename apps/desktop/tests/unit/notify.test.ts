@@ -202,3 +202,19 @@ describe('LAI-DSK-013 notice', () => {
     expect(NOTICE_COPY['LAI-DSK-013'].fix.en).toBe('Turn on "AppIndicator and KStatusNotifierItem Support" in Extensions, then restart ai-desktop.');
   });
 });
+
+describe('LAI-DSK-014 (the autostart entry could not be written)', () => {
+  it('names the file that failed, in both languages, with the code in the title', () => {
+    const path = '/home/person-a/.config/autostart/ai-desktop.desktop';
+    for (const lang of ['en', 'es'] as const) {
+      const t = setup({ lang });
+      expect(t.notifier.notice('LAI-DSK-014', { path })).toBe(true);
+      expect(t.shown[0]!.title).toContain('(LAI-DSK-014)');
+      expect(t.shown[0]!.body).toContain(path);
+      expect(t.shown[0]!.body).not.toContain('{path}');
+      expect(t.shown[0]!.body).toContain('~/.config/autostart');
+    }
+    expect(NOTICE_COPY['LAI-DSK-014'].title.en).toBe('Couldn\'t turn on "Start at login"');
+    expect(NOTICE_COPY['LAI-DSK-014'].fix.en).toBe('Check that `~/.config/autostart` is writable, then try again.');
+  });
+});

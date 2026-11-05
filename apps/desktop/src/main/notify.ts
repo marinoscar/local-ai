@@ -177,13 +177,13 @@ export class Notifier {
     return true;
   }
 
-  /** A one-time notice with a doctor code (LAI-DSK-013). Not rate limited: the caller remembers that it was shown. */
-  notice(code: NoticeCode): boolean {
+  /** A one-time notice with a doctor code (LAI-DSK-013, LAI-DSK-014); `{name}` placeholders of its text come from `values`. Not rate limited: the caller decides when it is shown. */
+  notice(code: NoticeCode, values: Readonly<Record<string, string>> = {}): boolean {
     const lang = this.#deps.lang();
     const copy = NOTICE_COPY[code];
     this.#log.log('warn', 'tray', pick(copy.title, 'en'), { code });
     if (!this.#deps.port.supported()) return false;
-    this.#deps.port.show({ title: `${pick(copy.title, lang)} (${code})`, body: `${pick(copy.message, lang)} ${pick(copy.fix, lang)}` }, this.#deps.onActivate);
+    this.#deps.port.show({ title: `${pick(copy.title, lang)} (${code})`, body: fill(`${pick(copy.message, lang)} ${pick(copy.fix, lang)}`, values) }, this.#deps.onActivate);
     return true;
   }
 }
