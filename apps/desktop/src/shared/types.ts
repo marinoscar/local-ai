@@ -17,7 +17,14 @@ export interface NotImplemented {
   code: 'not_implemented';
 }
 
-export type ActionResult = { ok: boolean; code?: string };
+export interface ActionResult {
+  ok: boolean;
+  code?: string;
+  /** "Start agent" failed (LAI-DSK-005): the read-only `systemctl status` excerpt, already scrubbed. */
+  statusExcerpt?: string;
+  /** "Start agent" was pressed while a start was already running: nothing was done. */
+  busy?: boolean;
+}
 
 /** Can the desktop reach its agent? `starting` covers the start-up sequence and the first event connection. */
 export type AgentReach = 'starting' | 'up' | 'down' | 'unauthorized';

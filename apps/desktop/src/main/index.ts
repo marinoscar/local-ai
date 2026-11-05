@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { Menu, app, clipboard, dialog, ipcMain, protocol, screen, session, shell } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import { AgentFeed, createAgentClient, resolveTokenPath, testHooksAllowed } from './agent-client';
-import { createAgentSupervisor } from './agent-supervisor';
+import { createAgentSupervisor, execFileRunner, resolveStartBinaries } from './agent-supervisor';
 import { runDiagnoseMain } from './diagnose';
 import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, installEgressGuard, installMainProcessGuard, setEgressLogger, type GuardedSessions } from './egress-guard';
 import { pick, resolveLang } from './i18n';
@@ -88,7 +88,14 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     sessionFetch: (input, init) => sessions.agent.fetch(input, init),
     log,
   });
-  const supervisor = createAgentSupervisor();
+  const supervisor = createAgentSupervisor({
+    start: {
+      binaries: resolveStartBinaries(process.env, testHooksAllowed(app.isPackaged, process.execPath)),
+      exec: execFileRunner,
+      health: async () => (await client.health({ tries: 1 })).reachable,
+      log,
+    },
+  });
   const feed = new AgentFeed(client);
 
   // -- status: what the top bar shows ------------------------------------------------------------------------------
