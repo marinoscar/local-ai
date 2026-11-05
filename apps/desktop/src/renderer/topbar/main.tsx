@@ -1,4 +1,5 @@
-// Shell page "topbar" (docs/specs/desktop.md section 3.1). Scaffold stub (DSK-01); the real page arrives with DSK-04.
-import { Placeholder, mountPage } from '../shared/mount';
+// Shell page "topbar" (docs/specs/desktop.md 3.4): the 48 px bar of the main window.
+import { mountPage } from '../shared/mount';
+import { TopBar } from './TopBar';
 
-mountPage(<Placeholder title="ai-desktop" owner="DSK-04" />);
+mountPage(<TopBar bridge={window.localaiDesktop} />);

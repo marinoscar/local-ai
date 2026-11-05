@@ -7,7 +7,7 @@ import type { AgentSupervisor } from './agent-supervisor';
 
 export const MODULE = 'startup' as const;
 
-/** What the sequence needs from the window. DSK-04's main window implements it; `windows.ts` has a one-window stand-in. */
+/** What the sequence needs from the window. The window manager of `windows.ts` implements it. */
 export interface ContentHost {
   /** Shows `localai://app/error/?code=...` (default session, shell page). */
   showError(code: DskCode, options?: { unit?: string }): Promise<void>;
