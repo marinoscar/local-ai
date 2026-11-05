@@ -368,9 +368,40 @@ describe('what an allowed shell page can do', () => {
   it('the methods of later items (and the key calls of a host that wires none) answer { ok: false, code: "not_implemented" }', async () => {
     const { deps } = makeDeps();
     const wrapped = wrap(deps);
-    for (const channel of [CHANNELS.startAgent, CHANNELS.cloudRequest]) {
+    for (const channel of [CHANNELS.startAgent]) {
       expect(await wrapped[channel]!(from(SHELL)), channel).toEqual({ ok: false, code: 'not_implemented' });
     }
+  });
+
+  it('the Lab members (DSK-11) are for the Lab page only, hand the page\'s request to the proxy untouched, and answer "unavailable" while there is none', async () => {
+    const LAB = 'localai://app/lab/';
+    const bare = wrap(makeDeps().deps);
+    expect(await bare[CHANNELS.cloudRequest]!(from(LAB), { method: 'GET', path: '/api/localai/nodes' })).toEqual({ ok: false, error: 'unavailable' });
+    expect(await bare[CHANNELS.cloudCached]!(from(LAB))).toBeNull();
+
+    const lab = {
+      request: vi.fn(async () => ({ ok: true, status: 200, body: { data: {} } })),
+      cached: vi.fn(async () => null),
+      openNode: vi.fn(),
+    };
+    const wired = wrap(makeDeps({ lab }).deps);
+    const raw = { method: 'GET', path: '/api/localai/nodes', headers: { authorization: 'x' } };
+    expect(await wired[CHANNELS.cloudRequest]!(from(LAB), raw)).toMatchObject({ ok: true, status: 200 });
+    expect(lab.request).toHaveBeenCalledWith(raw); // judging the request is the proxy's job, not the table's
+    wired[CHANNELS.cloudOpenNode]!(from(LAB), 'ai-n2');
+    expect(lab.openNode).toHaveBeenCalledWith('ai-n2');
+    expect(await wired[CHANNELS.cloudCached]!(from(LAB))).toBeNull();
+
+    // Not from the top bar, the error page, the connection info, the agent UI or the cloud.
+    for (const url of [SHELL, 'localai://app/topbar/', 'localai://app/connection-info/', 'localai://app/error/?code=LAI-DSK-004', AGENT, 'https://ai.marin.cr/lab/']) {
+      await expect(wired[CHANNELS.cloudRequest]!(from(url), raw), url).rejects.toThrow();
+      await expect(wired[CHANNELS.cloudCached]!(from(url)), url).rejects.toThrow();
+      wired[CHANNELS.cloudOpenNode]!(from(url), 'ai-n2');
+    }
+    // An iframe of the Lab page is refused too.
+    await expect(wired[CHANNELS.cloudRequest]!(from(LAB, 1, {}), raw)).rejects.toThrow();
+    expect(lab.request).toHaveBeenCalledTimes(1);
+    expect(lab.openNode).toHaveBeenCalledTimes(1);
   });
 
   it('the lab link members (DSK-10) reach the cloud session, and answer "unavailable" while there is none', async () => {

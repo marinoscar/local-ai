@@ -38,7 +38,7 @@ describe('window.localaiDesktop (shell pages)', () => {
         'setFullScreen', 'closePortal',
       ].sort(),
     );
-    expect(Object.keys(bridge.cloud).sort()).toEqual(['beginLink', 'linkState', 'openVerification', 'request', 'unlink']);
+    expect(Object.keys(bridge.cloud).sort()).toEqual(['beginLink', 'cached', 'linkState', 'openNode', 'openVerification', 'request', 'unlink']);
     expect(Object.keys(bridge.settings).sort()).toEqual(['get', 'set']);
   });
 
@@ -60,6 +60,7 @@ describe('window.localaiDesktop (shell pages)', () => {
     await b.cloud.linkState();
     await b.cloud.unlink();
     await b.cloud.request({ method: 'GET', path: '/api/localai/nodes' });
+    await b.cloud.cached();
     await b.settings.get();
     await b.settings.set({ autostart: false });
     await b.pinSubmit('1234');
@@ -71,6 +72,7 @@ describe('window.localaiDesktop (shell pages)', () => {
     b.setFullScreen(false);
     b.closePortal();
     b.cloud.openVerification();
+    b.cloud.openNode('ai-n2');
 
     expect(invoked).toEqual([
       [CHANNELS.status, []],
@@ -83,6 +85,7 @@ describe('window.localaiDesktop (shell pages)', () => {
       [CHANNELS.cloudLinkState, []],
       [CHANNELS.cloudUnlink, []],
       [CHANNELS.cloudRequest, [{ method: 'GET', path: '/api/localai/nodes' }]],
+      [CHANNELS.cloudCached, []],
       [CHANNELS.settingsGet, []],
       [CHANNELS.settingsSet, [{ autostart: false }]],
       [CHANNELS.pinSubmit, ['1234']],
@@ -96,6 +99,7 @@ describe('window.localaiDesktop (shell pages)', () => {
       [CHANNELS.setFullScreen, [false]],
       [CHANNELS.closePortal, []],
       [CHANNELS.cloudOpenVerification, []],
+      [CHANNELS.cloudOpenNode, ['ai-n2']],
     ]);
   });
 

@@ -15,6 +15,7 @@ import { createAgentSupervisor, execFileRunner, resolveStartBinaries } from './a
 import { type LaunchArgs, parseArgs } from './args';
 import { AutostartController, applyAutostart, autostartPath } from './autostart';
 import { runDiagnoseMain } from './diagnose';
+import { createCloudProxy, createLabCacheStore, labNodeUrl } from './cloud-api';
 import { CLOUD_TEXT, CODE_LINK_REMOVED, CODE_NO_KEYRING, CloudSession, LinkWindowController, abortableSleep, createCloudHttp, createLoopbackDispatcher, modeFromEvent, modeFromStatus, withCode, type LinkWindowFactory } from './cloud-link';
 import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, installEgressGuard, installMainProcessGuard, patchEgressState, setEgressLogger, type GuardedSessions } from './egress-guard';
 import { KeyCopier, copyNotification, createKeyActions, createKeyApi } from './clipboard';
@@ -280,8 +281,19 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   });
   cloudSession.onChange(push);
 
+  // -- the Lab tab's cloud proxy and its cache (DSK-11) ---------------------------------------------------------------
+  const labProxy = createCloudProxy({ session: cloudSession, cache: createLabCacheStore({ dir: configDir(), log }), log });
+  // Disconnecting forgets the cached cards: they belong to the account that was linked.
+  let wasLinked = settings.cloud.linked;
+  cloudSession.onChange(() => {
+    if (wasLinked && !settings.cloud.linked) void labProxy.clearCache();
+    wasLinked = settings.cloud.linked;
+  });
+
   // -- the tray (DSK-06) lives from here on, before the agent is probed: grey until the first status (desktop.md 4.1) ---
   let tray: TrayController | null = null;
+  // The tray's "Lab (ai.marin.cr)" item follows connected mode (DSK-11).
+  cloudSession.onChange(() => tray?.refresh());
   // What the tray needs from the window manager: show the main window, open Chat, Library or Maps.
   // In survival the main window comes back full screen (a tray click, a notification click).
   const control: WindowControl = { showMain: () => survival.bringForward(), openWindow: (which) => void windows.openChild(which) };
@@ -411,7 +423,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   registerHandlers(
     ipcMain,
     {
-      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => { if (!survival.active) windows.showTab(tab); }, setFullScreen: (flag) => survival.setFullScreen(flag), closePortal: () => survival.closePortal(), showMenu, settings: store, cloud: cloudSession, pinWindowId: () => pin.windowId(), keys, pin: { submit: (id, value) => pin.submit(id, value), cancel: (id) => pin.cancel(id) }, errorActions, log, setMode: async (target) => {
+      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => { if (!survival.active) windows.showTab(tab); }, setFullScreen: (flag) => survival.setFullScreen(flag), closePortal: () => survival.closePortal(), showMenu, settings: store, cloud: cloudSession, lab: { request: (req) => labProxy.request(req), cached: () => labProxy.cached(), openNode: (nodeId) => { const url = labNodeUrl(nodeId); if (url !== null && cloudSession.connectedModeActive()) void shell.openExternal(url); } }, pinWindowId: () => pin.windowId(), keys, pin: { submit: (id, value) => pin.submit(id, value), cancel: (id) => pin.cancel(id) }, errorActions, log, setMode: async (target) => {
         const outcome = await modes.setMode(target);
         return outcome.ok ? { ok: true } : { ok: false, code: outcome.code };
       } }),
@@ -444,6 +456,12 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
       dialogs,
       actions: {
         quit: () => app.quit(),
+        // DSK-11: "Lab (ai.marin.cr)" brings the window forward and shows the Lab tab (ignored unless connected mode is active).
+        openLab: () => {
+          control.showMain();
+          if (!survival.active) windows.showTab('lab');
+        },
+        labConnected: () => cloudSession.connectedModeActive(),
         copyApiKey: async () => {
           const message = copyNotification(await copier.copy(), lang);
           if (notificationPort.supported()) notificationPort.show(message, control.showMain);
