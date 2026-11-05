@@ -36,6 +36,16 @@ export function parseRoutingSettings(localai: unknown): RoutingSettings {
   return { queueFactor };
 }
 
+/**
+ * `llama.models_max` of a node's last stored snapshot (state.schema: an integer from 1 to 16), or null when the snapshot
+ * has none or it is not that. Pure, for the unit test.
+ */
+export function modelsMaxOf(lastState: unknown): number | null {
+  const llama = isRecord(lastState) && isRecord(lastState.llama) ? lastState.llama : undefined;
+  const value = llama?.models_max;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 16 ? value : null;
+}
+
 @Injectable()
 export class PrismaRoutingSource implements RoutingSource {
   private readonly logger = new Logger(PrismaRoutingSource.name);
@@ -74,6 +84,7 @@ export class PrismaRoutingSource implements RoutingSource {
         lastStateAt: node.lastStateAt,
         keyReportedAt: node.keyReportedAt,
         eab,
+        modelsMax: modelsMaxOf(node.lastState),
         models: node.models.map((model) => ({
           modelId: model.modelId,
           present: model.present,

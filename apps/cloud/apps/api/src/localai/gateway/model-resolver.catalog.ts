@@ -25,6 +25,7 @@ export class CatalogModelResolver implements GatewayModelResolver {
       // A catalog entry with no roles at all counts as "unknown", not as "has none".
       roles: hints.roles.length > 0 ? hints.roles : null,
       inApprovedCatalog: true,
+      keyPrefix: key.tokenPrefix,
     };
   }
 }

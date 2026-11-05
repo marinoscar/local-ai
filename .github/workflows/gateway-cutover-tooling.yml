@@ -1,0 +1,54 @@
+name: gateway-cutover-tooling
+
+# GW-11 (#146). The helper scripts of the gateway cutover (scripts/gateway-client.sh, scripts/openwebui-cutover.sh) against
+# fakes (a local HTTP server, a fake `docker`), and the document checks: Appendix A of docs/specs/gateway.md equals runbook
+# 02, the client templates parse and hold no key. No network, no real key, nothing touches a lab node.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/gateway-client.sh'
+      - 'scripts/openwebui-cutover.sh'
+      - 'scripts/tests/test-gateway-client.sh'
+      - 'scripts/tests/test-openwebui-cutover.sh'
+      - 'scripts/tests/gateway-docs.test.mjs'
+      - 'docs/templates/gateway/**'
+      - 'docs/specs/gateway.md'
+      - 'docs/runbooks/02-chat-and-api-keys.md'
+      - 'docs/runbooks/05-add-a-node.md'
+      - 'docs/runbooks/07-troubleshooting.md'
+      - 'docs/runbooks/10-lab-operations.md'
+      - '.github/workflows/gateway-cutover-tooling.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/gateway-client.sh'
+      - 'scripts/openwebui-cutover.sh'
+      - 'scripts/tests/test-gateway-client.sh'
+      - 'scripts/tests/test-openwebui-cutover.sh'
+      - 'scripts/tests/gateway-docs.test.mjs'
+      - 'docs/templates/gateway/**'
+      - 'docs/specs/gateway.md'
+      - 'docs/runbooks/02-chat-and-api-keys.md'
+      - 'docs/runbooks/05-add-a-node.md'
+      - 'docs/runbooks/07-troubleshooting.md'
+      - 'docs/runbooks/10-lab-operations.md'
+      - '.github/workflows/gateway-cutover-tooling.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  tooling:
+    name: shellcheck, script tests, document checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: shellcheck
+        run: shellcheck -S style scripts/gateway-client.sh scripts/openwebui-cutover.sh && shellcheck -S warning scripts/tests/test-gateway-client.sh scripts/tests/test-openwebui-cutover.sh
+      - name: gateway-client.sh against a fake gateway
+        run: scripts/tests/test-gateway-client.sh
+      - name: openwebui-cutover.sh against a fake docker
+        run: scripts/tests/test-openwebui-cutover.sh
+      - name: Spec, runbook and template checks
+        run: node --test scripts/tests/gateway-docs.test.mjs
