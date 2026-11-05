@@ -8,7 +8,7 @@ name: agent-rebuild
 # tag's version) and the swap cannot reach the internet. A second case injects a new agent that never
 # becomes healthy and proves the rollback to aiagent.prev. A third case removes one vendored package from the
 # real source and expects LAI-KIT-030 with nothing replaced. Only the preparation (the UI build and the
-# tarball) has network: the tarball ships the BUILT local UI, so the job builds it first, as release-node.yml does.
+# tarball) has network.
 on:
   pull_request:
     paths: ['agent/internal/router/build/**', 'agent/internal/kit/**', 'scripts/release/build-src-tarball.sh', '.github/workflows/agent-rebuild.yml']
@@ -30,10 +30,16 @@ jobs:
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
+      - name: Is there a local UI to build
+        id: ui
+        run: |
+          if [ -f agent/ui/package.json ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "agent/ui does not exist yet: the tarball carries no UI build"; fi
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.ui.outputs.present == 'true'
         with:
           node-version: '22'
-      - name: Build the local UI (network; the tarball ships it built because the kit has no Node.js)
+      - name: Build the local UI (the source tarball ships it built, as the release does)
+        if: steps.ui.outputs.present == 'true'
         working-directory: agent/ui
         run: |
           npm ci --no-audit --no-fund
