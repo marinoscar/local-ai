@@ -17,6 +17,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./api/agent": "./src/api/agent.gen.ts"
+    "./api/agent": "./src/api/agent.gen.ts",
+    "./lab/types": "./src/lab/types.ts"
   }
 }
