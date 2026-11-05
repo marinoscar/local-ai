@@ -54,12 +54,6 @@ test('the top bar shows the status, the mode and the buttons; the Lab tab is hid
   expect(present).toEqual({ 'tab-local': true, 'tab-lab': false, 'open-chat': true, 'open-library': true, 'open-maps': true, 'copy-key': true, menu: true });
 });
 
-test('Copy API key says "not available yet" until DSK-08 lands', async () => {
-  const bar = await waitForContents(run.app, isTopBar);
-  await evaluateIn(run.app, bar.id, "document.querySelector('[data-testid=copy-key]').click()");
-  await pollIn(run.app, bar.id, "document.querySelector('[data-testid=notice]')?.textContent === 'Not available yet.'");
-});
-
 test('the Chat button opens one window at /chat/; a second click focuses it instead of opening another', async () => {
   const bar = await waitForContents(run.app, isTopBar);
   expect(await childUrls(run.app)).toEqual([]);

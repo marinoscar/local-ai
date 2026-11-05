@@ -189,12 +189,33 @@ export interface ChildWindowInit {
   title: string;
 }
 
+/** The modal shell windows (desktop.md 4.6): the PIN prompt and the connection info. */
+export type ModalName = 'pin' | 'connection-info';
+
+export const MODAL_WINDOWS: Readonly<Record<ModalName, { page: string; width: number; height: number; preload: 'shell.js' | 'pin.js'; title: { en: string; es: string } }>> = {
+  'connection-info': { page: 'connection-info', width: 760, height: 700, preload: 'shell.js', title: { en: 'Connection info', es: 'Datos de conexión' } },
+  pin: { page: 'pin', width: 400, height: 420, preload: 'pin.js', title: { en: 'Administrator PIN', es: 'PIN de administrador' } },
+};
+
+export interface ModalInit {
+  url: string;
+  width: number;
+  height: number;
+  title: string;
+  preload: 'shell.js' | 'pin.js';
+}
+
+/** What a modal window is modal to: the main window, another modal, or nothing (the main window is hidden in the tray). */
+export type ModalParent = { main: MainWindowLike } | { child: ChildWindowLike } | null;
+
 export interface WindowFactory {
   /** Creates the main window hidden. */
   createMainWindow(init: MainWindowInit): MainWindowLike;
   createView(kind: ViewKind): ViewLike;
   /** Creates a child window (partition `persist:agent`, no preload) and shows it. */
   createChildWindow(init: ChildWindowInit): ChildWindowLike;
+  /** Creates a modal shell window (default session, `localai://app`, hardened) and shows it. */
+  createModalWindow(init: ModalInit, parent: ModalParent): ChildWindowLike;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -243,6 +264,14 @@ export interface WindowManager extends ContentHost {
   childWindow(name: ChildWindowName): ChildWindowLike | null;
   closeChildren(): void;
 
+  // Modal shell windows
+  /**
+   * Opens the PIN prompt or the connection info (one each: an open one is focused). `query` is `?a=b` or empty. A modal
+   * is modal to the main window while that is visible; the PIN prompt over the connection info is modal to it.
+   */
+  openModal(name: ModalName, query?: string): ChildWindowLike;
+  modalWindow(name: ModalName): ChildWindowLike | null;
+
   // Messages to pages
   sendToTopBar(channel: string, ...args: unknown[]): void;
   /** To every shell page of the main window that is showing an allowed shell URL (top bar, Lab, error page). */
@@ -283,6 +312,7 @@ class Manager implements WindowManager {
   readonly #topBar: ViewLike;
   readonly #views: Partial<Record<ViewKind, ViewLike>> = {};
   readonly #children = new Map<ChildWindowName, ChildWindowLike>();
+  readonly #modals = new Map<ModalName, ChildWindowLike>();
   readonly #listeners = new Set<() => void>();
   #attached: ViewLike | null = null;
   #barHeight: number = TOP_BAR_HEIGHT;
@@ -458,8 +488,39 @@ class Manager implements WindowManager {
   }
 
   closeChildren(): void {
-    for (const win of [...this.#children.values()]) if (!win.isDestroyed()) win.close();
+    for (const win of [...this.#modals.values(), ...this.#children.values()]) if (!win.isDestroyed()) win.close();
+    this.#modals.clear();
     this.#children.clear();
+  }
+
+  // -- modal shell windows ----------------------------------------------------------------------------------------
+
+  openModal(name: ModalName, query = ''): ChildWindowLike {
+    const existing = this.#modals.get(name);
+    if (existing && !existing.isDestroyed()) {
+      if (existing.isMinimized()) existing.restore();
+      existing.show();
+      existing.focus();
+      return existing;
+    }
+    const spec = MODAL_WINDOWS[name];
+    const over = name === 'pin' ? this.modalWindow('connection-info') : null;
+    const parent: ModalParent = over ? { child: over } : this.#main.isVisible() && !this.#main.isMinimized() ? { main: this.#main } : null;
+    const win = this.#o.factory.createModalWindow(
+      { url: this.#o.shellPageUrl(spec.page, query), width: spec.width, height: spec.height, title: spec.title[this.#o.lang()], preload: spec.preload },
+      parent,
+    );
+    registerView(win.webContents as never, 'shell');
+    this.#modals.set(name, win);
+    win.onClosed(() => {
+      if (this.#modals.get(name) === win) this.#modals.delete(name);
+    });
+    return win;
+  }
+
+  modalWindow(name: ModalName): ChildWindowLike | null {
+    const win = this.#modals.get(name);
+    return win && !win.isDestroyed() ? win : null;
   }
 
   // -- messages ---------------------------------------------------------------------------------------------------
@@ -649,8 +710,11 @@ export interface ElectronFactoryOptions {
   preloadDir: string;
 }
 
+/** The real window behind each adapter, so a modal can name its parent. */
+const rawWindows = new WeakMap<object, BaseWindow>();
+
 function adaptMainWindow(win: BaseWindow): MainWindowLike {
-  return {
+  const adapter: MainWindowLike = {
     contentView: {
       addChildView: (view) => win.contentView.addChildView(view as unknown as WebContentsView),
       removeChildView: (view) => win.contentView.removeChildView(view as unknown as WebContentsView),
@@ -679,10 +743,12 @@ function adaptMainWindow(win: BaseWindow): MainWindowLike {
       (win as unknown as { on(e: string, l: () => void): void }).on('closed', listener);
     },
   };
+  rawWindows.set(adapter, win);
+  return adapter;
 }
 
 function adaptChildWindow(win: BrowserWindow): ChildWindowLike {
-  return {
+  const adapter: ChildWindowLike = {
     webContents: win.webContents,
     isDestroyed: () => win.isDestroyed(),
     isMinimized: () => win.isMinimized(),
@@ -694,6 +760,8 @@ function adaptChildWindow(win: BrowserWindow): ChildWindowLike {
       win.on('closed', listener);
     },
   };
+  rawWindows.set(adapter, win);
+  return adapter;
 }
 
 export function createElectronWindowFactory(options: ElectronFactoryOptions): WindowFactory {
@@ -733,6 +801,27 @@ export function createElectronWindowFactory(options: ElectronFactoryOptions): Wi
         webPreferences: { ...hardenedWebPreferences(options.isPackaged), partition: PARTITIONS.agent },
       });
       win.removeMenu();
+      return adaptChildWindow(win);
+    },
+    createModalWindow(init, parent) {
+      const raw = parent ? rawWindows.get('main' in parent ? parent.main : parent.child) : undefined;
+      // Default session (where localai://app is served), the page's own preload, no partition: a shell page.
+      const win = new BrowserWindow({
+        width: init.width,
+        height: init.height,
+        useContentSize: true,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        title: init.title,
+        ...(raw ? { parent: raw, modal: true } : { alwaysOnTop: true }),
+        webPreferences: { ...hardenedWebPreferences(options.isPackaged), preload: join(options.preloadDir, init.preload) },
+      });
+      win.removeMenu();
+      // Registered before the first navigation, so the navigation guard knows the page is a shell page.
+      registerView(win.webContents as never, 'shell');
+      void win.loadURL(init.url).catch(() => undefined);
       return adaptChildWindow(win);
     },
   };

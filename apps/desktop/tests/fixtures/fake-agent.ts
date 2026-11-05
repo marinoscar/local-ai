@@ -37,6 +37,18 @@ export interface FakeAgent {
   readonly eventConnections: Array<{ lastEventId: string | undefined; via: 'bearer' | 'cookie' }>;
   /** Every `POST /api/v1/mode` and `POST /api/v1/mode/survival` the fake saw: the body, the bearer and the PIN grant header. */
   readonly modeRequests: Array<{ path: string; body: unknown; authorization: string | undefined; pinGrant: string | undefined; contentType: string | undefined }>;
+  /** The llama API key `GET /key` returns (64 hex). A rotation replaces it. */
+  apiKey: string;
+  /** Every `GET /api/v1/key` the fake saw (the agent audits each one as `key.show`). */
+  readonly keyRequests: Array<{ authorization: string | undefined }>;
+  /** Every `POST /api/v1/key/rotate`: the body, the bearer, the PIN grant header and whether it was accepted. */
+  readonly keyRotations: Array<{ body: unknown; authorization: string | undefined; pinGrant: string | undefined; accepted: boolean }>;
+  /** The admin PIN `POST /pin/verify` accepts; null: no PIN is set (409 LAI-SEC-005). */
+  pin: string | null;
+  /** Wrong PINs counted so far in the 5-minute window; at `maxPinFailures` the fake answers 429 LAI-SEC-004. */
+  pinFailures: number;
+  /** Every `POST /api/v1/pin/verify`: whether it was refused for a lockout, and how it ended (the PIN itself is not kept). */
+  readonly pinVerifications: Array<{ outcome: 'ok' | 'wrong' | 'locked' | 'no-pin' | 'bad-request'; authorization: string | undefined }>;
   /** Alerts reported by /status. */
   alerts: Array<{ code: string; severity: string; title: string; fix: string }>;
   /** Connectivity reported by /status and /mode. */
@@ -140,6 +152,26 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     models: { default: null, loaded: [] } as FakeAgent['models'],
     failNextModeChange: null as FakeAgent['failNextModeChange'],
     validPinGrant: null as string | null,
+    apiKey: randomBytes(32).toString('hex'),
+    pin: null as string | null,
+    pinFailures: 0,
+  };
+  const MAX_PIN_FAILURES = 5;
+  const keyRequests: FakeAgent['keyRequests'] = [];
+  const keyRotations: FakeAgent['keyRotations'] = [];
+  const pinVerifications: FakeAgent['pinVerifications'] = [];
+  const readBody = (req: IncomingMessage, then: (body: unknown) => void): void => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      let body: unknown = null;
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      } catch {
+        // recorded as null
+      }
+      then(body);
+    });
   };
 
   const json = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void => {
@@ -347,6 +379,105 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
       return;
     }
 
+    if (method === 'GET' && path === '/api/v1/key') {
+      if (credential(req) === null) {
+        error(res, 401, 'LAI-SEC-001', 'Missing or invalid credentials');
+        return;
+      }
+      keyRequests.push({ authorization: req.headers.authorization });
+      const key = state.apiKey;
+      json(
+        res,
+        200,
+        {
+          key,
+          fingerprint: `${key.slice(0, 4)}…${key.slice(-4)}`,
+          base_urls: { local: 'http://127.0.0.1:8080/v1', tailnet: null, public: 'https://ai-n3.example.test/v1' },
+          models: ['model-a', 'model-b'],
+          snippets: {
+            curl: 'curl -s http://127.0.0.1:8080/v1/chat/completions -H "Authorization: Bearer $KEY" -H \'Content-Type: application/json\' -d \'{"model":"model-a","messages":[{"role":"user","content":"Hello"}]}\'',
+            env: 'OPENAI_BASE_URL=http://127.0.0.1:8080/v1\nOPENAI_API_KEY=<key>',
+            opencode: {
+              provider: {
+                'local-llama': {
+                  npm: '@ai-sdk/openai-compatible',
+                  options: { baseURL: 'http://127.0.0.1:8080/v1', apiKey: '{file:~/.config/opencode/llama-api-key}' },
+                  models: { 'model-a': { limit: { context: 32768, output: 8192 } } },
+                },
+              },
+            },
+            openai_python: 'from openai import OpenAI\nclient = OpenAI(base_url="http://127.0.0.1:8080/v1", api_key=KEY)',
+          },
+        },
+        { 'cache-control': 'no-store' },
+      );
+      return;
+    }
+
+    if (method === 'POST' && path === '/api/v1/pin/verify') {
+      readBody(req, (body) => {
+        const authorization = req.headers.authorization;
+        if (credential(req) === null) {
+          error(res, 401, 'LAI-SEC-001', 'Missing or invalid credentials');
+          return;
+        }
+        const given = (body as { pin?: unknown } | null)?.pin;
+        if (typeof given !== 'string') {
+          pinVerifications.push({ outcome: 'bad-request', authorization });
+          error(res, 400, 'LAI-AGT-020', 'pin must be a string');
+          return;
+        }
+        if (state.pin === null) {
+          pinVerifications.push({ outcome: 'no-pin', authorization });
+          json(res, 409, { error: { code: 'LAI-SEC-005', message: 'No admin PIN has been set', fix: 'Run sudo aictl pin set', details: {} } });
+          return;
+        }
+        if (state.pinFailures >= MAX_PIN_FAILURES) {
+          pinVerifications.push({ outcome: 'locked', authorization });
+          json(res, 429, { error: { code: 'LAI-SEC-004', message: 'Too many wrong tries', fix: 'Wait 5 minutes.', details: { retry_after_s: 300, locked: false } } }, { 'retry-after': '300', 'cache-control': 'no-store' });
+          return;
+        }
+        if (given !== state.pin) {
+          state.pinFailures += 1;
+          pinVerifications.push({ outcome: 'wrong', authorization });
+          json(res, 401, { error: { code: 'LAI-SEC-003', message: 'Wrong PIN', fix: 'Try again.', details: { remaining_attempts: MAX_PIN_FAILURES - state.pinFailures } } }, { 'cache-control': 'no-store' });
+          return;
+        }
+        pinVerifications.push({ outcome: 'ok', authorization });
+        const grant = `pg_${randomBytes(32).toString('base64url')}`;
+        state.validPinGrant = grant;
+        json(res, 200, { grant, expires_at: new Date(Date.now() + 300_000).toISOString().replace(/\.\d+Z$/, 'Z') }, { 'cache-control': 'no-store' });
+      });
+      return;
+    }
+
+    if (method === 'POST' && path === '/api/v1/key/rotate') {
+      readBody(req, (body) => {
+        const pinGrant = req.headers['x-localai-pin-grant'];
+        const grant = Array.isArray(pinGrant) ? pinGrant[0] : pinGrant;
+        const accepted = credential(req) !== null && state.validPinGrant !== null && grant === state.validPinGrant;
+        keyRotations.push({ body, authorization: req.headers.authorization, pinGrant: grant, accepted });
+        if (credential(req) === null) {
+          error(res, 401, 'LAI-SEC-001', 'Missing or invalid credentials');
+          return;
+        }
+        if (!accepted) {
+          json(res, 403, { error: { code: 'LAI-SEC-002', message: 'This action needs the admin PIN', fix: 'Enter the admin PIN when asked.', details: { pin_required: true } } });
+          return;
+        }
+        state.apiKey = randomBytes(32).toString('hex');
+        json(res, 200, {
+          fingerprint: `${state.apiKey.slice(0, 4)}…${state.apiKey.slice(-4)}`,
+          rotated_at: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+          cloud_synced: false,
+          restored_models: [],
+          clients_to_update: ['OpenCode on this computer: ~/.config/opencode/llama-api-key', 'Any script that uses the old key directly'],
+          op_id: 'op_fake_rotate',
+        });
+      });
+      return;
+    }
+
     if (method === 'GET' && path === '/api/v1/events') {
       const via = credential(req);
       if (via === null) {
@@ -389,6 +520,27 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     sessionRequests,
     modeRequests,
     eventConnections,
+    keyRequests,
+    keyRotations,
+    pinVerifications,
+    get apiKey() {
+      return state.apiKey;
+    },
+    set apiKey(value: string) {
+      state.apiKey = value;
+    },
+    get pin() {
+      return state.pin;
+    },
+    set pin(value: string | null) {
+      state.pin = value;
+    },
+    get pinFailures() {
+      return state.pinFailures;
+    },
+    set pinFailures(value: number) {
+      state.pinFailures = value;
+    },
     get alerts() {
       return state.alerts;
     },

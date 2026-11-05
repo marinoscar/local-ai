@@ -32,6 +32,7 @@ const C = {
   settingsGet: 'localai:settings-get',
   settingsSet: 'localai:settings-set',
   pinSubmit: 'localai:pin-submit',
+  rotateKey: 'localai:rotate-key',
   lang: 'localai:lang',
   errorAction: 'localai:error-action',
 } as const;
@@ -88,6 +89,7 @@ export function createShellBridge(ipc: IpcRendererLike): LocalaiDesktop {
       set: (patch) => invoke(C.settingsSet, patch),
     },
     pinSubmit: (pin) => invoke(C.pinSubmit, pin),
+    rotateKey: () => invoke(C.rotateKey),
     lang: (): Lang => (ipc.sendSync(C.lang) === 'es' ? 'es' : 'en'),
     errorAction: (action, code) => invoke(C.errorAction, { action, code }),
     showMenu: () => {

@@ -37,15 +37,17 @@ describe('src/main layout', () => {
 });
 
 describe('src/preload layout', () => {
-  it('has the two bridges of the spec', () => {
-    expect(readdirSync(preloadDir).sort()).toEqual(['agent.ts', 'shell.ts']);
+  it('has the three bridges of the spec (the PIN window has its own, DSK-08)', () => {
+    expect(readdirSync(preloadDir).sort()).toEqual(['agent.ts', 'pin.ts', 'shell.ts']);
   });
 
-  it('shell.ts and agent.ts import and name their bridge', async () => {
+  it('shell.ts, agent.ts and pin.ts import and name their bridge', async () => {
     const shell = (await import('../../src/preload/shell')) as { BRIDGE: string };
     const agent = (await import('../../src/preload/agent')) as { BRIDGE: string };
+    const pin = (await import('../../src/preload/pin')) as { BRIDGE: string };
     expect(shell.BRIDGE).toBe('localaiDesktop');
     expect(agent.BRIDGE).toBe('localaiDesktopHost');
+    expect(pin.BRIDGE).toBe('localaiPin');
   });
 });
 

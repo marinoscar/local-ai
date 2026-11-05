@@ -43,3 +43,9 @@ export function copiedText(seconds: number, lang: Lang): string {
     ? `Clave copiada. Se borrará del portapapeles en ${seconds} segundos.`
     : `API key copied. It will be cleared from the clipboard in ${seconds} seconds.`;
 }
+
+/** "The API key could not be copied." plus the doctor code when the failure has one (every visible error carries its code). */
+export function copyFailedText(code: string, lang: Lang): string {
+  const text = pick(STRINGS.copyFailed, lang);
+  return code.startsWith('LAI-') ? `${text} (${code})` : text;
+}

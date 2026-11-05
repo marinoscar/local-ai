@@ -15,12 +15,14 @@ import { type LaunchArgs, parseArgs } from './args';
 import { AutostartController, applyAutostart, autostartPath } from './autostart';
 import { runDiagnoseMain } from './diagnose';
 import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, installEgressGuard, installMainProcessGuard, setEgressLogger, type GuardedSessions } from './egress-guard';
+import { KeyCopier, copyNotification, createKeyActions, createKeyApi } from './clipboard';
 import { DIALOG_TEXT, errorText, pick, resolveLang } from './i18n';
 import { CHANNELS, type SettingsStore, type StartupPhase, buildDesktopStatus, createHostHandlers, createSettingsStore, createShellHandlers, isAllowedOrigin, registerHandlers } from './ipc';
 import { type LogEntry, type Logger, createFileLogger } from './log';
 import { ABOUT, NOT_AVAILABLE, buildMenuTemplate } from './menu';
 import { installPermissionHandlers, installWebContentsHardening } from './navigation';
 import { Notifier } from './notify';
+import { PinService, createPinApi } from './pin';
 import { installLocalaiProtocol, registerLocalaiScheme, rendererRoot, shellUrl } from './protocol';
 import { type Settings, type SettingsPatch, configDir, readSettingsFile } from './settings';
 import { SessionRecovery, type ActionDeps, type ContentHost, type StartupResult, handleErrorAction, runStartup } from './startup';
@@ -199,11 +201,33 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   // What the tray needs from the window manager: show the main window, open Chat, Library or Maps.
   // In survival the main window comes back full screen (a tray click, a notification click).
   const control: WindowControl = { showMain: () => survival.bringForward(), openWindow: (which) => void windows.openChild(which) };
-  // DSK-08 provides the native PIN window; until then the tray cannot leave survival and says where to do it.
-  const pin: PinPrompt | undefined = undefined;
-  const modes = new ModeController({ api: createModeApi(client), ...(pin ? { pin } : {}), currentMode: () => tray?.mode ?? readStatus(feed.status).mode, log });
+  // DSK-08: the native PIN window (leaving survival from the tray, Rotate key) and the API key (copy, connection info).
+  const pin = new PinService({
+    api: createPinApi(client),
+    lang: () => lang,
+    log,
+    open: (purpose, language) => {
+      const win = windows.openModal('pin', `?${new URLSearchParams({ purpose, lang: language }).toString()}`);
+      return { id: win.webContents.id, focus: () => win.focus(), close: () => win.close(), isDestroyed: () => win.isDestroyed(), onClosed: (listener) => win.onClosed(listener) };
+    },
+  });
+  const keyApi = createKeyApi(client);
+  // The e2e test copy shortens the 60 s clipboard timeout; a packaged app ignores the variable.
+  const clearMs = testHooksAllowed(app.isPackaged, process.execPath) ? Number(process.env['LOCALAI_DESKTOP_CLIPBOARD_CLEAR_MS']) : Number.NaN;
+  const copier = new KeyCopier({ keys: keyApi, clipboard, log, ...(Number.isFinite(clearMs) && clearMs > 0 ? { clearAfterMs: clearMs } : {}) });
+  const keys = createKeyActions({ keys: keyApi, copier, pin });
+  // Whatever is still on the clipboard when the app quits would never be cleared by the timer.
+  app.on('will-quit', (event) => {
+    if (!copier.pending) return; // the second pass, after the clear: let the app quit
+    event.preventDefault();
+    // A clipboard that does not answer must not keep the app from quitting.
+    void Promise.race([copier.clearIfHeld(), new Promise((resolve) => setTimeout(resolve, 1500))]).finally(() => app.quit());
+  });
+  const showConnectionInfo = (): void => void windows.openModal('connection-info');
+  const modes = new ModeController({ api: createModeApi(client), pin: pin satisfies PinPrompt, currentMode: () => tray?.mode ?? readStatus(feed.status).mode, log });
   const dialogs = createElectronDialogs(dialog as unknown as ElectronDialogApi);
-  const notifier = new Notifier({ port: createElectronNotificationPort({ Notification }), lang: () => lang, clock: Date.now, onActivate: control.showMain, log });
+  const notificationPort = createElectronNotificationPort({ Notification });
+  const notifier = new Notifier({ port: notificationPort, lang: () => lang, clock: Date.now, onActivate: control.showMain, log });
 
   // -- "Start at login" (desktop.md 4.5) ---------------------------------------------------------------------------
   // The file follows `settings.autostart`: applied at every start, and again whenever a menu, the tray or a settings
@@ -262,7 +286,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     const template = buildMenuTemplate(
       { lang, linked: settings.cloud.linked, autostart: settings.autostart, checkForUpdates: settings.updates.checkForUpdates },
       {
-        connectionInfo: notAvailable, // DSK-08
+        connectionInfo: showConnectionInfo,
         connect: notAvailable, // DSK-10
         disconnect: notAvailable, // DSK-10
         setAutostart: (on) => void autostart.set(on),
@@ -300,11 +324,11 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   registerHandlers(
     ipcMain,
     {
-      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => { if (!survival.active) windows.showTab(tab); }, setFullScreen: (flag) => survival.setFullScreen(flag), closePortal: () => survival.closePortal(), showMenu, settings: store, pinWindowId: () => null, errorActions, log, setMode: async (target) => {
+      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => { if (!survival.active) windows.showTab(tab); }, setFullScreen: (flag) => survival.setFullScreen(flag), closePortal: () => survival.closePortal(), showMenu, settings: store, pinWindowId: () => pin.windowId(), keys, pin: { submit: (id, value) => pin.submit(id, value), cancel: (id) => pin.cancel(id) }, errorActions, log, setMode: async (target) => {
         const outcome = await modes.setMode(target);
         return outcome.ok ? { ok: true } : { ok: false, code: outcome.code };
       } }),
-      ...createHostHandlers({ version, openChild: open }),
+      ...createHostHandlers({ version, openChild: open, keys }),
     },
     { policy, log },
   );
@@ -333,6 +357,11 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
       dialogs,
       actions: {
         quit: () => app.quit(),
+        copyApiKey: async () => {
+          const message = copyNotification(await copier.copy(), lang);
+          if (notificationPort.supported()) notificationPort.show(message, control.showMain);
+        },
+        showConnectionInfo,
         autostart: { get: () => autostart.enabled, set: async (next) => void (await autostart.set(next)) },
         startAgent: async () => {
           const result = await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, errorActions);
@@ -359,6 +388,8 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   const screen = await start();
   // `--portal` on the first launch: the start-up sequence already opened it when the node is in survival mode.
   if (args.portal && screen !== 'survival') await survival.enter({ reason: 'portal' });
+  // The e2e test copy opens the connection info at once: a native menu item cannot be clicked from Playwright.
+  if (testHooksAllowed(app.isPackaged, process.execPath) && process.env['LOCALAI_DESKTOP_TEST_OPEN'] === 'connection-info') showConnectionInfo();
 }
 
 export interface StartOptions {

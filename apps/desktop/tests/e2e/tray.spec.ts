@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { type FakeAgent, newFakeToken, startFakeAgent } from '../fixtures/fake-agent';
-import { type Launched, evaluateIn, isAgentUrl, launch, waitForContents } from './helpers';
+import { type Launched, evaluateIn, isAgentUrl, isPinWindow, launch, waitForContents, waitForWindowPage } from './helpers';
 
 let agent: FakeAgent;
 let run: Launched | undefined;
@@ -38,11 +38,13 @@ test('the shell bridge switches the mode through the agent; agent pages have no 
 
   // A target the bridge does not know never reaches the agent.
   expect(await evaluateIn<unknown>(run.app, shell.id, "window.localaiDesktop.setMode('reboot')")).toEqual({ ok: false });
-  // Leaving survival needs the PIN, and the PIN window does not exist yet (DSK-08): the agent's refusal comes back as
-  // a code, with no grant sent. (With no tray nothing tracks the mode, so the agent is asked and answers.)
-  expect(await evaluateIn<unknown>(run.app, shell.id, "window.localaiDesktop.setMode('online')")).toEqual({ ok: false, code: 'LAI-SEC-002' });
-  expect(agent.modeRequests).toHaveLength(3);
-  expect(agent.modeRequests[2]).toMatchObject({ body: { target: 'online', wait: false }, pinGrant: undefined });
+  // Leaving survival needs the PIN: the PIN window opens (DSK-08), and cancelling it asks the agent for nothing more.
+  const before = agent.modeRequests.length;
+  const leaving = evaluateIn<unknown>(run.app, shell.id, "window.localaiDesktop.setMode('online')");
+  const pinPage = await waitForWindowPage(run.app, isPinWindow);
+  await pinPage.getByTestId('pin-cancel').click();
+  expect(await leaving).toEqual({ ok: false, code: 'LAI-SEC-002' });
+  expect(agent.modeRequests.slice(before).every((r) => r.pinGrant === undefined)).toBe(true);
   expect(agent.mode).toBe('survival');
 });
 

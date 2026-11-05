@@ -71,12 +71,78 @@ export interface DesktopStatus {
   survival?: SurvivalState;
 }
 
-/** DSK-08 owns the final shape (desktop.md 4.6); the key is masked until `revealKey`. */
+/** A refusal of a key or PIN call: the code is a doctor code (or the agent's), `fix` the one-sentence remedy when there is one. */
+export interface KeyFailure {
+  ok: false;
+  code: string;
+  message?: string;
+  fix?: string;
+}
+
+/** `copyApiKey()`: the key is on the clipboard and will be cleared after `clearsInS` seconds. */
+export type CopyKeyResult = { ok: true; clearsInS: number } | KeyFailure;
+
+/**
+ * The ready snippets of `GET /key` (agent.md 3.8.13). They hold the placeholders `$KEY` / `<key>`, never the key; the
+ * connection-info page substitutes the key only after **Reveal** (src/renderer/connection-info/snippets.ts).
+ */
+export interface ConnectionSnippets {
+  curl: string;
+  env: string;
+  /** The OpenCode provider block, as pretty-printed JSON. */
+  opencode: string;
+  openaiPython: string;
+}
+
+/** What the connection-info page shows (desktop.md 4.6). The key is masked (`ab12…9f3c`) until `revealKey`. */
 export interface ConnectionInfo {
+  ok: true;
+  /** `http://127.0.0.1:8080/v1`: the one that keeps working without internet. */
   localUrl: string;
+  tailnetUrl: string | null;
+  /** The node's public URL; null when offline or not set. */
   publicUrl: string | null;
+  /** `https://ai.marin.cr/v1`: the lab gateway, which needs a `lai_` key from the cloud, not this key. */
   labUrl: string;
   keyMasked: string;
+  models: string[];
+  snippets: ConnectionSnippets;
+}
+
+export type ConnectionInfoResult = ConnectionInfo | KeyFailure;
+
+/** `revealKey()`: the full key, only for an explicit Reveal on the connection-info page. Each call re-reads `GET /key` (the agent audits it). */
+export type RevealResult = { ok: true; key: string } | KeyFailure;
+
+/** What `rotateKey()` answers (agent.md 3.8.14, plus the cases of the PIN window). */
+export type RotateKeyResult =
+  | {
+      ok: true;
+      fingerprint: string;
+      rotatedAt: string;
+      cloudSynced: boolean;
+      restoredModels: string[];
+      /** Where the old key may still be in use ("OpenCode on this computer: ..."). */
+      clientsToUpdate: string[];
+    }
+  | (KeyFailure & {
+      /** The user closed the PIN window: nothing was asked of the agent. */
+      cancelled?: true;
+      /** The agent changed the key although the call failed after that (`details.key_rotated`): the old key is dead. */
+      keyRotated?: boolean;
+      fingerprint?: string;
+    });
+
+/** The answer to a PIN typed in the PIN window (desktop.md 4.6). The PIN itself is never echoed. */
+export interface PinResult {
+  ok: boolean;
+  /** `LAI-SEC-003` (wrong), `LAI-SEC-004` (locked), `LAI-SEC-005` (no PIN set), or a local word (`invalid_format`, `busy`, `no_prompt`). */
+  code?: string;
+  fix?: string;
+  /** `LAI-SEC-003`: the failures the agent's 5-minute window still allows. */
+  remainingAttempts?: number;
+  /** `LAI-SEC-004`: seconds until the agent accepts another try. */
+  retryAfterS?: number;
 }
 
 export interface CloudResponse {
@@ -125,9 +191,9 @@ export interface LocalaiDesktop {
   status(): Promise<DesktopStatus>;
   onStatus(cb: (status: DesktopStatus) => void): () => void;
   startAgent(): Promise<ActionResult | NotImplemented>;
-  copyApiKey(): Promise<{ ok: boolean; clearsInS: number } | NotImplemented>;
-  connectionInfo(): Promise<ConnectionInfo | NotImplemented>;
-  revealKey(): Promise<string | NotImplemented>;
+  copyApiKey(): Promise<CopyKeyResult>;
+  connectionInfo(): Promise<ConnectionInfoResult>;
+  revealKey(): Promise<RevealResult>;
   setMode(target: NodeMode): Promise<ActionResult | NotImplemented>;
   openWindow(which: ChildWindowName): void;
   showTab(tab: Tab): void;
@@ -143,7 +209,7 @@ export interface LocalaiDesktop {
     request(req: { method: 'GET' | 'POST' | 'DELETE'; path: string; body?: unknown }): Promise<CloudResponse | NotImplemented>;
   };
   settings: { get(): Promise<ShellSettings>; set(patch: ShellSettingsPatch): Promise<ShellSettings> };
-  pinSubmit(pin: string): Promise<ActionResult | NotImplemented>;
+  pinSubmit(pin: string): Promise<PinResult>;
   lang(): Lang;
   // Added by DSK-04 (section 3.5 "As built"):
   /** A button of the error page (DSK-03). The main process checks the page and that the code owns the button. */
@@ -152,15 +218,24 @@ export interface LocalaiDesktop {
   showMenu(): void;
   /** Messages for the top bar. */
   onNotice(cb: (notice: TopBarNotice) => void): () => void;
+  // Added by DSK-08 (section 3.5 "As built"):
+  /** "Rotate key..." of the connection-info page: asks for the PIN, then `POST /key/rotate` with the grant. */
+  rotateKey(): Promise<RotateKeyResult>;
 }
 
 /** `window.localaiDesktopHost` (agent pages): exactly these five members (desktop.md 3.5). */
 export interface LocalaiDesktopHost {
   readonly isDesktop: true;
   readonly version: string;
-  copyApiKey(): Promise<{ ok: boolean; clearsInS: number } | NotImplemented>;
+  copyApiKey(): Promise<CopyKeyResult>;
   openWindow(which: ChildWindowName): void;
-  connectionInfo(): Promise<ConnectionInfo | NotImplemented>;
+  connectionInfo(): Promise<ConnectionInfoResult>;
 }
 
 export const HOST_MEMBERS = ['isDesktop', 'version', 'copyApiKey', 'openWindow', 'connectionInfo'] as const;
+
+/** `window.localaiPin` (the PIN window only, src/preload/pin.ts): the smallest surface that can type a PIN and give up. */
+export interface LocalaiPin {
+  submit(pin: string): Promise<PinResult>;
+  cancel(): void;
+}

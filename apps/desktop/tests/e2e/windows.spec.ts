@@ -36,7 +36,7 @@ test.describe('the bridges', () => {
     const { agentPage, bar } = await start();
     const shell = await evaluateIn<string>(run!.app, bar, 'JSON.stringify({ keys: Object.keys(window.localaiDesktop).sort(), host: typeof window.localaiDesktopHost, node: [typeof require, typeof process, typeof module, typeof Buffer] })');
     expect(JSON.parse(shell)).toEqual({
-      keys: ['closePortal', 'cloud', 'connectionInfo', 'copyApiKey', 'errorAction', 'lang', 'onNotice', 'onStatus', 'openWindow', 'pinSubmit', 'revealKey', 'setFullScreen', 'setMode', 'settings', 'showMenu', 'showTab', 'startAgent', 'status'].sort(),
+      keys: ['closePortal', 'cloud', 'connectionInfo', 'copyApiKey', 'errorAction', 'lang', 'onNotice', 'onStatus', 'openWindow', 'pinSubmit', 'revealKey', 'rotateKey', 'setFullScreen', 'setMode', 'settings', 'showMenu', 'showTab', 'startAgent', 'status'].sort(),
       host: 'undefined',
       node: ['undefined', 'undefined', 'undefined', 'undefined'],
     });
@@ -51,11 +51,16 @@ test.describe('the bridges', () => {
     });
   });
 
-  test('the agent UI can open a window through the host bridge, and the not-yet members answer not_implemented', async () => {
+  test('the agent UI can open a window through the host bridge and copy the key (it never receives it)', async () => {
     const { agentPage } = await start();
     await evaluateIn(run!.app, agentPage, "window.localaiDesktopHost.openWindow('maps')");
     await waitForContents(run!.app, (url) => url === 'http://127.0.0.1:7070/maps/');
-    expect(await evaluateIn<string>(run!.app, agentPage, "window.localaiDesktopHost.copyApiKey().then((r) => JSON.stringify(r))")).toBe('{"ok":false,"code":"not_implemented"}');
+    expect(await evaluateIn<string>(run!.app, agentPage, "window.localaiDesktopHost.copyApiKey().then((r) => JSON.stringify(r))")).toBe('{"ok":true,"clearsInS":60}');
+    expect(await run!.app.evaluate(({ clipboard }) => clipboard.readText())).toBe(agent!.apiKey);
+    // The connection info it can read has the key masked.
+    const info = await evaluateIn<string>(run!.app, agentPage, "window.localaiDesktopHost.connectionInfo().then((r) => JSON.stringify(r))");
+    expect(info).toContain(`${agent!.apiKey.slice(0, 4)}…${agent!.apiKey.slice(-4)}`);
+    expect(info).not.toContain(agent!.apiKey);
     // A name that is not one of the three opens nothing.
     await evaluateIn(run!.app, agentPage, "window.localaiDesktopHost.openWindow('../api/v1/key')");
     await settle();

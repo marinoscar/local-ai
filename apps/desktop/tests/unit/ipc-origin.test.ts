@@ -8,6 +8,7 @@ import {
   CHANNELS,
   type BridgeDeps,
   type HandlerTable,
+  type KeyActions,
   type SenderEvent,
   buildDesktopStatus,
   createHostHandlers,
@@ -364,10 +365,10 @@ describe('what an allowed shell page can do', () => {
     expect(setMode).toHaveBeenCalledTimes(1);
   });
 
-  it('the methods of later items answer { ok: false, code: "not_implemented" }', async () => {
+  it('the methods of later items (and the key calls of a host that wires none) answer { ok: false, code: "not_implemented" }', async () => {
     const { deps } = makeDeps();
     const wrapped = wrap(deps);
-    for (const channel of [CHANNELS.startAgent, CHANNELS.copyApiKey, CHANNELS.connectionInfo, CHANNELS.revealKey, CHANNELS.cloudBeginLink, CHANNELS.cloudUnlink, CHANNELS.cloudRequest]) {
+    for (const channel of [CHANNELS.startAgent, CHANNELS.cloudBeginLink, CHANNELS.cloudUnlink, CHANNELS.cloudRequest]) {
       expect(await wrapped[channel]!(from(SHELL)), channel).toEqual({ ok: false, code: 'not_implemented' });
     }
   });
@@ -389,6 +390,77 @@ describe('what an allowed shell page can do', () => {
     expect(calls.showAgentUi).toHaveBeenCalledWith('/portal');
     // copy-command is not a button of LAI-DSK-004.
     expect(await wrapped[CHANNELS.errorAction]!(from('localai://app/error/'), { action: 'copy-command', code: 'LAI-DSK-004' })).toEqual({ ok: false });
+  });
+
+  it('the key calls reach the key actions; the key itself only to the connection-info page', async () => {
+    const keys: KeyActions = {
+      copy: vi.fn(async () => ({ ok: true as const, clearsInS: 60 })),
+      info: vi.fn(async () => ({ ok: false as const, code: 'x' })),
+      reveal: vi.fn(async () => ({ ok: false as const, code: 'x' })),
+      rotate: vi.fn(async () => ({ ok: false as const, code: 'x' })),
+    };
+    const wrapped = wrap(makeDeps({ keys }).deps);
+    const INFO = 'localai://app/connection-info/';
+    // Copy API key works from any shell page (the top bar's button); the key never comes back.
+    expect(await wrapped[CHANNELS.copyApiKey]!(from(SHELL))).toEqual({ ok: true, clearsInS: 60 });
+    expect(await wrapped[CHANNELS.copyApiKey]!(from('localai://app/lab/'))).toEqual({ ok: true, clearsInS: 60 });
+    // Info, Reveal and Rotate: the connection-info page only.
+    for (const [channel, action] of [[CHANNELS.connectionInfo, keys.info], [CHANNELS.revealKey, keys.reveal], [CHANNELS.rotateKey, keys.rotate]] as const) {
+      await expect(wrapped[channel]!(from(SHELL)), channel).rejects.toThrow();
+      await expect(wrapped[channel]!(from('localai://app/error/?code=LAI-DSK-004')), channel).rejects.toThrow();
+      await expect(wrapped[channel]!(from(AGENT)), channel).rejects.toThrow();
+      expect(action).not.toHaveBeenCalled();
+      await wrapped[channel]!(from(INFO));
+      expect(action).toHaveBeenCalledTimes(1);
+    }
+    // An iframe inside the page is not the page.
+    await expect(wrapped[CHANNELS.revealKey]!(from(INFO, 1, {}))).rejects.toThrow();
+    expect(keys.reveal).toHaveBeenCalledTimes(1);
+  });
+
+  it('the connection-info page of the Vite dev origin counts when the host passes it (unpackaged builds)', async () => {
+    const keys = { copy: vi.fn(), info: vi.fn(async () => ({ ok: false as const, code: 'x' })), reveal: vi.fn(), rotate: vi.fn() } as unknown as KeyActions;
+    const deps = makeDeps({ keys, policy: { devOrigin: 'http://127.0.0.1:5173' } }).deps;
+    const wrapped = registerHandlers(fakeIpc(), createShellHandlers(deps), { policy: deps.policy });
+    await wrapped[CHANNELS.connectionInfo]!(from('http://127.0.0.1:5173/connection-info/index.html'));
+    expect(keys.info).toHaveBeenCalledTimes(1);
+    await expect(wrapped[CHANNELS.connectionInfo]!(from('http://127.0.0.1:5173/topbar/index.html'))).rejects.toThrow();
+  });
+
+  it('the host bridge copies the key and shows the masked info; it has no reveal and no rotate', async () => {
+    const keys: KeyActions = {
+      copy: vi.fn(async () => ({ ok: true as const, clearsInS: 60 })),
+      info: vi.fn(async () => ({ ok: false as const, code: 'x' })),
+      reveal: vi.fn(),
+      rotate: vi.fn(),
+    } as never;
+    const { deps } = makeDeps({ keys });
+    const host = registerHandlers({ handle: vi.fn(), on: vi.fn() }, createHostHandlers(deps), { policy: {} });
+    expect(await host[CHANNELS.hostCopyApiKey]!(from(AGENT))).toEqual({ ok: true, clearsInS: 60 });
+    await host[CHANNELS.hostConnectionInfo]!(from(AGENT));
+    expect(keys.info).toHaveBeenCalledTimes(1);
+    await expect(host[CHANNELS.hostCopyApiKey]!(from(SHELL))).rejects.toThrow();
+    expect(keys.reveal).not.toHaveBeenCalled();
+    expect(keys.rotate).not.toHaveBeenCalled();
+    expect(Object.keys(host)).not.toContain(CHANNELS.revealKey);
+    expect(Object.keys(host)).not.toContain(CHANNELS.rotateKey);
+  });
+
+  it('pinSubmit and pinCancel reach the PIN service from the PIN window only', async () => {
+    const pin = { submit: vi.fn(async () => ({ ok: true })), cancel: vi.fn() };
+    let window: number | null = null;
+    const wrapped = wrap(makeDeps({ pin, pinWindowId: () => window }).deps);
+    await expect(wrapped[CHANNELS.pinSubmit]!(from('localai://app/pin/', 5), '1234')).rejects.toThrow();
+    wrapped[CHANNELS.pinCancel]!(from('localai://app/pin/', 5));
+    window = 5;
+    wrapped[CHANNELS.pinCancel]!(from(SHELL, 6));
+    await expect(wrapped[CHANNELS.pinSubmit]!(from(SHELL, 6), '1234')).rejects.toThrow();
+    expect(pin.cancel).not.toHaveBeenCalled();
+    expect(pin.submit).not.toHaveBeenCalled();
+    expect(await wrapped[CHANNELS.pinSubmit]!(from('localai://app/pin/', 5), '1234')).toEqual({ ok: true });
+    expect(pin.submit).toHaveBeenCalledWith(5, '1234');
+    wrapped[CHANNELS.pinCancel]!(from('localai://app/pin/', 5));
+    expect(pin.cancel).toHaveBeenCalledWith(5);
   });
 
   it('pinSubmit is refused from every page but the PIN window', async () => {

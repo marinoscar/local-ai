@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CHANNELS } from '../../src/main/ipc';
 import { type HostIpcLike, createHostBridge } from '../../src/preload/agent';
+import { type PinIpcLike, createPinBridge } from '../../src/preload/pin';
 import { type IpcRendererLike, createShellBridge } from '../../src/preload/shell';
 import { HOST_MEMBERS } from '../../src/shared/types';
 
@@ -31,6 +32,8 @@ describe('window.localaiDesktop (shell pages)', () => {
         'status', 'onStatus', 'startAgent', 'copyApiKey', 'connectionInfo', 'revealKey', 'setMode', 'openWindow', 'showTab', 'cloud', 'settings', 'pinSubmit', 'lang',
         // DSK-04
         'errorAction', 'showMenu', 'onNotice',
+        // DSK-08
+        'rotateKey',
         // DSK-09 (survival strip)
         'setFullScreen', 'closePortal',
       ].sort(),
@@ -60,6 +63,7 @@ describe('window.localaiDesktop (shell pages)', () => {
     await b.settings.get();
     await b.settings.set({ autostart: false });
     await b.pinSubmit('1234');
+    await b.rotateKey();
     await b.errorAction('open-portal', 'LAI-DSK-004');
     b.openWindow('chat');
     b.showTab('lab');
@@ -82,6 +86,7 @@ describe('window.localaiDesktop (shell pages)', () => {
       [CHANNELS.settingsGet, []],
       [CHANNELS.settingsSet, [{ autostart: false }]],
       [CHANNELS.pinSubmit, ['1234']],
+      [CHANNELS.rotateKey, []],
       [CHANNELS.errorAction, [{ action: 'open-portal', code: 'LAI-DSK-004' }]],
     ]);
     expect(sent).toEqual([
@@ -149,5 +154,19 @@ describe('window.localaiDesktopHost (agent pages)', () => {
     expect(ipc.invoke.mock.calls.map((c) => c[0])).toEqual([CHANNELS.hostCopyApiKey, CHANNELS.hostConnectionInfo]);
     expect(ipc.send).toHaveBeenCalledWith(CHANNELS.hostOpenWindow, 'maps');
     expect(ipc.sendSync).toHaveBeenCalledWith(CHANNELS.hostVersion);
+  });
+});
+
+describe('window.localaiPin (the PIN window only)', () => {
+  it('has submit and cancel and nothing else, on the channels of ipc.ts', async () => {
+    const invoke = vi.fn(async (_channel: string, ..._args: unknown[]) => ({ ok: true }));
+    const send = vi.fn((_channel: string, ..._args: unknown[]) => undefined);
+    const ipc: PinIpcLike = { invoke, send };
+    const bridge = createPinBridge(ipc);
+    expect(Object.keys(bridge).sort()).toEqual(['cancel', 'submit']);
+    await bridge.submit('4321');
+    bridge.cancel();
+    expect(invoke).toHaveBeenCalledWith(CHANNELS.pinSubmit, '4321');
+    expect(send).toHaveBeenCalledWith(CHANNELS.pinCancel);
   });
 });
