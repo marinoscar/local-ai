@@ -38,6 +38,20 @@ export interface CloudLinkState {
   url: string;
 }
 
+/**
+ * What the top bar needs to turn into the survival strip (desktop.md 4.7). `active` is the desktop's own state (the Portal
+ * is shown in survival form), not the agent's mode: it flips before the next `/status` is read.
+ */
+export interface SurvivalState {
+  active: boolean;
+  /** The main window is full screen now (it follows the window's events, so F11 and the window manager show up here). */
+  fullScreen: boolean;
+  /** The Portal was opened with `--portal` while the node is not in survival mode: the strip then offers a way back. */
+  portalOnly: boolean;
+  /** A small notice for the strip, in the display language (LAI-DSK-001 when the token file is unreadable). */
+  banner: { code: string; text: string } | null;
+}
+
 export interface DesktopStatus {
   /** The app's version (the About dialog). */
   version: string;
