@@ -17,7 +17,7 @@ import { AutostartController, applyAutostart, autostartPath } from './autostart'
 import { runDiagnoseMain } from './diagnose';
 import { createCloudProxy, createLabCacheStore, labNodeUrl } from './cloud-api';
 import { CLOUD_TEXT, CODE_LINK_REMOVED, CODE_NO_KEYRING, CloudSession, LinkWindowController, abortableSleep, createCloudHttp, createLoopbackDispatcher, modeFromEvent, modeFromStatus, withCode, type LinkWindowFactory } from './cloud-link';
-import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, installEgressGuard, installMainProcessGuard, patchEgressState, setEgressLogger, type GuardedSessions } from './egress-guard';
+import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, getUpdaterSession, installEgressGuard, installMainProcessGuard, patchEgressState, runAsUpdater, setEgressLogger, type GuardedSessions } from './egress-guard';
 import { KeyCopier, copyNotification, createKeyActions, createKeyApi } from './clipboard';
 import { DIALOG_TEXT, errorText, pick, resolveLang } from './i18n';
 import { CHANNELS, type SettingsStore, type StartupPhase, buildDesktopStatus, createHostHandlers, createSettingsStore, createShellHandlers, isAllowedOrigin, registerHandlers } from './ipc';
@@ -29,6 +29,7 @@ import { PinService, createPinApi } from './pin';
 import { installLocalaiProtocol, registerLocalaiScheme, rendererRoot, shellUrl } from './protocol';
 import { createSecretStore, tokenFilePath } from './secret-store';
 import { type Settings, type SettingsPatch, configDir, readSettingsFile } from './settings';
+import { UpdateController, describeUpdateStatus, loadElectronUpdater } from './updates';
 import { SessionRecovery, type ActionDeps, type ContentHost, type StartupResult, handleErrorAction, runStartup } from './startup';
 import { SurvivalController, install as installSurvival } from './survival';
 import {
@@ -164,6 +165,24 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     reloadAgentUi: () => windows.reloadAgentUi(),
   };
 
+  // -- opt-in updates (DSK-12): nothing is loaded or requested until "Check for updates" is ticked and the node is online ---
+  const updates = new UpdateController({
+    packaged: app.isPackaged,
+    currentVersion: app.getVersion(),
+    loadUpdater: () => loadElectronUpdater({ session: getUpdaterSession(), log }),
+    // The release feed, through the guarded updater session (the GitHub hosts are open there only while updates are on).
+    fetchText: async (url) => {
+      const response = await getUpdaterSession().fetch(url, { headers: { Accept: 'application/atom+xml' } });
+      if (!response.ok) throw new Error(`HTTP ${response.status} from the release feed`);
+      return response.text();
+    },
+    // `connected` belongs to DSK-10 (cloud-link.ts): change only `updates`.
+    setEgress: (allowed) => patchEgressState({ updates: allowed }),
+    runAsUpdater,
+    log,
+  });
+  app.on('will-quit', () => updates.dispose());
+
   // -- status: what the top bar shows ------------------------------------------------------------------------------
   // -- the lab link (DSK-10): the only holder of the PAT. Its closures use `dialogs` and `notifier`, declared below; they run later. ---
   const testHooks = testHooksAllowed(app.isPackaged, process.execPath);
@@ -256,8 +275,10 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     connected: cloudSession.connectedModeActive(),
   });
   const push = (): void => {
-    windows.setLabAvailable(status().connected);
-    windows.broadcastToShell(CHANNELS.statusChanged, status());
+    const current = status();
+    windows.setLabAvailable(current.connected);
+    updates.apply({ setting: settings.updates.checkForUpdates, mode: current.mode, connected: current.connected });
+    windows.broadcastToShell(CHANNELS.statusChanged, current);
   };
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   feed.subscribe((message) => {
@@ -379,7 +400,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   const notice = (kind: TopBarNotice['kind'], text: string): void => windows.sendToTopBar(CHANNELS.notice, { kind, text } satisfies TopBarNotice);
   const showMenu = (): void => {
     const template = buildMenuTemplate(
-      { lang, linked: settings.cloud.linked, autostart: settings.autostart, checkForUpdates: settings.updates.checkForUpdates },
+      { lang, linked: settings.cloud.linked, autostart: settings.autostart, checkForUpdates: settings.updates.checkForUpdates, updateLines: describeUpdateStatus(updates.status, lang) },
       {
         connectionInfo: showConnectionInfo,
         connect: () => {
@@ -389,7 +410,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
         },
         disconnect: () => void cloudSession.unlink().catch(() => undefined),
         setAutostart: (on) => void autostart.set(on),
-        setUpdates: (on) => void store.update({ updates: { checkForUpdates: on } }).catch(() => undefined), // the updater is DSK-12's
+        setUpdates: (on) => void store.update({ updates: { checkForUpdates: on } }).catch(() => undefined), // the settings listener reaches `updates.apply` through push()
         about: () => {
           void dialog.showMessageBox({ type: 'info', title: pick(ABOUT.title, lang), message: pick(ABOUT.message, lang), detail: ABOUT.detail(app.getVersion(), lang), buttons: [pick(ABOUT.close, lang)] });
         },

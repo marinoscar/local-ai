@@ -312,6 +312,26 @@ export const NOTICE_COPY = {
 } as const satisfies Record<string, { severity: Severity; title: Bilingual; message: Bilingual; fix: Bilingual }>;
 export type NoticeCode = keyof typeof NOTICE_COPY;
 
+/**
+ * The update status lines of the top bar's menu (desktop.md 4.10), under "Check for updates". LAI-DSK-016 is a status
+ * in the menu only: no page, no notification, and nothing else changes.
+ */
+export const UPDATE_TEXT = {
+  checking: { en: 'Checking for updates...', es: 'Buscando actualizaciones...' },
+  upToDate: { en: 'Up to date', es: 'Está al día' },
+  downloading: { en: 'Downloading version {version}...', es: 'Descargando la versión {version}...' },
+  ready: { en: 'Version {version} is ready. It installs when you quit.', es: 'La versión {version} está lista. Se instala al salir.' },
+  pausedOffline: { en: 'Paused: no updates while this computer is offline.', es: 'En pausa: sin actualizaciones mientras esta computadora está sin internet.' },
+  pausedSurvival: { en: 'Paused: no updates in Survival mode.', es: 'En pausa: sin actualizaciones en modo supervivencia.' },
+  pausedUnknown: { en: 'Paused: waiting for the agent to report its mode.', es: 'En pausa: esperando que el agente informe su modo.' },
+  unavailable: { en: 'Updates only work in the installed app.', es: 'Las actualizaciones solo funcionan en la app instalada.' },
+  errorTitle: { en: "Couldn't check or download an update", es: 'No se pudo buscar o descargar una actualización' },
+  errorFix: {
+    en: 'Try later, or install the update from the rebuild kit.',
+    es: 'Inténtalo más tarde o instala la actualización desde el kit de reconstrucción.',
+  },
+} as const satisfies Record<string, Bilingual>;
+
 /** `{name}` placeholders of the notification texts. */
 export function fill(text: string, values: Readonly<Record<string, string>>): string {
   return text.replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);

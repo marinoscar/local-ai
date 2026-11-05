@@ -11,6 +11,8 @@ export interface MenuState {
   linked: boolean;
   autostart: boolean;
   checkForUpdates: boolean;
+  /** The status lines under "Check for updates" (`describeUpdateStatus`, DSK-12); none when absent. */
+  updateLines?: readonly string[];
 }
 
 export interface MenuActions {
@@ -27,6 +29,7 @@ export interface MenuActions {
 export interface MenuTemplateItem {
   label?: string;
   type?: 'normal' | 'separator' | 'checkbox';
+  enabled?: boolean;
   checked?: boolean;
   click?: () => void;
 }
@@ -60,6 +63,8 @@ export function buildMenuTemplate(state: MenuState, actions: MenuActions): MenuT
     { type: 'separator' },
     { label: pick(STRINGS.startAtLogin, lang), type: 'checkbox', checked: state.autostart, click: () => actions.setAutostart(!state.autostart) },
     { label: pick(STRINGS.checkForUpdates, lang), type: 'checkbox', checked: state.checkForUpdates, click: () => actions.setUpdates(!state.checkForUpdates) },
+    // Status only (LAI-DSK-016 included): greyed out, nothing to click.
+    ...(state.checkForUpdates ? (state.updateLines ?? []) : []).map((label): MenuTemplateItem => ({ label, enabled: false })),
     { type: 'separator' },
     { label: pick(STRINGS.about, lang), click: actions.about },
     { label: pick(STRINGS.quit, lang), click: actions.quit },

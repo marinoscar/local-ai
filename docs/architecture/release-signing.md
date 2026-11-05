@@ -11,7 +11,7 @@ Nodes install software from GitHub releases. Anyone who can publish a release co
 |---|---|---|---|
 | Agent, installer, agent source | `node-v<semver>` | `aiagent-linux-amd64`, `aiagent-linux-arm64`, `install-node.sh`, `local-ai-node-v<semver>-src.tar.gz`, `SHA256SUMS` (lists the other four), `SHA256SUMS.minisig` | The agent on `sudo aictl update` and the `agent.update` cloud job ([agent.md §4.10](../specs/agent.md#410-self-update-internalupdate)), the installer, `aictl verify-release`, the rebuild kit |
 | Catalog and docs | `catalog-<CATALOG_VERSION>` | `catalog.tar.gz`, `SHA256SUMS`, `SHA256SUMS.minisig` | The agent when it refreshes the catalog, the rebuild kit |
-| Desktop app | `desktop-v<semver>` | Built by the desktop epic (E8) with the same scripts | The desktop app and the installer |
+| Desktop app | `desktop-v<semver>` | `ai-desktop_<v>_amd64.deb`, `ai-desktop-<v>-x86_64.AppImage`, `latest-linux.yml`, `SHA256SUMS` (lists those three), `SHA256SUMS.minisig` | `aictl verify-release`, the rebuild kit and the person installing; the opt-in updater reads `latest-linux.yml` and checks the SHA-512 of the file it downloads ([desktop.md §4.10](../specs/desktop.md#410-updates-off-by-default)) |
 
 Tag names and the moving tag `catalog-stable`: [overview.md §3.8](overview.md#3-canonical-names-single-source-of-truth).
 
@@ -33,9 +33,11 @@ Tag names and the moving tag `catalog-stable`: [overview.md §3.8](overview.md#3
    ```
    (`minisign.pub` is [`agent/internal/kit/keys/minisign.pub`](#4-the-public-key).)
 
+**The desktop app** ([desktop-release.yml](../../.github/workflows/desktop-release.yml), tag `desktop-v<semver>`, [desktop.md §4.11](../specs/desktop.md#411-packaging-and-release)) follows the same trust model with its own build. The tag must equal `desktop-v` plus the version in `apps/desktop/package.json` and sit on `main` (a mismatch fails the first job; fix it with a PR and a **new** tag, a pushed tag is never moved). The `build` job (no secrets) typechecks, tests, packages, verifies the packaged app, installs the deb as a node would and runs the packaged end-to-end suite; only then does the `release` job (environment `release`) assemble the assets ([`scripts/release/assemble-desktop-release.sh`](../../scripts/release/assemble-desktop-release.sh), which also checks that `latest-linux.yml` names this version and the real sha512 and size of the deb and the AppImage), write and sign `SHA256SUMS` with the same key and password secrets as the agent (`MINISIGN_SECRET_KEY`, `MINISIGN_PASSWORD`), verify the signature with the committed public key, create a **draft**, check that it holds the five assets, **publish** it (a pre-release when the tag has a `-`, such as `desktop-v0.1.0-rc.1`; never marked "latest"), download what GitHub now serves and verify it again with the committed key, moving the release back to a draft if that fails. The release job waits for the `release` environment's required reviewers, which is the owner's chance to stop it. Afterwards a PR from the [`kit-desktop-bump`](../../.github/PULL_REQUEST_TEMPLATE/kit-desktop-bump.md) template pins the deb in the rebuild kit.
+
 The workflows do not run until the agent module exists (AGENT-01) and, for the catalog, until `catalog/` exists. They fail with a message instead of publishing something empty. The node release also fails until `installers/install-node.sh` exists (INST-01): a node release always carries its installer.
 
-**Dry run.** Actions → release-node → *Run workflow* on any branch runs the same build, source tarball and offline proof, then assembles and signs the assets with a **throwaway key created inside the job** and uploads them as a workflow artifact (`node-release-dry-run`, 7 days). No release is created and the real key is never used; it also works before the owner has created the key pair. Without an `installers/install-node.sh` the dry run ships five assets and says so.
+**Dry run.** Actions → release-node (or desktop-release) → *Run workflow* on any branch runs the same build, source tarball and offline proof, then assembles and signs the assets with a **throwaway key created inside the job** and uploads them as a workflow artifact (`node-release-dry-run`, 7 days). No release is created and the real key is never used; it also works before the owner has created the key pair. Without an `installers/install-node.sh` the dry run ships five assets and says so. The desktop dry run builds, verifies and runs the packaged end-to-end suite, assembles the five desktop assets, signs them with a throwaway key and uploads them as `desktop-release-dry-run`; it skips the `release` job.
 
 ## 3. Owner action: create the key pair
 
@@ -53,7 +55,7 @@ Do this once, on a computer you trust, **with no internet connection** if you ca
 3. **Store them as GitHub secrets.** In the repository: **Settings → Environments → New environment → `release`**. Under the environment:
    - add secret `MINISIGN_SECRET_KEY` with the **entire contents** of `minisign.key` (both lines);
    - add secret `MINISIGN_PASSWORD` with the password;
-   - turn on **Required reviewers** (you), and under **Deployment branches and tags** allow only the tag patterns `node-v*` and `catalog-*`.
+   - turn on **Required reviewers** (you), and under **Deployment branches and tags** allow only the tag patterns `node-v*`, `catalog-*` and `desktop-v*`.
 4. **Commit only the public key.** Copy `minisign.pub` to `agent/internal/kit/keys/minisign.pub` and paste its second line (it starts with `RW`) into [§4](#4-the-public-key). Commit both in a normal PR. The redaction and gitleaks checks should pass (a public key is not a secret).
 5. **Delete the unencrypted copies** you do not need (the working folder), keeping only the backups from step 2.
 6. **Prove it works.** Push a throwaway tag such as `node-v0.0.1-test` on a fork, or after AGENT-01 on this repository. When the draft release appears, download its files and run the check from [§2](#2-how-a-release-is-made) step 4. Then delete the draft and the tag.
