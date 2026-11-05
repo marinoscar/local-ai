@@ -17,9 +17,14 @@ import type {
   AgentReach,
   ChildWindowName,
   CloudLinkState,
+  ConnectionInfoResult,
+  CopyKeyResult,
   DesktopStatus,
   NodeMode,
   NotImplemented,
+  PinResult,
+  RevealResult,
+  RotateKeyResult,
   ShellSettings,
   ShellSettingsPatch,
   Tab,
@@ -53,6 +58,8 @@ export const CHANNELS = {
   settingsGet: 'localai:settings-get',
   settingsSet: 'localai:settings-set',
   pinSubmit: 'localai:pin-submit',
+  pinCancel: 'localai:pin-cancel',
+  rotateKey: 'localai:rotate-key',
   lang: 'localai:lang',
   errorAction: ERROR_ACTION_CHANNEL,
   hostCopyApiKey: 'localai:host:copy-api-key',
@@ -390,6 +397,33 @@ const CHILD_NAMES: readonly string[] = ['chat', 'library', 'maps'];
 const TABS: readonly string[] = ['local', 'lab'];
 const SET_MODE_TARGETS: readonly string[] = ['online', 'offline', 'survival'];
 
+/** The key calls behind `copyApiKey`, `connectionInfo`, `revealKey` and `rotateKey` (src/main/clipboard.ts, index.ts). */
+export interface KeyActions {
+  copy(): Promise<CopyKeyResult>;
+  /** Everything the connection-info page shows; the key is masked. */
+  info(): Promise<ConnectionInfoResult>;
+  /** The full key. Re-reads `GET /key`, so the agent audits each Reveal. */
+  reveal(): Promise<RevealResult>;
+  /** Asks for the PIN, then rotates with the grant of that one request. */
+  rotate(): Promise<RotateKeyResult>;
+}
+
+/** The PIN window's calls (src/main/pin.ts). `senderId` is the calling webContents. */
+export interface PinActions {
+  submit(senderId: number, pin: unknown): Promise<PinResult>;
+  cancel(senderId: number): void;
+}
+
+/** Is `url` the shell page `page` (`localai://app/<page>/`, or the Vite dev origin's `/<page>/...` when unpackaged)? */
+export function isShellPage(url: string, page: string, devOrigin?: string): boolean {
+  const parsed = parse(url);
+  if (!parsed || parsed.username !== '' || parsed.password !== '') return false;
+  const onPage = (path: string): boolean => path === `/${page}` || path.startsWith(`/${page}/`);
+  if (parsed.protocol === 'localai:') return parsed.hostname === 'app' && onPage(parsed.pathname);
+  const dev = devOrigin ? parse(devOrigin) : null;
+  return dev !== null && parsed.origin === dev.origin && onPage(parsed.pathname);
+}
+
 export interface BridgeDeps {
   policy: OriginPolicy;
   version: string;
@@ -404,6 +438,10 @@ export interface BridgeDeps {
   setMode?(target: NodeMode): Promise<ActionResult>;
   /** The window id of the PIN prompt (DSK-08), or null while there is none: `pinSubmit` is refused from every other page. */
   pinWindowId(): number | null;
+  /** The key calls (DSK-08). Absent: those channels answer `not_implemented`. */
+  keys?: KeyActions;
+  /** The PIN window's calls (DSK-08). Absent: `pinSubmit` answers `not_implemented`. */
+  pin?: PinActions;
   /** The error-page actions (DSK-03); `host`, `supervisor`, `retry`... are wired by index.ts. */
   errorActions: ActionDeps;
   /** Reported when a settings patch was refused (never the values). */
@@ -415,6 +453,7 @@ const asChild = (value: unknown): ChildWindowName | null => (typeof value === 's
 /** `window.localaiDesktop`: every member of the spec's interface, the ones whose item has not landed answering `not_implemented`. */
 export function createShellHandlers(deps: BridgeDeps): HandlerTable {
   const stub = (kind: HandlerKind = 'invoke'): HandlerSpec => ({ kind, origin: 'shell', run: () => NOT_IMPLEMENTED });
+  const onConnectionInfoPage = (event: SenderEvent): boolean => isShellPage(event.senderFrame?.url ?? '', 'connection-info', deps.policy.devOrigin);
   return {
     [CHANNELS.status]: { kind: 'invoke', origin: 'shell', run: () => deps.status() },
     [CHANNELS.lang]: { kind: 'sync', origin: 'shell', run: () => deps.lang() },
@@ -461,7 +500,13 @@ export function createShellHandlers(deps: BridgeDeps): HandlerTable {
       kind: 'invoke',
       origin: 'shell',
       accept: (event) => deps.pinWindowId() !== null && event.sender.id === deps.pinWindowId(),
-      run: () => NOT_IMPLEMENTED, // DSK-08
+      run: (event, pin) => (deps.pin ? deps.pin.submit(event.sender.id, pin) : NOT_IMPLEMENTED),
+    },
+    [CHANNELS.pinCancel]: {
+      kind: 'send',
+      origin: 'shell',
+      accept: (event) => deps.pinWindowId() !== null && event.sender.id === deps.pinWindowId(),
+      run: (event) => deps.pin?.cancel(event.sender.id),
     },
     [CHANNELS.setMode]: {
       kind: 'invoke',
@@ -473,9 +518,11 @@ export function createShellHandlers(deps: BridgeDeps): HandlerTable {
       },
     },
     [CHANNELS.startAgent]: stub(), // DSK-05
-    [CHANNELS.copyApiKey]: stub(), // DSK-08
-    [CHANNELS.connectionInfo]: stub(), // DSK-08
-    [CHANNELS.revealKey]: stub(), // DSK-08
+    [CHANNELS.copyApiKey]: deps.keys ? { kind: 'invoke', origin: 'shell', run: () => deps.keys!.copy() } : stub(),
+    // The key, its masked form and the rotation are for the connection-info page only (the bridge exists in every shell page).
+    [CHANNELS.connectionInfo]: deps.keys ? { kind: 'invoke', origin: 'shell', accept: onConnectionInfoPage, run: () => deps.keys!.info() } : stub(),
+    [CHANNELS.revealKey]: deps.keys ? { kind: 'invoke', origin: 'shell', accept: onConnectionInfoPage, run: () => deps.keys!.reveal() } : stub(),
+    [CHANNELS.rotateKey]: deps.keys ? { kind: 'invoke', origin: 'shell', accept: onConnectionInfoPage, run: () => deps.keys!.rotate() } : stub(),
     [CHANNELS.cloudBeginLink]: stub(), // DSK-10
     [CHANNELS.cloudOpenVerification]: stub('send'), // DSK-10
     [CHANNELS.cloudUnlink]: stub(), // DSK-10
@@ -484,8 +531,11 @@ export function createShellHandlers(deps: BridgeDeps): HandlerTable {
   };
 }
 
-/** `window.localaiDesktopHost`: the agent UI may open the three windows and ask for the version; the key calls arrive with DSK-08. */
-export function createHostHandlers(deps: Pick<BridgeDeps, 'version' | 'openChild'>): HandlerTable {
+/**
+ * `window.localaiDesktopHost`: the agent UI may open the three windows, ask for the version, copy the key to the
+ * clipboard (it never receives it) and read the connection info with the key masked.
+ */
+export function createHostHandlers(deps: Pick<BridgeDeps, 'version' | 'openChild' | 'keys'>): HandlerTable {
   return {
     [CHANNELS.hostVersion]: { kind: 'sync', origin: 'host', run: () => deps.version },
     [CHANNELS.hostOpenWindow]: {
@@ -496,7 +546,7 @@ export function createHostHandlers(deps: Pick<BridgeDeps, 'version' | 'openChild
         if (name) deps.openChild(name);
       },
     },
-    [CHANNELS.hostCopyApiKey]: { kind: 'invoke', origin: 'host', run: () => NOT_IMPLEMENTED }, // DSK-08
-    [CHANNELS.hostConnectionInfo]: { kind: 'invoke', origin: 'host', run: () => NOT_IMPLEMENTED }, // DSK-08
+    [CHANNELS.hostCopyApiKey]: { kind: 'invoke', origin: 'host', run: () => (deps.keys ? deps.keys.copy() : NOT_IMPLEMENTED) },
+    [CHANNELS.hostConnectionInfo]: { kind: 'invoke', origin: 'host', run: () => (deps.keys ? deps.keys.info() : NOT_IMPLEMENTED) },
   };
 }

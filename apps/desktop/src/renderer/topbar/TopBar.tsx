@@ -5,7 +5,7 @@ import { Box, Button, Chip, IconButton, Tab, Tabs, Typography, useMediaQuery } f
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import type { ChildWindowName, DesktopStatus, Lang, LocalaiDesktop, Tab as TabName } from '../../shared/types';
 import { modeLabel, pillFor, selectedTab, tabsFor } from './model';
-import { STRINGS, copiedText, pick } from './strings';
+import { STRINGS, copiedText, copyFailedText, pick } from './strings';
 
 const NOTICE_MS = 7000;
 const PILL_COLOUR = { ok: 'success', busy: 'default', bad: 'error', warn: 'warning' } as const;
@@ -53,8 +53,8 @@ export function TopBar({ bridge }: TopBarProps): ReactElement {
     try {
       const result = await bridge.copyApiKey();
       if ('code' in result && result.code === 'not_implemented') say(pick(STRINGS.notAvailable, lang));
-      else if (result.ok) say(copiedText('clearsInS' in result ? result.clearsInS : 60, lang));
-      else say(pick(STRINGS.copyFailed, lang));
+      else if (result.ok) say(copiedText(result.clearsInS, lang));
+      else say(copyFailedText(result.code, lang));
     } catch {
       say(pick(STRINGS.copyFailed, lang));
     }
