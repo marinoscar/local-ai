@@ -252,3 +252,96 @@ describe('what is never recorded (spec 6)', () => {
     expect(lab.gw.logs.info.length).toBeGreaterThanOrEqual(3);
   });
 });
+
+// ---- the streaming path (GW-07's StreamProxy, real): headers, budget and usage, abort ------------------------------
+
+import { sleep as sseSleep, sseBehaviour } from '../fakes/fake-llama-sse';
+
+describe('through the real stream path', () => {
+  const STREAM = { model: 'model-a', messages: [{ role: 'user', content: 'Hola' }], stream: true };
+  const sseNode = (script: Parameters<typeof sseBehaviour>[0]) => ({ id: 'ai-n1', behaviour: sseBehaviour(script) });
+
+  it('the head of a stream carries the x-ratelimit-* headers of the admission, and the node headers', async () => {
+    const { lab } = await setup({ keyOverrides: { rpmLimit: 10, dailyTokenBudget: 1000n }, nodes: [sseNode({ tokens: ['a', 'b'] })] });
+    const stream = lab.stream('/chat/completions', STREAM);
+    const { status, headers } = await stream.head;
+    expect(status).toBe(200);
+    expect(headers['content-type']).toContain('text/event-stream');
+    expect(headers['x-ratelimit-limit-requests']).toBe('10');
+    expect(headers['x-ratelimit-remaining-requests']).toBe('9');
+    expect(headers['x-ratelimit-limit-tokens']).toBe('1000');
+    expect(headers['x-ratelimit-remaining-tokens']).toBe('1000');
+    expect(headers['x-localai-node']).toBe('ai-n1');
+    expect((await stream.done).text).toContain('[DONE]');
+  });
+
+  it('settles once with the node-reported usage, counts it against the budget, and releases the slot', async () => {
+    // The fake node reports 11 prompt + 2 completion tokens in the usage-only chunk.
+    const { lab, store } = await setup({ keyOverrides: { concurrentLimit: 1, rpmLimit: 100, dailyTokenBudget: 13n }, nodes: [sseNode({ tokens: ['a', 'b'] })] });
+    const first = await lab.stream('/chat/completions', STREAM).done;
+    expect(first.status).toBe(200);
+    expect(lab.limiter.inflightOf(lab.gw.key.id)).toBe(0);
+    await lab.recorder.flush();
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0]).toMatchObject({ endpoint: 'chat.completions', stream: true, status: 200, errorCode: null, aborted: false, promptTokens: 11, completionTokens: 2, usageSource: 'upstream', nodeId: 'ai-n1' });
+
+    // 13 tokens used == the budget of 13: the next request is refused with the headers of a refusal.
+    const refused = await lab.post('/chat/completions', CHAT);
+    expect(refused.status).toBe(429);
+    expect(refused.json.error.localai_code).toBe('LAI-GW-032');
+    expect(refused.headers['x-ratelimit-remaining-tokens']).toBe('0');
+  });
+
+  it('an estimated stream (no usage reported) still counts its content events and says so', async () => {
+    const { lab, store } = await setup({ keyOverrides: { dailyTokenBudget: 1000n }, nodes: [{ id: 'ai-n1', behaviour: sseBehaviour({ tokens: ['a', 'b', 'c'] }) }] });
+    const done = await lab.stream('/completions', { model: 'model-a', prompt: 'x', stream: true }).done; // completions: no forced usage chunk
+    expect(done.status).toBe(200);
+    await lab.recorder.flush();
+    expect(store.rows[0]).toMatchObject({ endpoint: 'completions', stream: true, promptTokens: null, completionTokens: 3, usageSource: 'estimated', errorCode: null });
+    expect((await lab.limiter.headersFor(lab.gw.key))['x-ratelimit-remaining-tokens']).toBe('997');
+  });
+
+  it('a client that leaves mid-stream is recorded once as aborted, with the estimate so far, and frees its slot', async () => {
+    const { lab, store } = await setup({
+      keyOverrides: { concurrentLimit: 1, dailyTokenBudget: 1000n },
+      nodes: [sseNode({ tokens: ['a', 'b', 'c', 'd'], after: { tokens: 2, action: 'stall' } })],
+    });
+    const stream = lab.stream('/chat/completions', STREAM);
+    await stream.head;
+    const deadline = Date.now() + 3000;
+    while (!stream.received().includes('"b"') && Date.now() < deadline) await sseSleep(10);
+    expect(lab.limiter.inflightOf(lab.gw.key.id)).toBe(1);
+    stream.abort();
+    const freeBy = Date.now() + 3000;
+    while (lab.limiter.inflightOf(lab.gw.key.id) !== 0 && Date.now() < freeBy) await sseSleep(10);
+    expect(lab.limiter.inflightOf(lab.gw.key.id)).toBe(0);
+    await lab.recorder.flush();
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0]).toMatchObject({ stream: true, status: 200, aborted: true, errorCode: null, usageSource: 'estimated', completionTokens: 2 });
+  });
+
+  it('a node that dies after the first byte records LAI-GW-045 and an estimate; one that goes quiet LAI-GW-044', async () => {
+    const dies = await setup({ nodes: [sseNode({ tokens: ['a', 'b', 'c'], after: { tokens: 2, action: 'destroy' } })] });
+    await dies.lab.stream('/chat/completions', STREAM).done;
+    await dies.lab.recorder.flush();
+    expect(dies.store.rows[0]).toMatchObject({ status: 200, aborted: false, errorCode: 'LAI-GW-045', usageSource: 'estimated', completionTokens: 2 });
+    expect(dies.lab.limiter.inflightOf(dies.lab.gw.key.id)).toBe(0);
+
+    // The lab's idle timeout is 3 s: a node that goes quiet is cut by it and the row says LAI-GW-044.
+    const quiet = await setup({ nodes: [sseNode({ tokens: ['a', 'b', 'c'], after: { tokens: 1, action: 'stall' } })] });
+    const ended = await quiet.lab.stream('/chat/completions', STREAM).done;
+    expect(ended.text).toContain('LAI-GW-045'); // the one event the client sees is the same for every interruption (spec 3.3)
+    await quiet.lab.recorder.flush();
+    expect(quiet.store.rows[0]).toMatchObject({ status: 200, aborted: false, errorCode: 'LAI-GW-044', usageSource: 'estimated', completionTokens: 1 });
+    expect(quiet.lab.limiter.inflightOf(quiet.lab.gw.key.id)).toBe(0);
+  }, 15_000);
+
+  it('a stream is one row and one slot, whatever way it ends: N streams, N rows, counter back to 0', async () => {
+    const { lab, store } = await setup({ keyOverrides: { concurrentLimit: 2, rpmLimit: 100 }, nodes: [sseNode({ tokens: ['a'] })] });
+    for (let index = 0; index < 5; index += 1) await lab.stream('/chat/completions', STREAM).done;
+    await lab.recorder.flush();
+    expect(store.rows).toHaveLength(5);
+    expect(new Set(store.rows.map((row) => row.requestId)).size).toBe(5);
+    expect(lab.limiter.inflightOf(lab.gw.key.id)).toBe(0);
+  });
+});

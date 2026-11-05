@@ -2,6 +2,8 @@
 // `UpstreamClient` and in-memory `RoutingTable`, fake llama-servers on real local sockets, and the REAL `RateLimiter`,
 // `DailyUsageLedger` and `UsageRecorder` (GW-08) over a store the spec chooses (a recording fake, or the Prisma store).
 import { randomBytes } from 'node:crypto';
+import { request as httpRequest, type IncomingHttpHeaders } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 import { AttemptLoop } from '../../../src/localai/gateway/attempts';
 import type { GatewayKeyRecord } from '../../../src/localai/gateway/auth';
@@ -16,6 +18,7 @@ import { DEFAULT_GATEWAY_TIMEOUTS, type ProxySettings } from '../../../src/local
 import type { SourceNodeRow } from '../../../src/localai/gateway/routing/build-candidates';
 import { FakeBus, FakeClock, model, node } from '../../../src/localai/gateway/routing/routing.fixtures';
 import { RoutingTable } from '../../../src/localai/gateway/routing/routing-table';
+import { StreamProxy } from '../../../src/localai/gateway/stream/stream-proxy';
 import { UpstreamClient } from '../../../src/localai/gateway/upstream/client';
 import { DailyUsageLedger, type DailyUsageReader } from '../../../src/localai/gateway/usage/usage-ledger';
 import { UsageRecorder } from '../../../src/localai/gateway/usage/usage-recorder';
@@ -50,7 +53,19 @@ export interface Lab {
   table: RoutingTable;
   post(path: string, body: unknown): Promise<{ status: number; headers: Record<string, unknown>; json: any; text: string }>;
   get(path: string): Promise<{ status: number; headers: Record<string, unknown>; json: any; text: string }>;
+  /** A streaming request over a real socket (the stream path hijacks the reply, so `inject` cannot carry it). */
+  stream(path: string, body: unknown): LabStream;
   cleanup(): Promise<void>;
+}
+
+export interface LabStream {
+  /** Resolves with the response head as soon as it arrives. */
+  head: Promise<{ status: number; headers: IncomingHttpHeaders }>;
+  /** Resolves when the response ended (or the socket closed after `abort()`), with everything received. */
+  done: Promise<{ status: number; headers: IncomingHttpHeaders; text: string }>;
+  /** Everything received so far. */
+  received(): string;
+  abort(): void;
 }
 
 export async function buildLab(options: LabOptions): Promise<Lab> {
@@ -70,12 +85,12 @@ export async function buildLab(options: LabOptions): Promise<Lab> {
   await table.rebuild();
 
   const client = new UpstreamClient({ version: 'test', resolveOrigin: (host) => origins.get(host) ?? 'http://127.0.0.1:1' });
-  const settings: ProxySettings = { timeouts: { ...DEFAULT_GATEWAY_TIMEOUTS, connectMs: 500, firstByteMs: 3000, idleMs: 3000, nonStreamTotalMs: 8000 }, maxAttempts: 2 };
+  const settings: ProxySettings = { timeouts: { ...DEFAULT_GATEWAY_TIMEOUTS, connectMs: 500, firstByteMs: 3000, idleMs: 3000, totalMs: 8000, nonStreamTotalMs: 8000 }, maxAttempts: 2 };
   const ledger = new DailyUsageLedger(options.reader ?? { read: async () => 0 }, options.now);
   const recorder = new UsageRecorder({ store: options.store, ledger, ...(options.now ? { now: options.now } : {}), flushIntervalMs: options.flushIntervalMs ?? 2000 });
   const limiter = new RateLimiter({ ledger, ...(options.now ? { now: options.now } : {}) });
   const loop = new AttemptLoop({ routing: table, keys: { get: async (id) => nodeKeys.get(id) ?? null }, transport: client, log: { warn: () => undefined } });
-  const service = new GatewayService(new LabResolver(), limiter, recorder, { handle: async () => { throw new GatewayError('LAI-GW-003'); } }, { read: async () => settings }, loop);
+  const service = new GatewayService(new LabResolver(), limiter, recorder, new StreamProxy(), { read: async () => settings }, loop);
   const listing = {
     list: async () => ({ object: 'list', data: [{ id: 'model-a', object: 'model' }] }),
     find: async (_key: unknown, id: string) => (id === 'model-a' ? { id, object: 'model' } : null),
@@ -108,6 +123,34 @@ export async function buildLab(options: LabOptions): Promise<Lab> {
     },
     async get(path) {
       return parse(await gw.app.inject({ method: 'GET', url: `${gw.prefix}${path}`, headers: { authorization: auth.authorization } }));
+    },
+    stream(path, body) {
+      let text = '';
+      let status = 0;
+      let headers: IncomingHttpHeaders = {};
+      let request: ReturnType<typeof httpRequest> | null = null;
+      let resolveHead!: (value: { status: number; headers: IncomingHttpHeaders }) => void;
+      const head = new Promise<{ status: number; headers: IncomingHttpHeaders }>((resolve) => {
+        resolveHead = resolve;
+      });
+      const done = new Promise<{ status: number; headers: IncomingHttpHeaders; text: string }>((resolve) => {
+        void (async () => {
+          if (!gw.app.server.listening) await gw.app.listen({ port: 0, host: '127.0.0.1' });
+          const port = (gw.app.server.address() as AddressInfo).port;
+          request = httpRequest({ host: '127.0.0.1', port, method: 'POST', path: `${gw.prefix}${path}`, headers: auth }, (response) => {
+            status = response.statusCode ?? 0;
+            headers = response.headers;
+            resolveHead({ status, headers });
+            response.setEncoding('utf8');
+            response.on('data', (chunk: string) => (text += chunk));
+            response.on('end', () => resolve({ status, headers, text }));
+            response.on('close', () => resolve({ status, headers, text }));
+          });
+          request.on('error', () => resolve({ status, headers, text }));
+          request.end(typeof body === 'string' ? body : JSON.stringify(body));
+        })();
+      });
+      return { head, done, received: () => text, abort: () => request?.destroy() };
     },
     async cleanup() {
       await recorder.onModuleDestroy();
