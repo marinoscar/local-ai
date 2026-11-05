@@ -173,6 +173,12 @@ func Pinned(it plan.CatalogItem, target plan.ItemPlan, catalogVersion string) (i
 		res := item.Resolution{Version: version, SortKey: version, Source: manifest.Source{Type: "url"}, Trust: manifest.TrustPinned, Resolver: "catalog_pin"}
 		for _, f := range files {
 			name := urlBase(f.URL)
+			if f.Name != "" {
+				name = f.Name
+				if !manifest.SafePath(name) {
+					name = ""
+				}
+			}
 			if name == "" {
 				return fail("the URL of item %s has no file name", c.ID)
 			}

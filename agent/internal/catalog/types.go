@@ -10,7 +10,9 @@ package catalog
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -258,6 +260,26 @@ type KiwixPinned struct {
 type URLFile struct {
 	URL    string `yaml:"url" catalog:"required"`
 	SHA256 string `yaml:"sha256"`
+	// Name is the path of the file inside the item directory ("release/SHA256SUMS"). It is optional: the
+	// default is the last element of the URL's path. It exists for a file whose release name the sync
+	// engine reserves in every item directory (SHA256SUMS, MANIFEST.json) or that belongs in a
+	// sub-folder (catalog.md section 3, rebuild-kit.md section 3.2.1).
+	Name string `yaml:"name"`
+}
+
+// ItemPath is the path of f inside its item directory: Name when the catalog gives one, else the last
+// element of the URL's path ("" when the URL has none). The caller checks that the result is a usable
+// file path (manifest.ValidFilePath).
+func (f URLFile) ItemPath() string {
+	if f.Name != "" {
+		return f.Name
+	}
+	u, err := url.Parse(f.URL)
+	if err != nil {
+		return ""
+	}
+	p := strings.TrimRight(u.Path, "/")
+	return p[strings.LastIndex(p, "/")+1:]
 }
 
 // ExtraRepo is a third-party apt repository added to the private apt tree.

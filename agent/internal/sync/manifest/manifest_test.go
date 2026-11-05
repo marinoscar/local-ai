@@ -783,3 +783,22 @@ func TestNames(t *testing.T) {
 		}
 	}
 }
+
+func TestSafePath(t *testing.T) {
+	good := []string{"a.bin", "release/SHA256SUMS", "release/SHA256SUMS.minisig", "a/b/c.txt", "SHA256SUMS.minisig"}
+	bad := []string{"", ".", "..", "../x", "a/../b", "/abs", "a//b", "a/", "SHA256SUMS", "MANIFEST.json", "a\\b", "a/ b", "a /b", "a\nb", "a/\x00"}
+	for _, p := range good {
+		if !manifest.SafePath(p) {
+			t.Errorf("SafePath(%q) = false, want true", p)
+		}
+	}
+	for _, p := range bad {
+		if manifest.SafePath(p) {
+			t.Errorf("SafePath(%q) = true, want false", p)
+		}
+	}
+	// ValidFilePath alone accepts a folder name with a space; SafePath is the stricter rule a catalog name needs.
+	if !manifest.ValidFilePath("a/ b") || manifest.SafePath("a/ b") {
+		t.Error("SafePath must be stricter than ValidFilePath on an element with a leading space")
+	}
+}
