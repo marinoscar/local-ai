@@ -12,6 +12,7 @@
     "isolatedModules": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "preserveSymlinks": true,
     "noUncheckedIndexedAccess": true
   },
   "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx"]
