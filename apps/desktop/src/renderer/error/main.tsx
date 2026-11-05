@@ -3,15 +3,6 @@ import type { Lang } from '../../main/i18n';
 import { mountPage } from '../shared/mount';
 import { ErrorPage } from './ErrorPage';
 
-interface Bridge {
-  errorAction(action: string, code: string): Promise<{ ok: boolean; code?: string; statusExcerpt?: string; busy?: boolean }>;
-}
-declare global {
-  interface Window {
-    localaiDesktop?: Bridge;
-  }
-}
-
 const params = new URLSearchParams(window.location.search);
 const queryLang = params.get('lang');
 const lang: Lang = queryLang === 'es' || queryLang === 'en' ? queryLang : navigator.language.toLowerCase().startsWith('es') ? 'es' : 'en';

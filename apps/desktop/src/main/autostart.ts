@@ -203,13 +203,23 @@ export class AutostartController {
 
   /** The user's choice. Turning it on is only remembered when the file was written; turning it off always is. */
   set(next: boolean): Promise<ApplyResult> {
-    return this.#run(async () => {
-      const result = await this.#d.apply(next);
-      this.#enabled = next && result.ok;
-      if (!result.ok) this.#d.onFailure(result, next);
-      if (result.ok || !next) await this.#persist(next);
-      return result;
-    });
+    return this.#run(() => this.#applyAndPersist(next));
+  }
+
+  async #applyAndPersist(next: boolean): Promise<ApplyResult> {
+    const result = await this.#d.apply(next);
+    this.#enabled = next && result.ok;
+    if (!result.ok) this.#d.onFailure(result, next);
+    if (result.ok || !next) await this.#persist(next);
+    return result;
+  }
+
+  /**
+   * The setting changed from somewhere else (a settings page, the top bar menu): brings the file in line. A change this
+   * controller made itself already matches `enabled` and does nothing, so persisting never loops back here.
+   */
+  follow(value: boolean): Promise<ApplyResult | null> {
+    return this.#run(async () => (value === this.#enabled ? null : this.#applyAndPersist(value)));
   }
 
   async #persist(value: boolean): Promise<void> {

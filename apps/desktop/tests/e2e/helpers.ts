@@ -21,21 +21,31 @@ export interface Launched {
   /** The environment the app runs with (a second launch must share it to reach the first instance). */
   env: Record<string, string>;
   stderr(): string;
-  stop(): Promise<void>;
+  stop(options?: { keep?: boolean }): Promise<void>;
 }
 
-/** Starts the app with an isolated config folder and, when `token` is given, a token file the app is pointed at. */
+/**
+ * Starts the app with an isolated config folder and, when `token` is given, a token file the app is pointed at.
+ * `work` reuses the folder of an earlier run (a restart: the settings file is still there); `stop()` then leaves it
+ * alone, `stop({ keep: true })` does the same for the first run.
+ */
 export async function launch(
   options: {
     token?: string | null;
     env?: Record<string, string>;
+    work?: string;
+    settings?: unknown;
     /** Command-line flags of the app (`--hidden`, ...). */
     args?: string[];
-    /** Runs before the app starts, with `configHome` (XDG_CONFIG_HOME): seeds settings.json or an autostart entry. */
+    /** Runs before the app starts, with `configHome` (XDG_CONFIG_HOME): seeds an autostart entry or other files. */
     seed?: (configHome: string) => Promise<void>;
   } = {},
 ): Promise<Launched> {
-  const work = await mkdtemp(join(tmpdir(), 'ai-desktop-e2e-'));
+  const work = options.work ?? (await mkdtemp(join(tmpdir(), 'ai-desktop-e2e-')));
+  if (options.settings !== undefined) {
+    await mkdir(join(work, 'config', 'ai-desktop'), { recursive: true });
+    await writeFile(join(work, 'config', 'ai-desktop', 'settings.json'), JSON.stringify(options.settings));
+  }
   const tokenPath = join(work, 'agent-token');
   const configHome = join(work, 'config');
   if (options.token) await writeFile(tokenPath, `${options.token}\n`, { mode: 0o600 });
@@ -56,9 +66,9 @@ export async function launch(
     configHome,
     env,
     stderr: () => stderr,
-    stop: async () => {
+    stop: async (stopOptions) => {
       await app.close().catch(() => undefined);
-      await rm(work, { recursive: true, force: true });
+      if (!options.work && !stopOptions?.keep) await rm(work, { recursive: true, force: true });
     },
   };
 }
@@ -105,4 +115,35 @@ export async function pollIn(app: ElectronApplication, id: number, code: string,
     if (Date.now() > end) throw new Error(`condition never became true: ${code} (last: ${String(last)})`);
     await new Promise((r) => setTimeout(r, 100));
   }
+}
+
+export const isTopBar = (url: string): boolean => url.startsWith('localai://app/topbar/');
+
+/** The Chat, Library and Maps windows currently open (BrowserWindows showing a page of the agent origin). */
+export async function childUrls(app: ElectronApplication): Promise<string[]> {
+  return app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => w.webContents.getURL()).filter((u) => u.startsWith('http://127.0.0.1:7070/')));
+}
+
+/**
+ * Opens a hidden test window with one of the app's preloads and loads `url` in it, to call the bridge from a page the
+ * main process must refuse. Returns the window's webContents id.
+ */
+export async function openProbeWindow(app: ElectronApplication, options: { url: string; preload: 'shell' | 'agent'; partition?: string }): Promise<number> {
+  return app.evaluate(
+    async ({ BrowserWindow, app: electronApp }, o) => {
+      const win = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          sandbox: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+          preload: `${electronApp.getAppPath()}/out/preload/${o.preload}.js`,
+          ...(o.partition ? { partition: o.partition } : {}),
+        },
+      });
+      await win.loadURL(o.url);
+      return win.webContents.id;
+    },
+    options,
+  );
 }

@@ -50,8 +50,9 @@ test.afterAll(async () => {
 });
 
 test('the shell window loads from localai://app, with the CSP, in whichever way the app is run', async () => {
-  const page = await app.firstWindow();
-  await page.waitForURL(/^localai:\/\/app\/error\//);
+  // The main window is a BaseWindow: the top bar and the error page are two views of it. Playwright lists every page.
+  await expect.poll(() => app.windows().map((w) => w.url()).some((url) => url.startsWith('localai://app/error/'))).toBe(true);
+  const page = app.windows().find((w) => w.url().startsWith('localai://app/error/'))!;
   await expect(page.locator('#root')).not.toBeEmpty();
   const headers = await page.evaluate(async () => {
     const response = await fetch('localai://app/topbar/');

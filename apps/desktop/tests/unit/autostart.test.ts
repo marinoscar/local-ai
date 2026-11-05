@@ -327,6 +327,26 @@ describe('AutostartController ("Start at login" in the tray)', () => {
     expect(controller.enabled).toBe(true);
   });
 
+  it('follows a setting changed elsewhere, and ignores the echo of its own writes', async () => {
+    const apply = vi.fn().mockImplementation(async (enabled: boolean) => ok(enabled ? 'written' : 'removed'));
+    const { controller, persisted } = make(true, apply);
+    await controller.applyAtStart();
+    apply.mockClear();
+    // A settings page sets it to false: the file is removed. (Persisting is idempotent: the page already wrote the value.)
+    expect((await controller.follow(false))?.ok).toBe(true);
+    expect(apply).toHaveBeenCalledWith(false);
+    expect(controller.enabled).toBe(false);
+    // The write that `set` itself made comes back through the settings listener with the same value: nothing happens.
+    apply.mockClear();
+    expect(await controller.follow(false)).toBeNull();
+    expect(apply).not.toHaveBeenCalled();
+    await controller.set(true);
+    apply.mockClear();
+    expect(await controller.follow(true)).toBeNull();
+    expect(apply).not.toHaveBeenCalled();
+    expect(persisted).toEqual([false, true]);
+  });
+
   it('serialises quick clicks: the last one wins and no two writes overlap', async () => {
     let running = 0;
     let overlapped = false;

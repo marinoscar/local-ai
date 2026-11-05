@@ -12,7 +12,7 @@ const preloadDir = join(here, '..', '..', 'src', 'preload');
 const MAIN_MODULES = [
   'index', 'agent-client', 'agent-supervisor', 'windows', 'navigation', 'egress-guard', 'csp', 'protocol', 'tray',
   'autostart', 'clipboard', 'pin', 'survival', 'cloud-link', 'cloud-api', 'secret-store', 'settings', 'updates', 'i18n',
-  'diagnose', 'log', 'startup', 'notify', 'args',
+  'diagnose', 'log', 'startup', 'notify', 'ipc', 'menu', 'args',
 ];
 
 const loaders = import.meta.glob('../../src/main/*.ts');

@@ -38,7 +38,7 @@ const TRAY = { LOCALAI_DESKTOP_TRAY: 'available' };
 const NO_TRAY = { LOCALAI_DESKTOP_TRAY: 'unavailable' };
 
 const entryPath = (a: Launched): string => join(a.configHome, 'autostart', 'ai-desktop.desktop');
-const visibility = (a: Launched): Promise<boolean[]> => a.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => w.isVisible()));
+const visibility = (a: Launched): Promise<boolean[]> => a.app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows().map((w) => w.isVisible()));
 
 test('first run: the deb entry is written, with --hidden, and nothing else is created in the folder', async () => {
   agent = await startFakeAgent({ port: 7070 });

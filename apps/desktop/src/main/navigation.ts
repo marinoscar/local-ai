@@ -1,8 +1,8 @@
 // Navigation, window-open and permission policy (docs/specs/desktop.md sections 3.4 and 3.6).
 //
 // `decide(view, url, state)` is a pure function: the table of section 3.6 and nothing else. The Electron wiring below
-// (`installWebContentsHardening`) only applies its answer. Opening child windows is DSK-04's job: this module returns
-// the decision and calls the `NavigationHooks` that DSK-04 sets.
+// (`installWebContentsHardening`) only applies its answer. Opening child windows is windows.ts's job: this module returns
+// the decision and calls the `NavigationHooks` that `wireNavigationHooks` (windows.ts) sets.
 import type { App, Session, WebContents, WebPreferences } from 'electron';
 import { AGENT_HOST, AGENT_PORT, CLOUD_HOST, isLoopbackHost, normalizeHost } from './egress-guard';
 
@@ -192,7 +192,7 @@ export function hardenedWebPreferences(isPackaged: boolean): WebPreferences {
 // Wiring
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** What DSK-04 (windows) and DSK-03 (top bar) plug in. The defaults do nothing, so a blocked link is simply blocked. */
+/** What windows.ts plugs in (`wireNavigationHooks`). The defaults do nothing, so a blocked link is simply blocked. */
 export interface NavigationHooks {
   openChild(name: ChildName): void;
   openExternal(url: string): void;
