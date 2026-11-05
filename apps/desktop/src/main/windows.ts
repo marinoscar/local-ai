@@ -118,6 +118,8 @@ export interface WebContentsLike {
   reloadIgnoringCache(): void;
   isDestroyed(): boolean;
   send(channel: string, ...args: unknown[]): void;
+  /** Present on a real `WebContents` (DSK-09 sets the Portal's stored language through it). */
+  executeJavaScript?(code: string): Promise<unknown>;
 }
 
 export interface ViewLike {
@@ -204,6 +206,12 @@ export type LocalContent = 'none' | 'error' | 'agent-ui';
 
 /** The typed window API of the app (shared with the tray, DSK-06, and survival UX, DSK-09). */
 export interface WindowManager extends ContentHost {
+  /**
+   * Loads `http://127.0.0.1:7070<path>` in the agent view and shows it. `reveal: false` (DSK-09: leaving survival)
+   * loads without showing a window that was closed to the tray.
+   */
+  showAgentUi(path: string, options?: { reveal?: boolean }): Promise<void>;
+
   // The main window
   /** Shows the main window (un-hides, restores, focuses). */
   showMain(): void;
@@ -216,7 +224,7 @@ export interface WindowManager extends ContentHost {
   setHideOnClose(enabled: boolean): void;
   /** Call from `before-quit`: from then on closing really closes. */
   prepareToQuit(): void;
-  /** The top bar's height (48; DSK-09 collapses it to 32 in survival mode). */
+  /** The top bar's height (48; survival mode collapses it to 32, see survival.ts). */
   setTopBarHeight(pixels: number): void;
 
   // Tabs
@@ -332,13 +340,13 @@ class Manager implements WindowManager {
     await view.webContents.loadURL(this.#o.shellPageUrl('error', `?${query.toString()}`)).catch(() => undefined);
   }
 
-  async showAgentUi(path: string): Promise<void> {
+  async showAgentUi(path: string, options: { reveal?: boolean } = {}): Promise<void> {
     const view = this.#view('agent');
     this.#local = 'agent-ui';
     this.#agentPath = path;
     this.#tab = 'local';
     this.#sync();
-    this.#reveal();
+    if (options.reveal !== false) this.#reveal();
     await view.webContents.loadURL(`${AGENT_ORIGIN}${path}`).catch(() => undefined);
   }
 

@@ -23,8 +23,8 @@ import { installPermissionHandlers, installWebContentsHardening } from './naviga
 import { Notifier } from './notify';
 import { installLocalaiProtocol, registerLocalaiScheme, rendererRoot, shellUrl } from './protocol';
 import { type Settings, type SettingsPatch, configDir, readSettingsFile } from './settings';
-import { SessionRecovery, type ActionDeps, type StartupResult, handleErrorAction, runStartup } from './startup';
-import { enter as enterSurvival } from './survival';
+import { SessionRecovery, type ActionDeps, type ContentHost, type StartupResult, handleErrorAction, runStartup } from './startup';
+import { SurvivalController, install as installSurvival } from './survival';
 import {
   type ElectronDialogApi,
   type ElectronTrayApi,
@@ -134,9 +134,42 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   });
   const feed = new AgentFeed(client);
 
+  // -- survival UX (DSK-09): the full-screen Portal and the 32 px strip ---------------------------------------------
+  const survival = new SurvivalController({
+    windows,
+    currentMode: () => readStatus(feed.status).mode,
+    chosenLang: () => (settings.lang === 'en' || settings.lang === 'es' ? settings.lang : null),
+    probeMode: async () => {
+      const health = await client.health({ tries: 1, timeoutMs: 1000 });
+      return health.reachable ? health.health.mode : null;
+    },
+    restart: () => void start(),
+    log,
+  });
+  installSurvival(survival);
+  // The content host of the start-up sequence and the error page: a Portal page that finished loading gets the language
+  // the person picked in the strip.
+  const host: ContentHost = {
+    showError: (code, options) => windows.showError(code, options),
+    showAgentUi: async (path) => {
+      await windows.showAgentUi(path);
+      if (path === '/portal') await survival.portalLoaded();
+    },
+    reloadAgentUi: () => windows.reloadAgentUi(),
+  };
+
   // -- status: what the top bar shows ------------------------------------------------------------------------------
   const cloud = (): CloudLinkState => ({ linked: settings.cloud.linked, tokenHeld: false, url: settings.cloud.url }); // DSK-10 holds the token
-  const status = () => buildDesktopStatus({ version: app.getVersion(), phase, connection: feed.connection, agentStatus: feed.status, cloud: cloud(), tab: windows.tab() });
+  const status = () =>
+    buildDesktopStatus({
+      version: app.getVersion(),
+      phase,
+      connection: feed.connection,
+      agentStatus: feed.status,
+      cloud: cloud(),
+      tab: windows.tab(),
+      survival: survival.state((code) => errorText(code, lang).title),
+    });
   const push = (): void => {
     windows.setLabAvailable(status().connected);
     windows.broadcastToShell(CHANNELS.statusChanged, status());
@@ -152,16 +185,20 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     push();
   });
   windows.onChange(push);
-  ctx.onSettingsChanged((next) => {
+  survival.onChange(push);
+  feed.subscribe((message) => survival.handle(message));
+  ctx.onSettingsChanged((next, patch) => {
     settings = next;
     lang = resolveLang(next.lang, app.getLocale());
     push();
+    if (patch.lang !== undefined) void survival.languageChanged().catch(() => undefined);
   });
 
   // -- the tray (DSK-06) lives from here on, before the agent is probed: grey until the first status (desktop.md 4.1) ---
   let tray: TrayController | null = null;
   // What the tray needs from the window manager: show the main window, open Chat, Library or Maps.
-  const control: WindowControl = { showMain: () => windows.showMain(), openWindow: (which) => void windows.openChild(which) };
+  // In survival the main window comes back full screen (a tray click, a notification click).
+  const control: WindowControl = { showMain: () => survival.bringForward(), openWindow: (which) => void windows.openChild(which) };
   // DSK-08 provides the native PIN window; until then the tray cannot leave survival and says where to do it.
   const pin: PinPrompt | undefined = undefined;
   const modes = new ModeController({ api: createModeApi(client), ...(pin ? { pin } : {}), currentMode: () => tray?.mode ?? readStatus(feed.status).mode, log });
@@ -183,29 +220,25 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     if (typeof patch.autostart === 'boolean') void autostart.follow(next.autostart);
   });
 
-  // The Portal full screen (`--portal`, also forwarded by a second launch). DSK-09 gives `enterSurvival` its full-screen body.
-  const openPortal = async (): Promise<void> => {
-    windows.showMain();
-    await windows.showAgentUi('/portal');
-    await enterSurvival();
-  };
+  // A second launch (main.ts already showed the window): `--portal` opens the Portal full screen, anything else brings
+  // the full-screen Portal back when the node is in survival mode (desktop.md 3.9, 4.7).
   ctx.onSecondLaunch((second) => {
-    if (second.portal) void openPortal().catch(() => undefined);
+    if (second.portal) void survival.enter({ reason: 'portal' }).catch(() => undefined);
+    else survival.bringForward();
   });
 
   // -- start-up ----------------------------------------------------------------------------------------------------
-  // A node in survival mode opens the Portal even when started with `--hidden` (desktop.md 4.5, 4.7). Until DSK-09 the
-  // hook has no full-screen body, so what shows is the main window.
-  const survival = {
-    enter: async (): Promise<void> => {
-      windows.showMain();
-      await enterSurvival();
-    },
-  };
   const start = async (): Promise<StartupResult['screen']> => {
     phase = 'starting';
     push();
-    const result = await runStartup({ client, supervisor, host: windows, survival, log });
+    const result = await runStartup({
+      client,
+      supervisor,
+      host,
+      // The sequence loads `/portal` itself right after, so the hook only changes the window.
+      survival: { enter: (options) => survival.enter({ reason: 'mode', load: false, ...(options?.banner !== undefined ? { banner: options.banner } : {}) }) },
+      log,
+    });
     log.log('info', 'agent', `start-up finished: ${result.screen}`, result.screen === 'error' ? { code: result.code } : {});
     phase = result.screen === 'error' ? 'error' : 'ready';
     if (result.screen === 'error') tray?.startupFailed(result.code === 'LAI-DSK-004' || result.code === 'LAI-DSK-005' ? 'down' : 'blocked');
@@ -217,7 +250,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   };
 
   // 401 recovery: the agent UI got a 401 on an API call (the token was rotated, or the agent restarted).
-  const recovery = new SessionRecovery({ client, supervisor, host: windows, log, active: () => windows.current() === 'agent-ui' && windows.agentPath() !== '/portal' });
+  const recovery = new SessionRecovery({ client, supervisor, host, log, active: () => windows.current() === 'agent-ui' && windows.agentPath() !== '/portal' });
   sessions.agent.webRequest.onCompleted({ urls: [`http://${AGENT_HOST}:${AGENT_PORT}/api/v1/*`] }, (details) => {
     if (details.statusCode === 401) void recovery.onUnauthorized(details.url).catch(() => undefined);
   });
@@ -247,7 +280,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   wireNavigationHooks(windows, { openExternal: (url) => void shell.openExternal(url), lang: () => lang, connected: () => status().connected });
   const policy = { devOrigin: ctx.devOrigin };
   const errorActions: ActionDeps = {
-    host: windows,
+    host,
     supervisor,
     clipboardWrite: (text) => clipboard.writeText(text),
     logout: () =>
@@ -267,7 +300,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   registerHandlers(
     ipcMain,
     {
-      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => windows.showTab(tab), showMenu, settings: store, pinWindowId: () => null, errorActions, log, setMode: async (target) => {
+      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => { if (!survival.active) windows.showTab(tab); }, setFullScreen: (flag) => survival.setFullScreen(flag), closePortal: () => survival.closePortal(), showMenu, settings: store, pinWindowId: () => null, errorActions, log, setMode: async (target) => {
         const outcome = await modes.setMode(target);
         return outcome.ok ? { ok: true } : { ok: false, code: outcome.code };
       } }),
@@ -325,7 +358,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   await autostart.applyAtStart();
   const screen = await start();
   // `--portal` on the first launch: the start-up sequence already opened it when the node is in survival mode.
-  if (args.portal && screen !== 'survival') await openPortal();
+  if (args.portal && screen !== 'survival') await survival.enter({ reason: 'portal' });
 }
 
 export interface StartOptions {
