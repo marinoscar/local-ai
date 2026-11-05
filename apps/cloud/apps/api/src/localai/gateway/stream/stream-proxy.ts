@@ -172,7 +172,9 @@ export class StreamProxy implements StreamProxyHandler {
       raw.on('error', () => undefined);
       raw.socket?.setNoDelay(true);
 
-      const headers: OutgoingHttpHeaders = { ...(ctx.reply.getHeaders() as OutgoingHttpHeaders) };
+      // `hijack()` skips Fastify's `onSend` hooks, which is where the `x-ratelimit-*` headers of the other responses are
+      // added (GW-08), so the head carries the admission ticket's own snapshot, written here explicitly.
+      const headers: OutgoingHttpHeaders = { ...(ctx.reply.getHeaders() as OutgoingHttpHeaders), ...(request.ticket?.headers() ?? {}) };
       delete headers['content-length'];
       delete headers['content-encoding'];
       delete headers['transfer-encoding'];

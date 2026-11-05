@@ -3,14 +3,13 @@
 // behind a confirmation. A gateway administrator can also list every user's keys. The page lays out what the API returned
 // and never sees a token except inside the Create dialog that the API just answered.
 import AddIcon from '@mui/icons-material/Add';
-import ModelsIcon from '@mui/icons-material/ViewList';
 import { Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import { usePermissions } from '@marinoscar/platform-web/identity/headless';
 import { formatAgo } from '@localai/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
 
 import { ConfirmDialog } from '../node/ConfirmDialog';
+import { GatewayNav } from './GatewayNav';
 import { usePolledResource } from '../usePolledResource';
 import { CreateKeyDialog } from './CreateKeyDialog';
 import { createKey as defaultCreateKey, DEFAULT_KEY_DEFAULTS, fetchKeyDefaults as defaultFetchDefaults, fetchModelSuggestions, listKeys as defaultListKeys, revokeKey as defaultRevokeKey } from './gatewayApi';
@@ -92,19 +91,14 @@ export function KeysPage({
 
   return (
     <Box component="section" aria-labelledby="keys-title" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <GatewayNav />
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, justifyContent: 'space-between' }}>
         <Typography id="keys-title" variant="h4" component="h1">
           API keys
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          {/* The other pages of the gateway destination (docs/specs/gateway.md section 3.8). */}
-          <Button component={RouterLink} to="/gateway/models" variant="outlined" startIcon={<ModelsIcon />}>
-            Models
-          </Button>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => void openCreate()}>
-            Create key
-          </Button>
-        </Box>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => void openCreate()}>
+          Create key
+        </Button>
       </Box>
       <Typography color="text.secondary">
         A key lets a program use the lab's models at <code>/v1</code>. Make one key per program or computer, and revoke it when you stop using it.
@@ -153,7 +147,7 @@ export function KeysPage({
       ) : null}
 
       {keys.length > 0 ? (
-        <TableContainer sx={{ border: 1, borderColor: 'divider', borderRadius: 1, maxWidth: '100%' }}>
+        <TableContainer sx={{ position: 'relative' /* keeps the visually hidden Actions header in the scroll container, not the page */, border: 1, borderColor: 'divider', borderRadius: 1, maxWidth: '100%' }}>
           <Table size="small" aria-label="API keys">
             <TableHead>
               <TableRow>
@@ -165,7 +159,7 @@ export function KeysPage({
                 <TableCell>Expires</TableCell>
                 <TableCell>Last used</TableCell>
                 <TableCell>
-                  <Box component="span" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+                  <Box component="span" sx={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
                     Actions
                   </Box>
                 </TableCell>

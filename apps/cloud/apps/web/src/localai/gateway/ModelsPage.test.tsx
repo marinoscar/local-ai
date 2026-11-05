@@ -17,7 +17,7 @@ function renderPage(overrides: ModelsPageProps = {}) {
   const listModels = (overrides.listModels ?? vi.fn(async (): Promise<ModelRow[]> => modelsFixture())) as ReturnType<typeof vi.fn> & (() => Promise<ModelRow[]>);
   const saveModelPolicy = overrides.saveModelPolicy ?? vi.fn(async (_id: string, _input: PolicyInput) => modelsFixture()[0]);
   const view = render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/gateway/models']}>
       <ModelsPage listModels={listModels} saveModelPolicy={saveModelPolicy} />
     </MemoryRouter>,
   );
@@ -64,7 +64,9 @@ describe('ModelsPage', () => {
     expect(rows[1]).toHaveTextContent('ai-n2');
     expect(rows[2]).toHaveTextContent('disabled');
     expect(rows[3]).toHaveTextContent('no node');
-    expect(screen.getByRole('link', { name: 'API keys' })).toHaveAttribute('href', '/gateway/keys');
+    const nav = screen.getByRole('navigation', { name: 'Gateway pages' });
+    expect(within(nav).getByRole('link', { name: 'API keys' })).toHaveAttribute('href', '/gateway/keys');
+    expect(within(nav).getByRole('link', { name: 'Models' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('a user without gateway:admin reads only: no Edit button', async () => {

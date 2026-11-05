@@ -1,14 +1,13 @@
 // The Models page (`/gateway/models`, gateway:use; docs/specs/gateway.md section 3.8): every catalog model with its live
 // state, its nodes and its policy (offered on /v1, aliases, on-demand load, preferred nodes). A gateway administrator
 // edits a policy in a dialog; everyone else reads. The page lays out what the API computed and never derives a state.
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
 import { Alert, Box, Button, Chip, CircularProgress, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, useMediaQuery } from '@mui/material';
 import { usePermissions } from '@marinoscar/platform-web/identity/headless';
 import { useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
 
 import { usePolledResource } from '../usePolledResource';
+import { GatewayNav } from './GatewayNav';
 import { ModelPolicyDialog } from './ModelPolicyDialog';
 import { listModels as defaultListModels, saveModelPolicy as defaultSave } from './modelsApi';
 import { describeAliases, describeNodes, describeOnDemand, describePreferred, describeState } from './modelsFormat';
@@ -63,14 +62,10 @@ export function ModelsPage({ listModels = defaultListModels, saveModelPolicy = d
 
   return (
     <Box component="section" aria-labelledby="models-title" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, justifyContent: 'space-between' }}>
-        <Typography id="models-title" variant="h4" component="h1">
-          Models
-        </Typography>
-        <Button component={RouterLink} to="/gateway/keys" variant="outlined" startIcon={<ArrowBackIcon />}>
-          API keys
-        </Button>
-      </Box>
+      <GatewayNav />
+      <Typography id="models-title" variant="h4" component="h1">
+        Models
+      </Typography>
       <Typography color="text.secondary">
         {isAdmin
           ? 'Which models are offered at /v1, under which names, and whether a request may load one that no node has loaded. A load never replaces a model that is answering.'

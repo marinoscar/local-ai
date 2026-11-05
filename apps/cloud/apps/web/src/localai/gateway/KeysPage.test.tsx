@@ -20,7 +20,7 @@ function renderPage(overrides: KeysPageProps = {}) {
   const createKey = overrides.createKey ?? vi.fn(async (_input: CreateKeyInput) => createdFixture());
   const revokeKey = overrides.revokeKey ?? vi.fn(async (id: string) => keyFixture({ id, status: 'revoked', revokedAt: KEYS_NOW.toISOString() }));
   const view = render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/gateway/keys']}>
     <KeysPage
       listKeys={listKeys}
       createKey={createKey}
@@ -61,12 +61,6 @@ describe('KeysPage', () => {
     expect(rows[1]).toHaveTextContent('never');
     expect(rows[1]).toHaveTextContent('just now');
     expect(screen.getAllByRole('button', { name: /^Revoke / })).toHaveLength(2);
-  });
-
-  it('links to the Models page', async () => {
-    renderPage();
-    await table();
-    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/gateway/models');
   });
 
   it('never shows a full token or a hash', async () => {
