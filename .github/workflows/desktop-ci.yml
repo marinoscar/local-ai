@@ -2,7 +2,8 @@ name: desktop-ci
 # ai-desktop (apps/desktop): typecheck, unit tests, build, then package the deb and AppImage, check the result and run the offline egress e2e against the packaged app
 # (docs/specs/desktop.md sections 3 and 4.11). It runs only for changes that can affect the desktop app, so a pull
 # request that touches only agent/** does not trigger it. packages/ui is consumed through "file:../../packages/ui",
-# which is why the job checks out the whole repository. The release workflow (desktop-release.yml) arrives with DSK-12.
+# which is why the job checks out the whole repository. The release workflow (desktop-release.yml, tags desktop-v*) repeats these steps before it signs anything;
+# scripts/tests/test-desktop-release.sh fails if the two drift apart.
 on:
   push:
     branches: [main]
