@@ -10,6 +10,7 @@ import { createAgentSupervisor, type AgentSupervisor } from './agent-supervisor'
 import { blockedTotal } from './egress-guard';
 import { type DskCode, type Lang, type Severity, ERROR_COPY, resolveLang } from './i18n';
 import { configDir, readSettings, type Settings } from './settings';
+import { detectTray } from './tray';
 
 export const MODULE = 'diagnose' as const;
 
@@ -62,7 +63,7 @@ export interface DiagnoseDeps {
   client: Pick<AgentClient, 'health' | 'readToken' | 'status'>;
   supervisor: Pick<AgentSupervisor, 'unitState' | 'diagnoseTokenAccess'>;
   safeStorageBackend(): string;
-  tray(): DiagnoseReport['tray'];
+  tray(): DiagnoseReport['tray'] | Promise<DiagnoseReport['tray']>;
   egressBlockedTotal(): number;
   autostartFilePresent(): boolean;
   apparmor: ApparmorProbe;
@@ -121,7 +122,7 @@ export async function buildReport(deps: DiagnoseDeps): Promise<DiagnoseReport> {
     agent: { reachable, version: agentVersion, unit_state },
     token: { readable: token.ok, group_member: group.kind !== 'not-member', needs_relogin: needsRelogin },
     session,
-    tray: deps.tray(),
+    tray: await deps.tray(),
     safe_storage_backend: deps.safeStorageBackend(),
     cloud: { linked: deps.settings.cloud.linked, reachable: null },
     egress_blocked_total: deps.egressBlockedTotal(),
@@ -216,7 +217,10 @@ export function runDiagnoseMain(): void {
           return 'unknown';
         }
       },
-      tray: () => 'unknown',
+      tray: async () => {
+        const availability = await detectTray();
+        return availability === 'available' ? 'supported' : availability === 'unavailable' ? 'unsupported' : 'unknown';
+      },
       egressBlockedTotal: () => Math.max(blockedTotal(), egressTotalFromLog(join(dir, 'logs', 'main.log'))),
       autostartFilePresent: () => existsSync(join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'autostart', 'ai-desktop.desktop')),
       apparmor: {

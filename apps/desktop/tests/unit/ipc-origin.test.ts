@@ -324,11 +324,20 @@ describe('what an allowed shell page can do', () => {
     expect(calls.update).toHaveBeenCalledTimes(1);
   });
 
-  it('setMode checks its argument before it answers not_implemented', async () => {
+  it('setMode checks its argument, then asks the mode controller (or answers not_implemented without one)', async () => {
     const { deps } = makeDeps();
-    const wrapped = wrap(deps);
-    expect(await wrapped[CHANNELS.setMode]!(from(SHELL), 'offline')).toEqual({ ok: false, code: 'not_implemented' });
-    await expect(wrapped[CHANNELS.setMode]!(from(SHELL), 'rm -rf')).rejects.toThrow();
+    expect(await wrap(deps)[CHANNELS.setMode]!(from(SHELL), 'offline')).toEqual({ ok: false, code: 'not_implemented' });
+    expect(await wrap(deps)[CHANNELS.setMode]!(from(SHELL), 'rm -rf')).toEqual({ ok: false });
+
+    const setMode = vi.fn(async () => ({ ok: true }));
+    const wired = wrap(makeDeps({ setMode }).deps);
+    expect(await wired[CHANNELS.setMode]!(from(SHELL), 'survival')).toEqual({ ok: true });
+    expect(await wired[CHANNELS.setMode]!(from(SHELL), 'reboot')).toEqual({ ok: false });
+    expect(await wired[CHANNELS.setMode]!(from(SHELL), { target: 'online' })).toEqual({ ok: false });
+    expect(setMode.mock.calls).toEqual([['survival']]);
+    // From a page that may not call, the mode controller is never reached.
+    await expect(wired[CHANNELS.setMode]!(from(AGENT), 'offline')).rejects.toThrow();
+    expect(setMode).toHaveBeenCalledTimes(1);
   });
 
   it('the methods of later items answer { ok: false, code: "not_implemented" }', async () => {

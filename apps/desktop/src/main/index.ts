@@ -7,21 +7,39 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { Menu, app, clipboard, dialog, ipcMain, protocol, screen, session, shell } from 'electron';
+import { Menu, Notification, Tray, app, clipboard, dialog, ipcMain, nativeImage, protocol, screen, session, shell } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import { AgentFeed, createAgentClient, resolveTokenPath, testHooksAllowed } from './agent-client';
 import { createAgentSupervisor, execFileRunner, resolveStartBinaries } from './agent-supervisor';
 import { runDiagnoseMain } from './diagnose';
 import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, installEgressGuard, installMainProcessGuard, setEgressLogger, type GuardedSessions } from './egress-guard';
-import { pick, resolveLang } from './i18n';
+import { DIALOG_TEXT, errorText, pick, resolveLang } from './i18n';
 import { CHANNELS, type SettingsStore, type StartupPhase, buildDesktopStatus, createHostHandlers, createSettingsStore, createShellHandlers, isAllowedOrigin, registerHandlers } from './ipc';
 import { type LogEntry, type Logger, createFileLogger } from './log';
 import { ABOUT, NOT_AVAILABLE, buildMenuTemplate } from './menu';
 import { installPermissionHandlers, installWebContentsHardening } from './navigation';
+import { Notifier } from './notify';
 import { installLocalaiProtocol, registerLocalaiScheme, rendererRoot, shellUrl } from './protocol';
 import { type Settings, type SettingsPatch, configDir, readSettingsFile } from './settings';
-import { SessionRecovery, type ActionDeps, runStartup } from './startup';
+import { SessionRecovery, type ActionDeps, handleErrorAction, runStartup } from './startup';
 import { enter as enterSurvival } from './survival';
+import {
+  type ElectronDialogApi,
+  type ElectronTrayApi,
+  type PinPrompt,
+  type WindowControl,
+  ModeController,
+  TrayController,
+  createElectronDialogs,
+  createElectronNotificationPort,
+  createElectronTrayPort,
+  createModeApi,
+  detectTray,
+  readStatus,
+  showTrayNoticeOnce,
+  trayNoticeStore,
+  trayUsable,
+} from './tray';
 import { type WindowManager, createElectronWindowFactory, createWindowManager, wireNavigationHooks } from './windows';
 import type { CloudLinkState, TopBarNotice } from '../shared/types';
 
@@ -122,6 +140,16 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     push();
   });
 
+  // -- the tray (DSK-06) lives from here on, before the agent is probed: grey until the first status (desktop.md 4.1) ---
+  let tray: TrayController | null = null;
+  // What the tray needs from the window manager: show the main window, open Chat, Library or Maps.
+  const control: WindowControl = { showMain: () => windows.showMain(), openWindow: (which) => void windows.openChild(which) };
+  // DSK-08 provides the native PIN window; until then the tray cannot leave survival and says where to do it.
+  const pin: PinPrompt | undefined = undefined;
+  const modes = new ModeController({ api: createModeApi(client), ...(pin ? { pin } : {}), currentMode: () => tray?.mode ?? readStatus(feed.status).mode, log });
+  const dialogs = createElectronDialogs(dialog as unknown as ElectronDialogApi);
+  const notifier = new Notifier({ port: createElectronNotificationPort({ Notification }), lang: () => lang, clock: Date.now, onActivate: control.showMain, log });
+
   // -- start-up ----------------------------------------------------------------------------------------------------
   const start = async (): Promise<void> => {
     phase = 'starting';
@@ -129,10 +157,10 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     const result = await runStartup({ client, supervisor, host: windows, survival: { enter: enterSurvival }, log });
     log.log('info', 'agent', `start-up finished: ${result.screen}`, result.screen === 'error' ? { code: result.code } : {});
     phase = result.screen === 'error' ? 'error' : 'ready';
-    if (result.screen !== 'error') {
-      feed.start();
-      void feed.refresh();
-    }
+    if (result.screen === 'error') tray?.startupFailed(result.code === 'LAI-DSK-004' || result.code === 'LAI-DSK-005' ? 'down' : 'blocked');
+    // The stream also runs after an error page: it is how the tray notices that the agent came back.
+    feed.start();
+    if (result.screen !== 'error') void feed.refresh();
     push();
   };
 
@@ -187,11 +215,62 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   registerHandlers(
     ipcMain,
     {
-      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => windows.showTab(tab), showMenu, settings: store, pinWindowId: () => null, errorActions, log }),
+      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => windows.showTab(tab), showMenu, settings: store, pinWindowId: () => null, errorActions, log, setMode: async (target) => {
+        const outcome = await modes.setMode(target);
+        return outcome.ok ? { ok: true } : { ok: false, code: outcome.code };
+      } }),
       ...createHostHandlers({ version, openChild: open }),
     },
     { policy, log },
   );
+
+  // The tray, when the desktop has one (desktop.md 4.3). No StatusNotifier watcher: a one-time LAI-DSK-013 notice, and
+  // closing the window quits the app.
+  // `LOCALAI_DESKTOP_TRAY=unavailable|available` pretends there is no StatusNotifier watcher, or one (unpackaged runs and the e2e test copy only).
+  const forced = testHooksAllowed(app.isPackaged, process.execPath) ? process.env['LOCALAI_DESKTOP_TRAY'] : undefined;
+  const availability = forced === 'unavailable' || forced === 'available' ? forced : await detectTray();
+  if (trayUsable(availability)) {
+    const iconDir = app.isPackaged ? join(process.resourcesPath, 'tray') : join(app.getAppPath(), 'build', 'linux', 'tray');
+    const controller = new TrayController({
+      port: createElectronTrayPort({ Tray, Menu, nativeImage } as unknown as ElectronTrayApi, {
+        iconDir,
+        onAction: (action) => void controller.invoke(action),
+        onActivate: () => controller.activate(),
+      }),
+      lang: () => lang,
+      clock: Date.now,
+      notifier,
+      modes,
+      probe: async () => {
+        const health = await client.health({ tries: 1, timeoutMs: 1000 });
+        return !health.reachable ? 'down' : health.health.starting ? 'starting' : 'up';
+      },
+      refreshStatus: () => feed.refresh(),
+      readMode: () => createModeApi(client).read(),
+      windows: control,
+      dialogs,
+      actions: {
+        quit: () => app.quit(),
+        startAgent: async () => {
+          const result = await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, errorActions);
+          // `busy`: a start is already running (the error page's button, or an earlier click): nothing to say.
+          if (result.ok || result.busy === true) return;
+          const copy = errorText('LAI-DSK-005', lang);
+          const excerpt = result.statusExcerpt !== undefined ? `\n\n${result.statusExcerpt}` : '';
+          await dialogs.alert({ title: copy.title, message: copy.message, detail: `${copy.fix} ${copy.command ?? ''}${excerpt}\n\n${copy.code}`, okLabel: pick(DIALOG_TEXT.ok, lang) });
+        },
+      },
+      log,
+    });
+    tray = controller;
+    feed.subscribe((message) => controller.handle(message));
+    controller.start();
+    // With a tray, closing the main window hides it (the window manager does it; Quit and `before-quit` really close).
+    windows.setHideOnClose(true);
+  } else {
+    log.log('warn', 'tray', 'no StatusNotifier watcher on the session bus; closing the window quits the app', { code: 'LAI-DSK-013' });
+    void showTrayNoticeOnce({ store: trayNoticeStore(configDir()), notify: () => notifier.notice('LAI-DSK-013') });
+  }
 
   await start();
 }

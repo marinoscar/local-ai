@@ -400,6 +400,8 @@ export interface BridgeDeps {
   /** Pops up the top bar's native menu. */
   showMenu(): void;
   settings: SettingsStore;
+  /** Switches the node's mode (DSK-06's `ModeController`, the same path as the tray). Absent: `setMode` answers `not_implemented`. */
+  setMode?(target: NodeMode): Promise<ActionResult>;
   /** The window id of the PIN prompt (DSK-08), or null while there is none: `pinSubmit` is refused from every other page. */
   pinWindowId(): number | null;
   /** The error-page actions (DSK-03); `host`, `supervisor`, `retry`... are wired by index.ts. */
@@ -465,8 +467,9 @@ export function createShellHandlers(deps: BridgeDeps): HandlerTable {
       kind: 'invoke',
       origin: 'shell',
       run: (_event, target) => {
-        if (typeof target !== 'string' || !SET_MODE_TARGETS.includes(target)) throw new Error('setMode: unknown target');
-        return NOT_IMPLEMENTED; // DSK-06
+        // A target the bridge does not know is refused here and never reaches the agent.
+        if (typeof target !== 'string' || !SET_MODE_TARGETS.includes(target)) return { ok: false } satisfies ActionResult;
+        return deps.setMode ? deps.setMode(target as NodeMode) : NOT_IMPLEMENTED;
       },
     },
     [CHANNELS.startAgent]: stub(), // DSK-05
