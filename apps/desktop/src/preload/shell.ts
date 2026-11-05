@@ -1,20 +1,94 @@
 // Preload bridge for shell pages: window.localaiDesktop (docs/specs/desktop.md section 3.5).
-// DSK-03 exposed only what the error page needs (`errorAction`); DSK-06 adds `setMode`. DSK-04 adds the rest of the allowlisted surface,
-// with origin checks on every handler, and folds this call into it.
+// It is the whole IPC surface of the top bar, the Lab, the error page and the later windows. Every call is an
+// `ipcRenderer.invoke/send/sendSync` on a fixed channel with plain data; the main process checks the calling frame's
+// origin on every one (src/main/ipc.ts). Nothing from Node is exposed.
+//
+// A sandboxed preload cannot load a shared chunk, so the channel names are repeated here; tests/unit/preload.test.ts
+// proves they match CHANNELS in src/main/ipc.ts. Only types are imported from the shared module.
 import { contextBridge, ipcRenderer } from 'electron';
+import type { DesktopStatus, Lang, LocalaiDesktop, TopBarNotice } from '../shared/types';
 
 export const BRIDGE = 'localaiDesktop' as const;
-/** Same string as ERROR_ACTION_CHANNEL in src/main/i18n.ts (not imported, to keep the sandboxed preload tiny). */
-const ERROR_ACTION_CHANNEL = 'localai:error-action';
-/** Same string as SET_MODE_CHANNEL in src/main/tray.ts. */
-const SET_MODE_CHANNEL = 'localai:set-mode';
+
+const C = {
+  status: 'localai:status',
+  statusChanged: 'localai:status-changed',
+  notice: 'localai:notice',
+  startAgent: 'localai:start-agent',
+  copyApiKey: 'localai:copy-api-key',
+  connectionInfo: 'localai:connection-info',
+  revealKey: 'localai:reveal-key',
+  setMode: 'localai:set-mode',
+  openWindow: 'localai:open-window',
+  showTab: 'localai:show-tab',
+  showMenu: 'localai:show-menu',
+  cloudBeginLink: 'localai:cloud-begin-link',
+  cloudOpenVerification: 'localai:cloud-open-verification',
+  cloudLinkState: 'localai:cloud-link-state',
+  cloudUnlink: 'localai:cloud-unlink',
+  cloudRequest: 'localai:cloud-request',
+  settingsGet: 'localai:settings-get',
+  settingsSet: 'localai:settings-set',
+  pinSubmit: 'localai:pin-submit',
+  lang: 'localai:lang',
+  errorAction: 'localai:error-action',
+} as const;
+
+/** The three `ipcRenderer` methods the bridge uses, so a test can drive it without Electron. */
+export interface IpcRendererLike {
+  invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+  send(channel: string, ...args: unknown[]): void;
+  sendSync(channel: string, ...args: unknown[]): unknown;
+  on(channel: string, listener: (event: unknown, ...args: unknown[]) => void): unknown;
+  removeListener(channel: string, listener: (event: unknown, ...args: unknown[]) => void): unknown;
+}
+
+export function createShellBridge(ipc: IpcRendererLike): LocalaiDesktop {
+  const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> => ipc.invoke(channel, ...args) as Promise<T>;
+  const subscribe = <T>(channel: string, cb: (value: T) => void): (() => void) => {
+    const listener = (_event: unknown, value: unknown): void => cb(value as T);
+    ipc.on(channel, listener);
+    return () => {
+      ipc.removeListener(channel, listener);
+    };
+  };
+  return {
+    status: () => invoke<DesktopStatus>(C.status),
+    onStatus: (cb) => subscribe<DesktopStatus>(C.statusChanged, cb),
+    startAgent: () => invoke(C.startAgent),
+    copyApiKey: () => invoke(C.copyApiKey),
+    connectionInfo: () => invoke(C.connectionInfo),
+    revealKey: () => invoke(C.revealKey),
+    setMode: (target) => invoke(C.setMode, target),
+    openWindow: (which) => {
+      ipc.send(C.openWindow, which);
+    },
+    showTab: (tab) => {
+      ipc.send(C.showTab, tab);
+    },
+    cloud: {
+      beginLink: () => invoke(C.cloudBeginLink),
+      openVerification: () => {
+        ipc.send(C.cloudOpenVerification);
+      },
+      linkState: () => invoke(C.cloudLinkState),
+      unlink: () => invoke(C.cloudUnlink),
+      request: (req) => invoke(C.cloudRequest, req),
+    },
+    settings: {
+      get: () => invoke(C.settingsGet),
+      set: (patch) => invoke(C.settingsSet, patch),
+    },
+    pinSubmit: (pin) => invoke(C.pinSubmit, pin),
+    lang: (): Lang => (ipc.sendSync(C.lang) === 'es' ? 'es' : 'en'),
+    errorAction: (action, code) => invoke(C.errorAction, { action, code }),
+    showMenu: () => {
+      ipc.send(C.showMenu);
+    },
+    onNotice: (cb) => subscribe<TopBarNotice>(C.notice, cb),
+  };
+}
 
 if (contextBridge && ipcRenderer) {
-  contextBridge.exposeInMainWorld(BRIDGE, {
-    /** A button of the error page. The main process checks the sender's page and that the code owns the button. */
-    errorAction: (action: string, code: string): Promise<{ ok: boolean; code?: string; statusExcerpt?: string; busy?: boolean }> =>
-      ipcRenderer.invoke(ERROR_ACTION_CHANNEL, { action, code }) as Promise<{ ok: boolean; code?: string; statusExcerpt?: string; busy?: boolean }>,
-    /** Asks the main process to switch the node's mode (the same path as the tray). Survival needs no PIN; leaving it does. */
-    setMode: (target: 'online' | 'offline' | 'survival'): Promise<{ ok: boolean; code?: string }> => ipcRenderer.invoke(SET_MODE_CHANNEL, target) as Promise<{ ok: boolean; code?: string }>,
-  });
+  contextBridge.exposeInMainWorld(BRIDGE, createShellBridge(ipcRenderer as unknown as IpcRendererLike));
 }

@@ -44,13 +44,13 @@ jobs:
         run: node scripts/dist.mjs --linux --x64
       - name: Verify the packaged app (asar, fuses, no source maps, no node_modules/electron)
         run: node scripts/packaged-app.mjs verify
-      - name: End-to-end, the packaged test copy under Xvfb against the fake agent on 127.0.0.1:7070 (egress, start-up, error pages, diagnose)
+      - name: End-to-end, the packaged test copy under Xvfb against the fake agent on 127.0.0.1:7070 (egress, start-up, error pages, diagnose, windows and bridges)
         env:
           LOCALAI_E2E_NO_SANDBOX: '1'
           LOCALAI_E2E_EXECUTABLE: release/test-copy/ai-desktop
         run: |
           node scripts/packaged-app.mjs test-copy
-          xvfb-run -a npx playwright test
+          xvfb-run -a -s "-screen 0 1920x1080x24" npx playwright test
       - name: Inspect the deb (depends, AppArmor profile, install paths)
         run: |
           deb=$(ls release/ai-desktop_*_amd64.deb)

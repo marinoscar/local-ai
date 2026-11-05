@@ -25,7 +25,7 @@ const NO_TRAY = { LOCALAI_DESKTOP_TRAY: 'unavailable' };
 test('the shell bridge switches the mode through the agent; agent pages have no such bridge', async () => {
   run = await launch({ token: agent.token, env: NO_TRAY });
   const agentPage = await waitForContents(run.app, isAgentUrl);
-  const shell = await waitForContents(run.app, (url) => url.startsWith('localai://app/'));
+  const shell = await waitForContents(run.app, (url) => url.startsWith('localai://app/topbar/'));
 
   expect(await evaluateIn<string>(run.app, agentPage.id, 'typeof window.localaiDesktop')).toBe('undefined');
   expect(await evaluateIn<unknown>(run.app, shell.id, "window.localaiDesktop.setMode('offline')")).toEqual({ ok: true });
@@ -57,7 +57,7 @@ test('with no tray, LAI-DSK-013 is logged and remembered once, and closing the w
   expect(log).toContain('"code":"LAI-DSK-013"');
 
   const exited = new Promise<void>((resolve) => run!.app.process().once('exit', () => resolve()));
-  await run.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close());
+  await run.app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0]!.close());
   await Promise.race([exited, new Promise((_r, reject) => setTimeout(() => reject(new Error('the app did not quit when its window was closed')), 15_000))]);
 });
 
@@ -66,12 +66,12 @@ test('with a tray, closing the window hides it and the app keeps running; Quit r
   await waitForContents(run.app, isAgentUrl);
   // The agent is up and the stream is open: the tray controller is wired to the feed.
   await expect.poll(() => agent.openEventStreams()).toBe(1);
-  expect(await run.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isVisible())).toBe(true);
+  expect(await run.app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0]!.isVisible())).toBe(true);
 
   let exited = false;
   run.app.process().once('exit', () => (exited = true));
-  await run.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close());
-  await expect.poll(() => run!.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => w.isVisible()))).toEqual([false]);
+  await run.app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0]!.close());
+  await expect.poll(() => run!.app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows().map((w) => w.isVisible()))).toEqual([false]);
   await new Promise((r) => setTimeout(r, 500));
   expect(exited).toBe(false);
 
