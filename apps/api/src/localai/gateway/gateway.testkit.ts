@@ -95,6 +95,8 @@ export interface TestGateway {
   /** Fastify's own log output (every line, as text), when `fastifyLogs` was requested. */
   fastifyLog: string[];
   token: string;
+  /** The one valid key's record (its id is what a usage row carries). */
+  key: GatewayKeyRecord;
   prefix: string;
   maintenance: { active: boolean };
   config: { enabled: boolean; origins: string[] };
@@ -107,6 +109,11 @@ export interface BuildOptions {
   authenticator?: GatewayRouteDeps['authenticator'];
   /** Runs on the root instance before it is ready (a spec registers a rogue route here). */
   beforeReady?: (app: FastifyInstance) => void;
+  /** Columns of the one valid key (its limits, or the id/user of a real database row). */
+  keyOverrides?: Partial<GatewayKeyRecord>;
+  /** GW-08: the source of the `x-ratelimit-*` headers and the sink of the `models` usage rows. */
+  rateLimitHeaders?: GatewayRouteDeps['rateLimitHeaders'];
+  usage?: GatewayRouteDeps['usage'];
 }
 
 /** A Fastify instance with the gateway registered over fakes, one active owner and one valid key (`token`). */
@@ -118,8 +125,8 @@ export async function buildGateway(options: BuildOptions = {}): Promise<TestGate
   const store = new FakeKeyStore();
   const owners = new FakeOwners();
   const token = makeToken();
-  store.add(makeKey(token));
-  owners.set('user-a', ACTIVE_OWNER);
+  const key = store.add(makeKey(token, options.keyOverrides));
+  owners.set(key.userId, ACTIVE_OWNER);
   const authenticator = new GatewayAuthenticator({ store, owners });
   const { sink, logs } = captureSink();
   const maintenance = { active: false };
@@ -135,8 +142,10 @@ export async function buildGateway(options: BuildOptions = {}): Promise<TestGate
     maintenance: { isActive: async () => maintenance.active },
     logger: sink,
     handlers: options.handlers,
+    ...(options.rateLimitHeaders ? { rateLimitHeaders: options.rateLimitHeaders } : {}),
+    ...(options.usage ? { usage: options.usage } : {}),
   });
   options.beforeReady?.(app);
   await app.ready();
-  return { app, store, owners, authenticator, logs, fastifyLog, token, prefix: GATEWAY_PREFIX, maintenance, config, routes };
+  return { app, store, owners, authenticator, logs, fastifyLog, token, key, prefix: GATEWAY_PREFIX, maintenance, config, routes };
 }

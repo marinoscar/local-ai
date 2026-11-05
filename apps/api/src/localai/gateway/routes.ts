@@ -27,9 +27,12 @@ import { buildGatewayIndex } from './index-route';
 import { ModelListing } from './models/listing';
 import { modelsHandlers } from './models-route';
 import { resolveRequestId } from './request-id';
+import type { RateLimitHeaderSource } from './limits/rate-limiter';
 import { RoutingTable } from './routing/routing-table';
 import { audioCapabilityOf, registerAudioMultipart, transcriptionsHandlers } from './transcriptions-route';
 import { formatRequestLog, newRequestLog, type GatewayLogSink, type GatewayRequestLog } from './request-log';
+import { GATEWAY_LIMITS } from './limits';
+import { GATEWAY_USAGE_SINK, type UsageSink } from './usage/usage-sink';
 
 /** Where the scope is mounted; the public path is `/v1/...`. */
 export const GATEWAY_PREFIX = '/api/gateway/v1';
@@ -78,7 +81,14 @@ export interface GatewayRouteDeps {
   maintenance: { isActive(): Promise<boolean> };
   logger: GatewayLogSink;
   handlers?: Partial<GatewayHandlers>;
+  /** GW-08: adds the `x-ratelimit-*` headers to every authenticated response, errors included (spec 3.2). */
+  rateLimitHeaders?: RateLimitHeaderSource;
+  /** GW-08: receives a usage row for the endpoints the proxy does not serve (`GET /v1/models`, spec 4.5). */
+  usage?: UsageSink;
 }
+
+/** Endpoints whose usage row is written here, on the response, because no proxy request owns them. */
+const ROUTE_RECORDED_ENDPOINTS: ReadonlySet<string> = new Set(['models']);
 
 interface RouteConfig {
   gatewayPublic?: boolean;
@@ -176,11 +186,47 @@ export async function registerGatewayRoutesOn(instance: FastifyInstance, deps: G
         return undefined;
       });
 
+      // The rate-limit headers go on every authenticated response, whatever ended it: an error after authentication
+      // (a 404, a 429) carries them too, a 401 and the pre-auth 503 do not (they have no key to describe).
+      scope.addHook('onSend', async (request, reply, payload) => {
+        const ctx = contexts.get(request);
+        if (ctx?.principal && deps.rateLimitHeaders) {
+          for (const [name, value] of Object.entries(await deps.rateLimitHeaders.headersFor(ctx.principal.key))) void reply.header(name, value);
+        }
+        return payload;
+      });
+
       scope.addHook('onResponse', async (request, reply) => {
         const ctx = contexts.get(request);
         if (!ctx) return;
         ctx.log.status ??= reply.statusCode;
         ctx.log.duration_ms ??= Math.round(reply.elapsedTime);
+        const endpoint = routeConfig(request).gatewayEndpoint;
+        if (ctx.principal && deps.usage && endpoint !== undefined && ROUTE_RECORDED_ENDPOINTS.has(endpoint)) {
+          try {
+            deps.usage.record({
+              requestId: ctx.requestId,
+              keyId: ctx.principal.key.id,
+              userId: ctx.principal.userId,
+              endpoint,
+              model: null,
+              requestedModel: ctx.log.requested_model,
+              nodeId: null,
+              status: reply.statusCode,
+              errorCode: ctx.log.error_code,
+              stream: false,
+              aborted: false,
+              attempts: 1,
+              promptTokens: null,
+              completionTokens: null,
+              usageSource: 'none',
+              ttfbMs: null,
+              durationMs: ctx.log.duration_ms,
+            });
+          } catch {
+            // never fails the response
+          }
+        }
         const line = formatRequestLog(ctx.log);
         if (reply.statusCode >= 500) deps.logger.warn(line);
         else deps.logger.info(line);
@@ -238,6 +284,20 @@ export async function registerGatewayRoutesOn(instance: FastifyInstance, deps: G
   );
 }
 
+/** A provider that may not be bound (a spec's slim application has neither the limiter nor the recorder). */
+function optionalProvider<T>(app: NestFastifyApplication, token: symbol): T | undefined {
+  try {
+    return app.get<T>(token, { strict: false });
+  } catch {
+    return undefined;
+  }
+}
+
+/** The limits object as a header source, when it is one (the no-op limits are not). */
+function headerSourceOf(limits: unknown): RateLimitHeaderSource | undefined {
+  return typeof (limits as Partial<RateLimitHeaderSource> | undefined)?.headersFor === 'function' ? (limits as RateLimitHeaderSource) : undefined;
+}
+
 /** Registers the gateway on the Nest application's Fastify instance, resolving the services from the Nest container. */
 export async function registerGatewayRoutes(app: NestFastifyApplication): Promise<void> {
   const maintenance = app.get(MaintenanceModeService, { strict: false });
@@ -247,6 +307,9 @@ export async function registerGatewayRoutes(app: NestFastifyApplication): Promis
     // The platform names the question `isEnabled()`: whether traffic is being held back at all, whoever asks.
     maintenance: { isActive: () => maintenance.isEnabled() },
     logger: nestLogSink(),
+    // GW-08: the limiter and the recorder are bound to these tokens by `GatewayProxyModule`.
+    rateLimitHeaders: headerSourceOf(optionalProvider(app, GATEWAY_LIMITS)),
+    usage: optionalProvider<UsageSink>(app, GATEWAY_USAGE_SINK),
     handlers: {
       ...modelsHandlers(app.get(ModelListing, { strict: false })),
       ...proxyHandlers(app.get(GatewayService, { strict: false })),
