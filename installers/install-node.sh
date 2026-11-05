@@ -769,6 +769,33 @@ phase_agent() {
   else
     if activate_llama; then svc_or_say start localai-llama.service || return $?; fi
   fi
+  say "5. kit: saving the llama.cpp build in use as a ready-made build"
+  export_builds
+  return 0
+}
+
+# export_builds: after the last activation (P8 or P9), `aictl kit export-build` packs the build in use into
+# kit/prebuilt/ of this computer and of every mounted, writable AI-ARK drive, so a later rebuild of this computer can
+# restore it in seconds (rebuild-kit.md section 4.2, "After every successful build activation (installer, ...)").
+# The build is already in use, so a failure here is a warning, never a failed install.
+export_builds() {
+  if ((DRY_RUN)); then
+    say "[dry-run] would run: $(quote_cmd "$AICTL_BIN" kit export-build) (when a llama.cpp build is active)"
+    return 0
+  fi
+  if [[ ! -x "$LLAMA_ROOT/current/bin/llama-server" ]]; then
+    say "no llama.cpp build is active, so there is nothing to save in the kit yet"
+    return 0
+  fi
+  if [[ ! -x "$AICTL_BIN" ]]; then
+    say "WARNING: the aictl program is not installed at $AICTL_BIN, so the build was not saved in the kit. Later: sudo aictl kit export-build"
+    return 0
+  fi
+  local rc=0
+  { run_or_say "$AICTL_BIN" kit export-build; } </dev/null || rc=$?
+  if ((rc != 0)); then
+    say "WARNING: the build is in use but could not be saved in the kit (exit $rc, see the lines above; the other kit files are untouched). Later: sudo aictl kit export-build"
+  fi
   return 0
 }
 
