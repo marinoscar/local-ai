@@ -67,6 +67,8 @@ export interface DesktopStatus {
   connected: boolean;
   /** The tab the main window shows. */
   tab: Tab;
+  /** Absent in snapshots older than DSK-09; the top bar treats absent as "not in survival form". */
+  survival?: SurvivalState;
 }
 
 /** DSK-08 owns the final shape (desktop.md 4.6); the key is masked until `revealKey`. */
@@ -129,6 +131,10 @@ export interface LocalaiDesktop {
   setMode(target: NodeMode): Promise<ActionResult | NotImplemented>;
   openWindow(which: ChildWindowName): void;
   showTab(tab: Tab): void;
+  /** Survival strip (DSK-09): full screen on or off. It never changes the node's mode. Ignored outside the survival form. */
+  setFullScreen(flag: boolean): void;
+  /** Survival strip (DSK-09): leave a Portal that was opened while the node is not in survival mode. Ignored in survival mode (that needs the PIN). */
+  closePortal(): void;
   cloud: {
     beginLink(): Promise<{ userCode: string; verificationUri: string; expiresIn: number } | NotImplemented>;
     openVerification(): void;

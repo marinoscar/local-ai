@@ -314,6 +314,30 @@ describe('what an allowed shell page can do', () => {
     expect(calls.showTab.mock.calls.map((c) => c[0])).toEqual(['local', 'lab']);
   });
 
+  it('setFullScreen takes a boolean from a shell page only; closePortal takes nothing (the survival strip, DSK-09)', () => {
+    const setFullScreen = vi.fn();
+    const closePortal = vi.fn();
+    const { deps } = makeDeps({ setFullScreen, closePortal });
+    const wrapped = wrap(deps);
+    for (const flag of [true, false, 'true', 1, null, undefined]) wrapped[CHANNELS.setFullScreen]!(from(SHELL), flag);
+    expect(setFullScreen.mock.calls).toEqual([[true], [false]]);
+    wrapped[CHANNELS.closePortal]!(from(SHELL));
+    expect(closePortal).toHaveBeenCalledTimes(1);
+    // An agent page has no such bridge: refused, and nothing runs.
+    wrapped[CHANNELS.setFullScreen]!(from(AGENT), false);
+    wrapped[CHANNELS.closePortal]!(from(AGENT));
+    expect(setFullScreen).toHaveBeenCalledTimes(2);
+    expect(closePortal).toHaveBeenCalledTimes(1);
+  });
+
+  it('without the survival wiring the two channels do nothing', () => {
+    const wrapped = wrap(makeDeps().deps);
+    expect(() => {
+      wrapped[CHANNELS.setFullScreen]!(from(SHELL), true);
+      wrapped[CHANNELS.closePortal]!(from(SHELL));
+    }).not.toThrow();
+  });
+
   it('settings.set validates, writes only the validated patch and answers the projection', async () => {
     const { deps, calls } = makeDeps();
     const wrapped = wrap(deps);
@@ -410,6 +434,12 @@ describe('buildDesktopStatus', () => {
     expect(buildDesktopStatus({ ...base, agentStatus: null }).connected).toBe(false);
     expect(buildDesktopStatus({ ...base, agentStatus: online, cloud: { ...cloud, tokenHeld: false } }).connected).toBe(false);
     expect(buildDesktopStatus({ ...base, agentStatus: online, cloud: { ...cloud, linked: false } }).connected).toBe(false);
+  });
+
+  it('carries the survival strip state only when it is given', () => {
+    expect(buildDesktopStatus({ ...base, agentStatus: null }).survival).toBeUndefined();
+    const survival = { active: true, fullScreen: true, portalOnly: false, banner: null };
+    expect(buildDesktopStatus({ ...base, agentStatus: null, survival }).survival).toEqual(survival);
   });
 
   it('an unknown mode value is null, not passed through', () => {

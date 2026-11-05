@@ -1,10 +1,10 @@
 // The top bar (docs/specs/desktop.md 3.4): 48 px, always visible. Tabs "This computer" | "Lab" (Lab only when
 // connected), the status pill and mode chip, the three window buttons, Copy API key and the menu. It talks to the main
 // process only through `window.localaiDesktop`; buttons whose feature has not landed show "Not available yet.".
-import { Box, Button, Chip, IconButton, Tab, Tabs, Typography, useMediaQuery } from '@mui/material';
+import { Box, Button, Chip, IconButton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Typography, useMediaQuery } from '@mui/material';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import type { ChildWindowName, DesktopStatus, Lang, LocalaiDesktop, Tab as TabName } from '../../shared/types';
-import { modeLabel, pillFor, selectedTab, tabsFor } from './model';
+import { modeLabel, pillFor, selectedTab, stripFor, tabsFor } from './model';
 import { STRINGS, copiedText, pick } from './strings';
 
 const NOTICE_MS = 7000;
@@ -59,6 +59,50 @@ export function TopBar({ bridge }: TopBarProps): ReactElement {
       say(pick(STRINGS.copyFailed, lang));
     }
   };
+
+  const strip = stripFor(status, lang);
+  if (strip.active) {
+    const setLang = (next: Lang | null): void => {
+      if (next !== null && next !== lang) void bridge?.settings.set({ lang: next }).catch(() => undefined);
+    };
+    return (
+      <Box
+        component="header"
+        data-testid="survival-strip"
+        sx={{ height: 32, display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, overflow: 'hidden', borderBottom: 1, borderColor: 'divider', bgcolor: 'warning.light', color: 'common.black' }}
+      >
+        <Typography component="h1" variant="body2" noWrap sx={{ fontWeight: 700, flexShrink: 0 }} data-testid="survival-label">
+          {strip.label}
+        </Typography>
+        <Typography role={strip.banner ? 'alert' : undefined} variant="caption" noWrap data-testid="survival-banner" sx={{ flexGrow: 1, minWidth: 0 }}>
+          {strip.banner ?? ''}
+        </Typography>
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={lang}
+          onChange={(_event, value: Lang | null) => setLang(value)}
+          aria-label={pick(STRINGS.language, lang)}
+          sx={{ height: 24, flexShrink: 0, '& .MuiToggleButton-root': { py: 0, px: 1, fontSize: '0.75rem', color: 'inherit', borderColor: 'currentColor' } }}
+        >
+          <ToggleButton value="en" data-testid="lang-en" aria-label="English" lang="en">
+            EN
+          </ToggleButton>
+          <ToggleButton value="es" data-testid="lang-es" aria-label="Español" lang="es">
+            ES
+          </ToggleButton>
+        </ToggleButtonGroup>
+        <Button size="small" variant="outlined" color="inherit" onClick={() => bridge?.setFullScreen(status?.survival?.fullScreen !== true)} data-testid="exit-fullscreen" sx={{ py: 0, minHeight: 24, whiteSpace: 'nowrap', flexShrink: 0, fontSize: '0.75rem' }}>
+          {strip.fullScreenLabel}
+        </Button>
+        {strip.showBack ? (
+          <Button size="small" variant="outlined" color="inherit" onClick={() => bridge?.closePortal()} data-testid="survival-back" sx={{ py: 0, minHeight: 24, whiteSpace: 'nowrap', flexShrink: 0, fontSize: '0.75rem' }}>
+            {pick(STRINGS.backToDashboard, lang)}
+          </Button>
+        ) : null}
+      </Box>
+    );
+  }
 
   const pill = pillFor(status, lang);
   const mode = modeLabel(status?.mode ?? null, lang);
