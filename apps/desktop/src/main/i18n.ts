@@ -216,3 +216,116 @@ export const ACTION_LABEL: Readonly<Record<ErrorAction, Bilingual>> = {
   'open-portal': PAGE_STRINGS.openPortal,
   'open-browser': PAGE_STRINGS.openBrowser,
 };
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Tray, native dialogs and notifications (DSK-06; docs/specs/desktop.md 4.3 and 4.4)
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** The six status lights of the tray (`build/linux/tray/tray-<colour>.png`). */
+export const TRAY_COLOURS = ['green', 'blue', 'orange', 'amber', 'red', 'grey'] as const;
+export type TrayColour = (typeof TRAY_COLOURS)[number];
+
+/** The tooltip of each colour, word for word from desktop.md 4.3. */
+export const TRAY_TOOLTIPS: Readonly<Record<TrayColour, Bilingual>> = {
+  green: { en: 'Local AI: ready (online)', es: 'Local AI: listo (en línea)' },
+  blue: { en: 'Local AI: ready (offline)', es: 'Local AI: listo (sin conexión)' },
+  orange: { en: 'Local AI: survival mode', es: 'Local AI: modo supervivencia' },
+  amber: { en: 'Local AI: needs attention', es: 'Local AI: necesita atención' },
+  red: { en: 'Local AI: not working, click for help', es: 'Local AI: no funciona, haz clic para ayuda' },
+  grey: { en: 'Local AI: starting', es: 'Local AI: iniciando' },
+};
+
+/** The three node modes in running text ("Local AI is now in survival mode"). */
+export const MODE_WORDS: Readonly<Record<'online' | 'offline' | 'survival', Bilingual>> = {
+  online: { en: 'online', es: 'en línea' },
+  offline: { en: 'offline', es: 'sin conexión' },
+  survival: { en: 'survival', es: 'supervivencia' },
+};
+
+/** Labels of the tray menu (desktop.md 4.3). */
+export const TRAY_TEXT = {
+  open: { en: 'Open Local AI', es: 'Abrir Local AI' },
+  chat: { en: 'Chat', es: 'Chat' },
+  library: { en: 'Library', es: 'Biblioteca' },
+  maps: { en: 'Maps', es: 'Mapas' },
+  mode: { en: 'Mode', es: 'Modo' },
+  online: { en: 'Online', es: 'En línea' },
+  offline: { en: 'Offline', es: 'Sin conexión' },
+  survival: { en: '⚠ Survival mode', es: '⚠ Modo supervivencia' },
+  leaveSurvival: {
+    en: 'Leave survival in the Survival Portal',
+    es: 'Para salir de supervivencia usa el Portal de Supervivencia',
+  },
+  copyKey: { en: 'Copy API key', es: 'Copiar la clave de la API' },
+  connectionInfo: { en: 'Show connection info', es: 'Mostrar datos de conexión' },
+  lab: { en: 'Lab (ai.marin.cr)', es: 'Laboratorio (ai.marin.cr)' },
+  startAgent: PAGE_STRINGS.startAgent,
+  startAtLogin: { en: 'Start at login', es: 'Iniciar al entrar a la sesión' },
+  quit: { en: 'Quit', es: 'Salir' },
+} as const satisfies Record<string, Bilingual>;
+
+/** Native dialogs of the tray (desktop.md 4.3, implementation note 5). */
+export const DIALOG_TEXT = {
+  survivalTitle: { en: 'Survival mode', es: 'Modo supervivencia' },
+  survivalQuestion: {
+    en: 'Switch to Survival mode? Everything you need offline will start.',
+    es: '¿Cambiar a modo supervivencia? Se iniciará todo lo necesario sin internet.',
+  },
+  survivalYes: { en: 'Switch to Survival mode', es: 'Cambiar a modo supervivencia' },
+  cancel: { en: 'Cancel', es: 'Cancelar' },
+  modeFailedTitle: { en: "The mode couldn't be changed", es: 'No se pudo cambiar el modo' },
+  modeFailedFallback: { en: 'Something went wrong while changing the mode.', es: 'Algo salió mal al cambiar el modo.' },
+  fixLabel: { en: 'What to do', es: 'Qué hacer' },
+  ok: { en: 'OK', es: 'Aceptar' },
+} as const satisfies Record<string, Bilingual>;
+
+/**
+ * Codes that are a one-time notice and never a page: they have no buttons and are not in `ERROR_CODES`
+ * (doctor-codes.md registers them).
+ */
+export const NOTICE_COPY = {
+  'LAI-DSK-013': {
+    severity: 'warning',
+    title: { en: "The system tray isn't available", es: 'La bandeja del sistema no está disponible' },
+    message: {
+      en: 'Local AI cannot show its status icon here. Closing the window will quit the app.',
+      es: 'Local AI no puede mostrar su icono de estado aquí. Al cerrar la ventana se cerrará la aplicación.',
+    },
+    fix: {
+      en: 'Turn on "AppIndicator and KStatusNotifierItem Support" in Extensions, then restart ai-desktop.',
+      es: 'Activa "AppIndicator and KStatusNotifierItem Support" en Extensiones y reinicia ai-desktop.',
+    },
+  },
+} as const satisfies Record<string, { severity: Severity; title: Bilingual; message: Bilingual; fix: Bilingual }>;
+export type NoticeCode = keyof typeof NOTICE_COPY;
+
+/** `{name}` placeholders of the notification texts. */
+export function fill(text: string, values: Readonly<Record<string, string>>): string {
+  return text.replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
+}
+
+/** Texts of the native notifications (desktop.md 4.4); builders in notify.ts. Placeholders are `{model}`, `{mode}`, ... */
+export const NOTIFY_TEXT = {
+  modeChangedTitle: { en: 'Mode changed', es: 'Modo cambiado' },
+  modeChangedBody: { en: 'Local AI is now in {mode} mode.', es: 'Local AI ahora está en modo {mode}.' },
+  modelFailedTitle: { en: "A model couldn't be loaded", es: 'No se pudo cargar un modelo' },
+  modelFailedBody: { en: 'The model {model} did not load ({code}). Open Local AI to see what to do.', es: 'El modelo {model} no se cargó ({code}). Abre Local AI para ver qué hacer.' },
+  modelFailedBodyNoCode: { en: 'The model {model} did not load. Open Local AI to see what to do.', es: 'El modelo {model} no se cargó. Abre Local AI para ver qué hacer.' },
+  syncDoneTitle: { en: 'Sync finished', es: 'Sincronización terminada' },
+  syncDoneBody: { en: 'Everything is up to date.', es: 'Todo está al día.' },
+  syncPartialBody: { en: 'Sync finished, but {failed} items could not be updated. The previous copies were kept.', es: 'La sincronización terminó, pero {failed} elementos no se pudieron actualizar. Se conservaron las copias anteriores.' },
+  syncFailedTitle: { en: 'Sync failed', es: 'La sincronización falló' },
+  syncFailedBody: { en: 'The last good copies were kept. Open Local AI to see what to do.', es: 'Se conservaron las últimas copias buenas. Abre Local AI para ver qué hacer.' },
+  driveMountedTitle: { en: 'Drive connected', es: 'Unidad conectada' },
+  driveMountedBody: { en: 'The Local AI drive was plugged in.', es: 'Se conectó la unidad de Local AI.' },
+  driveMountedReadOnlyBody: { en: 'The Local AI drive was plugged in (read only).', es: 'Se conectó la unidad de Local AI (solo lectura).' },
+  driveUnmountedTitle: { en: 'Drive removed', es: 'Unidad retirada' },
+  driveUnmountedSafeBody: { en: 'The Local AI drive can be unplugged safely.', es: 'La unidad de Local AI se puede desconectar sin riesgo.' },
+  driveUnmountedUnsafeBody: { en: 'The Local AI drive was removed without ejecting it. Plug it in again and eject it properly.', es: 'La unidad de Local AI se retiró sin expulsarla. Conéctala otra vez y expúlsala correctamente.' },
+  alertTitle: { en: 'Local AI needs attention', es: 'Local AI necesita atención' },
+  suggestTitle: { en: 'No internet', es: 'Sin internet' },
+  suggestBody: {
+    en: 'No internet for 30 minutes. Everything here still works. Switch to Survival mode?',
+    es: 'Sin internet durante 30 minutos. Todo lo de aquí sigue funcionando. ¿Cambiar a modo supervivencia?',
+  },
+} as const satisfies Record<string, Bilingual>;

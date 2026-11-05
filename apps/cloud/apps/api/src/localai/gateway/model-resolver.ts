@@ -24,6 +24,11 @@ export interface ResolvedGatewayModel {
   roles: readonly string[] | null;
   /** Step 4 of the selection: is the model in the approved catalog (503 LAI-GW-021) or unknown (404 LAI-GW-020)? */
   inApprovedCatalog: boolean;
+  /**
+   * The display prefix (`lai_` + 6 characters) of the key that asked: the on-demand load (GW-09) records it in the audit
+   * row of the command it queues. Never the token. Absent when the resolver was not given a key.
+   */
+  keyPrefix?: string;
 }
 
 export interface GatewayModelResolver {

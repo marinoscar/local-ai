@@ -113,6 +113,12 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   signal?: AbortSignal;
   timeoutMs?: number;
+  /**
+   * Send no credential at all (no token read, no `Authorization`). For the few routes the agent serves without
+   * authentication, `POST /api/v1/mode/survival` above all, which must work even when the token file cannot be read.
+   * The destination check of `request()` still applies.
+   */
+  anonymous?: boolean;
 }
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -374,7 +380,8 @@ export class AgentClient {
    */
   async request(path: string, options: RequestOptions = {}): Promise<Response> {
     const url = this.#apiUrl(path);
-    const failure = await this.#ensureToken();
+    const anonymous = options.anonymous === true;
+    const failure = anonymous ? null : await this.#ensureToken();
     if (failure) throw new AgentTokenError(failure.reason);
     const send = (): Promise<Response> => {
       const signals = [AbortSignal.timeout(options.timeoutMs ?? 5000), ...(options.signal ? [options.signal] : [])];
@@ -383,14 +390,14 @@ export class AgentClient {
         headers: {
           ...options.headers,
           ...(options.json !== undefined ? { 'Content-Type': 'application/json' } : {}),
-          ...this.#authHeader(),
+          ...(anonymous ? {} : this.#authHeader()),
         },
         ...(options.json !== undefined ? { body: JSON.stringify(options.json) } : {}),
         signal: AbortSignal.any(signals),
       });
     };
     const first = await send();
-    if (first.status !== 401) return first;
+    if (anonymous || first.status !== 401) return first;
     const reread = await this.readToken();
     if (!reread.ok || !reread.changed) return first;
     return send();
