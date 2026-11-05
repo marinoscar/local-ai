@@ -4,6 +4,7 @@
 import { Module } from '@nestjs/common';
 
 import { LOCALAI_CLOCK, systemLocalaiClock } from '../../commands/command-events';
+import { catalogStoreFor } from '../routing/fake-upstream.seed';
 import { GatewayRoutingModule } from '../routing/routing.module';
 import { APPROVED_CATALOG_STORE, ApprovedCatalogReader, PrismaApprovedCatalogStore } from './catalog-hints';
 import { ModelListing } from './listing';
@@ -19,7 +20,8 @@ import { ModelDirectoryProvider, ModelResolver } from './resolve';
     ModelDirectoryProvider,
     ModelResolver,
     ModelListing,
-    { provide: APPROVED_CATALOG_STORE, useExisting: PrismaApprovedCatalogStore },
+    // The real store unless the load-test flag is on (routing/fake-upstream.seed.ts, refused in production).
+    { provide: APPROVED_CATALOG_STORE, inject: [PrismaApprovedCatalogStore], useFactory: (real: PrismaApprovedCatalogStore) => catalogStoreFor(real) },
     { provide: MODEL_POLICY_SOURCE, useExisting: PrismaModelPolicySource },
     { provide: LOCALAI_CLOCK, useValue: systemLocalaiClock },
   ],
