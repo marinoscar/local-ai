@@ -36,7 +36,7 @@ test.describe('the bridges', () => {
     const { agentPage, bar } = await start();
     const shell = await evaluateIn<string>(run!.app, bar, 'JSON.stringify({ keys: Object.keys(window.localaiDesktop).sort(), host: typeof window.localaiDesktopHost, node: [typeof require, typeof process, typeof module, typeof Buffer] })');
     expect(JSON.parse(shell)).toEqual({
-      keys: ['cloud', 'connectionInfo', 'copyApiKey', 'errorAction', 'lang', 'onNotice', 'onStatus', 'openWindow', 'pinSubmit', 'revealKey', 'rotateKey', 'setMode', 'settings', 'showMenu', 'showTab', 'startAgent', 'status'].sort(),
+      keys: ['closePortal', 'cloud', 'connectionInfo', 'copyApiKey', 'errorAction', 'lang', 'onNotice', 'onStatus', 'openWindow', 'pinSubmit', 'revealKey', 'rotateKey', 'setFullScreen', 'setMode', 'settings', 'showMenu', 'showTab', 'startAgent', 'status'].sort(),
       host: 'undefined',
       node: ['undefined', 'undefined', 'undefined', 'undefined'],
     });

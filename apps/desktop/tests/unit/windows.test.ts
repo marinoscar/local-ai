@@ -306,6 +306,18 @@ describe('the main window', () => {
     expect(manager.agentPath()).toBe('/portal');
   });
 
+  it('showAgentUi({ reveal: false }) loads without showing a window that was closed to the tray (leaving survival)', async () => {
+    const { manager, main, view } = setup();
+    await manager.showAgentUi('/portal');
+    manager.hideMain();
+    expect(main.visible).toBe(false);
+    await manager.showAgentUi('/', { reveal: false });
+    expect(main.visible).toBe(false);
+    expect(view('agent').webContents.loads.at(-1)).toBe('http://127.0.0.1:7070/');
+    await manager.showAgentUi('/');
+    expect(main.visible).toBe(true);
+  });
+
   it('the error page is in the chosen language', async () => {
     const { manager, view } = setup({ lang: 'es' });
     await manager.showError('LAI-DSK-003');

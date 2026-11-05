@@ -27,6 +27,7 @@ import type {
   RotateKeyResult,
   ShellSettings,
   ShellSettingsPatch,
+  SurvivalState,
   Tab,
   WindowBounds,
 } from '../shared/types';
@@ -49,6 +50,8 @@ export const CHANNELS = {
   setMode: 'localai:set-mode',
   openWindow: 'localai:open-window',
   showTab: 'localai:show-tab',
+  setFullScreen: 'localai:set-full-screen',
+  closePortal: 'localai:close-portal',
   showMenu: 'localai:show-menu',
   cloudBeginLink: 'localai:cloud-begin-link',
   cloudOpenVerification: 'localai:cloud-open-verification',
@@ -348,6 +351,8 @@ export interface StatusInputs {
   agentStatus: AgentStatus | null;
   cloud: CloudLinkState;
   tab: Tab;
+  /** The survival strip's state (DSK-09); absent: not in survival form. */
+  survival?: SurvivalState;
 }
 
 const MODES: readonly string[] = ['online', 'offline', 'survival'];
@@ -385,6 +390,7 @@ export function buildDesktopStatus(input: StatusInputs): DesktopStatus {
     // desktop.md 4.9: linked AND a token held AND the node's mode is online.
     connected: input.cloud.linked && input.cloud.tokenHeld && mode === 'online',
     tab: input.tab,
+    ...(input.survival !== undefined ? { survival: input.survival } : {}),
   };
 }
 
@@ -431,6 +437,9 @@ export interface BridgeDeps {
   status(): DesktopStatus;
   openChild(name: ChildWindowName): void;
   showTab(tab: Tab): void;
+  /** Survival strip (DSK-09). Absent: the channels do nothing. */
+  setFullScreen?(flag: boolean): void;
+  closePortal?(): void;
   /** Pops up the top bar's native menu. */
   showMenu(): void;
   settings: SettingsStore;
@@ -472,6 +481,14 @@ export function createShellHandlers(deps: BridgeDeps): HandlerTable {
         if (typeof tab === 'string' && TABS.includes(tab)) deps.showTab(tab as Tab);
       },
     },
+    [CHANNELS.setFullScreen]: {
+      kind: 'send',
+      origin: 'shell',
+      run: (_event, flag) => {
+        if (typeof flag === 'boolean') deps.setFullScreen?.(flag);
+      },
+    },
+    [CHANNELS.closePortal]: { kind: 'send', origin: 'shell', run: () => deps.closePortal?.() },
     [CHANNELS.showMenu]: { kind: 'send', origin: 'shell', run: () => deps.showMenu() },
     [CHANNELS.settingsGet]: { kind: 'invoke', origin: 'shell', run: async () => projectSettings(await deps.settings.get()) },
     [CHANNELS.settingsSet]: {

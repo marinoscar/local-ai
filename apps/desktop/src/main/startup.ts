@@ -18,8 +18,12 @@ export interface ContentHost {
 }
 
 export interface SurvivalHook {
-  /** DSK-09: full screen, collapsed strip. Called when the node is in survival mode at start-up. */
-  enter(): void | Promise<void>;
+  /**
+   * Full screen, collapsed strip (survival.ts). Called when the node is in survival mode at start-up, before the Portal
+   * is loaded. `banner` is set when the token file is unreadable: the Portal needs no token, so it is shown anyway and
+   * the strip carries the code.
+   */
+  enter(options?: { banner?: DskCode }): void | Promise<void>;
 }
 
 export type StartupClient = Pick<AgentClient, 'health' | 'readToken' | 'createSession' | 'status' | 'recreateSession'>;
@@ -35,8 +39,11 @@ export interface StartupDeps {
 
 export type StartupResult =
   | { screen: 'agent-ui'; mode: string | null }
-  | { screen: 'survival' }
+  | { screen: 'survival'; banner?: DskCode }
   | { screen: 'error'; code: DskCode };
+
+/** The token-file failures the Portal can ride out: it is served without a login (desktop.md 4.7 rule 5). */
+const TOKEN_FILE_CODES: readonly DskCode[] = ['LAI-DSK-001', 'LAI-DSK-002', 'LAI-DSK-003'];
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -50,7 +57,16 @@ export async function codeForTokenFailure(failure: Extract<TokenResult, { ok: fa
 export async function runStartup(deps: StartupDeps): Promise<StartupResult> {
   const log = deps.log ?? NULL_LOGGER;
   const sleep = deps.sleep ?? wait;
+  // The mode `/health` reports (no login needed); set once the agent answered.
+  let agentMode: string | undefined;
   const fail = async (code: DskCode, why: string, options?: { unit?: string }): Promise<StartupResult> => {
+    if (agentMode === 'survival' && TOKEN_FILE_CODES.includes(code)) {
+      // Survival mode and no usable token: the emergency screen must not become an error page.
+      log.log('warn', 'agent', `${why}; the node is in survival mode, so the Portal is shown without a session`, { code });
+      await deps.survival.enter({ banner: code });
+      await deps.host.showAgentUi('/portal');
+      return { screen: 'survival', banner: code };
+    }
     log.log(ERROR_COPY[code].severity === 'critical' || ERROR_COPY[code].severity === 'error' ? 'error' : 'warn', 'agent', why, { code });
     await deps.host.showError(code, options);
     return { screen: 'error', code };
@@ -68,6 +84,7 @@ export async function runStartup(deps: StartupDeps): Promise<StartupResult> {
     probe = await deps.client.health({ tries: 1 });
   }
   if (!probe.reachable) return fail('LAI-DSK-004', 'the agent stopped answering while starting', { unit: await deps.supervisor.unitState() });
+  agentMode = probe.health.mode;
   if (checkApiVersion(probe.health.version) === 'mismatch') {
     return fail('LAI-DSK-006', 'the agent API major version is not supported', undefined);
   }

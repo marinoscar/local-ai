@@ -39,3 +39,17 @@ export function tabsFor(status: DesktopStatus | null): Tab[] {
 export function selectedTab(status: DesktopStatus | null): Tab {
   return status?.connected && status.tab === 'lab' ? 'lab' : 'local';
 }
+
+/** The 32 px survival strip replaces the whole bar while the desktop shows the Portal in survival form (desktop.md 4.7). */
+export function stripFor(status: DesktopStatus | null, lang: Lang): { active: boolean; label: string; fullScreenLabel: string; showBack: boolean; banner: string | null } {
+  const s = status?.survival;
+  const active = s?.active === true;
+  return {
+    active,
+    // A Portal opened outside survival mode does not call itself "Survival mode".
+    label: pick(s?.portalOnly === true ? STRINGS.survivalPortal : STRINGS.survivalMode, lang),
+    fullScreenLabel: pick(s?.fullScreen === true ? STRINGS.exitFullScreen : STRINGS.enterFullScreen, lang),
+    showBack: active && s?.portalOnly === true,
+    banner: s?.banner ? `${s.banner.code} · ${s.banner.text}` : null,
+  };
+}

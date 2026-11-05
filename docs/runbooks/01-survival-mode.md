@@ -66,6 +66,16 @@ Print this page and keep it next to the computer, with the AI-ARK drive. The one
 
 You can click a button, or press its number on the keyboard. **Esc** always brings you back to the home screen. The **English | Español** switch at the top changes the language. **A A+ A++** makes the text bigger.
 
+### The Local AI app in Survival mode (full screen)
+
+When the computer is in Survival mode, the **Local AI** app fills the whole screen with the Survival Portal. A thin orange strip at the top says **Survival mode**. It has an **EN | ES** switch for the language and an **Exit full screen** button.
+
+- **To make the window smaller (for example to use another program):** press **Exit full screen** in the strip. The strip stays, and the button now says **Full screen**: press it to fill the screen again. The F11 key does the same. This does **not** turn Survival mode off.
+- **If you close the window:** the app keeps running in the background. Click the small Local AI icon at the top of the screen (the tray), or start **Local AI** again from the Super key menu: the Survival Portal fills the screen again. To really quit, use **Quit** in the tray menu. The computer keeps running Survival mode even when the app is closed.
+- **The language switch in the strip** changes the strip and the Portal together. By default the language follows the computer's own language.
+- **If the strip shows a code such as `LAI-DSK-001`** (this user is not allowed to control Local AI): the Portal still works, everything on it is available. The code tells the owner what to fix later: see the troubleshooting runbook.
+- **What you should see:** the Portal with its big buttons under a 1-line strip. **If it doesn't work:** use the browser way (step 6).
+
 ### Button 1: Chat (type questions)
 8. Press **1**. After a short "Opening the chat" message, the chat page opens.
 9. Click the box at the bottom, type your question in plain words, press **Enter**.
@@ -464,6 +474,16 @@ Imprima esta página y guárdela junto a la computadora, con el disco AI-ARK. La
 ## Parte 3. El Portal de Supervivencia, botón por botón
 
 Puede hacer clic en un botón o presionar su número en el teclado. **Esc** siempre vuelve a la pantalla de inicio. El selector **English | Español** de arriba cambia el idioma. **A A+ A++** agranda el texto.
+
+### La app Local AI en modo supervivencia (pantalla completa)
+
+Cuando la computadora está en modo supervivencia, la app **Local AI** llena toda la pantalla con el Portal de Supervivencia. Una franja delgada naranja arriba dice **Modo supervivencia**. Tiene un selector **EN | ES** para el idioma y un botón **Salir de pantalla completa**.
+
+- **Para hacer la ventana más pequeña (por ejemplo, para usar otro programa):** presione **Salir de pantalla completa** en la franja. La franja se queda y el botón ahora dice **Pantalla completa**: presiónelo para volver a llenar la pantalla. La tecla F11 hace lo mismo. Esto **no** apaga el modo supervivencia.
+- **Si cierra la ventana:** la app sigue funcionando en segundo plano. Haga clic en el icono pequeño de Local AI arriba en la pantalla (la bandeja), o abra **Local AI** otra vez con la tecla Super: el Portal vuelve a llenar la pantalla. Para cerrar de verdad, use **Salir** en el menú de la bandeja. La computadora sigue en modo supervivencia aunque cierre la app.
+- **El selector de idioma de la franja** cambia la franja y el Portal juntos. Por defecto el idioma sigue el idioma de la propia computadora.
+- **Si la franja muestra un código como `LAI-DSK-001`** (este usuario no puede controlar Local AI): el Portal funciona igual, todo lo que tiene está disponible. El código le dice al dueño qué arreglar después: vea el runbook de solución de problemas.
+- **Lo que debe ver:** el Portal con sus botones grandes bajo una franja de 1 línea. **Si no funciona:** use la vía del navegador (paso 6).
 
 ### Botón 1: Conversar (escribir preguntas)
 8. Presione **1**. Después de un mensaje corto "Abriendo la conversación", se abre la página de conversación.

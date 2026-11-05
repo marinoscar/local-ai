@@ -34,6 +34,8 @@ describe('window.localaiDesktop (shell pages)', () => {
         'errorAction', 'showMenu', 'onNotice',
         // DSK-08
         'rotateKey',
+        // DSK-09 (survival strip)
+        'setFullScreen', 'closePortal',
       ].sort(),
     );
     expect(Object.keys(bridge.cloud).sort()).toEqual(['beginLink', 'linkState', 'openVerification', 'request', 'unlink']);
@@ -66,6 +68,8 @@ describe('window.localaiDesktop (shell pages)', () => {
     b.openWindow('chat');
     b.showTab('lab');
     b.showMenu();
+    b.setFullScreen(false);
+    b.closePortal();
     b.cloud.openVerification();
 
     expect(invoked).toEqual([
@@ -89,6 +93,8 @@ describe('window.localaiDesktop (shell pages)', () => {
       [CHANNELS.openWindow, ['chat']],
       [CHANNELS.showTab, ['lab']],
       [CHANNELS.showMenu, []],
+      [CHANNELS.setFullScreen, [false]],
+      [CHANNELS.closePortal, []],
       [CHANNELS.cloudOpenVerification, []],
     ]);
   });

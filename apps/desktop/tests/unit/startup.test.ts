@@ -115,6 +115,44 @@ describe('start-up sequence (desktop.md 4.1)', () => {
     expect(s.shown).toEqual([{ ui: '/portal' }]);
   });
 
+  describe('survival mode with a token file the desktop cannot use (desktop.md 4.7 rule 5)', () => {
+    const inSurvival = healthy();
+    inSurvival.reachable && (inSurvival.health.mode = 'survival');
+
+    it.each([
+      ['permission-denied', 'not-member', 'LAI-DSK-001'],
+      ['permission-denied', 'needs-relogin', 'LAI-DSK-002'],
+      ['missing', 'not-member', 'LAI-DSK-003'],
+      ['empty', 'not-member', 'LAI-DSK-003'],
+    ] as const)('%s / %s: the Portal loads with the code as a banner, not the error page', async (reason, group, code) => {
+      const s = setup({ health: [inSurvival], token: [{ ok: false, reason }], group });
+      expect(await run(s)).toEqual({ screen: 'survival', banner: code });
+      expect(s.survival.enter).toHaveBeenCalledWith({ banner: code });
+      expect(s.shown).toEqual([{ ui: '/portal' }]);
+      expect(s.calls).toEqual(['health', 'readToken']);
+    });
+
+    it('a token that goes bad at the session step is treated the same', async () => {
+      const s = setup({ health: [inSurvival], session: [{ ok: false, kind: 'token', token: { ok: false, reason: 'permission-denied' } }] });
+      expect(await run(s)).toEqual({ screen: 'survival', banner: 'LAI-DSK-001' });
+    });
+
+    it('the same token failure outside survival mode is still the error page', async () => {
+      const s = setup({ token: [{ ok: false, reason: 'permission-denied' }] });
+      expect(await run(s)).toEqual({ screen: 'error', code: 'LAI-DSK-001' });
+      expect(s.survival.enter).not.toHaveBeenCalled();
+    });
+
+    it('failures that are not about the token stay error pages (agent down, version, refused session)', async () => {
+      const refused = setup({ health: [inSurvival], session: [{ ok: false, kind: 'unauthorized' }, { ok: false, kind: 'unauthorized' }] });
+      expect(await run(refused)).toEqual({ screen: 'error', code: 'LAI-DSK-007' });
+      const old = healthy('9.0.0');
+      old.reachable && (old.health.mode = 'survival');
+      const version = setup({ health: [old] });
+      expect(await run(version)).toEqual({ screen: 'error', code: 'LAI-DSK-006' });
+    });
+  });
+
   it('a status that cannot be read still opens the agent UI', async () => {
     const s = setup({ status: { ok: false, kind: 'unexpected', status: 500 } });
     expect(await run(s)).toEqual({ screen: 'agent-ui', mode: null });

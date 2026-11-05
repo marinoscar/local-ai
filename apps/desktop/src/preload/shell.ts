@@ -21,6 +21,8 @@ const C = {
   setMode: 'localai:set-mode',
   openWindow: 'localai:open-window',
   showTab: 'localai:show-tab',
+  setFullScreen: 'localai:set-full-screen',
+  closePortal: 'localai:close-portal',
   showMenu: 'localai:show-menu',
   cloudBeginLink: 'localai:cloud-begin-link',
   cloudOpenVerification: 'localai:cloud-open-verification',
@@ -66,6 +68,12 @@ export function createShellBridge(ipc: IpcRendererLike): LocalaiDesktop {
     },
     showTab: (tab) => {
       ipc.send(C.showTab, tab);
+    },
+    setFullScreen: (flag) => {
+      ipc.send(C.setFullScreen, flag);
+    },
+    closePortal: () => {
+      ipc.send(C.closePortal);
     },
     cloud: {
       beginLink: () => invoke(C.cloudBeginLink),

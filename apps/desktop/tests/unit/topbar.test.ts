@@ -1,7 +1,7 @@
 // The top bar's view model and the menu template (docs/specs/desktop.md 3.4).
 import { describe, expect, it, vi } from 'vitest';
 import { ABOUT, NOT_AVAILABLE, buildMenuTemplate } from '../../src/main/menu';
-import { modeLabel, pillFor, selectedTab, tabsFor } from '../../src/renderer/topbar/model';
+import { modeLabel, pillFor, selectedTab, stripFor, tabsFor } from '../../src/renderer/topbar/model';
 import { STRINGS, copiedText } from '../../src/renderer/topbar/strings';
 import type { DesktopStatus } from '../../src/shared/types';
 
@@ -106,5 +106,35 @@ describe('the menu (the three dots)', () => {
     expect(labels).toEqual(['Información de conexión', 'Conectar con el laboratorio', '---', 'Iniciar al abrir sesión', 'Buscar actualizaciones', '---', 'Acerca de', 'Salir']);
     expect(NOT_AVAILABLE.es).toContain('Todavía');
     expect(ABOUT.detail('0.1.0', 'es')).toContain('Versión 0.1.0');
+  });
+});
+
+describe('the survival strip (desktop.md 4.7)', () => {
+  const survival = (over: Partial<NonNullable<DesktopStatus['survival']>> = {}) => status({ mode: 'survival', survival: { active: true, fullScreen: true, portalOnly: false, banner: null, ...over } });
+
+  it('is off until the main process says the Portal is in survival form', () => {
+    expect(stripFor(null, 'en').active).toBe(false);
+    expect(stripFor(status(), 'en').active).toBe(false);
+    expect(stripFor(status({ mode: 'survival' }), 'en').active).toBe(false);
+    expect(stripFor(status({ survival: { active: false, fullScreen: false, portalOnly: false, banner: null } }), 'en').active).toBe(false);
+  });
+
+  it('says "Survival mode" / "Modo supervivencia" and offers Exit full screen while full screen', () => {
+    expect(stripFor(survival(), 'en')).toEqual({ active: true, label: 'Survival mode', fullScreenLabel: 'Exit full screen', showBack: false, banner: null });
+    expect(stripFor(survival(), 'es')).toMatchObject({ label: 'Modo supervivencia', fullScreenLabel: 'Salir de pantalla completa' });
+  });
+
+  it('after leaving full screen the button goes back in (nobody is stuck either way)', () => {
+    expect(stripFor(survival({ fullScreen: false }), 'en').fullScreenLabel).toBe('Full screen');
+    expect(stripFor(survival({ fullScreen: false }), 'es').fullScreenLabel).toBe('Pantalla completa');
+  });
+
+  it('a Portal opened outside survival mode is not called survival mode and has a way back', () => {
+    expect(stripFor(survival({ portalOnly: true }), 'en')).toMatchObject({ label: 'Survival Portal', showBack: true });
+    expect(stripFor(survival({ portalOnly: true }), 'es').label).toBe('Portal de supervivencia');
+  });
+
+  it('shows the token-file code as a small banner', () => {
+    expect(stripFor(survival({ banner: { code: 'LAI-DSK-001', text: 'x' } }), 'en').banner).toBe('LAI-DSK-001 · x');
   });
 });
