@@ -28,6 +28,20 @@ jobs:
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
+      - name: Is there a local UI to build
+        id: ui
+        run: |
+          if [ -f agent/ui/package.json ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "agent/ui does not exist yet: the tarball carries no UI build"; fi
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.ui.outputs.present == 'true'
+        with:
+          node-version: '22'
+      - name: Build the local UI (the source tarball ships it built, as the release does)
+        if: steps.ui.outputs.present == 'true'
+        working-directory: agent/ui
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
       - name: Build the agent source tarball of this commit (network)
         run: |
           set -euo pipefail
