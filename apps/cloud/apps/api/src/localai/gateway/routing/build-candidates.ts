@@ -31,6 +31,8 @@ export interface SourceNodeRow {
   lastStateAt: Date | null;
   keyReportedAt: Date | null;
   eab: NodeHealth;
+  /** `llama.models_max` of the node's last snapshot (how many models its router keeps loaded); null when it reported none. */
+  modelsMax?: number | null;
   models: readonly SourceModelRow[];
 }
 
@@ -41,6 +43,8 @@ export interface RoutingSnapshot {
   routable: Map<string, { nodeId: string; publicHost: string }>;
   /** Models present on any node that is not retired, routable or not (the 503 LAI-GW-021 versus 404 LAI-GW-020 question). */
   present: Set<string>;
+  /** `llama.models_max` by routable node id, for the on-demand load's eviction guard (gateway.md section 4.3 step 3). */
+  modelsMax: Map<string, number>;
 }
 
 const MODES: readonly string[] = ['online', 'offline', 'survival'];
@@ -53,6 +57,7 @@ export function buildSnapshot(rows: readonly SourceNodeRow[], now: Date): Routin
   const candidates = new Map<string, Candidate[]>();
   const routable = new Map<string, { nodeId: string; publicHost: string }>();
   const present = new Set<string>();
+  const modelsMax = new Map<string, number>();
 
   for (const row of rows) {
     if (row.phase === 'retired') continue;
@@ -70,6 +75,7 @@ export function buildSnapshot(rows: readonly SourceNodeRow[], now: Date): Routin
     });
     if (!admitted || row.servePattern === 'none') continue;
     routable.set(row.nodeId, { nodeId: row.nodeId, publicHost: row.publicHost });
+    if (typeof row.modelsMax === 'number' && Number.isInteger(row.modelsMax) && row.modelsMax >= 1) modelsMax.set(row.nodeId, row.modelsMax);
 
     for (const model of row.models) {
       const canLoad = model.present && model.verified && model.loadable;
@@ -95,5 +101,5 @@ export function buildSnapshot(rows: readonly SourceNodeRow[], now: Date): Routin
       candidates.set(model.modelId, list);
     }
   }
-  return { candidates, routable, present };
+  return { candidates, routable, present, modelsMax };
 }

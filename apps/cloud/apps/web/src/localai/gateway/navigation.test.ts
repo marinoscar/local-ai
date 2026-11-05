@@ -15,11 +15,13 @@ describe('the API keys destination', () => {
     const routes = shellDestinationRoutes(NAVIGATION);
     expect(resolveActiveDestination(routes, '/gateway/keys')).toBe('gateway');
     expect(resolveActiveDestination(routes, '/gateway/usage')).toBe('gateway');
+    expect(resolveActiveDestination(routes, '/gateway/models')).toBe('gateway');
     expect(resolveActiveDestination(routes, '/gatewayx')).toBeNull();
   });
 
   it('is a page, not a settings card', () => {
     const cardPaths = (NAVIGATION.settingsSurfaces ?? []).flatMap((surface) => surface.sections.flatMap((section) => section.cards.map((card) => card.path)));
     expect(cardPaths).not.toContain('/gateway/keys');
+    expect(cardPaths).not.toContain('/gateway/models');
   });
 });
