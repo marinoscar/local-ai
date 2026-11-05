@@ -7,23 +7,26 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { Menu, Notification, Tray, app, clipboard, dialog, ipcMain, nativeImage, protocol, screen, session, shell } from 'electron';
+import { hostname } from 'node:os';
+import { BrowserWindow, Menu, Notification, Tray, app, clipboard, dialog, ipcMain, nativeImage, protocol, safeStorage, screen, session, shell } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import { AgentFeed, createAgentClient, resolveTokenPath, testHooksAllowed } from './agent-client';
 import { createAgentSupervisor, execFileRunner, resolveStartBinaries } from './agent-supervisor';
 import { type LaunchArgs, parseArgs } from './args';
 import { AutostartController, applyAutostart, autostartPath } from './autostart';
 import { runDiagnoseMain } from './diagnose';
-import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, getUpdaterSession, installEgressGuard, installMainProcessGuard, runAsUpdater, setEgressLogger, setEgressState, type GuardedSessions } from './egress-guard';
+import { CLOUD_TEXT, CODE_LINK_REMOVED, CODE_NO_KEYRING, CloudSession, LinkWindowController, abortableSleep, createCloudHttp, createLoopbackDispatcher, modeFromEvent, modeFromStatus, withCode, type LinkWindowFactory } from './cloud-link';
+import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, getUpdaterSession, installEgressGuard, installMainProcessGuard, patchEgressState, runAsUpdater, setEgressLogger, type GuardedSessions } from './egress-guard';
 import { KeyCopier, copyNotification, createKeyActions, createKeyApi } from './clipboard';
 import { DIALOG_TEXT, errorText, pick, resolveLang } from './i18n';
 import { CHANNELS, type SettingsStore, type StartupPhase, buildDesktopStatus, createHostHandlers, createSettingsStore, createShellHandlers, isAllowedOrigin, registerHandlers } from './ipc';
 import { type LogEntry, type Logger, createFileLogger } from './log';
-import { ABOUT, NOT_AVAILABLE, buildMenuTemplate } from './menu';
-import { installPermissionHandlers, installWebContentsHardening } from './navigation';
+import { ABOUT, buildMenuTemplate } from './menu';
+import { hardenedWebPreferences, installPermissionHandlers, installWebContentsHardening } from './navigation';
 import { Notifier } from './notify';
 import { PinService, createPinApi } from './pin';
 import { installLocalaiProtocol, registerLocalaiScheme, rendererRoot, shellUrl } from './protocol';
+import { createSecretStore, tokenFilePath } from './secret-store';
 import { type Settings, type SettingsPatch, configDir, readSettingsFile } from './settings';
 import { UpdateController, describeUpdateStatus, loadElectronUpdater } from './updates';
 import { SessionRecovery, type ActionDeps, type ContentHost, type StartupResult, handleErrorAction, runStartup } from './startup';
@@ -172,17 +175,94 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
       if (!response.ok) throw new Error(`HTTP ${response.status} from the release feed`);
       return response.text();
     },
-    // `connected` belongs to DSK-10: keep it, change only `updates`.
-    setEgress: (allowed) => setEgressState({ ...getEgressState(), updates: allowed }),
+    // `connected` belongs to DSK-10 (cloud-link.ts): change only `updates`.
+    setEgress: (allowed) => patchEgressState({ updates: allowed }),
     runAsUpdater,
     log,
   });
   app.on('will-quit', () => updates.dispose());
 
   // -- status: what the top bar shows ------------------------------------------------------------------------------
-  const cloud = (): CloudLinkState => ({ linked: settings.cloud.linked, tokenHeld: false, url: settings.cloud.url }); // DSK-10 holds the token
-  const status = () =>
-    buildDesktopStatus({
+  // -- the lab link (DSK-10): the only holder of the PAT. Its closures use `dialogs` and `notifier`, declared below; they run later. ---
+  const testHooks = testHooksAllowed(app.isPackaged, process.execPath);
+  // Test seam (the e2e fake cloud): `ai.marin.cr:443` is connected to a plain-HTTP server on this loopback port. Never in a shipped app.
+  const fakeCloudPort = testHooks ? Number(process.env['LOCALAI_DESKTOP_TEST_CLOUD_PORT']) : Number.NaN;
+  const secrets = createSecretStore({
+    file: tokenFilePath(configDir()),
+    safeStorage,
+    allowPlaintext: () => settings.secrets.allowPlaintext,
+    rememberConsent: async () => void (await store.update({ secrets: { allowPlaintext: true } })),
+    askConsent: () =>
+      dialogs.confirm({
+        title: pick(CLOUD_TEXT.consentTitle, lang),
+        message: withCode(pick(CLOUD_TEXT.consentMessage, lang), CODE_NO_KEYRING),
+        confirmLabel: pick(CLOUD_TEXT.consentConfirm, lang),
+        cancelLabel: pick(CLOUD_TEXT.consentCancel, lang),
+      }),
+    log,
+  });
+  const cloudSession = new CloudSession({
+    http: createCloudHttp(Number.isInteger(fakeCloudPort) && fakeCloudPort > 0 && fakeCloudPort < 65536 ? { dispatcher: createLoopbackDispatcher(fakeCloudPort) } : {}),
+    secrets,
+    linked: () => settings.cloud.linked,
+    setLinked: async (linked) => void (await store.update({ cloud: { linked } })),
+    url: () => settings.cloud.url,
+    setEgressConnected: (connected) => patchEgressState({ connected }),
+    hostname: () => hostname(),
+    version: app.getVersion(),
+    openExternal: (url) => void shell.openExternal(url),
+    now: Date.now,
+    sleep: abortableSleep,
+    onRemoved: () => {
+      const text = `${pick(CLOUD_TEXT.removedTitle, lang)}. ${pick(CLOUD_TEXT.removedBody, lang)}`;
+      windows.sendToTopBar(CHANNELS.notice, { kind: 'not-available', text: withCode(text, CODE_LINK_REMOVED) } satisfies TopBarNotice);
+      notifier.send({ kind: 'cloud.removed', title: pick(CLOUD_TEXT.removedTitle, lang), body: withCode(pick(CLOUD_TEXT.removedBody, lang), CODE_LINK_REMOVED) });
+    },
+    log,
+  });
+  // The agent's mode closes the cloud: `mode.step` toward offline/survival does it the moment the transition STARTS,
+  // before the agent has finished (desktop.md 4.9). Subscribed first, so nothing else sees the event before the egress switch.
+  cloudSession.setModeSignal(modeFromStatus(feed.status));
+  feed.subscribe((message) => {
+    if (message.kind === 'status') cloudSession.setModeSignal(modeFromStatus(message.status));
+    else if (message.kind === 'event') {
+      const change = modeFromEvent(message.event);
+      if (change) cloudSession.setModeSignal(change);
+      // A step that failed may leave the node where it was: read the committed mode again.
+      const data = message.event.data as { state?: unknown } | null;
+      if (message.event.type === 'mode.step' && data?.state === 'failed') void feed.refresh();
+    }
+  });
+
+  const linkWindowFactory: LinkWindowFactory = {
+    create: (init) => {
+      const win = new BrowserWindow({
+        width: init.width,
+        height: init.height,
+        title: init.title,
+        resizable: true,
+        minimizable: false,
+        webPreferences: { ...hardenedWebPreferences(app.isPackaged), preload: join(__dirname, '../preload/shell.js') },
+      });
+      win.removeMenu();
+      void win.loadURL(shellPageUrl('link'));
+      return {
+        isDestroyed: () => win.isDestroyed(),
+        isMinimized: () => win.isMinimized(),
+        restore: () => win.restore(),
+        show: () => win.show(),
+        focus: () => win.focus(),
+        close: () => win.close(),
+        onClosed: (listener) => void win.on('closed', listener),
+      };
+    },
+  };
+  const linkWindow = new LinkWindowController({ factory: linkWindowFactory, title: () => pick(CLOUD_TEXT.linkWindowTitle, lang), onClosed: () => cloudSession.cancelLink() });
+
+  const cloud = (): CloudLinkState => cloudSession.state();
+  // `connected` is the session's own answer: it also knows that a transition toward offline/survival has started.
+  const status = () => ({
+    ...buildDesktopStatus({
       version: app.getVersion(),
       phase,
       connection: feed.connection,
@@ -190,7 +270,9 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
       cloud: cloud(),
       tab: windows.tab(),
       survival: survival.state((code) => errorText(code, lang).title),
-    });
+    }),
+    connected: cloudSession.connectedModeActive(),
+  });
   const push = (): void => {
     const current = status();
     windows.setLabAvailable(current.connected);
@@ -213,9 +295,11 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   ctx.onSettingsChanged((next, patch) => {
     settings = next;
     lang = resolveLang(next.lang, app.getLocale());
+    cloudSession.refresh();
     push();
     if (patch.lang !== undefined) void survival.languageChanged().catch(() => undefined);
   });
+  cloudSession.onChange(push);
 
   // -- the tray (DSK-06) lives from here on, before the agent is probed: grey until the first status (desktop.md 4.1) ---
   let tray: TrayController | null = null;
@@ -302,14 +386,17 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
 
   // -- the top bar's menu ------------------------------------------------------------------------------------------
   const notice = (kind: TopBarNotice['kind'], text: string): void => windows.sendToTopBar(CHANNELS.notice, { kind, text } satisfies TopBarNotice);
-  const notAvailable = (): void => notice('not-available', pick(NOT_AVAILABLE, lang));
   const showMenu = (): void => {
     const template = buildMenuTemplate(
       { lang, linked: settings.cloud.linked, autostart: settings.autostart, checkForUpdates: settings.updates.checkForUpdates, updateLines: describeUpdateStatus(updates.status, lang) },
       {
         connectionInfo: showConnectionInfo,
-        connect: notAvailable, // DSK-10
-        disconnect: notAvailable, // DSK-10
+        connect: () => {
+          // Desktop.md 4.8 step 1: refused while the node is offline or in survival (or its mode is not known).
+          if (!cloudSession.nodeOnline) notice('not-available', pick(CLOUD_TEXT.switchOnline, lang));
+          else linkWindow.open();
+        },
+        disconnect: () => void cloudSession.unlink().catch(() => undefined),
         setAutostart: (on) => void autostart.set(on),
         setUpdates: (on) => void store.update({ updates: { checkForUpdates: on } }).catch(() => undefined), // the settings listener reaches `updates.apply` through push()
         about: () => {
@@ -345,7 +432,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   registerHandlers(
     ipcMain,
     {
-      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => { if (!survival.active) windows.showTab(tab); }, setFullScreen: (flag) => survival.setFullScreen(flag), closePortal: () => survival.closePortal(), showMenu, settings: store, pinWindowId: () => pin.windowId(), keys, pin: { submit: (id, value) => pin.submit(id, value), cancel: (id) => pin.cancel(id) }, errorActions, log, setMode: async (target) => {
+      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => { if (!survival.active) windows.showTab(tab); }, setFullScreen: (flag) => survival.setFullScreen(flag), closePortal: () => survival.closePortal(), showMenu, settings: store, cloud: cloudSession, pinWindowId: () => pin.windowId(), keys, pin: { submit: (id, value) => pin.submit(id, value), cancel: (id) => pin.cancel(id) }, errorActions, log, setMode: async (target) => {
         const outcome = await modes.setMode(target);
         return outcome.ok ? { ok: true } : { ok: false, code: outcome.code };
       } }),
@@ -406,6 +493,8 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   }
 
   await autostart.applyAtStart();
+  // The stored token is read back before the first status push: a lost or unreadable one is LAI-DSK-011 and "unlinked".
+  await cloudSession.start();
   const screen = await start();
   // `--portal` on the first launch: the start-up sequence already opened it when the node is in survival mode.
   if (args.portal && screen !== 'survival') await survival.enter({ reason: 'portal' });

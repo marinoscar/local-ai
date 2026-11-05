@@ -368,9 +368,38 @@ describe('what an allowed shell page can do', () => {
   it('the methods of later items (and the key calls of a host that wires none) answer { ok: false, code: "not_implemented" }', async () => {
     const { deps } = makeDeps();
     const wrapped = wrap(deps);
-    for (const channel of [CHANNELS.startAgent, CHANNELS.cloudBeginLink, CHANNELS.cloudUnlink, CHANNELS.cloudRequest]) {
+    for (const channel of [CHANNELS.startAgent, CHANNELS.cloudRequest]) {
       expect(await wrapped[channel]!(from(SHELL)), channel).toEqual({ ok: false, code: 'not_implemented' });
     }
+  });
+
+  it('the lab link members (DSK-10) reach the cloud session, and answer "unavailable" while there is none', async () => {
+    const wrapped = wrap(makeDeps().deps);
+    expect(await wrapped[CHANNELS.cloudBeginLink]!(from(SHELL))).toEqual({ ok: false, code: 'unavailable' });
+    expect(await wrapped[CHANNELS.cloudUnlink]!(from(SHELL))).toBeUndefined();
+    expect(await wrapped[CHANNELS.cloudLinkState]!(from(SHELL))).toEqual({ linked: false, tokenHeld: false, url: 'https://ai.marin.cr' });
+
+    const cloud = {
+      state: vi.fn(() => ({ linked: true, tokenHeld: true, url: 'https://ai.marin.cr', user: 'Person A' })),
+      beginLink: vi.fn(async () => ({ userCode: 'ABCD-1234', verificationUri: 'https://ai.marin.cr/activate', expiresIn: 900 })),
+      openVerification: vi.fn(),
+      unlink: vi.fn(async () => ({ revoked: true })),
+    };
+    const wired = wrap(makeDeps({ cloud }).deps);
+    expect(await wired[CHANNELS.cloudBeginLink]!(from(SHELL), 'ignored', { deviceCode: 'x' })).toMatchObject({ userCode: 'ABCD-1234' });
+    expect(cloud.beginLink).toHaveBeenCalledWith(); // a page supplies no argument
+    wired[CHANNELS.cloudOpenVerification]!(from(SHELL), 'https://evil.example/');
+    expect(cloud.openVerification).toHaveBeenCalledWith();
+    expect(await wired[CHANNELS.cloudUnlink]!(from(SHELL))).toBeUndefined(); // nothing about the revoke goes to the page
+    expect(cloud.unlink).toHaveBeenCalledTimes(1);
+    expect(await wired[CHANNELS.cloudLinkState]!(from(SHELL))).toEqual({ linked: true, tokenHeld: true, url: 'https://ai.marin.cr', user: 'Person A' });
+    // From a page that may not call, nothing reaches the session.
+    await expect(wired[CHANNELS.cloudBeginLink]!(from(AGENT))).rejects.toThrow();
+    await expect(wired[CHANNELS.cloudUnlink]!(from('https://ai.marin.cr/'))).rejects.toThrow();
+    wired[CHANNELS.cloudOpenVerification]!(from(AGENT));
+    expect(cloud.beginLink).toHaveBeenCalledTimes(1);
+    expect(cloud.unlink).toHaveBeenCalledTimes(1);
+    expect(cloud.openVerification).toHaveBeenCalledTimes(1);
   });
 
   it('lang answers the language in use', () => {
