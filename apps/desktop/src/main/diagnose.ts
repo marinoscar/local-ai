@@ -2,11 +2,11 @@
 // Checks carry severities; a failing check never changes the exit code. Only loopback is touched: the agent.
 import { spawnSync } from 'node:child_process';
 import { existsSync, openSync, readSync, closeSync, readFileSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { app, safeStorage } from 'electron';
 import { createAgentClient, checkApiVersion, resolveTokenPath, testHooksAllowed, type AgentClient } from './agent-client';
 import { createAgentSupervisor, type AgentSupervisor } from './agent-supervisor';
+import { autostartPath } from './autostart';
 import { blockedTotal } from './egress-guard';
 import { type DskCode, type Lang, type Severity, ERROR_COPY, resolveLang } from './i18n';
 import { configDir, readSettings, type Settings } from './settings';
@@ -222,7 +222,7 @@ export function runDiagnoseMain(): void {
         return availability === 'available' ? 'supported' : availability === 'unavailable' ? 'unsupported' : 'unknown';
       },
       egressBlockedTotal: () => Math.max(blockedTotal(), egressTotalFromLog(join(dir, 'logs', 'main.log'))),
-      autostartFilePresent: () => existsSync(join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'autostart', 'ai-desktop.desktop')),
+      autostartFilePresent: () => existsSync(autostartPath()),
       apparmor: {
         applies: app.isPackaged,
         restrictUserns: () => readOrNull('/proc/sys/kernel/apparmor_restrict_unprivileged_userns'),
