@@ -97,6 +97,8 @@ export interface UpstreamClientOptions {
   resolveOrigin?: (publicHost: string) => string;
   /** The mode: where a call goes. Default: public mode over `resolveOrigin`. */
   targets?: TargetResolver;
+  /** undici connections per origin; default {@link UPSTREAM_CONNECTIONS}. Only the load-test flag raises it. */
+  connections?: number;
   /** Extra trusted CA certificates for TLS targets (a spec's self-signed CA; production uses the system bundle only). */
   tlsCa?: string | Buffer | Array<string | Buffer>;
 }
@@ -108,11 +110,13 @@ export class UpstreamClient implements UpstreamTransport {
   private readonly targets: TargetResolver;
   private readonly tlsCa: UpstreamClientOptions['tlsCa'];
   private readonly userAgent: string;
+  private readonly connections: number;
 
   constructor(options: UpstreamClientOptions) {
     this.userAgent = `localai-gateway/${options.version}`;
     this.targets = options.targets ?? new PublicTargets(options.resolveOrigin, (line) => this.logger.warn(line));
     this.tlsCa = options.tlsCa;
+    this.connections = options.connections ?? UPSTREAM_CONNECTIONS;
   }
 
   async routable(node: TargetSubject): Promise<boolean> {
@@ -185,7 +189,7 @@ export class UpstreamClient implements UpstreamTransport {
       agent = new Agent({
         keepAliveTimeout: UPSTREAM_KEEP_ALIVE_MS,
         keepAliveMaxTimeout: UPSTREAM_KEEP_ALIVE_MS,
-        connections: UPSTREAM_CONNECTIONS,
+        connections: this.connections,
         connect: {
           timeout: call.connectMs,
           ...(target.servername ? { servername: target.servername } : {}),

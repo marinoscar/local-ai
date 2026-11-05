@@ -376,12 +376,12 @@ To rehearse with a test name first, the lab owner can set the setting `vps.stagi
 31. From any computer, with a `lai_` key ([02 Part 3](02-chat-and-api-keys.md)):
 
     ```
-    curl -s https://ai.marin.cr/v1/models -H "Authorization: Bearer $(cat ~/.config/localai/gateway-key)"
+    curl -s https://ai.marin.cr/v1/models -H "Authorization: Bearer $(cat ~/.config/opencode/localai-gateway-key)"
     ```
 
     - **What you should see:** ai-n4's loaded model in the list. A chat request for that model returns the header `x-localai-node: ai-n4` when ai-n4 is chosen.
     - **If it doesn't work:** the node must be healthy, online, enrolled, have its key in the cloud (`LAI-CLD-026`: run `sudo aictl cloud resend-key` on the node) and answer on its public URL (`LAI-CLD-027`).
-32. **Open WebUI:** nothing to do once it uses the gateway ([02 Part 5](02-chat-and-api-keys.md)). Before E7, add a connection for `https://ai-n4.marin.cr/v1` with the node key ([source/vps-ai-nodes-setup.md §7](../source/vps-ai-nodes-setup.md#7-open-webui-connections)).
+32. **Open WebUI:** nothing to do once it uses the gateway ([02 Part 5](02-chat-and-api-keys.md)); the node shows up in its model list by itself. Only while Open WebUI still has one connection per node (the cutover of [10 Part 5](10-lab-operations.md#part-5-gateway-keys-and-usage) is not done yet), add a connection for `https://ai-n4.marin.cr/v1` with the node key ([source/vps-ai-nodes-setup.md §7](../source/vps-ai-nodes-setup.md#7-open-webui-connections)).
 
 ---
 

@@ -1,4 +1,4 @@
-import { parseRoutingSettings } from './routing-source';
+import { modelsMaxOf, parseRoutingSettings } from './routing-source';
 
 describe('parseRoutingSettings (gateway.queueFactor)', () => {
   const cases: Array<[string, unknown, number]> = [
@@ -16,5 +16,21 @@ describe('parseRoutingSettings (gateway.queueFactor)', () => {
   ];
   it.each(cases)('%s', (_name, stored, expected) => {
     expect(parseRoutingSettings(stored)).toEqual({ queueFactor: expected });
+  });
+});
+
+describe('modelsMaxOf (llama.models_max of the last snapshot)', () => {
+  const cases: Array<[string, unknown, number | null]> = [
+    ['a snapshot with models_max', { llama: { models_max: 3 } }, 3],
+    ['the largest value', { llama: { models_max: 16 } }, 16],
+    ['no snapshot yet', null, null],
+    ['no llama block', { mode: 'online' }, null],
+    ['zero', { llama: { models_max: 0 } }, null],
+    ['above 16', { llama: { models_max: 17 } }, null],
+    ['a fraction', { llama: { models_max: 1.5 } }, null],
+    ['a string', { llama: { models_max: '2' } }, null],
+  ];
+  it.each(cases)('%s', (_name, lastState, expected) => {
+    expect(modelsMaxOf(lastState)).toBe(expected);
   });
 });

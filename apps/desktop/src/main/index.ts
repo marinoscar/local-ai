@@ -11,6 +11,8 @@ import { Menu, Notification, Tray, app, clipboard, dialog, ipcMain, nativeImage,
 import type { MenuItemConstructorOptions } from 'electron';
 import { AgentFeed, createAgentClient, resolveTokenPath, testHooksAllowed } from './agent-client';
 import { createAgentSupervisor, execFileRunner, resolveStartBinaries } from './agent-supervisor';
+import { type LaunchArgs, parseArgs } from './args';
+import { AutostartController, applyAutostart, autostartPath } from './autostart';
 import { runDiagnoseMain } from './diagnose';
 import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, installEgressGuard, installMainProcessGuard, setEgressLogger, type GuardedSessions } from './egress-guard';
 import { KeyCopier, copyNotification, createKeyActions, createKeyApi } from './clipboard';
@@ -23,12 +25,13 @@ import { Notifier } from './notify';
 import { PinService, createPinApi } from './pin';
 import { installLocalaiProtocol, registerLocalaiScheme, rendererRoot, shellUrl } from './protocol';
 import { type Settings, type SettingsPatch, configDir, readSettingsFile } from './settings';
-import { SessionRecovery, type ActionDeps, handleErrorAction, runStartup } from './startup';
+import { SessionRecovery, type ActionDeps, type StartupResult, handleErrorAction, runStartup } from './startup';
 import { enter as enterSurvival } from './survival';
 import {
   type ElectronDialogApi,
   type ElectronTrayApi,
   type PinPrompt,
+  type TrayAvailability,
   type WindowControl,
   ModeController,
   TrayController,
@@ -63,6 +66,8 @@ export interface WindowsContext {
   saveBounds(bounds: Record<string, unknown>): Promise<void>;
   lang(): ReturnType<typeof resolveLang>;
   devOrigin: string | undefined;
+  /** `--hidden` with a usable tray (DSK-07): the main window stays hidden until something shows it. */
+  startHidden?: boolean;
 }
 
 /** Exported for the start-up order test. Hidden until the start-up sequence decides what it shows (desktop.md 4.1). */
@@ -78,6 +83,7 @@ export function createWindows(ctx: WindowsContext): WindowManager {
     saveBounds: ctx.saveBounds,
     displays: () => ({ all: screen.getAllDisplays(), primary: screen.getPrimaryDisplay() }),
     quitApp: () => app.quit(),
+    ...(ctx.startHidden ? { startHidden: true } : {}),
   });
 }
 
@@ -91,6 +97,18 @@ export interface BootContext {
   store: SettingsStore;
   /** Runs after every settings write (DSK-07 hooks the autostart file here). */
   onSettingsChanged(listener: (next: Settings, patch: SettingsPatch) => void): void;
+  /** The command line of this launch (`--hidden`, `--portal`). */
+  args: LaunchArgs;
+  /** StatusNotifier availability, asked once before the window was created (it decides `--hidden`). */
+  trayAvailability: TrayAvailability;
+  /** A second launch of the app (its command line); the main window is already brought forward. */
+  onSecondLaunch(listener: (args: LaunchArgs) => void): void;
+}
+
+/** `LOCALAI_DESKTOP_TRAY=unavailable|available` pretends there is no StatusNotifier watcher, or one (unpackaged runs and the e2e test copy only). */
+async function resolveTrayAvailability(): Promise<TrayAvailability> {
+  const forced = testHooksAllowed(app.isPackaged, process.execPath) ? process.env['LOCALAI_DESKTOP_TRAY'] : undefined;
+  return forced === 'unavailable' || forced === 'available' ? forced : detectTray();
 }
 
 /** Status changes that make the top bar re-read `/status` (mode, alerts, the cloud link). */
@@ -98,7 +116,7 @@ const REFRESH_EVENTS: ReadonlySet<string> = new Set(['mode.changed', 'alert.rais
 
 /** The start-up sequence and its wiring (desktop.md 4.1). Replaced by a stub in the start-up order test. */
 export async function bootstrap(ctx: BootContext): Promise<void> {
-  const { windows, sessions, log, store } = ctx;
+  const { windows, sessions, log, store, args, trayAvailability: availability } = ctx;
   let settings = ctx.settings;
   let lang = resolveLang(settings.lang, app.getLocale());
   let phase: StartupPhase = 'starting';
@@ -174,11 +192,44 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   const notificationPort = createElectronNotificationPort({ Notification });
   const notifier = new Notifier({ port: notificationPort, lang: () => lang, clock: Date.now, onActivate: control.showMain, log });
 
+  // -- "Start at login" (desktop.md 4.5) ---------------------------------------------------------------------------
+  // The file follows `settings.autostart`: applied at every start, and again whenever a menu, the tray or a settings
+  // page changes the setting. A development run never writes the entry (it would start /usr/bin/ai-desktop); the
+  // packaged app, the AppImage and the e2e test copy do.
+  const autostart = new AutostartController({
+    wanted: settings.autostart,
+    apply: async (enabled) => (app.isPackaged ? applyAutostart(enabled, { log }) : { ok: true, action: 'skipped', path: autostartPath() }),
+    persist: async (enabled) => void (await store.update({ autostart: enabled })),
+    onFailure: (failure) => void notifier.notice('LAI-DSK-014', { path: failure.path }),
+    log,
+  });
+  ctx.onSettingsChanged((next, patch) => {
+    if (typeof patch.autostart === 'boolean') void autostart.follow(next.autostart);
+  });
+
+  // The Portal full screen (`--portal`, also forwarded by a second launch). DSK-09 gives `enterSurvival` its full-screen body.
+  const openPortal = async (): Promise<void> => {
+    windows.showMain();
+    await windows.showAgentUi('/portal');
+    await enterSurvival();
+  };
+  ctx.onSecondLaunch((second) => {
+    if (second.portal) void openPortal().catch(() => undefined);
+  });
+
   // -- start-up ----------------------------------------------------------------------------------------------------
-  const start = async (): Promise<void> => {
+  // A node in survival mode opens the Portal even when started with `--hidden` (desktop.md 4.5, 4.7). Until DSK-09 the
+  // hook has no full-screen body, so what shows is the main window.
+  const survival = {
+    enter: async (): Promise<void> => {
+      windows.showMain();
+      await enterSurvival();
+    },
+  };
+  const start = async (): Promise<StartupResult['screen']> => {
     phase = 'starting';
     push();
-    const result = await runStartup({ client, supervisor, host: windows, survival: { enter: enterSurvival }, log });
+    const result = await runStartup({ client, supervisor, host: windows, survival, log });
     log.log('info', 'agent', `start-up finished: ${result.screen}`, result.screen === 'error' ? { code: result.code } : {});
     phase = result.screen === 'error' ? 'error' : 'ready';
     if (result.screen === 'error') tray?.startupFailed(result.code === 'LAI-DSK-004' || result.code === 'LAI-DSK-005' ? 'down' : 'blocked');
@@ -186,6 +237,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     feed.start();
     if (result.screen !== 'error') void feed.refresh();
     push();
+    return result.screen;
   };
 
   // 401 recovery: the agent UI got a 401 on an API call (the token was rotated, or the agent restarted).
@@ -204,7 +256,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
         connectionInfo: showConnectionInfo,
         connect: notAvailable, // DSK-10
         disconnect: notAvailable, // DSK-10
-        setAutostart: (on) => void store.update({ autostart: on }).catch(() => undefined), // the autostart file is DSK-07's
+        setAutostart: (on) => void autostart.set(on),
         setUpdates: (on) => void store.update({ updates: { checkForUpdates: on } }).catch(() => undefined), // the updater is DSK-12's
         about: () => {
           void dialog.showMessageBox({ type: 'info', title: pick(ABOUT.title, lang), message: pick(ABOUT.message, lang), detail: ABOUT.detail(app.getVersion(), lang), buttons: [pick(ABOUT.close, lang)] });
@@ -250,9 +302,6 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
 
   // The tray, when the desktop has one (desktop.md 4.3). No StatusNotifier watcher: a one-time LAI-DSK-013 notice, and
   // closing the window quits the app.
-  // `LOCALAI_DESKTOP_TRAY=unavailable|available` pretends there is no StatusNotifier watcher, or one (unpackaged runs and the e2e test copy only).
-  const forced = testHooksAllowed(app.isPackaged, process.execPath) ? process.env['LOCALAI_DESKTOP_TRAY'] : undefined;
-  const availability = forced === 'unavailable' || forced === 'available' ? forced : await detectTray();
   if (trayUsable(availability)) {
     const iconDir = app.isPackaged ? join(process.resourcesPath, 'tray') : join(app.getAppPath(), 'build', 'linux', 'tray');
     const controller = new TrayController({
@@ -280,6 +329,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
           if (notificationPort.supported()) notificationPort.show(message, control.showMain);
         },
         showConnectionInfo,
+        autostart: { get: () => autostart.enabled, set: async (next) => void (await autostart.set(next)) },
         startAgent: async () => {
           const result = await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, errorActions);
           // `busy`: a start is already running (the error page's button, or an earlier click): nothing to say.
@@ -301,7 +351,10 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     void showTrayNoticeOnce({ store: trayNoticeStore(configDir()), notify: () => notifier.notice('LAI-DSK-013') });
   }
 
-  await start();
+  await autostart.applyAtStart();
+  const screen = await start();
+  // `--portal` on the first launch: the start-up sequence already opened it when the node is in survival mode.
+  if (args.portal && screen !== 'survival') await openPortal();
   // The e2e test copy opens the connection info at once: a native menu item cannot be clicked from Playwright.
   if (testHooksAllowed(app.isPackaged, process.execPath) && process.env['LOCALAI_DESKTOP_TEST_OPEN'] === 'connection-info') showConnectionInfo();
 }
@@ -319,7 +372,8 @@ export function start(options: StartOptions = {}): void {
   installMainProcessGuard();
 
   // `ai-desktop --diagnose`: a JSON report on stdout, no window, no single-instance lock (desktop.md 3.9).
-  if (process.argv.includes('--diagnose')) {
+  const args = parseArgs(process.argv);
+  if (args.diagnose) {
     runDiagnoseMain();
     return;
   }
@@ -328,9 +382,14 @@ export function start(options: StartOptions = {}): void {
     app.quit();
     return;
   }
-  // Set once the window exists; a second launch brings the (possibly hidden) main window forward.
+  // Set once the window exists; a second launch brings the (possibly hidden) main window forward and forwards its flags (`--portal`).
   let windows: WindowManager | null = null;
-  app.on('second-instance', () => windows?.showMain());
+  const secondLaunch = new Set<(second: LaunchArgs) => void>();
+  app.on('second-instance', (_event, argv) => {
+    windows?.showMain();
+    const second = parseArgs(argv);
+    secondLaunch.forEach((listener) => listener(second));
+  });
   app.on('window-all-closed', () => app.quit());
 
   const dev = !app.isPackaged;
@@ -359,16 +418,19 @@ export function start(options: StartOptions = {}): void {
       const read = await readSettingsFile(dir);
       if (read.problem) log.log('warn', 'app', `settings.json could not be used (${read.problem}); defaults are in effect`);
       const listeners = new Set<(next: Settings, patch: SettingsPatch) => void>();
+      // The tray decides `--hidden` (desktop.md 4.5): with no tray there would be no way back to a hidden window, so it shows.
+      const trayAvailability = await resolveTrayAvailability();
       const store = createSettingsStore(dir, (next, patch) => listeners.forEach((listener) => listener(next, patch)));
       windows = createWindows({
         savedBounds: read.settings.window.bounds,
         saveBounds: async (bounds) => void (await store.update({ window: { bounds: { ...bounds } } })),
         lang: () => resolveLang(read.settings.lang, app.getLocale()),
         devOrigin,
+        startHidden: args.hidden && !args.portal && trayUsable(trayAvailability),
       });
       const manager = windows;
       app.on('before-quit', () => manager.prepareToQuit());
-      await (options.bootstrap ?? bootstrap)({ windows: manager, sessions, log, devOrigin, settings: read.settings, store, onSettingsChanged: (listener) => void listeners.add(listener) });
+      await (options.bootstrap ?? bootstrap)({ windows: manager, sessions, log, devOrigin, settings: read.settings, store, onSettingsChanged: (listener) => void listeners.add(listener), args, trayAvailability, onSecondLaunch: (listener) => void secondLaunch.add(listener) });
     } catch (error: unknown) {
       log.log('error', 'app', `start-up failed: ${(error as Error).message}`);
     }

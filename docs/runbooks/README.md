@@ -19,6 +19,7 @@ These pages are for **people**, not programmers. Each one tells you exactly what
 | [08-scheduled-sync.md](08-scheduled-sync.md) | You want to know what runs at night, whether the ark is green, or how to read the monthly self-test |
 | [09-laptop-as-server.md](09-laptop-as-server.md) | A laptop must stay on with the lid closed, never sleep, and stay reachable |
 | [10-lab-operations.md](10-lab-operations.md) | You run the whole lab from `https://ai.marin.cr`: weekly and monthly checks, updates, keys, alerts, and installing or updating the cloud app itself (Part 9) |
+| [11-gateway-load-test.md](11-gateway-load-test.md) | You want to prove the gateway copes with 200 streams at once (fake test), or load-test the real lab off-hours |
 
 ## How these pages are written
 - Steps are numbered. Commands go in grey boxes: type them exactly, then press **Enter**. Buttons are in **bold**.

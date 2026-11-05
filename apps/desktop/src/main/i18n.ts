@@ -296,6 +296,19 @@ export const NOTICE_COPY = {
       es: 'Activa "AppIndicator and KStatusNotifierItem Support" en Extensiones y reinicia ai-desktop.',
     },
   },
+  // `{path}` is the file that could not be written (the toast names it; desktop.md 4.5).
+  'LAI-DSK-014': {
+    severity: 'warning',
+    title: { en: 'Couldn\'t turn on "Start at login"', es: 'No se pudo activar "Iniciar al entrar a la sesión"' },
+    message: {
+      en: 'Local AI could not write {path}, so it will not start by itself after a restart.',
+      es: 'Local AI no pudo escribir {path}, así que no se iniciará solo después de reiniciar.',
+    },
+    fix: {
+      en: 'Check that `~/.config/autostart` is writable, then try again.',
+      es: 'Comprueba que `~/.config/autostart` tenga permiso de escritura e inténtalo de nuevo.',
+    },
+  },
 } as const satisfies Record<string, { severity: Severity; title: Bilingual; message: Bilingual; fix: Bilingual }>;
 export type NoticeCode = keyof typeof NOTICE_COPY;
 
