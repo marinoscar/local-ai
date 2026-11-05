@@ -6,7 +6,9 @@ name: agent-rebuild
 # binary runs inside `unshare -n`, so the checks, the extraction, `go build` with GOPROXY=off and
 # -mod=vendor, the static-link check, the start-up test (`aiagent.new version --json` must report the
 # tag's version) and the swap cannot reach the internet. A second case injects a new agent that never
-# becomes healthy and proves the rollback to aiagent.prev. Only the preparation (the tarball) has network.
+# becomes healthy and proves the rollback to aiagent.prev. A third case removes one vendored package from the
+# real source and expects LAI-KIT-030 with nothing replaced. Only the preparation (the UI build and the
+# tarball) has network.
 on:
   pull_request:
     paths: ['agent/internal/router/build/**', 'agent/internal/kit/**', 'scripts/release/build-src-tarball.sh', '.github/workflows/agent-rebuild.yml']
