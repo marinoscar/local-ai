@@ -6,15 +6,41 @@
 //                                      or 200 { data: { accessToken: "pat_...", credentialType: "pat", expiresAt, tokenId, ... } }
 //   GET    /api/auth/me             -> { data: { id, email, displayName, ... } }   (bearer required)
 //   DELETE /api/pat/:id             -> 204                                        (bearer required)
-//   GET    /api/localai/nodes       -> held open while `holdNodes` is set (to prove an abort), else { data: [] }
+//   GET    /api/localai/nodes       -> held open while `holdNodes` is set (to prove an abort), else { data: { summary, nodes } }
+//   GET    /api/localai/nodes/:id   -> the card plus `lastState.models` (the Lab's Models panel)
+//   POST   /api/localai/nodes/:id/commands  -> 201 { data: CommandView } (queued), or the scripted refusal (`refuseCommands`)
+//   GET    /api/localai/commands/:id        -> queued, then running, then succeeded, one step per read (`holdCommand` stops it)
+//   GET    /api/localai/alerts      -> { data: { alerts: [] } }
+//   `down` destroys every connection (a network error); `nodesStatus` answers the node list with that status (a 5xx).
 // The app's code never talks to a real host in a test: with LOCALAI_DESKTOP_TEST_CLOUD_PORT the main process connects
 // `ai.marin.cr:443` to this server on a loopback port, in plain HTTP (cloud-link.ts `createLoopbackDispatcher`; honoured only
 // by an unpackaged run and the e2e test copy). The unit tests of the device flow use their own scripted fakes.
 import { randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { type IncomingMessage, type ServerResponse, createServer } from 'node:http';
+import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 
 export const FAKE_CLOUD_HOST = 'ai.marin.cr' as const;
+
+/** `GET /api/localai/nodes` of the cloud's own 3-node fixture (apps/cloud/apps/api/test/fixtures/localai/lab-3-nodes.json), a copy. */
+export const LAB_3_NODES = JSON.parse(readFileSync(join(__dirname, 'lab-3-nodes.json'), 'utf8')) as { summary: Record<string, number>; nodes: Array<Record<string, unknown>> };
+
+/** The models `lastState.models` of every node in the fake. */
+export const FAKE_MODELS = [
+  { id: 'qwen3.6-35b-a3b-q4km', present: true, verified: true, loadable: true, loadable_reason: null, status: 'loaded', default: true },
+  { id: 'qwen3.5-9b-q4km', present: true, verified: true, loadable: true, loadable_reason: null, status: 'unloaded', default: false },
+  { id: 'big-model-q8', present: false, verified: false, loadable: false, loadable_reason: 'not downloaded', status: 'unloaded', default: false },
+];
+
+export interface FakeCommand {
+  id: string;
+  nodeId: string;
+  type: string;
+  params: unknown;
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  reads: number;
+}
 
 export interface FakeCloudRequest {
   method: string;
@@ -69,6 +95,18 @@ export interface FakeCloud {
   holdMe: boolean;
   /** Answer 401 to every request that carries a bearer (a revoked or expired PAT). */
   rejectBearer: boolean;
+  /** Destroy every connection at once: the cloud is unreachable (a network error). */
+  down: boolean;
+  /** Answer `GET /api/localai/nodes` with this status (503: a 5xx); 200 by default. */
+  nodesStatus: number;
+  /** Refuse every command POST with this status and body (403, 409 LAI-CLD-035, 422 LAI-CLD-034 ...); null accepts. */
+  refuseCommands: { status: number; body: unknown } | null;
+  /** Keep the commands `queued`: a read of one does not advance it. */
+  holdCommand: boolean;
+  /** The cards `GET /api/localai/nodes` answers (the 3-node fixture by default). */
+  nodes: Array<Record<string, unknown>>;
+  /** Commands accepted so far. */
+  readonly commands: FakeCommand[];
   displayName: string | null;
   close(): Promise<void>;
 }
@@ -102,7 +140,8 @@ export async function startFakeCloud(options: FakeCloudOptions = {}): Promise<Fa
   let current: { deviceCode: string; userCode: string; state: CodeState } | null = null;
   let slowDown = false;
   let codeSeq = 0;
-  const flags = { holdNodes: false, holdMe: false, rejectBearer: false, displayName: options.displayName === undefined ? 'Person A' : options.displayName };
+  const commands: FakeCommand[] = [];
+  const flags = { holdNodes: false, holdMe: false, rejectBearer: false, down: false, nodesStatus: 200, holdCommand: false, refuseCommands: null as FakeCloud['refuseCommands'], nodes: structuredClone(LAB_3_NODES.nodes), displayName: options.displayName === undefined ? 'Person A' : options.displayName };
 
   const send = (res: ServerResponse, status: number, body?: string): void => {
     res.writeHead(status, { 'content-type': 'application/json', connection: 'close' });
@@ -110,6 +149,7 @@ export async function startFakeCloud(options: FakeCloudOptions = {}): Promise<Fa
   };
 
   const server = createServer((req, res) => {
+    if (flags.down) return void req.socket.destroy();
     void (async () => {
       const url = new URL(req.url ?? '/', 'http://fake-cloud.invalid');
       const method = req.method ?? 'GET';
@@ -185,10 +225,58 @@ export async function startFakeCloud(options: FakeCloudOptions = {}): Promise<Fa
       if (method === 'GET' && url.pathname === '/api/localai/nodes') {
         if (bearer === undefined) return send(res, 401, '{}');
         if (flags.holdNodes) return hold(res);
-        return send(res, 200, envelope([]));
+        if (flags.nodesStatus !== 200) return send(res, flags.nodesStatus, JSON.stringify({ statusCode: flags.nodesStatus, message: 'Service Unavailable' }));
+        return send(res, 200, envelope({ summary: { ...LAB_3_NODES.summary, nodes: flags.nodes.length }, nodes: flags.nodes }));
+      }
+      const node = /^\/api\/localai\/nodes\/(ai-n[1-9][0-9]{0,3})$/.exec(url.pathname);
+      if (method === 'GET' && node) {
+        if (bearer === undefined) return send(res, 401, '{}');
+        const card = flags.nodes.find((n) => n['nodeId'] === node[1]);
+        if (!card) return send(res, 404, JSON.stringify({ statusCode: 404, message: 'No Local AI node has this id' }));
+        return send(res, 200, envelope({ ...card, lastState: { models: FAKE_MODELS }, keyReceived: true }));
+      }
+      const post = /^\/api\/localai\/nodes\/(ai-n[1-9][0-9]{0,3})\/commands$/.exec(url.pathname);
+      if (method === 'POST' && post) {
+        if (bearer === undefined) return send(res, 401, '{}');
+        if (flags.refuseCommands) return send(res, flags.refuseCommands.status, JSON.stringify(flags.refuseCommands.body));
+        const asked = body as { type?: unknown; params?: unknown } | null;
+        const command: FakeCommand = { id: randomUUID(), nodeId: post[1]!, type: `localai.${String(asked?.type)}`, params: asked?.params ?? {}, status: 'queued', reads: 0 };
+        commands.push(command);
+        return send(res, 201, envelope(commandView(command)));
+      }
+      const read = /^\/api\/localai\/commands\/([0-9a-f-]{36})$/.exec(url.pathname);
+      if (method === 'GET' && read) {
+        if (bearer === undefined) return send(res, 401, '{}');
+        const command = commands.find((c) => c.id === read[1]);
+        if (!command) return send(res, 404, JSON.stringify({ statusCode: 404, message: 'No such command' }));
+        if (!flags.holdCommand) {
+          command.reads += 1;
+          command.status = command.reads === 1 ? 'running' : 'succeeded';
+        }
+        return send(res, 200, envelope({ ...commandView(command), result: command.status === 'succeeded' ? {} : undefined }));
+      }
+      if (method === 'GET' && url.pathname === '/api/localai/alerts') {
+        if (bearer === undefined) return send(res, 401, '{}');
+        return send(res, 200, envelope({ alerts: [] }));
       }
       return send(res, 404, JSON.stringify({ statusCode: 404, message: 'Not Found' }));
     })().catch(() => send(res, 500));
+  });
+
+  const commandView = (c: FakeCommand): Record<string, unknown> => ({
+    id: c.id,
+    nodeId: c.nodeId,
+    type: c.type,
+    status: c.status,
+    params: c.params,
+    source: 'desktop',
+    requestedById: null,
+    attempts: 0,
+    expiresAt: new Date(Date.now() + 900_000).toISOString(),
+    createdAt: new Date().toISOString(),
+    claimedAt: null,
+    finishedAt: null,
+    error: null,
   });
 
   /** Keeps a response open until the client closes the connection; that close is the abort the tests time. */
@@ -241,6 +329,37 @@ export async function startFakeCloud(options: FakeCloudOptions = {}): Promise<Fa
     set rejectBearer(value: boolean) {
       flags.rejectBearer = value;
     },
+    get down() {
+      return flags.down;
+    },
+    set down(value: boolean) {
+      flags.down = value;
+    },
+    get nodesStatus() {
+      return flags.nodesStatus;
+    },
+    set nodesStatus(value: number) {
+      flags.nodesStatus = value;
+    },
+    get refuseCommands() {
+      return flags.refuseCommands;
+    },
+    set refuseCommands(value: FakeCloud['refuseCommands']) {
+      flags.refuseCommands = value;
+    },
+    get holdCommand() {
+      return flags.holdCommand;
+    },
+    set holdCommand(value: boolean) {
+      flags.holdCommand = value;
+    },
+    get nodes() {
+      return flags.nodes;
+    },
+    set nodes(value: Array<Record<string, unknown>>) {
+      flags.nodes = value;
+    },
+    commands,
     get displayName() {
       return flags.displayName;
     },

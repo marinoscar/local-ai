@@ -478,6 +478,19 @@ describe('TrayController menu actions', () => {
     expect(setup({ actions: { openLab: () => undefined } }).labels()).not.toContain('Lab (ai.marin.cr)');
   });
 
+  it('the Lab item follows connected mode when the controller is told to refresh (DSK-11)', () => {
+    let connected = false;
+    const t = setup({ actions: { openLab: () => undefined, labConnected: () => connected } });
+    t.send(stat(status()));
+    expect(t.labels()).not.toContain('Lab (ai.marin.cr)');
+    connected = true;
+    t.controller.refresh();
+    expect(t.labels()).toContain('Lab (ai.marin.cr)');
+    connected = false;
+    t.controller.refresh();
+    expect(t.labels()).not.toContain('Lab (ai.marin.cr)');
+  });
+
   it('Start at login toggles through its owner and redraws the check mark', async () => {
     let on = true;
     const t = setup({ actions: { autostart: { get: () => on, set: (next) => void (on = next) } } });
