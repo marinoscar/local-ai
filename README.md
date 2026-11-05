@@ -1,5 +1,7 @@
 # local-ai
 
+🇬🇧 **English** · 🇪🇸 [Español](README.es.md)
+
 **Run local AI for a home lab, and keep it working when the internet is gone.**
 
 This repository is the runbook and the source tree for two jobs:
@@ -11,48 +13,44 @@ If a change makes job 2 less reliable, it is wrong, even if it makes job 1 nicer
 
 ---
 
-## 🚨 In an emergency / En una emergencia
+## 🚨 In an emergency
 
-**English**
 1. Plug in the charger, power on the computer and log in.
 2. Open the **Local AI** app and press **Survival mode**.
 3. If the app will not open, open a web browser and go to `http://127.0.0.1:7070`.
 
-**Español**
-1. Conecte el cargador, encienda la computadora e inicie sesión.
-2. Abra la aplicación **Local AI** y presione **Modo supervivencia**.
-3. Si la aplicación no abre, abra un navegador web y vaya a `http://127.0.0.1:7070`.
+Full guide, printable, English and Spanish: [Survival mode runbook](docs/runbooks/01-survival-mode.md). One page to keep next to the computer: [Survival card](docs/runbooks/00-survival-card.md) (English and Spanish side by side). You do not need the internet or the admin PIN to start.
 
-Full guide, printable, English and Spanish: [Survival mode runbook](docs/runbooks/01-survival-mode.md). One page to keep next to the computer: [Survival card](docs/runbooks/00-survival-card.md). You do not need the internet or the admin PIN to start.
-
-> 🛠 **Status: designed, not built yet** (Survival Portal: E4, desktop app: E8). Until a node has been installed, these steps describe the design. See [Roadmap and status](#10-roadmap-and-status).
+> 🧪 **Status:** the software for all of this is written and tested in CI, and the agent, the model router, the kit and the speech and library services already run on a real node. The emergency path has **not yet been drilled end to end on real hardware**. See [Status](#10-status-and-roadmap) before you rely on it.
 
 ---
 
 ## Contents
-[1 What you get](#1-what-you-get) · [2 How it works](#2-how-it-works) · [3 The three modes](#3-the-three-modes) · [4 The lab today](#4-the-lab-today) · [5 Quick start by role](#5-quick-start-by-role) · [6 Using the API](#6-using-the-api) · [7 Repository layout](#7-repository-layout) · [8 Documentation map](#8-documentation-map) · [9 Building and contributing](#9-building-and-contributing) · [10 Roadmap and status](#10-roadmap-and-status) · [11 Security note](#11-security-note) · [12 License and credits](#12-license-and-credits)
+[1 What you get](#1-what-you-get) · [2 How it works](#2-how-it-works) · [3 The three modes](#3-the-three-modes) · [4 The lab today](#4-the-lab-today) · [5 Quick start by role](#5-quick-start-by-role) · [6 The command line](#6-the-command-line) · [7 Using the API](#7-using-the-api) · [8 Repository layout](#8-repository-layout) · [9 Documentation map](#9-documentation-map) · [10 Status and roadmap](#10-status-and-roadmap) · [11 Building and contributing](#11-building-and-contributing) · [12 Security note](#12-security-note) · [13 License and credits](#13-license-and-credits)
 
 ## 1. What you get
 
 Everything in the first table works with **no internet**. Only the second table needs it.
 
+Status legend: ✅ built, merged and tested in CI · 🧪 built, and still waiting for a check on real hardware or a drill (see [Status](#10-status-and-roadmap)) · ⏳ built, waiting for an owner step.
+
 | Capability | What it does | Works offline | Status |
 |---|---|---|---|
-| Chat and coding | Local LLMs, agentic work, the llama.cpp web chat | ✅ | 🛠 planned (E1, E2) |
-| Vision | Ask questions about a photo | ✅ | 🛠 planned (E4) |
-| Voice in and out | Speech-to-text (whisper.cpp) and text-to-speech (Piper) | ✅ | 🛠 planned (E4) |
-| Offline library | Kiwix: Wikipedia, medical, how-to, repair and survival content | ✅ | 🛠 planned (E3, E4) |
-| Offline maps | Map viewer with place search | ✅ | 🛠 planned (E4) |
-| Manuals | These runbooks, rendered and printable, on the node | ✅ | 🛠 planned (E4) |
-| Rebuild kit | Rebuild a node's inference software with no internet | ✅ | 🛠 planned (E5) |
-| Survival Portal | Big-button home page for non-experts | ✅ | 🛠 planned (E4) |
-| Monthly drill | Self-test that proves the node still works offline | ✅ | 🛠 planned (E9) |
+| Chat and coding | Local LLMs through the llama.cpp router, agentic work, the llama.cpp web chat | ✅ | 🧪 running on ai-n3 |
+| Vision | Ask questions about a photo | ✅ | 🧪 |
+| Voice in and out | Speech-to-text (whisper.cpp) and text-to-speech (Piper), English and Spanish | ✅ | 🧪 running on ai-n3 |
+| Offline library | Kiwix: Wikipedia, medical, how-to, repair and survival content | ✅ | 🧪 running on ai-n3 |
+| Offline maps | Map viewer with place search | ✅ | 🧪 |
+| Manuals | These runbooks, rendered and printable, on the node | ✅ | 🧪 rendered on ai-n3 |
+| Rebuild kit | Rebuild a node's inference software, the agent and the packages with no internet | ✅ | 🧪 partly verified on ai-n3 |
+| Survival Portal and desktop app | Big-button home page for non-experts, and the Local AI desktop app around it | ✅ | 🧪 |
+| Monthly drill | Self-test that proves the node still works offline | ✅ | 🧪 first run passed on ai-n3 |
 
 | Online only | What it does | Status |
 |---|---|---|
-| Cloud control | See health, load or swap models, keys, ark readiness from `ai.marin.cr` | 🛠 planned (E6) |
-| Gateway | One OpenAI-compatible API for the whole lab at `/v1` | 🛠 planned (E7) |
-| Ark sync | Nightly download and checksum of models and content; never deletes the last good copy | 🛠 planned (E3) |
+| Cloud control | See health, load or swap models, keys, ark readiness from `ai.marin.cr` | ⏳ app built; production deploy is an owner step |
+| Gateway | One OpenAI-compatible API for the whole lab at `/v1`: keys, limits, usage, model policies, streaming, audio | ⏳ built; the live cutover is an owner step |
+| Ark sync | Nightly download and checksum of models and content; never deletes the last good copy | 🧪 verified on ai-n3 |
 
 ## 2. How it works
 
@@ -93,7 +91,7 @@ Each node is always in exactly one mode, and it survives a reboot. Details and t
 
 - **`online`**: a normal lab member. Reachable through Tailscale, controlled by the cloud, syncing nightly.
 - **`offline`**: private and standalone. Nothing leaves the machine; the local AI is fully usable.
-- **`survival`**: `offline` plus everything needed in an emergency, with the Survival Portal as the home screen.
+- **`survival`**: `offline` plus everything needed in an emergency, with the Survival Portal as the home screen. Anyone can switch to it with no PIN; leaving it needs the admin PIN.
 
 ## 4. The lab today
 
@@ -103,7 +101,7 @@ Each node is always in exactly one mode, and it survives a reboot. Details and t
 | ai-n2 | MSI Stealth 17 Studio, RTX 4080 Laptop 12 GB (dual-boot Windows) | CUDA | `cuda-12gb` | `https://ai-n2.marin.cr` |
 | ai-n3 | HP ZBook Create G7, RTX 2070 Max-Q 8 GB | CUDA | `small-8gb` | `https://ai-n3.marin.cr` |
 
-Today these run a hand-managed `llama-server`; migrating them to the agent is part of epic E2. Models served, serving patterns and known discrepancies: [lab-inventory.md](docs/architecture/lab-inventory.md). Addresses and identifiers are placeholders in this repository.
+**ai-n3** is the first node on the new software: it runs the agent, the router (Qwen 3.5 9B) and the speech and library services, and it was the machine used to test the rebuild kit. **ai-n1** and **ai-n2** still run a hand-managed `llama-server`; migrating them is tracked in epic E2. Models served, serving patterns and known discrepancies: [lab-inventory.md](docs/architecture/lab-inventory.md). Addresses and identifiers are placeholders in this repository.
 
 ## 5. Quick start by role
 
@@ -119,21 +117,41 @@ Each item is a runbook written for someone who has never used a terminal. The ru
   1. Buy and format the drive.
   2. Fill it with a sync, then eject it safely.
 - **I want to add a node, or migrate an existing one** → [05 Add a node](docs/runbooks/05-add-a-node.md)
-  1. Install the node software.
+  1. Run the installer (`install-node.sh`).
   2. Enroll it in the cloud and publish its endpoint.
 - **My computer died; rebuild offline** → [06 Rebuild a node offline](docs/runbooks/06-rebuild-a-node-offline.md)
   1. Boot an Ubuntu USB stick.
-  2. Install from the AI-ARK drive; no internet needed.
+  2. Install from the AI-ARK drive (`install-node.sh --from-ark`); no internet needed.
 - **Something is broken** → [07 Troubleshooting](docs/runbooks/07-troubleshooting.md)
   1. Run `aictl doctor`.
   2. Look up the `LAI-…` code it prints.
 - **What runs on a schedule** → [08 Scheduled sync](docs/runbooks/08-scheduled-sync.md)
 - **A laptop must stay on with the lid closed** → [09 Laptop as server](docs/runbooks/09-laptop-as-server.md)
 - **I run the lab** → [10 Lab operations](docs/runbooks/10-lab-operations.md)
+- **I want to load-test the gateway** → [11 Gateway load test](docs/runbooks/11-gateway-load-test.md)
 
 New and unsure? Start at [00 Start here](docs/runbooks/00-START-HERE.md). All runbooks: [runbooks index](docs/runbooks/README.md).
 
-## 6. Using the API
+## 6. The command line
+
+`aictl` is the command line of the node agent. Run `aictl help` for the full list, and `aictl help <command>` for one command. The ones you will use most:
+
+| Command | What it does |
+|---|---|
+| `aictl status` | State of this node: mode, model, services, ark, cloud |
+| `aictl doctor` | Health checks, every problem explained with a `LAI-…` code and a fix |
+| `aictl mode [online\|offline\|survival]` | Show or switch the mode |
+| `aictl models` / `aictl load <model>` | List models and load one |
+| `aictl key show` / `aictl key copy` | The node's API key and addresses; copy the key without printing it |
+| `aictl ark status` / `aictl ark sync` | How complete the offline content is; download and verify it |
+| `aictl kit status` / `aictl kit verify` | Whether the rebuild kit is present, signed and undamaged |
+| `aictl rebuild-llama` / `rebuild-whisper` / `rebuild-agent` | Rebuild a program from the pinned source, even with no internet |
+| `aictl drill` | The offline self-test |
+| `aictl docs render` | Render the manuals and the survival card for offline use |
+
+The full contract is in [aictl.md](docs/specs/aictl.md).
+
+## 7. Using the API
 
 Through the lab gateway, with a gateway key (`$LAI_KEY` holds a key that starts with `lai_`):
 
@@ -147,26 +165,24 @@ On a node, with the node's own key (`$LLAMA_API_KEY`), even with no internet:
 curl -s http://127.0.0.1:8080/v1/models -H "Authorization: Bearer $LLAMA_API_KEY"
 ```
 
-Both are OpenAI-compatible, so any OpenAI client works. Setting up OpenCode and Open WebUI, Python and streaming: [02 Chat and API keys](docs/runbooks/02-chat-and-api-keys.md). Ports and URLs: [overview.md §3](docs/architecture/overview.md#3-canonical-names-single-source-of-truth).
+Both are OpenAI-compatible, so any OpenAI client works. Setting up OpenCode and Open WebUI, Python and streaming: [02 Chat and API keys](docs/runbooks/02-chat-and-api-keys.md). The gateway's design, limits and error codes: [gateway.md](docs/specs/gateway.md). Ports and URLs: [overview.md §3](docs/architecture/overview.md#3-canonical-names-single-source-of-truth).
 
-## 7. Repository layout
+## 8. Repository layout
 
 ```
 AGENTS.md / CLAUDE.md       rules for every human and coding agent
 inventory.example.yaml      placeholders for real lab values (real file: inventory.local.yaml, git-ignored)
 docs/                       all documentation (see the map below)
-catalog/                    models, ark content and node profiles as data            (E2, E3)
-agent/                      Go module: aiagent daemon, aictl CLI, embedded local UI  (E1 to E5)
-installers/                 install-node.sh, online and offline                       (E5)
-packages/ui/                shared React components                                   (E4, E6, E8)
-apps/cloud/                 ai.marin.cr, built on EnterpriseAppBase                   (E6, E7)
-apps/desktop/               the Local AI Electron shell                               (E8)
-scripts/                    repo tooling: redaction, links, doctor codes, hooks      (E0)
+catalog/                    models.yaml, ark.yaml and node profiles as data
+agent/                      Go module: aiagent daemon, aictl CLI, the embedded local UI (agent/ui)
+installers/                 install-node.sh, online and offline (--from-ark)
+packages/ui/                shared React components and brand assets
+apps/cloud/                 ai.marin.cr: control UI and the /v1 gateway, built on EnterpriseAppBase
+apps/desktop/               the Local AI desktop app (Electron, deb and AppImage)
+scripts/                    repo tooling: redaction, links, doctor codes, hooks, release and signing
 ```
 
-Only `docs/`, `scripts/`, the `agent/` skeleton and the root files exist today.
-
-## 8. Documentation map
+## 9. Documentation map
 
 | Folder | Contents |
 |---|---|
@@ -177,13 +193,36 @@ Only `docs/`, `scripts/`, the `agent/` skeleton and the root files exist today.
 | [docs/source/](docs/README.md) | Redacted archive of the original gists. History only |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Epics, issue map, dependency graph |
 
-The component → spec → epic table is kept in [docs/README.md](docs/README.md#specs) so it cannot drift from this page.
+The component → spec → epic table is kept in [docs/README.md](docs/README.md#specs) so it cannot drift from this page. The runbooks are in English; the Survival mode runbook and the Survival card are English and Spanish.
 
-## 9. Building and contributing
+## 10. Status and roadmap
+
+**The software for every epic is written, merged and tested in CI.** What remains is checking it on real hardware, the steps only the owner can do, and the drills. Nothing below is claimed to work in an emergency until its drill has passed ([E9](https://github.com/marinoscar/local-ai/issues/10)).
+
+| Phase | Goal | Epics | State |
+|---|---|---|---|
+| 0 | Foundation: repo, CI guardrails, docs | [E0 #1](https://github.com/marinoscar/local-ai/issues/1) | Guardrails done; creating the private lab inventory on the owner's machines is open |
+| 1 | Node agent and ark, fully offline | [E1 #2](https://github.com/marinoscar/local-ai/issues/2) agent and CLI · [E2 #3](https://github.com/marinoscar/local-ai/issues/3) models and router · [E3 #4](https://github.com/marinoscar/local-ai/issues/4) ark sync · [E4 #5](https://github.com/marinoscar/local-ai/issues/5) companion services and Portal · [E5 #6](https://github.com/marinoscar/local-ai/issues/6) installer and kit | E1 and E3 complete. E2: router and ai-n3 migration done; ai-n1 and ai-n2 migration and the pinned model list are open. E4: one open item (speech model selection). E5: only the `kit-desktop` pin is open, and the offline-install and offline-rebuild checks on hardware |
+| 2 | Cloud and gateway | [E6 #7](https://github.com/marinoscar/local-ai/issues/7) cloud app · [E7 #8](https://github.com/marinoscar/local-ai/issues/8) gateway | Both built. Open, owner-only: the production deploy and DNS (#92), the VPS stack agent (#93), the Open WebUI cutover (#146), the gateway load-test run (#147). Moving node commands onto EnterpriseAppBase jobs (#94) waits for two upstream changes |
+| 3 | Desktop | [E8 #9](https://github.com/marinoscar/local-ai/issues/9) desktop app | Built. Open: the first signed release (#129) |
+| Throughout | Drills, QA, runbook verification | [E9 #10](https://github.com/marinoscar/local-ai/issues/10) | Mostly open: runbook verification and the drills |
+
+Full issue map, waves and critical path: [ROADMAP.md](docs/ROADMAP.md). Live status: [GitHub Issues](https://github.com/marinoscar/local-ai/issues). Update this section whenever an epic ships.
+
+## 11. Building and contributing
 
 - **Issue first.** Every change is tracked by a GitHub issue under an epic. One issue = one branch `<type>/<issue#>-<slug>` = one PR that says `Closes #<issue>`. Commits follow Conventional Commits (`feat(agent): …`).
 - **Redaction.** The repo is public. Run `scripts/install-hooks.sh` once per clone; it blocks commits that leak lab values. Check any time with `scripts/check-redaction.sh`. Details in [AGENTS.md](AGENTS.md#local-setup-once-per-clone).
 - **Other checks before you push:** `scripts/check-links.sh` (every link and anchor resolves) and `scripts/check-doctor-codes.sh` (error codes match their specs). CI runs all of them.
+- **Build and test each part:**
+
+  | Part | Commands |
+  |---|---|
+  | Agent and CLI (Go) | `scripts/agent-ci.sh all` (vet, race tests, staticcheck, vendor check, static amd64 and arm64 builds) |
+  | Local UI | `cd agent/ui && npm ci && npm run build` |
+  | Cloud app and gateway | `cd apps/cloud && npm ci && npm run typecheck && npm test` (Node 24) |
+  | Desktop app | `cd apps/desktop && npm ci && npm run typecheck && npm test`; `npm run dist` builds the deb and the AppImage |
+
 - **Tech stack** (decided in the ADRs):
 
   | Component | Stack |
@@ -196,29 +235,15 @@ The component → spec → epic table is kept in [docs/README.md](docs/README.md
 
 - **Coding agents:** read [AGENTS.md](AGENTS.md), then your issue, then the spec sections it links. If the spec is wrong, fix it in the same PR.
 
-## 10. Roadmap and status
-
-**Design approved; implementation just started.** The foundation epic (E0) is in progress: its CI guardrails are in place. The first product epic (E1, the agent) has begun: the `agent/` skeleton (a static multi-call `aiagent`/`aictl` binary that prints its version and help, with the process wiring and the `execx` exec guard) exists, and none of the capabilities above work yet. Update this section, and the 🛠 markers above, whenever an epic ships.
-
-| Phase | Goal | Epics |
-|---|---|---|
-| 0 | Foundation: repo, CI guardrails, docs | [E0 #1](https://github.com/marinoscar/local-ai/issues/1) |
-| 1 | Node agent and ark, fully offline | [E1 #2](https://github.com/marinoscar/local-ai/issues/2) agent and CLI · [E2 #3](https://github.com/marinoscar/local-ai/issues/3) models and router · [E3 #4](https://github.com/marinoscar/local-ai/issues/4) ark sync · [E4 #5](https://github.com/marinoscar/local-ai/issues/5) companion services and Portal · [E5 #6](https://github.com/marinoscar/local-ai/issues/6) installer and kit |
-| 2 | Cloud and gateway | [E6 #7](https://github.com/marinoscar/local-ai/issues/7) cloud app · [E7 #8](https://github.com/marinoscar/local-ai/issues/8) gateway |
-| 3 | Desktop | [E8 #9](https://github.com/marinoscar/local-ai/issues/9) desktop app |
-| Throughout | Drills, QA, runbook verification | [E9 #10](https://github.com/marinoscar/local-ai/issues/10) |
-
-Full issue map, waves and critical path: [ROADMAP.md](docs/ROADMAP.md). Live status: [GitHub Issues](https://github.com/marinoscar/local-ai/issues).
-
-## 11. Security note
+## 12. Security note
 
 This repository is **public**. It contains placeholders such as `<TAILNET_IP_AI_N1>` and `<VPS_PUBLIC_IP>`, never real addresses, keys, tokens or zone IDs. The real values live only in `inventory.local.yaml`, which is git-ignored and exists on the owner's machines and the ark drive ([inventory.example.yaml](inventory.example.yaml), [security model §5](docs/architecture/security-model.md#5-redaction-public-repo)).
 
 **If you find a leaked value:** do not paste it into an issue or a PR. Open a private report with GitHub **Security → Report a vulnerability** on this repository, and say which file and line. The owner will rotate the value and clean the history.
 
-## 12. License and credits
+## 13. License and credits
 
-**This repository has no license file yet.** The owner has not chosen one. Until one is added, all rights are reserved by the author.
+**This repository has no license file yet.** The owner has not chosen one. Until one is added, all rights are reserved by the author. The cloud app in `apps/cloud/` is generated from EnterpriseAppBase and carries that project's own license file.
 
 Local AI builds on these projects. Check each project's own license before you redistribute anything, especially the **content** that goes on an ark drive:
 
