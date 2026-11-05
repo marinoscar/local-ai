@@ -2,6 +2,7 @@
 // the Revoke confirmation, the admin view, and the axe checks. The transports and the permissions are stubbed.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
+import { MemoryRouter } from 'react-router-dom';
 
 import { createdFixture, FIXTURE_TOKEN, KEYS_NOW, keyFixture, keysFixture } from './fixture';
 import { KeysPage, type KeysPageProps } from './KeysPage';
@@ -19,6 +20,7 @@ function renderPage(overrides: KeysPageProps = {}) {
   const createKey = overrides.createKey ?? vi.fn(async (_input: CreateKeyInput) => createdFixture());
   const revokeKey = overrides.revokeKey ?? vi.fn(async (id: string) => keyFixture({ id, status: 'revoked', revokedAt: KEYS_NOW.toISOString() }));
   const view = render(
+    <MemoryRouter initialEntries={['/gateway/keys']}>
     <KeysPage
       listKeys={listKeys}
       createKey={createKey}
@@ -28,7 +30,8 @@ function renderPage(overrides: KeysPageProps = {}) {
       now={KEYS_NOW}
       origin="https://ai.marin.cr"
       {...overrides}
-    />,
+    />
+    </MemoryRouter>,
   );
   return { ...view, listKeys, createKey, revokeKey };
 }

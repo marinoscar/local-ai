@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { type FakeAgent, newFakeToken, startFakeAgent } from '../fixtures/fake-agent';
-import { type Launched, evaluateIn, isAgentUrl, launch, listContents, pollIn, waitForContents } from './helpers';
+import { type Launched, childUrls, evaluateIn, isAgentUrl, isTopBar, launch, listContents, pollIn, waitForContents } from './helpers';
 
 let agent: FakeAgent;
 let run: Launched;
@@ -39,6 +39,60 @@ test('the session cookie lives in persist:agent, HttpOnly', async () => {
 test('the main process subscribed to /events with the bearer token', async () => {
   await expect.poll(() => agent.eventConnections.length).toBeGreaterThanOrEqual(1);
   expect(agent.eventConnections[0]).toEqual({ lastEventId: undefined, via: 'bearer' });
+});
+
+test('the top bar shows the status, the mode and the buttons; the Lab tab is hidden while not connected', async () => {
+  const bar = await waitForContents(run.app, isTopBar);
+  await pollIn(run.app, bar.id, "document.querySelector('[data-testid=pill]')?.dataset.tone === 'ok'");
+  expect(await evaluateIn<string>(run.app, bar.id, "document.querySelector('[data-testid=pill]').getAttribute('aria-label')")).toBe('Ready');
+  await pollIn(run.app, bar.id, "document.querySelector('[data-testid=mode]')?.textContent === 'Online'");
+  const present = await evaluateIn<Record<string, boolean>>(
+    run.app,
+    bar.id,
+    `Object.fromEntries(['tab-local', 'tab-lab', 'open-chat', 'open-library', 'open-maps', 'copy-key', 'menu'].map((id) => [id, document.querySelector('[data-testid=' + id + ']') !== null]))`,
+  );
+  expect(present).toEqual({ 'tab-local': true, 'tab-lab': false, 'open-chat': true, 'open-library': true, 'open-maps': true, 'copy-key': true, menu: true });
+});
+
+test('Copy API key says "not available yet" until DSK-08 lands', async () => {
+  const bar = await waitForContents(run.app, isTopBar);
+  await evaluateIn(run.app, bar.id, "document.querySelector('[data-testid=copy-key]').click()");
+  await pollIn(run.app, bar.id, "document.querySelector('[data-testid=notice]')?.textContent === 'Not available yet.'");
+});
+
+test('the Chat button opens one window at /chat/; a second click focuses it instead of opening another', async () => {
+  const bar = await waitForContents(run.app, isTopBar);
+  expect(await childUrls(run.app)).toEqual([]);
+  await evaluateIn(run.app, bar.id, "document.querySelector('[data-testid=open-chat]').click()");
+  const chat = await waitForContents(run.app, (url) => url === 'http://127.0.0.1:7070/chat/');
+  await pollIn(run.app, chat.id, "document.body.innerText.includes('/chat/')");
+  await evaluateIn(run.app, bar.id, "document.querySelector('[data-testid=open-chat]').click()");
+  await new Promise((r) => setTimeout(r, 500));
+  expect(await childUrls(run.app)).toEqual(['http://127.0.0.1:7070/chat/']);
+  // It is a window of its own, not a view of the main one, and it carries no preload.
+  const bridge = await evaluateIn<string>(run.app, chat.id, 'JSON.stringify([typeof window.localaiDesktop, typeof window.localaiDesktopHost])');
+  expect(bridge).toBe('["undefined","undefined"]');
+});
+
+test('inside the Chat window, navigating to /library/ is blocked silently', async () => {
+  const chat = await waitForContents(run.app, (url) => url === 'http://127.0.0.1:7070/chat/');
+  await evaluateIn(run.app, chat.id, "location.href = '/library/'");
+  await new Promise((r) => setTimeout(r, 700));
+  expect(await childUrls(run.app)).toEqual(['http://127.0.0.1:7070/chat/']);
+  expect(await evaluateIn<string>(run.app, chat.id, 'location.href')).toBe('http://127.0.0.1:7070/chat/');
+});
+
+test('a link from the agent UI to /library/ opens the Library window and leaves the agent UI where it was', async () => {
+  await evaluateIn(run.app, agentPage, "location.href = '/library/'");
+  await waitForContents(run.app, (url) => url === 'http://127.0.0.1:7070/library/');
+  expect(await evaluateIn<string>(run.app, agentPage, 'location.href')).toBe('http://127.0.0.1:7070/');
+});
+
+test('a link to the internet from the agent UI is blocked and the top bar says so', async () => {
+  const bar = await waitForContents(run.app, isTopBar);
+  await evaluateIn(run.app, agentPage, "location.href = 'https://example.com/'");
+  await pollIn(run.app, bar.id, "document.querySelector('[data-testid=notice]')?.textContent === 'Links to the internet are turned off on this computer.'");
+  expect(await evaluateIn<string>(run.app, agentPage, 'location.href')).toBe('http://127.0.0.1:7070/');
 });
 
 test('the token is nowhere in any renderer: cookie, storage, window keys, DOM', async () => {

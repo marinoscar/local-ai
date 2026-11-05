@@ -78,7 +78,10 @@ test('every error page shows its code, both languages, the fix and the Portal bu
   await expectErrorPage('LAI-DSK-004');
   for (const lang of ['en', 'es'] as const) {
     for (const code of ERROR_CODES) {
-      await run.app.evaluate(({ BrowserWindow }, url) => BrowserWindow.getAllWindows()[0]!.loadURL(url), `localai://app/error/?code=${code}&lang=${lang}`);
+      await run.app.evaluate(
+        ({ webContents }, url) => webContents.getAllWebContents().find((c) => c.getURL().startsWith('localai://app/error/'))!.loadURL(url),
+        `localai://app/error/?code=${code}&lang=${lang}`,
+      );
       await expectErrorPage(code, lang);
     }
   }
