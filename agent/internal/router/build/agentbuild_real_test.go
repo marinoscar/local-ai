@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -83,21 +84,10 @@ func TestAgentRealBuild(t *testing.T) {
 	arch := kitArch(runtime.GOARCH)
 
 	// The kit: the source tarball as it is, and a toolchain tarball whose go is the real one.
-	kitRoot := t.TempDir()
 	data, err := os.ReadFile(tarball)
 	if err != nil {
 		t.Fatal(err)
 	}
-	put := func(part, name string, body []byte) {
-		if err := os.MkdirAll(filepath.Join(kitRoot, "kit", part), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(kitRoot, "kit", part, name), body, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	put("src", filepath.Base(tarball), data)
-	put("src", "MANIFEST.json", []byte(fmt.Sprintf(`{"schema_version":1,"files":[{"kind":"source_tarball","path":%q,"sha256":%q}]}`, filepath.Base(tarball), sum256(data))))
 	var tc bytes.Buffer
 	gz := gzip.NewWriter(&tc)
 	tw := tar.NewWriter(gz)
@@ -122,12 +112,28 @@ func TestAgentRealBuild(t *testing.T) {
 	_ = tw.Close()
 	_ = gz.Close()
 	tcName := "go" + goVer + ".linux-" + arch + ".tar.gz"
-	put("toolchains", tcName, tc.Bytes())
-	put("toolchains", "MANIFEST.json", []byte(fmt.Sprintf(`{"schema_version":1,"files":[{"kind":"toolchain","path":%q,"sha256":%q}]}`, tcName, sum256(tc.Bytes()))))
+	// makeKit writes a kit root holding the given source tarball (named like the real one) and the toolchain.
+	makeKit := func(src []byte) string {
+		root := t.TempDir()
+		put := func(part, name string, body []byte) {
+			if err := os.MkdirAll(filepath.Join(root, "kit", part), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, "kit", part, name), body, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		put("src", filepath.Base(tarball), src)
+		put("src", "MANIFEST.json", []byte(fmt.Sprintf(`{"schema_version":1,"files":[{"kind":"source_tarball","path":%q,"sha256":%q}]}`, filepath.Base(tarball), sum256(src))))
+		put("toolchains", tcName, tc.Bytes())
+		put("toolchains", "MANIFEST.json", []byte(fmt.Sprintf(`{"schema_version":1,"files":[{"kind":"toolchain","path":%q,"sha256":%q}]}`, tcName, sum256(tc.Bytes()))))
+		return root
+	}
+	kitRoot := makeKit(data)
 
 	// The node: an installed agent that is a script, and every program of the build real except systemctl.
 	installed := []byte(fmt.Sprintf("#!/bin/sh\necho '{\"version\":\"0.0.1\",\"os\":\"linux\",\"arch\":%q}'\n", arch))
-	run := func(t *testing.T, healthy bool) (*AgentBuilder, string, *manualClock, *int) {
+	runIn := func(t *testing.T, kitRoot string, healthy bool) (*AgentBuilder, string, *manualClock, *int) {
 		t.Helper()
 		opt := t.TempDir()
 		if err := os.MkdirAll(filepath.Join(opt, "bin"), 0o755); err != nil {
@@ -160,6 +166,11 @@ func TestAgentRealBuild(t *testing.T) {
 			},
 			Clock: clk.Now, Sleep: clk.Sleep,
 		}), opt, clk, reads
+	}
+
+	run := func(t *testing.T, healthy bool) (*AgentBuilder, string, *manualClock, *int) {
+		t.Helper()
+		return runIn(t, kitRoot, healthy)
 	}
 
 	t.Run("builds, reports the tag's version and swaps it in", func(t *testing.T) {
@@ -215,6 +226,73 @@ func TestAgentRealBuild(t *testing.T) {
 			t.Fatalf("%+v %v", rep, err)
 		}
 	})
+
+	// Removing one vendored package from the real source (here the yaml package the module requires) is
+	// LAI-KIT-030, found before the compile and again, if the check were skipped, by go itself: nothing is
+	// replaced and no new program is left behind (rebuild-kit.md section 4.3.4, issue #62).
+	t.Run("a vendored package removed from the real source is LAI-KIT-030", func(t *testing.T) {
+		broken, removed := dropFromTarball(t, data, "agent/vendor/gopkg.in/yaml.v3/")
+		if removed == 0 {
+			t.Fatal("the source tarball has no agent/vendor/gopkg.in/yaml.v3/: pick another vendored package")
+		}
+		root := makeKit(broken)
+		b, opt, _, _ := runIn(t, root, true)
+		dry, err := b.Build(context.Background(), AgentRequest{Tag: tag, DryRun: true})
+		var e *Error
+		if !errors.As(err, &e) || e.Code != doctor.KIT030 || dry.Report == nil || dry.Report.OK() {
+			t.Fatalf("dry run: %+v %v", dry, err)
+		}
+		_, err = b.Build(context.Background(), AgentRequest{Tag: tag})
+		if !errors.As(err, &e) || e.Code != doctor.KIT030 {
+			t.Fatalf("build: %v", err)
+		}
+		if got, _ := os.ReadFile(filepath.Join(opt, "bin", "aiagent")); !bytes.Equal(got, installed) {
+			t.Error("the installed agent was touched")
+		}
+		for _, n := range []string{"aiagent.new", "aiagent.prev"} {
+			if _, err := os.Stat(filepath.Join(opt, "bin", n)); err == nil {
+				t.Errorf("%s exists after a refused build", n)
+			}
+		}
+	})
+}
+
+// dropFromTarball returns a copy of the gzip tar archive without the entries below the path prefix, and how
+// many entries it dropped.
+func dropFromTarball(t *testing.T, data []byte, prefix string) ([]byte, int) {
+	t.Helper()
+	zr, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := tar.NewReader(zr)
+	var out bytes.Buffer
+	zw := gzip.NewWriter(&out)
+	tw := tar.NewWriter(zw)
+	dropped := 0
+	for {
+		h, err := tr.Next()
+		if err != nil {
+			break
+		}
+		if strings.HasPrefix(h.Name, prefix) {
+			dropped++
+			continue
+		}
+		if err := tw.WriteHeader(h); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.Copy(tw, tr); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return out.Bytes(), dropped
 }
 
 // systemctlIsTrue runs every program as it is, except the stand-in for systemctl, which does nothing.
