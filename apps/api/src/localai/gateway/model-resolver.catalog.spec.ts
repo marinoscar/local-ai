@@ -11,13 +11,16 @@ const codeOf = async (promise: Promise<unknown>): Promise<string | null> => prom
 
 describe('CatalogModelResolver (GW-05 resolve.ts behind the proxy port)', () => {
   it('resolves an alias to the catalog id with its policy and the catalog roles', async () => {
-    const resolved = await resolverOver(directoryOf(new Map([['qwen3-coder-next-q4km', policy({ aliases: ['lab-coder'], preferredNodes: ['ai-n1'], firstByteTimeoutS: 60 })]]))).resolve('lab-coder', key());
+    const apiKey = key();
+    const resolved = await resolverOver(directoryOf(new Map([['qwen3-coder-next-q4km', policy({ aliases: ['lab-coder'], preferredNodes: ['ai-n1'], firstByteTimeoutS: 60 })]]))).resolve('lab-coder', apiKey);
     expect(resolved).toEqual({
       modelId: 'qwen3-coder-next-q4km',
       requestedModel: 'lab-coder',
       policy: { preferredNodes: ['ai-n1'], onDemandLoad: false, loadWaitS: 120, firstByteTimeoutS: 60 },
       roles: ['coder', 'chat'],
       inApprovedCatalog: true,
+      // The display prefix only: the on-demand load audits it with the command it queues.
+      keyPrefix: apiKey.tokenPrefix,
     });
   });
 

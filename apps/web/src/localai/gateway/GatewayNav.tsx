@@ -6,6 +6,7 @@ import { Link as RouterLink, useLocation } from 'react-router-dom';
 export const GATEWAY_PAGES: ReadonlyArray<{ path: string; label: string }> = [
   { path: '/gateway/keys', label: 'API keys' },
   { path: '/gateway/usage', label: 'Usage' },
+  { path: '/gateway/models', label: 'Models' },
 ];
 
 export function GatewayNav() {

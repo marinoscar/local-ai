@@ -408,6 +408,16 @@ describe('RoutingTable: loadableCandidates', () => {
     expect(table.loadableCandidates('model-a', { preferredNodes: ['ai-n1'] }).map((c) => c.nodeId)).toEqual(['ai-n3', 'ai-n1', 'ai-n2', 'ai-n5']);
     const n1 = table.loadableCandidates('model-a').find((c) => c.nodeId === 'ai-n1')!;
     expect(n1.loadedOnNode).toEqual([{ modelId: 'model-x', inflight: 1 }]);
+    expect(n1.modelsMax).toBeNull();
+  });
+
+  it('carries the node\'s models_max from its last snapshot', async () => {
+    const { source, table } = setup();
+    source.rows = [node('ai-n1', [model('model-a', { status: 'unloaded' })], { modelsMax: 3 }), node('ai-n2', [model('model-a', { status: 'unloaded' })], { modelsMax: 0 })];
+    await table.rebuild();
+    const byNode = new Map(table.loadableCandidates('model-a').map((c) => [c.nodeId, c.modelsMax]));
+    expect(byNode.get('ai-n1')).toBe(3);
+    expect(byNode.get('ai-n2')).toBeNull();
   });
 
   it('leaves out suspect and keyInvalid nodes', async () => {

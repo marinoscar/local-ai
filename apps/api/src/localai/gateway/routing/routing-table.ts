@@ -77,7 +77,7 @@ const pairKey = (nodeId: string, modelId: string): string => `${nodeId}\u0000${m
 export class RoutingTable implements OnModuleInit, OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(RoutingTable.name);
 
-  private snapshot: RoutingSnapshot = { candidates: new Map(), routable: new Map(), present: new Set() };
+  private snapshot: RoutingSnapshot = { candidates: new Map(), routable: new Map(), present: new Set(), modelsMax: new Map() };
   private queueFactor = DEFAULT_QUEUE_FACTOR;
 
   private readonly nodes = new Map<string, NodeLive>();
@@ -234,7 +234,11 @@ export class RoutingTable implements OnModuleInit, OnApplicationBootstrap, OnMod
         const flags = this.flagsOf(candidate.nodeId, now);
         return !flags.suspect && !flags.keyInvalid;
       })
-      .map((candidate): LoadableCandidate => ({ ...candidate, loadedOnNode: loadedByNode.get(candidate.nodeId) ?? [] }))
+      .map((candidate): LoadableCandidate => ({
+        ...candidate,
+        loadedOnNode: loadedByNode.get(candidate.nodeId) ?? [],
+        modelsMax: this.snapshot.modelsMax.get(candidate.nodeId) ?? null,
+      }))
       .sort(
         (a, b) =>
           a.priority - b.priority ||
