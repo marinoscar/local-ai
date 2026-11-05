@@ -6,18 +6,40 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { BrowserWindow, app, clipboard, ipcMain, protocol, session, shell } from 'electron';
+import { BrowserWindow, Menu, Notification, Tray, app, clipboard, dialog, ipcMain, nativeImage, protocol, session, shell } from 'electron';
 import { AgentFeed, createAgentClient, resolveTokenPath, testHooksAllowed } from './agent-client';
 import { createAgentSupervisor, execFileRunner, resolveStartBinaries } from './agent-supervisor';
 import { runDiagnoseMain } from './diagnose';
 import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, installEgressGuard, installMainProcessGuard, setEgressLogger, type GuardedSessions } from './egress-guard';
-import { ERROR_ACTION_CHANNEL, resolveLang } from './i18n';
+import { DIALOG_TEXT, ERROR_ACTION_CHANNEL, errorText, pick, resolveLang } from './i18n';
 import { type LogEntry, type Logger, createFileLogger } from './log';
 import { hardenedWebPreferences, installPermissionHandlers, installWebContentsHardening, registerView } from './navigation';
 import { installLocalaiProtocol, registerLocalaiScheme, rendererRoot, shellUrl } from './protocol';
+import { Notifier } from './notify';
 import { configDir, readSettingsFile } from './settings';
-import { SessionRecovery, handleErrorAction, isErrorPageUrl, parseActionRequest, runStartup } from './startup';
+import { type ActionDeps, SessionRecovery, handleErrorAction, isErrorPageUrl, parseActionRequest, runStartup } from './startup';
 import { enter as enterSurvival } from './survival';
+import {
+  type ElectronDialogApi,
+  type ElectronTrayApi,
+  type PinPrompt,
+  type WindowControl,
+  ModeController,
+  SET_MODE_CHANNEL,
+  TrayController,
+  createElectronDialogs,
+  createElectronNotificationPort,
+  createElectronTrayPort,
+  createModeApi,
+  detectTray,
+  installHideToTray,
+  isShellPageUrl,
+  parseModeTarget,
+  readStatus,
+  showTrayNoticeOnce,
+  trayNoticeStore,
+  trayUsable,
+} from './tray';
 import { createTemporaryHost } from './windows';
 
 export const MODULE = 'index' as const;
@@ -85,13 +107,29 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   const host = createTemporaryHost({ window: win, isPackaged: app.isPackaged, preloadDir: join(__dirname, '../preload'), lang: () => lang, shellPageUrl });
   const feed = new AgentFeed(client);
 
+  // The tray (DSK-06) lives from here on, before the agent is probed: grey until the first status (desktop.md 4.1).
+  let tray: TrayController | null = null;
+  const windows: WindowControl = {
+    showMain: () => {
+      if (win.isDestroyed()) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    },
+  };
+  // DSK-08 provides the native PIN window; until then the tray cannot leave survival and says where to do it.
+  const pin: PinPrompt | undefined = undefined;
+  const modes = new ModeController({ api: createModeApi(client), ...(pin ? { pin } : {}), currentMode: () => tray?.mode ?? readStatus(feed.status).mode, log });
+  const dialogs = createElectronDialogs(dialog as unknown as ElectronDialogApi);
+  const notifier = new Notifier({ port: createElectronNotificationPort({ Notification }), lang: () => lang, clock: Date.now, onActivate: windows.showMain, log });
+
   const start = async (): Promise<void> => {
     const result = await runStartup({ client, supervisor, host, survival: { enter: enterSurvival }, log });
     log.log('info', 'agent', `start-up finished: ${result.screen}`, result.screen === 'error' ? { code: result.code } : {});
-    if (result.screen !== 'error') {
-      feed.start();
-      void feed.refresh();
-    }
+    if (result.screen === 'error') tray?.startupFailed(result.code === 'LAI-DSK-004' || result.code === 'LAI-DSK-005' ? 'down' : 'blocked');
+    // The stream also runs after an error page: it is how the tray notices that the agent came back.
+    feed.start();
+    if (result.screen !== 'error') void feed.refresh();
   };
 
   // 401 recovery: the agent UI got a 401 on an API call (the token was rotated, or the agent restarted).
@@ -101,25 +139,85 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   });
 
   // The error page's buttons (the one IPC channel of this item; DSK-04 folds it into the full bridge).
+  const actionDeps: ActionDeps = {
+    host,
+    supervisor,
+    clipboardWrite: (text) => clipboard.writeText(text),
+    logout: () =>
+      new Promise<boolean>((resolve) => {
+        const quit = '/usr/bin/gnome-session-quit';
+        if (!existsSync(quit)) return resolve(false);
+        execFile(quit, ['--logout'], { timeout: 5000 }, (error) => resolve(!error));
+      }),
+    // The LAI-DSK-007 fallback: the agent's own UI in the default browser (loopback only; desktop.md 5).
+    openAgentInBrowser: () => shell.openExternal(`http://${AGENT_HOST}:${AGENT_PORT}/`),
+    retry: () => void start(),
+    log,
+  };
   ipcMain.handle(ERROR_ACTION_CHANNEL, async (event, payload: unknown) => {
     const request = parseActionRequest(payload);
     if (!request || !isErrorPageUrl(event.senderFrame?.url ?? '', ctx.devOrigin)) return { ok: false };
-    return handleErrorAction(request, {
-      host,
-      supervisor,
-      clipboardWrite: (text) => clipboard.writeText(text),
-      logout: () =>
-        new Promise<boolean>((resolve) => {
-          const quit = '/usr/bin/gnome-session-quit';
-          if (!existsSync(quit)) return resolve(false);
-          execFile(quit, ['--logout'], { timeout: 5000 }, (error) => resolve(!error));
-        }),
-      // The LAI-DSK-007 fallback: the agent's own UI in the default browser (loopback only; desktop.md 5).
-      openAgentInBrowser: () => shell.openExternal(`http://${AGENT_HOST}:${AGENT_PORT}/`),
-      retry: () => void start(),
+    return handleErrorAction(request, actionDeps);
+  });
+
+  // `setMode` of the shell bridge: shell pages only, a known target only. The page shows its own errors from `code`.
+  ipcMain.handle(SET_MODE_CHANNEL, async (event, payload: unknown) => {
+    const target = parseModeTarget(payload);
+    if (target === null || !isShellPageUrl(event.senderFrame?.url ?? '', ctx.devOrigin)) return { ok: false };
+    const outcome = await modes.setMode(target);
+    return outcome.ok ? { ok: true } : { ok: false, code: outcome.code };
+  });
+
+  // The tray, when the desktop has one (desktop.md 4.3). No StatusNotifier watcher: a one-time LAI-DSK-013 notice, and
+  // closing the window quits the app.
+  // `LOCALAI_DESKTOP_TRAY=unavailable|available` pretends there is no StatusNotifier watcher, or one (unpackaged runs and the e2e test copy only).
+  const forced = testHooksAllowed(app.isPackaged, process.execPath) ? process.env['LOCALAI_DESKTOP_TRAY'] : undefined;
+  const availability = forced === 'unavailable' || forced === 'available' ? forced : await detectTray();
+  if (trayUsable(availability)) {
+    let quitting = false;
+    app.on('before-quit', () => {
+      quitting = true;
+    });
+    const iconDir = app.isPackaged ? join(process.resourcesPath, 'tray') : join(app.getAppPath(), 'build', 'linux', 'tray');
+    const controller = new TrayController({
+      port: createElectronTrayPort({ Tray, Menu, nativeImage } as unknown as ElectronTrayApi, {
+        iconDir,
+        onAction: (action) => void controller.invoke(action),
+        onActivate: () => controller.activate(),
+      }),
+      lang: () => lang,
+      clock: Date.now,
+      notifier,
+      modes,
+      probe: async () => {
+        const health = await client.health({ tries: 1, timeoutMs: 1000 });
+        return !health.reachable ? 'down' : health.health.starting ? 'starting' : 'up';
+      },
+      refreshStatus: () => feed.refresh(),
+      readMode: () => createModeApi(client).read(),
+      windows,
+      dialogs,
+      actions: {
+        quit: () => app.quit(),
+        startAgent: async () => {
+          const result = await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, actionDeps);
+          // `busy`: a start is already running (the error page's button, or an earlier click): nothing to say.
+          if (result.ok || result.busy === true) return;
+          const copy = errorText('LAI-DSK-005', lang);
+          const excerpt = result.statusExcerpt !== undefined ? `\n\n${result.statusExcerpt}` : '';
+          await dialogs.alert({ title: copy.title, message: copy.message, detail: `${copy.fix} ${copy.command ?? ''}${excerpt}\n\n${copy.code}`, okLabel: pick(DIALOG_TEXT.ok, lang) });
+        },
+      },
       log,
     });
-  });
+    tray = controller;
+    feed.subscribe((message) => controller.handle(message));
+    controller.start();
+    installHideToTray(win, { trayActive: () => tray !== null, quitting: () => quitting });
+  } else {
+    log.log('warn', 'tray', 'no StatusNotifier watcher on the session bus; closing the window quits the app', { code: 'LAI-DSK-013' });
+    void showTrayNoticeOnce({ store: trayNoticeStore(dir), notify: () => notifier.notice('LAI-DSK-013') });
+  }
 
   await start();
 }
@@ -150,6 +248,8 @@ export function start(options: StartOptions = {}): void {
     const [win] = BrowserWindow.getAllWindows();
     if (win) {
       if (win.isMinimized()) win.restore();
+      // Hidden to the tray: a second launch brings it back.
+      if (!win.isVisible()) win.show();
       win.focus();
     }
   });
