@@ -238,6 +238,17 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
     sudo bash /media/$USER/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/$USER/AI-ARK --repair
     ```
 
+31a. **Install or update the Local AI desktop app (ai-desktop) from the kit.** This is the offline way to update the app: its own "Check for updates" switch is off by default, and it never works without internet. The package is in the kit, on the drive and on this computer (numbered so that the steps below do not move):
+
+    ```
+    aictl verify-release /srv/localai/kit/desktop
+    sudo apt install /srv/localai/kit/desktop/ai-desktop_<version>_amd64.deb
+    ```
+
+    `<version>` is in the file name: `ls /srv/localai/kit/desktop/`. With the drive plugged in, `/media/$USER/AI-ARK/localai/kit/desktop/` has the same files. Close the app first if it is open (**Quit** in its menu).
+    - **What you should see:** `✓ Signature OK (Local AI release key). … files checked: all match.` first, then the installation finishing, and **Local AI** in the application menu. Open it: the dashboard shows in a few seconds.
+    - **If it doesn't work:** `LAI-KIT-044` or `LAI-AGT-010` (a signature or a file doesn't match): **don't** install it; use the copy on the other drive after checking it the same way. `No such file or directory`: this kit has no desktop app yet (the drive was synced before the first desktop release); use a browser at `http://127.0.0.1:7070` meanwhile ([07 → The app won't open](07-troubleshooting.md#the-app-wont-open)). `apt` complains about missing packages (it cannot download them): `sudo aictl kit install-debs` first (step 29), then run the `apt install` again.
+
 ---
 
 ## Part 8. When the internet comes back
