@@ -19,6 +19,8 @@ export interface TemporaryHostOptions {
   lang(): Lang;
   /** URL of a built shell page: `localai://app/error/?code=...` packaged, the Vite server in development. */
   shellPageUrl(page: string, query: string): string;
+  /** `--hidden` (DSK-07): the window stays hidden (in the tray) until something shows it, whatever the start-up sequence loads. */
+  startHidden?: boolean;
 }
 
 export interface TemporaryHost extends ContentHost {
@@ -43,6 +45,12 @@ export function createTemporaryHost(options: TemporaryHostOptions): TemporaryHos
     view.setBounds({ x: 0, y: 0, width, height });
   };
   win.on('resize', fit);
+  // `--hidden`: loading a page does not reveal the window. The first time anything shows it (the tray, a second launch,
+  // survival) it behaves as usual again.
+  let suppressReveal = options.startHidden === true;
+  win.on('show', () => {
+    suppressReveal = false;
+  });
 
   const ensureView = (): WebContentsView => {
     if (view) return view;
@@ -61,6 +69,7 @@ export function createTemporaryHost(options: TemporaryHostOptions): TemporaryHos
   };
 
   const reveal = (): void => {
+    if (suppressReveal) return;
     if (!win.isVisible()) win.show();
   };
 
