@@ -318,13 +318,30 @@ func (k *Kit) Mirror(name, id string, commits ...string) []string {
 	return names
 }
 
-// SignBin writes kit/bin/SHA256SUMS and its minisign signature over the files of kit/bin that are
-// listed, signed by the kit's throwaway key.
+// ReleaseSums returns the release's signed checksum list (SHA256SUMS) and its signature over files, the
+// whole release: the agent files of kit/bin and also the files that belong to other kit items (the agent
+// source of kit/src, the installer), as a real release's list does.
+func (k *Kit) ReleaseSums(files map[string][]byte) (sums, sig []byte) {
+	sums = updatetest.Sums(files)
+	return sums, k.Signer.Sign(sums, updatetest.SignOptions{})
+}
+
+// SignBin writes the release's signed checksum list into kit/bin/release/, where the catalog puts it
+// (kit.ReleaseDirName), signed by the kit's throwaway key. files are the whole release; only the files
+// that are in kit/bin need to exist there.
 func (k *Kit) SignBin(files map[string][]byte) {
 	k.T.Helper()
-	sums := updatetest.Sums(files)
+	sums, sig := k.ReleaseSums(files)
+	k.Write("bin/"+kit.ReleaseDirName+"/SHA256SUMS", sums)
+	k.Write("bin/"+kit.ReleaseDirName+"/SHA256SUMS.minisig", sig)
+}
+
+// SignBinBeside is SignBin for the layout of a drive prepared by hand: the list beside the binaries.
+func (k *Kit) SignBinBeside(files map[string][]byte) {
+	k.T.Helper()
+	sums, sig := k.ReleaseSums(files)
 	k.Write("bin/SHA256SUMS", sums)
-	k.Write("bin/SHA256SUMS.minisig", k.Signer.Sign(sums, updatetest.SignOptions{}))
+	k.Write("bin/SHA256SUMS.minisig", sig)
 }
 
 // Index writes kit/MANIFEST.json and kit/README.txt the way sync does.
@@ -497,9 +514,22 @@ func (k *Kit) Provision(nodes ...Node) {
 	}
 	installer := []byte("#!/bin/sh\n# installer fixture\n")
 	k.Write("installers/install-node.sh", installer)
-	k.Item("bin", "kit-agent-binaries", bin, WithSource("installers",
+	// The release's signed list names the installer and the agent source too, which are not in kit/bin.
+	release := map[string][]byte{"install-node.sh": installer}
+	for n, b := range bin {
+		release[n] = b
+	}
+	for n, b := range src {
+		release[n] = b
+	}
+	sums, sig := k.ReleaseSums(release)
+	binItem := map[string][]byte{}
+	for n, b := range bin {
+		binItem[n] = b
+	}
+	binItem[kit.ReleaseDirName+"/SHA256SUMS"], binItem[kit.ReleaseDirName+"/SHA256SUMS.minisig"] = sums, sig
+	k.Item("bin", "kit-agent-binaries", binItem, WithSource("installers",
 		[]map[string]any{{"path": "install-node.sh", "size_bytes": len(installer), "sha256": SHA(installer)}}))
-	k.SignBin(bin)
 	tc := map[string][]byte{}
 	tools := map[string]map[string][]byte{"kiwix-tools": {}, "pmtiles": {}, "piper": {}}
 	for a := range archs {

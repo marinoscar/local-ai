@@ -1,7 +1,7 @@
 == stdout ==
 
 Rebuild kit on this computer's disk: green
-  Everything was read again from the disk: 25 files, 2.3 kB.
+  Everything was read again from the disk: 27 files, 2.9 kB.
 PART        STATE  CODE
 catalog     ok
 installers  ok

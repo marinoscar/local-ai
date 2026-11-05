@@ -46,6 +46,14 @@ func put(rel, content string) func(*testing.T, string) {
 
 const shaD = `"@sha:d@"`
 
+// toolBundleURL is the single-file form of the kit-tool-bundle item of the fixture; toolBundleFiles
+// rewrites it as a files list.
+const toolBundleURL = "      url: \"https://data.example.test/tool-bundle.tar.gz\"\n      sha256: " + shaD + "\n"
+
+func toolBundleFiles(files ...string) string {
+	return "      files:\n        - " + strings.Join(files, "\n        - ") + "\n"
+}
+
 var ruleCases = []struct {
 	name  string
 	edits []edit
@@ -245,6 +253,22 @@ var ruleCases = []struct {
 		want: []want{w(CodeOptionalField, fA, "content[7].source.trust")}},
 	{name: "016 url and files together", edits: []edit{{fA, "      sha256: " + shaD + "\n", "      sha256: " + shaD + "\n      files: [{url: \"https://data.example.test/a.zip\", sha256: " + shaD + "}]\n"}},
 		want: []want{w(CodeOptionalField, fA, "content[7].source.files"), w(CodeOptionalField, fA, "content[7].source.sha256")}},
+	{name: "010 files name is the reserved SHA256SUMS", edits: []edit{{fA, toolBundleURL, toolBundleFiles(`{url: "https://data.example.test/rel/SHA256SUMS", sha256: ` + shaD + `, name: SHA256SUMS}`)}},
+		want: []want{w(CodeSchema, fA, "content[7].source.files[0].name")}, msg: "clean relative path"},
+	{name: "010 files name leaves the item folder", edits: []edit{{fA, toolBundleURL, toolBundleFiles(`{url: "https://data.example.test/rel/x.bin", sha256: ` + shaD + `, name: "../x.bin"}`)}},
+		want: []want{w(CodeSchema, fA, "content[7].source.files[0].name")}},
+	{name: "010 files name is absolute", edits: []edit{{fA, toolBundleURL, toolBundleFiles(`{url: "https://data.example.test/rel/x.bin", sha256: ` + shaD + `, name: "/x.bin"}`)}},
+		want: []want{w(CodeSchema, fA, "content[7].source.files[0].name")}},
+	{name: "010 files name has an empty folder", edits: []edit{{fA, toolBundleURL, toolBundleFiles(`{url: "https://data.example.test/rel/x.bin", sha256: ` + shaD + `, name: "a//x.bin"}`)}},
+		want: []want{w(CodeSchema, fA, "content[7].source.files[0].name")}},
+	{name: "010 files name is the manifest", edits: []edit{{fA, toolBundleURL, toolBundleFiles(`{url: "https://data.example.test/rel/x.bin", sha256: ` + shaD + `, name: MANIFEST.json}`)}},
+		want: []want{w(CodeSchema, fA, "content[7].source.files[0].name")}},
+	{name: "010 two files with one name", edits: []edit{{fA, toolBundleURL, toolBundleFiles(
+		`{url: "https://data.example.test/a/x.bin", sha256: `+shaD+`}`, `{url: "https://data.example.test/b/x.bin", sha256: `+shaD+`}`)}},
+		want: []want{w(CodeSchema, fA, "content[7].source.files[1].url")}, msg: "used twice"},
+	{name: "010 a written name collides with a default one", edits: []edit{{fA, toolBundleURL, toolBundleFiles(
+		`{url: "https://data.example.test/a/x.bin", sha256: `+shaD+`}`, `{url: "https://data.example.test/b/y.bin", sha256: `+shaD+`, name: x.bin}`)}},
+		want: []want{w(CodeSchema, fA, "content[7].source.files[1].url")}},
 	{name: "016 url without url or files", edits: []edit{{fA, "      url: \"https://data.example.test/tool-bundle.tar.gz\"\n      sha256: " + shaD + "\n", ""}},
 		want: []want{w(CodeOptionalField, fA, "content[7].source")}},
 	{name: "016 checksum sidecar without sidecar_url", edits: []edit{{fA, "      sidecar_url: \"https://releases.example.test/SHA256SUMS\"\n", ""}},
@@ -398,6 +422,10 @@ func TestLintAllowed(t *testing.T) {
 			writeFile(t, dir, FileTestMarker, "")
 			writeFile(t, dir, "pins.json", "{}")
 		}},
+		{name: "a url item names a file inside a folder of the item (a release's signed checksums)", edits: []edit{{fA, toolBundleURL, toolBundleFiles(
+			`{url: "https://data.example.test/rel/tool-linux-amd64", sha256: `+shaD+`}`,
+			`{url: "https://data.example.test/rel/SHA256SUMS", sha256: `+shaD+`, name: release/SHA256SUMS}`,
+			`{url: "https://data.example.test/rel/SHA256SUMS.minisig", sha256: `+shaD+`, name: release/SHA256SUMS.minisig}`)}}},
 		{name: "kit-catalog is a kit item with a repo_docs source", setup: appendTo(fA, "  - id: kit-catalog\n    kind: kit\n    source: {type: repo_docs}\n")},
 		{name: "CATALOG_VERSION without trailing newline", setup: put(fV, "2026.11.02-1")},
 		{name: "CATALOG_VERSION with CRLF", setup: put(fV, "2026.11.02-1\r\n")},

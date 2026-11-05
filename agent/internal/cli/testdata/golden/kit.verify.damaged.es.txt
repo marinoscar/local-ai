@@ -1,7 +1,7 @@
 == stdout ==
 
 Kit de reconstrucción en el disco de este equipo: rojo
-  Todo se leyó otra vez desde el disco: 24 archivos, 2.3 kB.
+  Todo se leyó otra vez desde el disco: 26 archivos, 2.8 kB.
 PARTE       ESTADO  CÓDIGO
 catalog     bien
 installers  bien

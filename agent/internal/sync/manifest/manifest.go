@@ -378,6 +378,21 @@ func ValidFilePath(p string) bool {
 	return path.Clean(p) == p
 }
 
+// SafePath reports whether p can be the name a catalog gives a file inside an item directory: a valid
+// file path (ValidFilePath) whose every element is a SafeName, so "release/SHA256SUMS" is usable and
+// neither "SHA256SUMS", "a//b", "a/ b" nor "../x" is.
+func SafePath(p string) bool {
+	if !ValidFilePath(p) {
+		return false
+	}
+	for _, e := range strings.Split(p, "/") {
+		if !SafeName(e) {
+			return false
+		}
+	}
+	return true
+}
+
 // IsSHA256 reports whether s is exactly 64 lowercase hex digits.
 func IsSHA256(s string) bool {
 	if len(s) != 64 {

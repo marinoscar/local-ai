@@ -157,6 +157,61 @@ func TestURLPinnedMultiFile(t *testing.T) {
 	}
 }
 
+// A file the catalog gives a name lands under that name (a path inside the item), so a release's signed
+// SHA256SUMS, whose own name the engine reserves, can be a file of the item (issue #360).
+func TestURLPinnedFileNames(t *testing.T) {
+	_, o, u := urlSetup(t)
+	prog, sums, sig := []byte("program"), []byte("sums"), []byte("signature")
+	o.put("/rel/prog", prog, "", "")
+	o.put("/rel/SHA256SUMS", sums, "", "")
+	o.put("/rel/SHA256SUMS.minisig", sig, "", "")
+	got, err := u.Lookup(context.Background(), urlContent("kit-agent-binaries", "kit", catalog.ContentSource{
+		Type: "url", Files: []catalog.URLFile{
+			{URL: o.srv.URL + "/rel/prog", SHA256: sum256(prog)},
+			{URL: o.srv.URL + "/rel/SHA256SUMS", SHA256: sum256(sums), Name: "release/SHA256SUMS"},
+			{URL: o.srv.URL + "/rel/SHA256SUMS.minisig", SHA256: sum256(sig), Name: "release/SHA256SUMS.minisig"},
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for _, f := range got.Files {
+		paths = append(paths, f.Path)
+		if !manifest.ValidFilePath(f.Path) {
+			t.Errorf("%q is not a usable path", f.Path)
+		}
+	}
+	if strings.Join(paths, " ") != "prog release/SHA256SUMS release/SHA256SUMS.minisig" {
+		t.Errorf("paths = %v", paths)
+	}
+	// The digests stay each file's own, and the version stays the first file's.
+	if got.Files[1].SHA256 != sum256(sums) || got.Files[2].SHA256 != sum256(sig) || got.Version != sum256(prog)[:12] {
+		t.Errorf("result = %+v", got)
+	}
+
+	// The reserved name without a folder is still refused, as are names that leave the item folder or
+	// repeat another file's name.
+	sha := strings.Repeat("ab", 32)
+	for name, files := range map[string][]catalog.URLFile{
+		"the reserved name":   {{URL: "https://d.example.test/r/x", SHA256: sha, Name: "SHA256SUMS"}},
+		"the manifest name":   {{URL: "https://d.example.test/r/x", SHA256: sha, Name: "MANIFEST.json"}},
+		"a parent folder":     {{URL: "https://d.example.test/r/x", SHA256: sha, Name: "../x"}},
+		"an absolute path":    {{URL: "https://d.example.test/r/x", SHA256: sha, Name: "/x"}},
+		"a name used twice":   {{URL: "https://d.example.test/r/x", SHA256: sha, Name: "a/x"}, {URL: "https://d.example.test/r/y", SHA256: sha, Name: "a/x"}},
+		"a name as a default": {{URL: "https://d.example.test/r/x", SHA256: sha}, {URL: "https://d.example.test/r/y", SHA256: sha, Name: "x"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := u.Lookup(context.Background(), urlContent("x", "kit", catalog.ContentSource{Type: "url", Files: files}))
+			codeIs(t, err, doctor.SYN033, true)
+		})
+	}
+	// A release URL with the reserved name and no catalog name is the failure the issue found.
+	_, err = u.Lookup(context.Background(), urlContent("x", "kit", catalog.ContentSource{
+		Type: "url", Files: []catalog.URLFile{{URL: "https://d.example.test/r/SHA256SUMS", SHA256: sha}}}))
+	codeIs(t, err, doctor.SYN033, true)
+}
+
 // An origin that cannot answer a HEAD does not stop a pinned item (the size is then unknown); one that
 // no longer has the file does (LAI-SYN-030).
 func TestURLPinnedHeadFailures(t *testing.T) {

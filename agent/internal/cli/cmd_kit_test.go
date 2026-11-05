@@ -780,9 +780,11 @@ func (f *kitFix) kitAgent(t *testing.T, version string, signer *updatetest.Signe
 	t.Helper()
 	files := map[string][]byte{"aiagent-linux-amd64": []byte(agentJSON(version)), "aiagent-linux-arm64": []byte(strings.Replace(agentJSON(version), "amd64", "arm64", 1))}
 	d := kitPutTool(t, f.kitDir, "bin", "node-v"+version, files)
-	sums := updatetest.Sums(files)
-	kitWrite(t, filepath.Join(d, "SHA256SUMS"), string(sums))
-	kitWrite(t, filepath.Join(d, "SHA256SUMS.minisig"), string(signer.Sign(sums, updatetest.SignOptions{})))
+	// The release's list names the agent source too (it is in kit/src), and sits in bin/release/.
+	sums := updatetest.Sums(map[string][]byte{"aiagent-linux-amd64": files["aiagent-linux-amd64"], "aiagent-linux-arm64": files["aiagent-linux-arm64"],
+		"local-ai-node-v" + version + "-src.tar.gz": []byte("source")})
+	kitWrite(t, filepath.Join(d, "release", "SHA256SUMS"), string(sums))
+	kitWrite(t, filepath.Join(d, "release", "SHA256SUMS.minisig"), string(signer.Sign(sums, updatetest.SignOptions{})))
 }
 
 func (f *kitFix) installedAgent(t *testing.T, version string) {

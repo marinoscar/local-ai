@@ -948,6 +948,24 @@ t "offline: a tampered agent on the drive -> LAI-INS-021" 1 "LAI-INS-021" realv 
 t "offline: nothing placed" 0 "" test ! -e "$I2_IROOT/opt/localai/bin"
 I2_ARK4="$w/i2-ark4"; i2_mkark "$I2_ARK4"; echo "# x" >>"$I2_ARK4/localai/kit/bin/SHA256SUMS"
 t "offline: a tampered SHA256SUMS -> LAI-INS-021" 1 "the signature of SHA256SUMS is wrong" realv -- "${I2_RA[@]}" --from-ark "$I2_ARK4"
+# The layout `aictl ark sync` produces (issue #360): the release's signed list in kit/bin/release/, the installer
+# beside the binaries, no kit/installers/ folder.
+I2_ARK5="$w/i2-ark5"; i2_mkark "$I2_ARK5"
+mkdir -p "$I2_ARK5/localai/kit/bin/release"; mv "$I2_ARK5"/localai/kit/bin/SHA256SUMS* "$I2_ARK5/localai/kit/bin/release/"
+mv "$I2_ARK5/localai/kit/installers/install-node.sh" "$I2_ARK5/localai/kit/bin/"; rmdir "$I2_ARK5/localai/kit/installers"
+i2_fresh
+t "offline: a drive in the layout of aictl ark sync installs" 0 "staged from ark $I2_ARK5" realv -- "${I2_RA[@]}" --from-ark "$I2_ARK5"
+t "offline: ...agent and installer placed from kit/bin" 0 "" bash -c 'cmp -s "$1/opt/localai/bin/aiagent" "$2/localai/kit/bin/aiagent-linux-amd64" && cmp -s "$1/opt/localai/installers/install-node.sh" "$2/localai/kit/bin/install-node.sh" && test -L "$1/usr/local/sbin/install-node.sh"' _ "$I2_IROOT" "$I2_ARK5"
+I2_ARK6="$w/i2-ark6"; i2_mkark "$I2_ARK6"
+mkdir -p "$I2_ARK6/localai/kit/bin/release"; mv "$I2_ARK6"/localai/kit/bin/SHA256SUMS* "$I2_ARK6/localai/kit/bin/release/"
+echo "# x" >>"$I2_ARK6/localai/kit/bin/release/SHA256SUMS"
+i2_fresh
+t "offline: a tampered release/SHA256SUMS -> LAI-INS-021" 1 "the signature of SHA256SUMS is wrong" realv -- "${I2_RA[@]}" --from-ark "$I2_ARK6"
+t "offline: ...and nothing placed" 0 "" test ! -e "$I2_IROOT/opt/localai/bin"
+I2_ARK7="$w/i2-ark7"; i2_mkark "$I2_ARK7"; rm "$I2_ARK7/localai/kit/bin/SHA256SUMS.minisig"
+mkdir -p "$I2_ARK7/localai/kit/bin/release"; cp "$I2_ARK5/localai/kit/bin/release/SHA256SUMS" "$I2_ARK7/localai/kit/bin/release/"
+i2_fresh
+t "offline: release/ with a list but no signature -> LAI-INS-016" 1 "LAI-INS-016" realv -- "${I2_RA[@]}" --from-ark "$I2_ARK7"
 i2_fresh
 t "dry run offline: verifies for real, places nothing" 0 "[dry-run] would run: install -m 0755" dryv -- "${I2_RA[@]}" --from-ark "$I2_ARK"
 t "dry run offline: nothing under the install root" 0 "" test ! -e "$I2_IROOT"

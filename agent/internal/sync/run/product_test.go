@@ -3,6 +3,7 @@ package run
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"os"
@@ -208,9 +209,12 @@ type pstack struct {
 	planner   *fakePlanner
 	producers map[string]resolve.Producer
 	itemRes   map[string]ItemResolver
-	jr        *journal.Journal
-	idx       *ark.Index
-	eng       *Engine
+	// rootCAs, when set, is trusted by the engine's own downloader (the one that fetches the files of a
+	// file item), for a test origin served over TLS.
+	rootCAs *x509.CertPool
+	jr      *journal.Journal
+	idx     *ark.Index
+	eng     *Engine
 }
 
 func newPStack(t *testing.T, withDrive bool, producers map[string]resolve.Producer, items ...plan.CatalogItem) *pstack {
@@ -221,8 +225,15 @@ func newPStack(t *testing.T, withDrive bool, producers map[string]resolve.Produc
 // newPStackRes is newPStack with plain item resolvers (huggingface, url, ...) registered as well.
 func newPStackRes(t *testing.T, withDrive bool, producers map[string]resolve.Producer, itemRes map[string]ItemResolver, items ...plan.CatalogItem) *pstack {
 	t.Helper()
+	return newPStackTLS(t, nil, withDrive, producers, itemRes, items...)
+}
+
+// newPStackTLS is newPStackRes with a pool of certificates the engine's own downloader trusts: the origin
+// of a file item is a TLS test server.
+func newPStackTLS(t *testing.T, rootCAs *x509.CertPool, withDrive bool, producers map[string]resolve.Producer, itemRes map[string]ItemResolver, items ...plan.CatalogItem) *pstack {
+	t.Helper()
 	base := t.TempDir()
-	s := &pstack{t: t, base: base, clk: newFakeClock(), evs: &recorder{}, producers: producers, itemRes: itemRes}
+	s := &pstack{t: t, base: base, clk: newFakeClock(), evs: &recorder{}, producers: producers, itemRes: itemRes, rootCAs: rootCAs}
 	s.internal = ark.Root{ID: ark.InternalID, Kind: ark.KindInternal, Path: filepath.Join(base, "srv"), State: ark.StateReady}
 	roots := []ark.Root{s.internal}
 	if withDrive {
@@ -266,7 +277,7 @@ func (s *pstack) open() {
 	if err != nil {
 		s.t.Fatal(err)
 	}
-	dl := download.New(download.Options{HTTP: download.NewHTTPClient(download.ClientConfig{}), Space: ret, Logger: quiet})
+	dl := download.New(download.Options{HTTP: download.NewHTTPClient(download.ClientConfig{RootCAs: s.rootCAs}), Space: ret, Logger: quiet})
 	machine, err := item.New(item.Deps{FS: item.OSFS{}, Journal: jr, Fetcher: dl, Index: s.idx, Remover: ret, Roots: roots, Now: s.clk.Now, NodeID: "ai-test", AgentVersion: "0.0.0", Logger: quiet})
 	if err != nil {
 		s.t.Fatal(err)

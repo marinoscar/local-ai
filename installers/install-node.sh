@@ -1165,6 +1165,27 @@ p1_check_ports() {
   ((bad)) || p1_ok "ports 7070, 8080, 8081 and 8888 are free or ours"
 }
 
+# kit_sums_dir <kit>: the folder of an ark drive that holds the release's signed SHA256SUMS and its signature.
+# `aictl ark sync` keeps them in kit/bin/release/ (the sync engine reserves the plain name SHA256SUMS in an item
+# folder, issue #360); a drive prepared by hand has them beside the binaries in kit/bin/.
+kit_sums_dir() {
+  if [[ -f "$1/bin/release/SHA256SUMS" || -f "$1/bin/release/SHA256SUMS.minisig" ]]; then
+    printf '%s/bin/release' "$1"
+  else
+    printf '%s/bin' "$1"
+  fi
+}
+
+# kit_installer <kit>: the copy of this installer on an ark drive: kit/installers/install-node.sh, else the one
+# `aictl ark sync` puts beside the binaries (kit-agent-binaries syncs the release's install-node.sh into kit/bin/).
+kit_installer() {
+  if [[ -f "$1/installers/install-node.sh" ]]; then
+    printf '%s/installers/install-node.sh' "$1"
+  else
+    printf '%s/bin/install-node.sh' "$1"
+  fi
+}
+
 p1_check_source() {
   if [[ -z "$OPT_FROM_ARK" ]]; then
     if curl -fsS --max-time 5 -o /dev/null "$INTERNET_URL" 2>/dev/null; then
@@ -1177,10 +1198,12 @@ p1_check_source() {
   local kit="$OPT_FROM_ARK/localai/kit" missing=() f
   [[ -f "$OPT_FROM_ARK/localai/ROOT.json" ]] || missing+=("localai/ROOT.json")
   [[ -s "$kit/catalog/CATALOG_VERSION" ]] || missing+=("localai/kit/catalog/CATALOG_VERSION")
-  for f in "aiagent-linux-${P1_ARCH:-amd64}" SHA256SUMS SHA256SUMS.minisig; do
-    [[ -f "$kit/bin/$f" ]] || missing+=("localai/kit/bin/$f")
+  [[ -f "$kit/bin/aiagent-linux-${P1_ARCH:-amd64}" ]] || missing+=("localai/kit/bin/aiagent-linux-${P1_ARCH:-amd64}")
+  local sd; sd="$(kit_sums_dir "$kit")"
+  for f in SHA256SUMS SHA256SUMS.minisig; do
+    [[ -f "$sd/$f" ]] || missing+=("localai/${sd#"$OPT_FROM_ARK"/localai/}/$f")
   done
-  [[ -f "$kit/installers/install-node.sh" ]] || missing+=("localai/kit/installers/install-node.sh")
+  [[ -f "$(kit_installer "$kit")" ]] || missing+=("localai/kit/installers/install-node.sh")
   if [[ -n "$P1_CODENAME" && -n "$P1_ARCH" ]]; then
     [[ -f "$kit/debs/$P1_CODENAME-$P1_ARCH/MANIFEST.json" ]] || missing+=("localai/kit/debs/$P1_CODENAME-$P1_ARCH/")
     if [[ "$P1_BACKEND" == cuda || "$P1_DRIVER_BROKEN" == 1 ]]; then
@@ -1317,12 +1340,15 @@ p2_fetch() {
   if [[ -n "$OPT_FROM_ARK" ]]; then
     local kit="$OPT_FROM_ARK/localai/kit"
     P2_FROM="ark $OPT_FROM_ARK"
-    for f in "$name" SHA256SUMS SHA256SUMS.minisig; do
-      [[ -f "$kit/bin/$f" ]] || p_fail 1 LAI-INS-016 "the ark drive has no $kit/bin/$f."
-      cp "$kit/bin/$f" "$P2_TMP/$f"
+    [[ -f "$kit/bin/$name" ]] || p_fail 1 LAI-INS-016 "the ark drive has no $kit/bin/$name."
+    cp "$kit/bin/$name" "$P2_TMP/$name"
+    local sd inst; sd="$(kit_sums_dir "$kit")"; inst="$(kit_installer "$kit")"
+    for f in SHA256SUMS SHA256SUMS.minisig; do
+      [[ -f "$sd/$f" ]] || p_fail 1 LAI-INS-016 "the ark drive has no $sd/$f."
+      cp "$sd/$f" "$P2_TMP/$f"
     done
-    [[ -f "$kit/installers/install-node.sh" ]] || p_fail 1 LAI-INS-016 "the ark drive has no $kit/installers/install-node.sh."
-    cp "$kit/installers/install-node.sh" "$P2_TMP/install-node.sh"
+    [[ -f "$inst" ]] || p_fail 1 LAI-INS-016 "the ark drive has no $kit/installers/install-node.sh."
+    cp "$inst" "$P2_TMP/install-node.sh"
     return 0
   fi
   local base="${RELEASE_BASE_URL:-$REPO_RELEASES/$INSTALLER_TAG}" proto='=https'
@@ -2224,8 +2250,8 @@ repair_installer_files() {
   if ((DEV)) && [[ -n "${LAI_INSTALL_SELF:-}" ]]; then self="$LAI_INSTALL_SELF"; fi
   if [[ "$(readlink -f -- "$self")" != "$(readlink -f -- "$dest" 2>/dev/null || echo "$dest")" ]]; then
     src="$self"
-  elif [[ -n "$OPT_FROM_ARK" && -f "$OPT_FROM_ARK/localai/kit/installers/install-node.sh" ]]; then
-    src="$OPT_FROM_ARK/localai/kit/installers/install-node.sh"
+  elif [[ -n "$OPT_FROM_ARK" && -f "$(kit_installer "$OPT_FROM_ARK/localai/kit")" ]]; then
+    src="$(kit_installer "$OPT_FROM_ARK/localai/kit")"
   fi
   if [[ -n "$src" ]]; then
     write_file_or_diff "$dest" 0755 "$(root_owner)" <"$src"

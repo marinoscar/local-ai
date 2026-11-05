@@ -165,11 +165,18 @@ type DirOptions struct {
 	IgnoreMissing bool
 	// MaxFileBytes bounds the size of each file that is hashed; 0 means 8 GiB.
 	MaxFileBytes int64
+	// ListDir is the folder that holds SHA256SUMS and SHA256SUMS.minisig; the files they list are still
+	// looked for in the directory VerifyDir is given. Empty means that same directory. A rebuild kit
+	// keeps the release's signed list in kit/bin/release/ because the sync engine reserves the name
+	// SHA256SUMS in every item folder (rebuild-kit.md section 3.2.1).
+	ListDir string
 }
 
 // VerifyDir verifies a downloaded or kit release directory offline: SHA256SUMS.minisig against keys, then
-// every file listed in SHA256SUMS (agent.md section 4.10, aictl.md section 4.27a). It is the entry point of
-// `aictl verify-release` and of the kit verification. It needs no agent, no network and no root.
+// every file listed in SHA256SUMS (agent.md section 4.10, aictl.md section 4.27a). The list and its
+// signature are read from opt.ListDir when set, else from dir; the files they name are always looked for
+// in dir. It is the entry point of `aictl verify-release` and of the kit verification. It needs no agent,
+// no network and no root.
 //
 // The returned report is filled as far as the check got. The error is nil only when the signature verified
 // and every listed file matched (a missing file only when IgnoreMissing). A directory without SHA256SUMS or
@@ -178,14 +185,18 @@ type DirOptions struct {
 // LAI-AGT-010 (LAI-KIT-044 for a kit directory).
 func VerifyDir(fsys FS, dir string, keys []PublicKey, opt DirOptions) (DirReport, error) {
 	var rep DirReport
-	sums, err := readLimited(fsys, filepath.Join(dir, SumsName), maxSumsBytes)
+	listDir := dir
+	if opt.ListDir != "" {
+		listDir = opt.ListDir
+	}
+	sums, err := readLimited(fsys, filepath.Join(listDir, SumsName), maxSumsBytes)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return rep, fmt.Errorf("%w: %v", ErrNoSums, err)
 		}
 		return rep, err
 	}
-	sigData, err := readLimited(fsys, filepath.Join(dir, SigName), maxSignatureFile)
+	sigData, err := readLimited(fsys, filepath.Join(listDir, SigName), maxSignatureFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return rep, fmt.Errorf("%w: %v", ErrNoSums, err)

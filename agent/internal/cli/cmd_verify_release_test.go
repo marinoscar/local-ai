@@ -292,3 +292,51 @@ func TestVerifyReleaseGolden(t *testing.T) {
 	checkGolden(t, "verify-release.mismatch.en", runResult(f.run("verify-release", f.dir)))
 	checkGolden(t, "verify-release.mismatch.es", runResult(f.run("--lang", "es", "verify-release", f.dir)))
 }
+
+// A kit's bin folder keeps the release's signed list in release/ and does not hold every file it names
+// (the agent source is in kit/src): the check reads release/ and does not ask for the others.
+func TestVerifyReleaseKitBinFolder(t *testing.T) {
+	f := newReleaseFix(t)
+	// Move the pair into release/ and add a line for a file that is not in this folder.
+	whole := map[string][]byte{}
+	for n, d := range f.files {
+		whole[n] = d
+	}
+	whole["local-ai-node-v0.1.0-src.tar.gz"] = []byte("source")
+	sums := updatetest.Sums(whole)
+	for _, n := range []string{update.SumsName, update.SigName} {
+		if err := os.Remove(filepath.Join(f.dir, n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(f.dir, kit.ReleaseDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f.write(filepath.Join(kit.ReleaseDirName, update.SumsName), sums)
+	f.write(filepath.Join(kit.ReleaseDirName, update.SigName), f.signer.Sign(sums, updatetest.SignOptions{}))
+
+	got := f.run("verify-release", f.dir)
+	checkRun(t, got, 0, "✓ Signature OK (Local AI release key). 4 files checked: all match.\n", "")
+	j := f.run("--json", "verify-release", f.dir)
+	var doc releaseReport
+	if err := json.Unmarshal([]byte(j.out), &doc); err != nil || !doc.OK || doc.Signature != "ok" || doc.KeyID == "" || len(doc.Files) != 5 {
+		t.Fatalf("%v %+v\n%s", err, doc, j.out)
+	}
+
+	// A changed binary is still caught.
+	f.write("aiagent-linux-amd64", []byte("evil"))
+	bad := f.run("verify-release", f.dir)
+	if bad.code != ExitFailed || !strings.Contains(flat(bad.errOut), "aiagent-linux-amd64") {
+		t.Fatalf("%+v", bad)
+	}
+
+	// A folder that still has the classic pair at its top is checked the classic way, including the
+	// files that are missing.
+	g := newReleaseFix(t)
+	if err := os.Remove(filepath.Join(g.dir, "README.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if miss := g.run("verify-release", g.dir); miss.code != ExitFailed {
+		t.Fatalf("a missing file of a classic release must fail: %+v", miss)
+	}
+}

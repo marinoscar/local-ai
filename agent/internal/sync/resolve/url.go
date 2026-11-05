@@ -97,7 +97,7 @@ func readURLItem(it plan.CatalogItem) (urlItem, error) {
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
 			return urlItem{}, failPerm(CodeNoNewest, nil, "a file of item %s has no usable https URL", it.ID)
 		}
-		name := fileBase(f.URL)
+		name := fileName(f)
 		if name == "" {
 			return urlItem{}, failPerm(CodeNoNewest, nil, "the URL %s of item %s has no usable file name", redactURL(f.URL), it.ID)
 		}
@@ -355,4 +355,17 @@ func (u *URLSource) Resolve(ctx context.Context, it plan.CatalogItem) (plan.Reso
 		total = it.CatalogBytes()
 	}
 	return plan.Resolved{Version: computedVersion(ui, heads), SortKey: w.syncTime(), SizeBytes: total}, nil
+}
+
+// fileName is the path of a catalog file inside its item: the name the catalog gives it (a clean
+// relative path such as "release/SHA256SUMS"), else the last element of its URL. "" when it has no usable
+// one.
+func fileName(f catalog.URLFile) string {
+	if f.Name != "" {
+		if !manifest.SafePath(f.Name) {
+			return ""
+		}
+		return f.Name
+	}
+	return fileBase(f.URL)
 }

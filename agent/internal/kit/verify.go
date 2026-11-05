@@ -19,7 +19,7 @@ import (
 //
 //  1. re-hashes the kit files against their MANIFESTs (every file with Full, the items not
 //     re-verified within ReverifyDays by default, nothing with ModeQuick),
-//  2. checks kit/bin/SHA256SUMS.minisig with the embedded key and SHA256SUMS against the binaries,
+//  2. checks kit/bin/release/SHA256SUMS.minisig with the embedded key and SHA256SUMS against the binaries,
 //  3. checks that everything this node needs is present and verified (completeness.go),
 //  4. on a drive, the same for every node of pins.json,
 //  5. checks the consistency of the closures with this node (Ubuntu codename, CUDA against the driver),

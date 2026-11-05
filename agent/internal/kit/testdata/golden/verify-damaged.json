@@ -90,9 +90,9 @@
       "dir": "bin",
       "part": "bin",
       "status": "ok",
-      "files": 2,
-      "hashed": 2,
-      "bytes": 19,
+      "files": 4,
+      "hashed": 4,
+      "bytes": 563,
       "last_reverified_at": "2026-11-02T18:04:11Z"
     },
     {
@@ -360,8 +360,8 @@
   ],
   "totals": {
     "items": 12,
-    "files": 24,
-    "files_hashed": 24,
-    "bytes_hashed": 2259
+    "files": 26,
+    "files_hashed": 26,
+    "bytes_hashed": 2803
   }
 }

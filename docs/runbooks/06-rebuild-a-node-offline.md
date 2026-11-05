@@ -229,7 +229,7 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
     sudo aictl kit install agent
     ```
 
-    - **What you should see:** `✓ Signature OK (Local AI release key). … files checked: all match.`, then the agent restarts.
+    - **What you should see:** `✓ Signature OK (Local AI release key). … files checked: all match.`, then the agent restarts. (The check reads the release's signed list from `kit/bin/release/`; it does not need the agent's source code file, which is in `kit/src/`.)
     - **If it doesn't work:** `LAI-KIT-044` (the kit's agent files failed their signature check): **don't** install them; use another drive. To build it from source instead: `sudo aictl rebuild-agent --from-kit --dry-run` (checks), then `sudo aictl rebuild-agent --from-kit` (`LAI-KIT-030`: the source in the kit is incomplete).
 
 31. **Something in Local AI's own files is broken** (doctor fixes say "install-node.sh --repair"): re-run the installer in repair mode. It never changes the node id, key, PIN, profile or content.

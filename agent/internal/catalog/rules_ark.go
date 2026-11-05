@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+
+	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 )
 
 // Rules of catalog.md section 3 (ark.yaml): LAI-CAT-010, 011, 012, 015, 016, 017.
@@ -249,9 +251,21 @@ func (s *lintState) lintURLSource(p string, it *ContentItem) {
 	if hasURL && !validHTTPURL(src.URL) {
 		s.add(f, CodeSchema, joinPath(sp, "url"), "url must be an http(s) URL, got %q", truncate(src.URL, 60))
 	}
+	names := map[string]bool{}
 	for i, file := range src.Files {
+		fp := indexPath(joinPath(sp, "files"), i)
 		if !validHTTPURL(file.URL) {
-			s.add(f, CodeSchema, joinPath(indexPath(joinPath(sp, "files"), i), "url"), "url must be an http(s) URL, got %q", truncate(file.URL, 60))
+			s.add(f, CodeSchema, joinPath(fp, "url"), "url must be an http(s) URL, got %q", truncate(file.URL, 60))
+		}
+		if file.Name != "" && !manifest.SafePath(file.Name) {
+			s.add(f, CodeSchema, joinPath(fp, "name"), "name must be a clean relative path inside the item folder (not SHA256SUMS or MANIFEST.json), got %q", truncate(file.Name, 60))
+		}
+		// Two files of one item cannot share a name, written or taken from the URL.
+		if n := file.ItemPath(); n != "" {
+			if names[n] {
+				s.add(f, CodeSchema, joinPath(fp, "url"), "the file name %q is used twice in this item (give one of them a name)", truncate(n, 60))
+			}
+			names[n] = true
 		}
 	}
 	if src.VersionPolicy != "" && !oneOf(src.VersionPolicy, versionPolicy) {

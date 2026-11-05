@@ -277,6 +277,59 @@ func TestVerifyDir(t *testing.T) {
 			t.Fatalf("want ErrNoSums without the signature, got %v", err)
 		}
 	})
+	t.Run("the signed list in another folder", func(t *testing.T) {
+		// The kit layout: files in dir, the release's SHA256SUMS and its signature in dir/release.
+		dir := t.TempDir()
+		list := filepath.Join(dir, "release")
+		if err := os.Mkdir(list, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for name, data := range rel.Assets {
+			target := dir
+			if name == SumsName || name == SigName {
+				target = list
+			}
+			if err := os.WriteFile(filepath.Join(target, name), data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		opt := DirOptions{ListDir: list}
+		rep, err := VerifyDir(OSFS{}, dir, []PublicKey{key}, opt)
+		if err != nil || rep.Checked() != 2 || rep.KeyID != KeyIDString(s.ID) {
+			t.Fatalf("report %+v err %v", rep, err)
+		}
+		// Without ListDir the folder has no list at all.
+		if _, err := VerifyDir(OSFS{}, dir, []PublicKey{key}, DirOptions{}); !errors.Is(err, ErrNoSums) {
+			t.Fatalf("want ErrNoSums without ListDir, got %v", err)
+		}
+		// A file of the list that is not in dir (a file of another kit item) is tolerated only on request.
+		bigger := updatetest.NewRelease(s, "0.2.0", map[string][]byte{
+			"aiagent-linux-amd64": []byte("one"), "install-node.sh": []byte("two"), "local-ai-src.tar.gz": []byte("three"),
+		})
+		for _, name := range []string{SumsName, SigName} {
+			if err := os.WriteFile(filepath.Join(list, name), bigger.Assets[name], 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var me *MismatchError
+		if _, err := VerifyDir(OSFS{}, dir, []PublicKey{key}, opt); !errors.As(err, &me) || len(me.Files) != 1 {
+			t.Fatalf("a listed file that is absent must fail, got %v", err)
+		}
+		opt.IgnoreMissing = true
+		if rep, err := VerifyDir(OSFS{}, dir, []PublicKey{key}, opt); err != nil || rep.Checked() != 2 {
+			t.Fatalf("IgnoreMissing: %+v %v", rep, err)
+		}
+		// A signature next to the files does not stand in for the one in the list folder.
+		if err := os.WriteFile(filepath.Join(dir, SigName), bigger.Assets[SigName], 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(list, SigName), []byte("untrusted comment: x\nRWQAAAAAAAAAAA==\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := VerifyDir(OSFS{}, dir, []PublicKey{key}, opt); err == nil {
+			t.Fatal("the signature of the list folder is the one that counts")
+		}
+	})
 	t.Run("no embedded key", func(t *testing.T) {
 		dir := t.TempDir()
 		writeRelease(t, dir, rel)

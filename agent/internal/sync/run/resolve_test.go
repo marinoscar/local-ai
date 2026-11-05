@@ -78,6 +78,26 @@ func TestPinnedContent(t *testing.T) {
 			t.Fatalf("%+v, %v", res, err)
 		}
 	})
+	t.Run("a url item with a file given a name inside a folder", func(t *testing.T) {
+		c := &catalog.ContentItem{ID: "kit-agent-binaries", Kind: "kit", Source: catalog.ContentSource{Type: "url", Files: []catalog.URLFile{
+			{URL: "https://files.example.test/rel/aiagent-linux-amd64", SHA256: sha([]byte("a"))},
+			{URL: "https://files.example.test/rel/SHA256SUMS", SHA256: sha([]byte("s")), Name: "release/SHA256SUMS"},
+			{URL: "https://files.example.test/rel/SHA256SUMS.minisig", SHA256: sha([]byte("m")), Name: "release/SHA256SUMS.minisig"},
+		}}}
+		res, err := Pinned(plan.ContentItem(c), plan.ItemPlan{ID: c.ID, ToVersion: "v"}, "")
+		if err != nil || len(res.Files) != 3 || res.Files[1].Path != "release/SHA256SUMS" || res.Files[2].Path != "release/SHA256SUMS.minisig" ||
+			res.Files[1].SHA256 != sha([]byte("s")) || res.Files[1].URL != "https://files.example.test/rel/SHA256SUMS" {
+			t.Fatalf("%+v, %v", res, err)
+		}
+		for _, bad := range []string{"SHA256SUMS", "../x", "/x", "a//b"} {
+			c.Source.Files[1].Name = bad
+			_, err := Pinned(plan.ContentItem(c), plan.ItemPlan{ID: c.ID, ToVersion: "v"}, "")
+			var re *item.ResolveError
+			if !errors.As(err, &re) || re.Code != doctor.SYN033 {
+				t.Errorf("name %q: %v", bad, err)
+			}
+		}
+	})
 	t.Run("a pinned kiwix file", func(t *testing.T) {
 		c := &catalog.ContentItem{ID: "wiki", Kind: "kiwix", ExpectedSizeBytes: 1234, Source: catalog.ContentSource{
 			Type: "kiwix", Book: "wikipedia_en", BaseURL: "https://kiwix.example.test/zim/", VersionPolicy: "pinned",
