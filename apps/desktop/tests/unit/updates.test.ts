@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Dispatcher, fetch as undiciFetch } from 'undici';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { decideMainEgress, getEgressState, resetEgressGuardForTests, runAsUpdater, setEgressState } from '../../src/main/egress-guard';
+import { decideMainEgress, getEgressState, patchEgressState, resetEgressGuardForTests, runAsUpdater, setEgressState } from '../../src/main/egress-guard';
 import { UPDATE_TEXT } from '../../src/main/i18n';
 import type { LogEntry, Logger } from '../../src/main/log';
 import { buildMenuTemplate } from '../../src/main/menu';
@@ -425,14 +425,15 @@ describe('UpdateController and the egress guard', () => {
 
   it('the GitHub hosts are open to the updater only while updates are on, and never to the rest of the app', () => {
     resetEgressGuardForTests();
+    setEgressState({ connected: true, updates: false }); // connected mode (DSK-10) is on and must stay on
     const timers = new ManualTimers();
     const controller = new UpdateController({
       packaged: true,
       currentVersion: '0.1.0',
       loadUpdater: async () => new FakePort('0.2.0'),
       fetchText: async () => feedWith('node-v1.0.0'),
-      // What index.ts does: keep `connected` (DSK-10), change `updates`.
-      setEgress: (allowed) => setEgressState({ ...getEgressState(), updates: allowed }),
+      // What index.ts does: change `updates` and leave `connected` (DSK-10) alone.
+      setEgress: (allowed) => patchEgressState({ updates: allowed }),
       runAsUpdater,
       timers,
     });
@@ -447,6 +448,7 @@ describe('UpdateController and the egress guard', () => {
     controller.apply(ON);
     controller.apply({ ...ON, setting: false });
     expect([asUpdater(), asApp()]).toEqual([false, false]);
+    expect(getEgressState()).toEqual({ connected: true, updates: false });
     controller.dispose();
   });
 });
