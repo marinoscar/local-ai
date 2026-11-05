@@ -5,7 +5,8 @@
 //       dir is the unpacked app (default release/linux-unpacked): the `ai-desktop` binary next to resources/app.asar.
 //       Passes only if: the app is packed in an asar (and there is no loose resources/app folder); the Electron fuses
 //       read back from the binary are exactly the ones in electron-builder.yml (section 3.3); the asar holds no *.map
-//       file and no node_modules/electron.
+//       file and no node_modules/electron; electron-updater (bundled into a chunk of its own) is reached only through a
+//       lazy `Promise.resolve().then(() => require(...))` in the main bundle, so it is never loaded at start-up (4.10).
 //   node scripts/packaged-app.mjs test-copy [--from dir] [--to dir]
 //       Copies the packaged app to release/test-copy and turns the Node inspector fuse back on in the COPY, so
 //       Playwright can drive it. The copy is for tests only; it is never packaged or shipped (release/ is git-ignored).
@@ -14,7 +15,7 @@
 import { access, cp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listPackage } from '@electron/asar';
+import { extractFile, listPackage } from '@electron/asar';
 import { FuseState, FuseV1Options, FuseVersion, flipFuses, getCurrentFuseWire } from '@electron/fuses';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -89,8 +90,53 @@ export async function verifyPackagedApp(appDir) {
     const electron = entries.filter((entry) => /(^|\/)node_modules\/electron(\/|$)/.test(entry));
     if (electron.length > 0) problems.push(`node_modules/electron inside the asar (${electron.length} entries, first ${electron[0]})`);
     if (maps.length === 0 && electron.length === 0 && entries.length > 0) checks.push(`asar content: ${entries.length} entries, no *.map, no node_modules/electron`);
+    // 4. the updater chunk is loaded lazily (desktop.md 4.10: nothing from electron-updater runs, or touches the network, at start-up)
+    const lazy = checkLazyUpdaterChunk(asar, entries);
+    problems.push(...lazy.problems);
+    if (lazy.problems.length === 0 && lazy.chunk) checks.push(`updater: ${lazy.chunk} is required only lazily from the main bundle`);
   }
   return { ok: problems.length === 0, problems, checks };
+}
+
+const read = (asar, entry) => {
+  try {
+    return extractFile(asar, entry.replace(/^\//, '')).toString('utf8');
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Every chunk of out/main/chunks that holds electron-updater (it names its own session "electron-updater") must be
+ * required in out/main/index.js only inside `Promise.resolve().then(...)`, which is how the bundler writes the dynamic
+ * import of src/main/updates.ts. A plain top-level `require` would load the library, and its code, at start-up.
+ */
+export function checkLazyUpdaterChunk(asar, entries) {
+  const problems = [];
+  const chunks = entries.filter((entry) => /^\/?out\/main\/chunks\/[^/]+\.js$/.test(entry));
+  const indexText = read(asar, 'out/main/index.js');
+  let found = null;
+  for (const chunk of chunks) {
+    const text = read(asar, chunk);
+    if (text === null || !text.includes('"electron-updater"')) continue;
+    found = chunk.replace(/^\//, '');
+    const name = chunk.split('/').pop();
+    if (indexText === null) {
+      problems.push('out/main/index.js cannot be read from the asar');
+      continue;
+    }
+    const needle = `./chunks/${name}`;
+    let at = indexText.indexOf(needle);
+    if (at < 0) problems.push(`the updater chunk ${name} is never required by out/main/index.js`);
+    while (at >= 0) {
+      if (!/Promise\.resolve\(\)\.then\(\(\) =>[^;\n]*$/.test(indexText.slice(Math.max(0, at - 120), at))) {
+        problems.push(`out/main/index.js requires the updater chunk ${name} outside Promise.resolve().then(): electron-updater would load at start-up`);
+        break;
+      }
+      at = indexText.indexOf(needle, at + needle.length);
+    }
+  }
+  return { problems, chunk: found };
 }
 
 /**

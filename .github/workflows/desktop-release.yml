@@ -1,0 +1,231 @@
+name: desktop-release
+# Tag desktop-vX.Y.Z -> ai-desktop built, verified and tested in CI, then a signed GitHub release with five assets: the deb,
+# the AppImage, latest-linux.yml (what the opt-in updater reads), SHA256SUMS and SHA256SUMS.minisig (the same minisign key
+# as the agent). The release is created as a DRAFT, checked against the committed public key, and then published
+# (a pre-release when the tag has a `-`, such as desktop-v0.1.0-rc.1). Spec: docs/specs/desktop.md sections 4.10 and 4.11;
+# key custody and the owner's setup: docs/architecture/release-signing.md. Shipping the deb into the rebuild kit is a
+# separate PR from .github/PULL_REQUEST_TEMPLATE/kit-desktop-bump.md.
+#
+# Jobs: prepare (the tag equals desktop-v + apps/desktop/package.json, and is on main)
+#       -> build (typecheck, unit tests, build, package, verify, inspect and install the deb, packaged e2e; NO secrets)
+#       -> package-dry-run (workflow_dispatch only: assemble and sign with a throwaway key; publishes nothing)
+#       -> release (tag pushes only, environment `release`: the only job that holds MINISIGN_SECRET_KEY).
+#
+# workflow_dispatch is a DRY RUN: everything except the real key and the publishing. A failed release is fixed with a NEW
+# tag; a pushed tag is never moved or deleted by this workflow.
+on:
+  push:
+    tags: ['desktop-v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      dry_run: ${{ steps.meta.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {fetch-depth: 0}
+      - name: Check the tag equals desktop-v plus the package.json version, and that a tag is on main
+        id: meta
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            scripts/release/check-desktop-tag.sh --dry-run > "$RUNNER_TEMP/meta"
+            dry=true
+          else
+            scripts/release/check-desktop-tag.sh --tag "$GITHUB_REF_NAME" > "$RUNNER_TEMP/meta"
+            git fetch --no-tags origin main
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+              || { echo "::error::$GITHUB_REF_NAME does not point at a commit on main"; exit 1; }
+            dry=false
+          fi
+          cat "$RUNNER_TEMP/meta" >> "$GITHUB_OUTPUT"
+          echo "dry_run=$dry" >> "$GITHUB_OUTPUT"
+          echo "release $(grep '^tag=' "$RUNNER_TEMP/meta" | cut -d= -f2) (dry run: $dry)"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Download the pinned Electron binary (electron 44 has no install hook)
+        run: node node_modules/electron/install.js
+      - name: Typecheck (main, preload, tests, renderer)
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build (electron-vite, three bundles)
+        run: npm run build
+      - name: Package (deb and AppImage, x64, nothing is published by electron-builder)
+        run: node scripts/dist.mjs --linux --x64 --publish never
+      - name: Verify the packaged app (asar, fuses, no source maps, no node_modules/electron, the updater chunk is lazy)
+        run: node scripts/packaged-app.mjs verify
+      - name: Inspect the deb (depends, AppArmor profile, install paths) and the asset names
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          deb="release/ai-desktop_${VERSION}_amd64.deb"
+          ls "$deb" "release/ai-desktop-${VERSION}-x86_64.AppImage" release/latest-linux.yml
+          dpkg -I "$deb"
+          dpkg-deb -c "$deb" | grep apparmor
+          dpkg-deb -c "$deb" | grep -E ' \./opt/ai-desktop/(ai-desktop|resources/apparmor-profile)$'
+          dpkg-deb -c "$deb" | grep -E ' \./usr/share/applications/ai-desktop\.desktop$'
+      - name: Install the deb, as a node would, and verify the installed app
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "./release/ai-desktop_${VERSION}_amd64.deb"
+          test -x /opt/ai-desktop/ai-desktop
+          node scripts/packaged-app.mjs verify /opt/ai-desktop
+      - name: End-to-end, a test copy of the installed app under Xvfb against the fake agent on 127.0.0.1:7070 (smoke, egress and the rest of tests/e2e)
+        env:
+          LOCALAI_E2E_NO_SANDBOX: '1'
+          LOCALAI_E2E_EXECUTABLE: release/test-copy/ai-desktop
+        run: |
+          node scripts/packaged-app.mjs test-copy --from /opt/ai-desktop --to release/test-copy
+          xvfb-run -a -s "-screen 0 1920x1080x24" npx playwright test
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: desktop-e2e-traces
+          path: apps/desktop/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-unsigned
+          path: |
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/latest-linux.yml
+          retention-days: 7
+          if-no-files-found: error
+
+  package-dry-run:
+    # workflow_dispatch only: assemble and sign with a throwaway key, upload for inspection, publish nothing.
+    if: needs.prepare.outputs.dry_run == 'true'
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install minisign
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-unsigned
+          path: ${{ runner.temp }}/unsigned
+      - name: Assemble the assets and sign them with a throwaway key
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          pw="$(openssl rand -hex 16)"; echo "::add-mask::$pw"
+          printf '%s\n%s\n' "$pw" "$pw" | minisign -G -p "$RUNNER_TEMP/dry.pub" -s "$RUNNER_TEMP/dry.key" -f >/dev/null
+          MINISIGN_SECRET_KEY="$(cat "$RUNNER_TEMP/dry.key")" MINISIGN_PASSWORD="$pw" RELEASE_TAG="$TAG" \
+            scripts/release/assemble-desktop-release.sh --tag "$TAG" --dir "$RUNNER_TEMP/unsigned" \
+              --pubkey "$RUNNER_TEMP/dry.pub" --out "$RUNNER_TEMP/release" --sign
+          rm -f "$RUNNER_TEMP/dry.key"
+          scripts/release/desktop-release-notes.sh --tag "$TAG" --dir "$RUNNER_TEMP/release" > "$RUNNER_TEMP/release/RELEASE-NOTES.md"
+          echo "Dry run for $TAG: signed with a throwaway key. NOT a release; nothing was published." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-release-dry-run
+          path: ${{ runner.temp }}/release/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    # Only this job holds the signing secrets and write access. Add required reviewers to the `release` environment and
+    # allow the tag pattern desktop-v* there (docs/architecture/release-signing.md section 3): the signing starts after
+    # the build and the packaged tests pass. Never runs for workflow_dispatch.
+    if: github.event_name == 'push' && needs.prepare.outputs.dry_run == 'false'
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Require the signing secrets and the committed public key
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [ -n "$MINISIGN_SECRET_KEY" ] && [ -n "$MINISIGN_PASSWORD" ] || { echo "::error::secrets MINISIGN_SECRET_KEY / MINISIGN_PASSWORD are not set in the release environment (owner action: docs/architecture/release-signing.md)"; exit 1; }
+          [ -f agent/internal/kit/keys/minisign.pub ] || { echo "::error::agent/internal/kit/keys/minisign.pub is not committed (owner action: docs/architecture/release-signing.md)"; exit 1; }
+      - name: Install minisign
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-unsigned
+          path: ${{ runner.temp }}/unsigned
+      - name: Write SHA256SUMS, sign it, verify with the committed public key, write the release notes
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          scripts/release/assemble-desktop-release.sh --tag "$RELEASE_TAG" --dir "$RUNNER_TEMP/unsigned" \
+            --pubkey agent/internal/kit/keys/minisign.pub --out "$RUNNER_TEMP/release" --sign
+          scripts/release/desktop-release-notes.sh --tag "$RELEASE_TAG" --dir "$RUNNER_TEMP/release" > "$RUNNER_TEMP/notes.md"
+      - name: Create the draft release and check its assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REL: ${{ runner.temp }}/release
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          # PRERELEASE is empty or the single flag --prerelease. A desktop release is never the repository's "latest".
+          # shellcheck disable=SC2086
+          gh release create "$TAG" --draft --verify-tag --latest=false $PRERELEASE \
+            --title "ai-desktop $VERSION" --notes-file "$RUNNER_TEMP/notes.md" \
+            "$REL/ai-desktop_${VERSION}_amd64.deb" "$REL/ai-desktop-${VERSION}-x86_64.AppImage" "$REL/latest-linux.yml" \
+            "$REL/SHA256SUMS" "$REL/SHA256SUMS.minisig"
+          id="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.draft and .tag_name==\"$TAG\") | .id" | head -n 1)"
+          [ -n "$id" ] || { echo "::error::the draft release for $TAG was not found"; exit 1; }
+          echo "RELEASE_ID=$id" >> "$GITHUB_ENV"
+          have="$(gh api "repos/$GITHUB_REPOSITORY/releases/$id" --jq '[.assets[] | select(.state=="uploaded") | .name] | sort | join(" ")')"
+          want="$(printf '%s\n' "ai-desktop_${VERSION}_amd64.deb" "ai-desktop-${VERSION}-x86_64.AppImage" latest-linux.yml SHA256SUMS SHA256SUMS.minisig | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
+          [ "$have" = "$want" ] || { echo "::error::the draft holds [$have], expected [$want]"; exit 1; }
+          echo "draft $TAG (release $id) holds the five assets"
+      - name: Publish the release (a pre-release when the tag has a dash), then verify what was published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false --jq '"published " + .tag_name + " prerelease=" + (.prerelease|tostring)'
+          mkdir -p "$RUNNER_TEMP/published"
+          # The same check a node does: the committed public key must verify what GitHub now serves. If it does not, pull the release back to a draft.
+          if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/published" \
+              && scripts/release-sign.sh verify "$RUNNER_TEMP/published" agent/internal/kit/keys/minisign.pub; then
+            echo "published $TAG verifies against agent/internal/kit/keys/minisign.pub" >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=true >/dev/null
+            echo "::error::the published assets of $TAG do not verify; the release was moved back to a draft. Fix with a new tag."
+            exit 1
+          fi
