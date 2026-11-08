@@ -416,7 +416,7 @@ Plain list, also printed in the rebuild runbook:
 | Kit debs for another codename | red (error) | `LAI-KIT-042` |
 | Toolkit/driver mismatch | red | `LAI-KIT-043` |
 | Signature check of agent binaries fails | refuse to install from the kit | `LAI-KIT-044` |
-| Power loss mid-build | scratch dir is discarded on the next run; `current` never pointed at a partial build | — |
+| Power loss or Ctrl-C mid-build | the next run of the same build carries on in the kept build tree (`builds/<build-id>.tmp/build`, when it has its `CMakeCache.txt`; anything else of the `.tmp` is discarded); `current` never pointed at a partial build | — |
 
 ## 7. Security considerations
 - Every kit artifact is verified before use: catalog pins, signed apt indexes, minisign for agent binaries, GitHub digests where available.

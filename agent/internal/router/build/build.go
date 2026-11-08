@@ -23,6 +23,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/user"
@@ -232,6 +233,10 @@ type Request struct {
 	Actor audit.Actor
 	// Progress, when set, is told about each stage as it starts (the caller prints it on stderr).
 	Progress func(Progress)
+	// Output, when set, also receives the output of the compile step (`cmake --build`, so ninja's
+	// "[n/N] Building …" lines) as it is written, besides build.log; the caller turns it into a
+	// percentage and an estimate of the time left. Its errors are ignored.
+	Output io.Writer
 }
 
 // Progress is one progress line.

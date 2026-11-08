@@ -159,3 +159,26 @@ func TestLookupRefusesRelativeAndOutsideNames(t *testing.T) {
 		t.Errorf("Lookup(/tmp/anything) = %v, want ErrNotFound", err)
 	}
 }
+
+// errWriter fails every write, like a progress reader that went away.
+type errWriter struct{ got strings.Builder }
+
+func (w *errWriter) Write(p []byte) (int, error) {
+	w.got.Write(p)
+	return 0, errors.New("gone")
+}
+
+func TestTeeSeesTheOutputAndItsErrorsAreIgnored(t *testing.T) {
+	echo := must(t, "echo")
+	tee := &errWriter{}
+	res, err := Exec{}.Run(context.Background(), Cmd{Path: echo, Args: []string{"[1/2] one"}, Timeout: 5 * time.Second, MaxOut: 4, Tee: tee})
+	if err != nil || res.ExitCode != 0 {
+		t.Fatalf("err=%v exit=%d", err, res.ExitCode)
+	}
+	if tee.got.String() != "[1/2] one\n" {
+		t.Errorf("tee got %q", tee.got.String())
+	}
+	if string(res.Stdout) != "[1/2" || !res.Truncated {
+		t.Errorf("the cap must still apply to the result: %q truncated=%v", res.Stdout, res.Truncated)
+	}
+}

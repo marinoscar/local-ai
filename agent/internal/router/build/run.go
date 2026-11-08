@@ -50,6 +50,11 @@ type run struct {
 	compileUser string
 	// warnings are what the stages found worth telling the caller (Result.Warnings).
 	warnings []string
+	// resumed is set when prepare kept the build tree of a build that was stopped (Ctrl-C, a power
+	// cut): ninja then compiles only what is missing.
+	resumed bool
+	// tee receives the program's output as it runs (Request.Output, during the compile step only).
+	tee io.Writer
 }
 
 // Build runs the whole procedure of llama-router.md section 4.10: resolve the inputs, check the
@@ -166,6 +171,9 @@ func (m *Manager) build(ctx context.Context, req Request) (Result, error) {
 	if e := r.prepare(); e != nil {
 		return Result{}, e
 	}
+	if r.resumed {
+		progress(StageConfigure, "Carrying on with the build that was stopped before")
+	}
 
 	progress(StageConfigure, fmt.Sprintf("Building llama.cpp %s for %s%s, %d parallel jobs",
 		in.ShortCommit, in.Backend, archSuffix(in.CudaArch), in.Jobs))
@@ -258,14 +266,32 @@ func (m *Manager) checkDisk() *Error {
 	return nil
 }
 
-// prepare removes what an interrupted build left (<id>.tmp) and creates O/bin and build.log.
+// prepare removes what an interrupted build left (<id>.tmp) and creates O/bin and build.log. The
+// build tree B of a build that was stopped is kept when it holds a CMakeCache.txt (resumable): cmake
+// configures it again and ninja compiles only what is missing or out of date (an object a stopped
+// compiler left half written has no entry in .ninja_log, so ninja builds it again). Everything else
+// in O is removed.
 func (r *run) prepare() *Error {
 	fsys := r.m.opt.FS
 	fail := func(err error) *Error {
 		return newErr(CodeBuildFailed, StagePreflight, "The build folder could not be created.", err,
 			"cause", "filesystem", "build_id", r.plan.BuildID)
 	}
-	if err := fsys.RemoveAll(r.plan.OutDir); err != nil {
+	if r.resumable() {
+		entries, err := fsys.ReadDir(r.plan.OutDir)
+		if err != nil {
+			return fail(err)
+		}
+		for _, e := range entries {
+			if e.Name() == filepath.Base(r.plan.BuildDir) {
+				continue
+			}
+			if err := fsys.RemoveAll(filepath.Join(r.plan.OutDir, e.Name())); err != nil {
+				return fail(err)
+			}
+		}
+		r.resumed = true
+	} else if err := fsys.RemoveAll(r.plan.OutDir); err != nil {
 		return fail(err)
 	}
 	if err := fsys.MkdirAll(filepath.Join(r.plan.OutDir, "bin"), 0o755); err != nil {
@@ -305,6 +331,13 @@ func (r *run) handOver() *Error {
 			return fail("chown", err)
 		}
 	}
+	// A kept build tree may have been made by another user (a run without the drop): it is handed
+	// over whole, without following links, so the compile can write into it.
+	if r.resumed {
+		if err := chownTree(r.m.opt.FS, r.plan.BuildDir, uid, gid); err != nil {
+			return fail("chown", err)
+		}
+	}
 	// A scratch source tree (whisper.cpp) is written to by its own configure step (configure_file puts
 	// generated files into the tree), so the compile user must own it too. It is removed after the build.
 	if r.m.opt.Recipe.ScratchSource && r.plan.SourceDir != "" {
@@ -331,8 +364,12 @@ func (r *run) takeBack() *Error {
 // compile runs the configure or the build step. With a compile user it is
 // `setpriv --reuid <user> --regid <user> --clear-groups <program> <args>`: a build script that is
 // not trustworthy cannot write system files. Errors and the log name the program (cmake), not
-// setpriv.
+// setpriv. The output of the build step also goes to Request.Output as it is written.
 func (r *run) compile(ctx context.Context, stage Stage, path string, args []string, timeout time.Duration) (execx.Result, *Error) {
+	if stage == StageBuild && r.req.Output != nil {
+		r.tee = r.req.Output
+		defer func() { r.tee = nil }()
+	}
 	if !r.drop {
 		return r.cmd(ctx, stage, path, args, timeout)
 	}
@@ -347,10 +384,32 @@ func (r *run) closeLog() {
 	}
 }
 
-// discard removes the half-built directory (a cancelled build).
+// discard ends a cancelled build. A build tree that can be resumed (it holds a CMakeCache.txt) is
+// kept in <id>.tmp, so the next run of the same build carries on where this one stopped (prepare);
+// anything else is removed. current is never touched, and a later good build deletes a leftover
+// <id>.tmp of another build (retention).
 func (r *run) discard() {
 	r.closeLog()
+	if r.resumable() {
+		return
+	}
 	_ = r.m.opt.FS.RemoveAll(r.plan.OutDir)
+}
+
+// resumable reports whether <id>.tmp holds a build tree that cmake and ninja can carry on with: B is
+// a real directory (not a link) with a regular CMakeCache.txt in it.
+func (r *run) resumable() bool {
+	fsys := r.m.opt.FS
+	fi, err := fsys.Lstat(r.plan.OutDir)
+	if err != nil || !fi.IsDir() {
+		return false
+	}
+	fi, err = fsys.Lstat(r.plan.BuildDir)
+	if err != nil || !fi.IsDir() {
+		return false
+	}
+	fi, err = fsys.Lstat(filepath.Join(r.plan.BuildDir, "CMakeCache.txt"))
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // keepFailed turns O into <id>.tmp.failed for inspection, deletes the (large) build tree and puts
@@ -420,7 +479,7 @@ func (r *run) cmd(ctx context.Context, stage Stage, path string, args []string, 
 func (r *run) cmdNamed(ctx context.Context, stage Stage, name, path string, args []string, timeout time.Duration) (execx.Result, *Error) {
 	line := "$ " + path + " " + strings.Join(args, " ") + "\n"
 	r.logf("%s", line)
-	res, err := r.m.opt.Exec.Run(ctx, execx.Cmd{Path: path, Args: args, Timeout: timeout, MaxOut: maxToolOut, Env: toolEnv()})
+	res, err := r.m.opt.Exec.Run(ctx, execx.Cmd{Path: path, Args: args, Timeout: timeout, MaxOut: maxToolOut, Env: toolEnv(), Tee: r.tee})
 	r.logf("%s", string(res.Stdout))
 	if len(res.Stderr) > 0 {
 		r.logf("%s", string(res.Stderr))
