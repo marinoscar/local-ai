@@ -693,6 +693,13 @@ i Survival card: /srv/localai/docs/survival-card-ai-n3.html
 ```
 `--json` (the one document on stdout): `{"outputs": ["/srv/localai/docs"], "pages": 43, "pdf": 44, "inventory": true, "survival_card": "survival-card-ai-n3"}`; `survival_card` is `null` when there is no template; `pages` does not count the card, `pdf` does. The summary line says `N runbooks and M specs` when there are no other documents.
 
+### 4.22a `aictl docs inventory import <file>`  [local] [root]
+Checks that `<file>` is a lab inventory and installs it as `/etc/localai/inventory.local.yaml` (root:root 0600, overview.md §3.2), the first place `docs render` (§4.22) and sync's manuals (ark-sync.md §4.9.8) look. The fix of `LAI-SYN-062` names it (issue #435), so nobody copies the file into `/etc/localai` by hand. Offline: works.
+```
+✓ The lab inventory was installed in /etc/localai/inventory.local.yaml (only root can read it). The next sync fills the manuals with the real values.
+```
+Details (`internal/cli/cmd_docs_inventory.go`, `internal/cli/local/inventory.go`): root check first (`LAI-CLI-006`, exit 4, nothing read). Exactly one argument (exit 2). The file must be a regular file of at most 1 MiB that is valid YAML and passes the installer's reader (`internal/setup/inventory.Parse`: `schema_version: 1`, `serve_pattern` `A` or `B`); otherwise `<file> is not a lab inventory: <reason>. Nothing was changed.` with a fixed reason (`it is empty`, `it is too large to be an inventory (more than 1 MiB)`, `it is not valid YAML`, `it does not follow inventory.example.yaml (schema_version must be 1, serve_pattern A or B)`), exit 2. **No value of the file is ever printed**: the parser's own message can quote one, so it is never shown, and the file is in no error, audit field or `--json`. A missing or unreadable file, or a folder, is `LAI-CLI-012` (exit 1). The copy is written atomically under the lock of §4.11.3; a file with the same bytes and mode 0600 already installed is `i This inventory is already installed on this computer; nothing was changed.` (nothing written or audited; a wrong mode is repaired by writing again). Audit `inventory.import` (`cli-root`, no target; failures `fail` with their code). `--json`: `{"changed": true|false, "path": "/etc/localai/inventory.local.yaml"}`. Rendering is not started: the next sync (or `aictl docs render`) uses the file.
+
 ### 4.23 `aictl rebuild-llama`  [local] [root]  [3 h]
 ```
 aictl rebuild-llama [--commit <40hex|short>] [--backend cuda|vulkan|cpu] [--cuda-arch <list>]

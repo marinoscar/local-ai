@@ -318,8 +318,10 @@ Every time a sync finishes on a plugged-in AI-ARK drive, the node rewrites two t
       **or keep the drive's version on both sides:**
 
       ```
-      sudo cp /media/$USER/AI-ARK/inventory.local.yaml /etc/localai/inventory.local.yaml
+      sudo aictl docs inventory import /media/$USER/AI-ARK/inventory.local.yaml
       ```
+
+      It checks the file first and says `✓ The lab inventory was installed in /etc/localai/inventory.local.yaml …`.
 
     - Then delete the saved copies and sync once so the node notices the files agree:
 

@@ -36,6 +36,8 @@ var helpES = map[string]string{
 	"default":                "Muestra o cambia el modelo predeterminado (el que arranca con este equipo).",
 	"delete":                 "Borra un modelo de este equipo.",
 	"docs":                   "Genera los manuales sin conexión y la tarjeta de supervivencia.",
+	"docs inventory":         "Instala el inventario del laboratorio con el que se llenan los manuales.",
+	"docs inventory import":  "Comprueba un archivo de inventario del laboratorio y lo instala en este equipo.",
 	"docs render":            "Convierte los manuales y las especificaciones a HTML (y PDF) y genera la tarjeta de supervivencia.",
 	"doctor":                 "Ejecuta las comprobaciones de salud y explica cada problema con palabras sencillas.",
 	"download":               "Descarga un modelo de internet (modo en línea).",
