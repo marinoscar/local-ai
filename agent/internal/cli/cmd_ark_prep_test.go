@@ -434,7 +434,11 @@ func repairRig(t *testing.T, f *fakeTools, listed string, onEject ...func()) *mg
 
 func newRepairTools(code int) *fakeTools {
 	return &fakeTools{lists: []string{lsblk(sysNVMe, arkUSBMounted), lsblk(sysNVMe, arkUSBUnmounted)}, code: code,
-		prog: []prep.CheckProgress{{1, 0, 100}, {1, 5, 100}, {1, 50, 100}, {1, 100, 100}, {2, 10, 10}, {5, 3, 3}}}
+		prog: []prep.CheckProgress{cp(1, 0, 100), cp(1, 5, 100), cp(1, 50, 100), cp(1, 100, 100), cp(2, 10, 10), cp(5, 3, 3)}}
+}
+
+func cp(pass int, done, total int64) prep.CheckProgress {
+	return prep.CheckProgress{Pass: pass, Done: done, Total: total}
 }
 
 func TestArkRepair(t *testing.T) {
