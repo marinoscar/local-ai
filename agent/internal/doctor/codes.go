@@ -264,6 +264,9 @@ const (
 	ARK012 = "LAI-ARK-012"
 	ARK014 = "LAI-ARK-014"
 	ARK015 = "LAI-ARK-015"
+	ARK016 = "LAI-ARK-016"
+	ARK017 = "LAI-ARK-017"
+	ARK018 = "LAI-ARK-018"
 	ARK020 = "LAI-ARK-020"
 	ARK021 = "LAI-ARK-021"
 
@@ -1721,7 +1724,7 @@ var table = []Code{
 		ID:       ARK004,
 		Severity: Error,
 		Title:    Msg{EN: "The ark drive's filesystem has errors", ES: "El sistema de archivos de la unidad del arca tiene errores"},
-		Fix:      Msg{EN: "Eject it, then run `sudo fsck.ext4 -f /dev/<device>` and plug it in again.", ES: "Expúlsela, ejecute `sudo fsck.ext4 -f /dev/<dispositivo>` y conéctela de nuevo."},
+		Fix:      Msg{EN: "Run `sudo aictl ark repair <root-id>` (or `sudo aictl`, menu 6, Repair a drive). Last resort: eject it and run `sudo fsck.ext4 -f /dev/<device>`.", ES: "Ejecute `sudo aictl ark repair <id-de-raíz>` (o `sudo aictl`, menú 6, Reparar una unidad). Último recurso: expúlsela y ejecute `sudo fsck.ext4 -f /dev/<dispositivo>`."},
 	},
 	{
 		ID:       ARK005,
@@ -1733,7 +1736,7 @@ var table = []Code{
 		ID:       ARK006,
 		Severity: Error,
 		Title:    Msg{EN: "Two drives have the same ID (a cloned drive)", ES: "Dos unidades tienen el mismo ID (una unidad clonada)"},
-		Fix:      Msg{EN: "Unplug one. Give it a new ID with `sudo tune2fs -U random /dev/<device>`.", ES: "Desconecte una. Dele un ID nuevo con `sudo tune2fs -U random /dev/<dispositivo>`."},
+		Fix:      Msg{EN: "Run `sudo aictl ark new-id <root-id>` (or `sudo aictl`, menu 6, Give a copied drive a new id). Last resort: unmount the copy and run `sudo tune2fs -U random /dev/<device>`.", ES: "Ejecute `sudo aictl ark new-id <id-de-raíz>` (o `sudo aictl`, menú 6, Dar un id nuevo a una copia). Último recurso: desmonte la copia y ejecute `sudo tune2fs -U random /dev/<dispositivo>`."},
 	},
 	{
 		ID:       ARK007,
@@ -1782,6 +1785,24 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "Several ark drives are connected; choose one", ES: "Hay varias unidades del arca conectadas; elija una"},
 		Fix:      Msg{EN: "Run `aictl ark import` in a terminal and choose the drive from the list it shows.", ES: "Ejecute `aictl ark import` en una terminal y elija la unidad de la lista que muestra."},
+	},
+	{
+		ID:       ARK016,
+		Severity: Error,
+		Title:    Msg{EN: "No disk can be formatted as an AI-ARK drive", ES: "Ningún disco se puede formatear como unidad AI-ARK"},
+		Fix:      Msg{EN: "Plug in only the new drive. If the desktop opened it, eject it in the file manager, then run `sudo aictl ark format` again.", ES: "Conecte solo la unidad nueva. Si el escritorio la abrió, expúlsela en el gestor de archivos y ejecute otra vez `sudo aictl ark format`."},
+	},
+	{
+		ID:       ARK017,
+		Severity: Error,
+		Title:    Msg{EN: "A disk tool failed while formatting, repairing or giving a drive a new id", ES: "Falló una herramienta de disco al formatear, reparar o dar un id nuevo a una unidad"},
+		Fix:      Msg{EN: "Unplug the drive, plug it in again and run the same command again. If it fails again, follow the last-resort steps of runbook 04.", ES: "Desconecte la unidad, conéctela de nuevo y ejecute otra vez el mismo comando. Si vuelve a fallar, siga los pasos de último recurso del runbook 04."},
+	},
+	{
+		ID:       ARK018,
+		Severity: Error,
+		Title:    Msg{EN: "The repair could not fix every error on the drive", ES: "La reparación no pudo arreglar todos los errores de la unidad"},
+		Fix:      Msg{EN: "The drive may be failing. Prepare a new drive (`sudo aictl ark format`), fill it (`aictl ark sync`) and stop using this one.", ES: "La unidad puede estar fallando. Prepare una unidad nueva (`sudo aictl ark format`), llénela (`aictl ark sync`) y deje de usar esta."},
 	},
 	{
 		ID:       ARK020,
