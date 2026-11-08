@@ -41,27 +41,42 @@ type fakeWhisperEngine struct {
 	onBuild  func(ctx context.Context, opt build.Options)
 	reqs     []build.Request
 	resolved []build.Request
+	// ninja is written to Request.Output, as the compile step would (rebuild-llama's progress).
+	ninja string
+	// buildFn and resolveFn, when set, answer per request instead of res/err and in/inErr (the
+	// fallback chain of rebuild-llama asks several times).
+	buildFn   func(req build.Request) (build.Result, error)
+	resolveFn func(req build.Request) (build.Inputs, error)
 }
 
 func (e *fakeWhisperEngine) Resolve(_ context.Context, req build.Request) (build.Inputs, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.resolved = append(e.resolved, req)
+	if e.resolveFn != nil {
+		return e.resolveFn(req)
+	}
 	return e.in, e.inErr
 }
 
 func (e *fakeWhisperEngine) Build(ctx context.Context, req build.Request) (build.Result, error) {
 	e.mu.Lock()
 	e.reqs = append(e.reqs, req)
-	hook, progress := e.onBuild, e.progress
+	hook, progress, ninja, fn := e.onBuild, e.progress, e.ninja, e.buildFn
 	e.mu.Unlock()
 	for _, p := range progress {
 		if req.Progress != nil {
 			req.Progress(p)
 		}
 	}
+	if ninja != "" && req.Output != nil {
+		_, _ = req.Output.Write([]byte(ninja))
+	}
 	if hook != nil {
 		hook(ctx, e.opt)
+	}
+	if fn != nil {
+		return fn(req)
 	}
 	return e.res, e.err
 }

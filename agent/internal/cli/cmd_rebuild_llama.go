@@ -163,6 +163,7 @@ func rebuildLlama(c *Call) error {
 	opt := llamaOptions(c, env, host, set, roots, kitPaths, req, pr)
 	eng := llamaNewEngine(opt)
 	req.Progress = pr.progress
+	req.Output = pr.compileOutput()
 
 	if req.Prebuilt != "" {
 		return llamaRestore(c, eng, host, env, req, pr)
@@ -216,6 +217,7 @@ func llamaBuild(c *Call, eng llamaEngine, req build.Request, pr *llamaPrinter, e
 		return berr
 	})
 	hb()
+	pr.endCompile()
 	if stopped && err != nil {
 		return res, llamaStopped(c)
 	}
@@ -229,8 +231,8 @@ func llamaBuild(c *Call, eng llamaEngine, req build.Request, pr *llamaPrinter, e
 // puts `current` back when the stop came during the switch).
 func llamaStopped(c *Call) error {
 	msg := pick(c.Lang,
-		"The build was stopped. Nothing was changed: the build in use is the same as before.",
-		"Se detuvo la compilación. No se cambió nada: se sigue usando la misma versión de antes.")
+		"The build was stopped. Nothing was changed: the build in use is the same as before. Run the same command again to carry on where it stopped.",
+		"Se detuvo la compilación. No se cambió nada: se sigue usando la misma versión de antes. Ejecute el mismo comando otra vez para continuar donde se detuvo.")
 	if c.Global.JSON {
 		return c.Err(CodeInterrupted, msg).WithCause(context.Canceled)
 	}

@@ -284,7 +284,7 @@ func TestRebuildLlamaYesAndJSONDoNotChangeTheRequest(t *testing.T) {
 			t.Fatalf("%v: exit %d\n%s\n%s", pre, r.code, r.out, r.errOut)
 		}
 		req := f.lastReq(t)
-		req.Progress = nil
+		req.Progress, req.Output = nil, nil // how progress is shown is not what is built
 		reqs = append(reqs, req)
 	}
 	for i := 1; i < len(reqs); i++ {
