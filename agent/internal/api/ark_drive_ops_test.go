@@ -97,13 +97,14 @@ func TestArkDriveRouteMetadata(t *testing.T) {
 // Eject answers 202 {"state":"ejecting"}, passes force, and is audited; the body is optional.
 func TestArkDriveEject(t *testing.T) {
 	for _, tc := range []struct {
-		name, body string
-		force      bool
+		name, body  string
+		force, keep bool
 	}{
-		{"no body", ``, false},
-		{"empty object", `{}`, false},
-		{"force false", `{"force": false}`, false},
-		{"force true", `{"force": true}`, true},
+		{"no body", ``, false, false},
+		{"empty object", `{}`, false, false},
+		{"force false", `{"force": false}`, false, false},
+		{"force true", `{"force": true}`, true, false},
+		{"keep powered", `{"keep_powered": true}`, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newArkDriveRig(t)
@@ -118,12 +119,13 @@ func TestArkDriveEject(t *testing.T) {
 				t.Fatalf("eject calls = %d", len(r.ops.eject))
 			}
 			got := r.ops.eject[0]
-			if got.RootID != "ark-3f9c0a12" || got.Force != tc.force || got.OpID != "op_7k2m9q4r8t1c" {
+			if got.RootID != "ark-3f9c0a12" || got.Force != tc.force || got.KeepPowered != tc.keep || got.OpID != "op_7k2m9q4r8t1c" {
 				t.Errorf("request = %+v", got)
 			}
 			evs := r.audit.events()
 			if len(evs) != 1 || evs[0].Action != audit.ActionArkEject || evs[0].Result != audit.ResultOK ||
-				evs[0].Target["root_id"] != "ark-3f9c0a12" || evs[0].Target["force"] != strconv.FormatBool(tc.force) {
+				evs[0].Target["root_id"] != "ark-3f9c0a12" || evs[0].Target["force"] != strconv.FormatBool(tc.force) ||
+				(evs[0].Target["keep_powered"] == "true") != tc.keep {
 				t.Fatalf("audit = %+v", evs)
 			}
 		})

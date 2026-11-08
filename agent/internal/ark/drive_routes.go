@@ -26,7 +26,7 @@ var _ api.ArkDriveOps = DriveAPI{}
 
 // Eject implements api.ArkDriveOps.
 func (d DriveAPI) Eject(ctx context.Context, req api.ArkEjectRequest) error {
-	return driveError(d.Actions.Eject(ctx, req.RootID, req.Force), req.RootID)
+	return driveError(d.Actions.EjectWith(ctx, req.RootID, EjectOptions{Force: req.Force, KeepPowered: req.KeepPowered}), req.RootID)
 }
 
 // Init implements api.ArkDriveOps.
