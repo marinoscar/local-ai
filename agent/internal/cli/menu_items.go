@@ -56,6 +56,9 @@ func menuTree() []menuItem {
 			{en: "Check that the content is not damaged", es: "Comprobar que el contenido no está dañado", args: []string{"ark", "verify", "--wait"}},
 			{en: "List the connected drives", es: "Ver las unidades conectadas", args: []string{"ark", "drives"}},
 			{en: "Safely remove a drive", es: "Quitar una unidad de forma segura", args: []string{"ark", "eject"}, pick: drivePicker()},
+			{en: "How much disk the content may use", es: "Cuánto disco puede usar el contenido", args: []string{"ark", "budget"}},
+			{en: "Save a Hugging Face token (for some models)", es: "Guardar un token de Hugging Face (para algunos modelos)", args: []string{"ark", "hf-token", "set"},
+				hintEN: "(needs sudo)", hintES: "(necesita sudo)"},
 		}},
 		{en: "Repair with no internet (rebuild kit)", es: "Reparar sin internet (kit de reconstrucción)", sub: []menuItem{
 			{en: "Is the rebuild kit complete?", es: "¿Está completo el kit de reconstrucción?", args: []string{"kit", "status"}},

@@ -191,7 +191,7 @@ Rules: a `LAI-SEC-004` answer (PIN locked after too many wrong tries, `429`) is 
 | 3 | Use the AI: key and addresses › | `key show`, `key copy`, `key snippets`, `ui-code`, `key rotate` |
 | 4 | AI models: load, change, download › | `models`; pickers for `load`, `unload`, `default`, `download`, `delete` |
 | 5 | Mode: online, offline or survival › | `mode`, `mode online`, `mode offline`, `mode survival` |
-| 6 | Offline content and the AI-ARK drive › | `ark status`, `ark sync --wait`, `ark import --wait`, `ark verify --wait`, `ark drives`; picker for `ark eject` |
+| 6 | Offline content and the AI-ARK drive › | `ark status`, `ark sync --wait`, `ark import --wait`, `ark verify --wait`, `ark drives`; picker for `ark eject`; `ark budget`, `ark hf-token set` |
 | 7 | Repair with no internet (rebuild kit) › | `kit status`, `kit verify`, `rebuild-llama`, `rebuild-whisper`, `rebuild-agent` |
 | 8 | Services: AI engine, library, speech › | `services`; pickers for `services restart|start|stop`; `logs -n 60` |
 | 9 | More › | `drill --quick --wait`, `drill --wait`, `drill show`, `cloud status`, `profile show`, `profile suggest`, `version`, `help` |
