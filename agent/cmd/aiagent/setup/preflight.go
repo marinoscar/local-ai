@@ -10,6 +10,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/kit"
+	"github.com/marinoscar/local-ai/agent/internal/services"
 	"github.com/marinoscar/local-ai/agent/internal/setup/detect"
 )
 
@@ -233,18 +234,29 @@ func Preflight(ctx context.Context, d Deps, o PreflightOptions) Report {
 		c.add("ports", StatusOK, "", "ports 7070, 8080, 8081 and 8888 are free or ours")
 	}
 
-	// legacy llama-qwen
-	if b, err := readFile(e, "/etc/systemd/system/llama-qwen.service"); err == nil {
-		sys.LegacyService = true
+	// legacy llama units (llama-qwen, and llama-coder-next on ai-n1)
+	var legacy []string
+	for _, unit := range []string{services.UnitLlamaQwen, services.UnitLlamaCoderNext} {
+		b, err := readFile(e, "/etc/systemd/system/"+unit)
+		if err != nil {
+			continue
+		}
+		legacy = append(legacy, unit)
+		if sys.LegacyExec != "" {
+			continue
+		}
 		for _, line := range strings.Split(string(b), "\n") {
 			if v, ok := strings.CutPrefix(strings.TrimSpace(line), "ExecStart="); ok {
 				sys.LegacyExec = v
 				break
 			}
 		}
-		c.add("legacy", StatusInfo, "", "the old llama-qwen service is installed and will be migrated")
+	}
+	if len(legacy) > 0 {
+		sys.LegacyService = true
+		c.add("legacy", StatusInfo, "", "the old llama service is installed and will be migrated ("+strings.Join(legacy, ", ")+")")
 	} else {
-		c.add("legacy", StatusInfo, "", "no old llama-qwen service")
+		c.add("legacy", StatusInfo, "", "no old llama service (llama-qwen or llama-coder-next)")
 	}
 
 	// internet (online) or ark (offline)

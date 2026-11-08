@@ -418,6 +418,7 @@ Today's nodes run a hand-made `llama-qwen.service`. The migration swaps it for `
 > - The owner is present. Pick a quiet time.
 > - The catalog must contain the node's current model with the **exact sha256** of the file on disk. If it doesn't, the dry run stops with `LAI-LLM-017` "Model file not in the catalog": add it first ([03 Part 5](03-swap-a-model.md)).
 > - ai-n2: boot it into **Ubuntu**, not Windows.
+> - ai-n1: the model it serves (Qwen3-Coder-Next) runs from `llama-coder-next.service`, not `llama-qwen.service`. That is fine: the migration replaces the old service that is running, and also switches off `llama-qwen.service` so it can't take port 8080 back after a reboot. Wherever this part says `llama-qwen.service`, on ai-n1 read `llama-coder-next.service`.
 
 > 🛠 Verify when implemented (Epics E2, E5). Rehearse on ai-n3 first and record the result in the PR.
 
@@ -427,6 +428,8 @@ Today's nodes run a hand-made `llama-qwen.service`. The migration swaps it for `
     systemctl cat llama-qwen.service
     tailscale serve status
     ```
+
+    On ai-n1 use `systemctl cat llama-coder-next.service` in the first line.
 
 38. **Run the installer as a dry run** (Part 3 step 9 to download it):
 
@@ -462,7 +465,7 @@ Today's nodes run a hand-made `llama-qwen.service`. The migration swaps it for `
     - From another computer: `https://ai-n3.marin.cr/v1/models` with the **same key as before** → `200`. On ai-n3, `opencode run "say hi"` still works with no config change.
 41. **Per-node clean-up:**
     - **ai-n3:** it also has an old, undocumented `--tcp=18080` listener. The doctor reports it as `LAI-NET-005`. Remove it: `sudo tailscale serve --tcp=18080 off`.
-    - **ai-n1:** Pattern A stays. The `GGML_VK_SUBALLOCATION_BLOCK_SIZE` setting is carried over into `node.yaml` (`llama.extra_env`). Check `aictl doctor` shows no `LAI-LLM-015`.
+    - **ai-n1:** Pattern A stays. Check `systemctl is-enabled llama-coder-next llama-qwen` shows `masked` twice, and that `aictl doctor` shows no `LAI-LLM-015` or `LAI-LLM-016`. A rollback (step 43) brings `llama-coder-next.service` back running and `llama-qwen.service` back stopped, as before.
     - **ai-n2:** record the captured flags in [architecture/lab-inventory.md](../architecture/lab-inventory.md) §2.
     - The old `~/llama.cpp` folder and `~/models` are left in place (model files become links to `/srv/localai/models/…`). Don't delete them until the node has run well for a few weeks.
 42. **Then continue with Part 5** (if Tailscale needs it), **Part 6** (enroll) and **Part 8** (gateway). Part 7 is already done for existing nodes.

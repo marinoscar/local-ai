@@ -28,8 +28,9 @@ var allowed = map[string][]Verb{
 	// The transient rollback pair is only ever stopped (the update succeeded).
 	UnitAgentRollbackTmr: {VerbStop},
 	UnitAgentRollback:    {VerbStop},
-	// The old hand-made llama unit: the migration and its rollback (llama-router.md section 4.9).
-	UnitLlamaQwen: {VerbState, VerbStart, VerbStop, VerbEnable, VerbDisable, VerbMask, VerbUnmask},
+	// The old hand-made llama units: the migration and its rollback (llama-router.md section 4.9).
+	UnitLlamaQwen:      {VerbState, VerbStart, VerbStop, VerbEnable, VerbDisable, VerbMask, VerbUnmask},
+	UnitLlamaCoderNext: {VerbState, VerbStart, VerbStop, VerbEnable, VerbDisable, VerbMask, VerbUnmask},
 	// Not ours: read only.
 	UnitTailscaled: {VerbState},
 }

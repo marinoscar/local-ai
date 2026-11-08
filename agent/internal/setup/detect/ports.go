@@ -57,12 +57,12 @@ type PortRule struct {
 	Ours []string
 }
 
-// PortRules are the ports the node needs. 8080 is held only by the legacy llama-qwen or our router.
+// PortRules are the ports the node needs. 8080 is held only by a legacy llama unit or our router.
 var PortRules = []PortRule{
 	{7070, []string{"aiagent", "localai-agent"}},
 	{8888, []string{"kiwix-serve", "localai-kiwix"}},
 	{8081, []string{"whisper-server", "localai-whisper"}},
-	{8080, []string{"llama-server", "llama-qwen", "localai-llama"}},
+	{8080, []string{"llama-server", "llama-qwen", "llama-coder-next", "localai-llama"}},
 }
 
 // PortConflict is a needed port held by a program that is not ours.

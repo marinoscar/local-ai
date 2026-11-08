@@ -29,6 +29,7 @@ const (
 	UnitAgentRollback    = "localai-agent-rollback.service"
 	UnitAgentRollbackTmr = "localai-agent-rollback.timer"
 	UnitLlamaQwen        = "llama-qwen.service"
+	UnitLlamaCoderNext   = "llama-coder-next.service"
 	UnitTailscaled       = "tailscaled.service"
 )
 

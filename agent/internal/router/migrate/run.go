@@ -58,11 +58,11 @@ func (e *Engine) Pending(ctx context.Context) (bool, string, error) {
 			return true, "an interrupted rollback", nil
 		}
 	}
-	fi, lerr := e.fs.Lstat(e.paths.LegacyUnitFile())
-	if lerr != nil || !fi.Mode().IsRegular() {
+	installed := e.installedLegacy()
+	if len(installed) == 0 {
 		return false, "", nil
 	}
-	return true, LegacyUnitName + " is installed", nil
+	return true, installed[0] + " is installed", nil
 }
 
 // Prepare decides what a run does and returns the plan: a fresh preflight, the plan of an interrupted
@@ -120,7 +120,7 @@ func (e *Engine) Run(ctx context.Context, p *Plan) (*Result, error) {
 		if err := e.saveProgress(Progress{AgentStopped: e.prog.AgentStopped}); err != nil {
 			return nil, err
 		}
-		e.auditLine("migration.llama_qwen.start", audit.ResultOK, "", map[string]string{"model": p.ModelID, "unit": LegacyUnitName})
+		e.auditLine("migration.llama_qwen.start", audit.ResultOK, "", map[string]string{"model": p.ModelID, "unit": e.legacy()})
 	}
 	if err := e.stopAgent(ctx); err != nil {
 		return nil, err
@@ -139,11 +139,12 @@ func (e *Engine) Rollback(ctx context.Context) (*Result, error) {
 		return nil, err
 	}
 	if !ok || prog.direction() == dirFresh {
+		e.useLegacy(e.chooseLegacy(ctx, e.installedLegacy()))
 		if e.legacyIntact() {
-			e.say("Nothing to roll back: the migration did not run, %s is as it was.", LegacyUnitName)
+			e.say("Nothing to roll back: the migration did not run, %s is as it was.", e.legacy())
 			return &Result{State: "already_rolled_back"}, nil
 		}
-		return nil, fail(CodeInterrupted, "R2", "there is no migration record (%s) and %s is gone: restore it by hand from the backup, if one exists", e.paths.Progress(), LegacyUnitName)
+		return nil, fail(CodeInterrupted, "R2", "there is no migration record (%s) and %s is gone: restore it by hand from the backup, if one exists", e.paths.Progress(), e.legacy())
 	}
 	e.prog = prog
 	p, perr := e.loadPlan()
@@ -331,7 +332,7 @@ func (e *Engine) settleBeforeSwitch(ctx context.Context, p *Plan) error {
 	}
 	old, err := e.legacyActive(ctx)
 	if err != nil {
-		return wrap(CodeInterrupted, "", err, "cannot read the state of %s", LegacyUnitName)
+		return wrap(CodeInterrupted, "", err, "cannot read the state of %s", e.legacy())
 	}
 	newSt, err := e.sd.State(ctx, NewUnitName)
 	if err != nil {
@@ -340,9 +341,9 @@ func (e *Engine) settleBeforeSwitch(ctx context.Context, p *Plan) error {
 	if old || newSt.Active() {
 		return nil
 	}
-	e.say("The previous run stopped %s and did not finish: starting it again before going on (%s).", LegacyUnitName, CodeInterrupted)
-	if err := e.sd.Start(ctx, LegacyUnitName); err != nil {
-		return wrap(CodeInterrupted, M6, err, "cannot start %s again", LegacyUnitName)
+	e.say("The previous run stopped %s and did not finish: starting it again before going on (%s).", e.legacy(), CodeInterrupted)
+	if err := e.sd.Start(ctx, e.legacy()); err != nil {
+		return wrap(CodeInterrupted, M6, err, "cannot start %s again", e.legacy())
 	}
 	if err := e.waitOldAnswers(ctx, e.timing.RollbackWait); err != nil {
 		return err

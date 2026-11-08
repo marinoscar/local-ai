@@ -786,7 +786,7 @@ var table = []Code{
 	{
 		ID:       LLM016,
 		Severity: Warning,
-		Title:    Msg{EN: "The old `llama-qwen.service` is still enabled or running", ES: "El antiguo `llama-qwen.service` sigue habilitado o en ejecución"},
+		Title:    Msg{EN: "An old llama service (`llama-qwen.service` or `llama-coder-next.service`) is still enabled or running", ES: "Un antiguo servicio llama (`llama-qwen.service` o `llama-coder-next.service`) sigue habilitado o en ejecución"},
 		Fix:      Msg{EN: "Run `sudo aiagent migrate llama-qwen`", ES: "Ejecute `sudo aiagent migrate llama-qwen`"},
 	},
 	{

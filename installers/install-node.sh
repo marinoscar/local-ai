@@ -748,21 +748,33 @@ phase_llama() {
 }
 
 # ---- P8 migration ---------------------------------------------------------------------------------------------
-# llama-qwen.service is present as a real unit file (after the migration it is masked: a symlink to /dev/null).
-llama_qwen_present() {
-  [[ -f "$SYSTEMD_DIR/llama-qwen.service" && ! -L "$SYSTEMD_DIR/llama-qwen.service" ]]
+# The hand-written llama units the migration replaces (llama-router.md 4.9.1): llama-qwen.service, and
+# llama-coder-next.service on ai-n1.
+LEGACY_UNITS=(llama-qwen.service llama-coder-next.service)
+
+# legacy_unit_present: a known legacy unit is present as a real unit file (after the migration it is masked:
+# a symlink to /dev/null).
+legacy_unit_present() {
+  local u
+  for u in "${LEGACY_UNITS[@]}"; do
+    if [[ -f "$SYSTEMD_DIR/$u" && ! -L "$SYSTEMD_DIR/$u" ]]; then return 0; fi
+  done
+  return 1
 }
 
-# llama_qwen_holds_8080: the old service is running, or something listens on 8080 while the unit still exists.
-llama_qwen_holds_8080() {
-  llama_qwen_present || return 1
-  "$SYSTEMCTL" is-active --quiet llama-qwen 2>/dev/null && return 0
+# legacy_holds_8080: an old service is running, or something listens on 8080 while a unit still exists.
+legacy_holds_8080() {
+  legacy_unit_present || return 1
+  local u
+  for u in "${LEGACY_UNITS[@]}"; do
+    "$SYSTEMCTL" is-active --quiet "${u%.service}" 2>/dev/null && return 0
+  done
   "$SS_BIN" -Hltn 'sport = :8080' 2>/dev/null | grep -q ':8080'
 }
 
 check_migration() {
   llama_init_paths
-  ! llama_qwen_present
+  ! legacy_unit_present
 }
 
 phase_migration() {
@@ -770,18 +782,18 @@ phase_migration() {
   MIGRATION_RAN=0
   if [[ "$OPT_MIGRATE" == no ]]; then
     # shellcheck disable=SC2310
-    if llama_qwen_holds_8080; then
-      llama_fail 1 LAI-INS-031 "the old llama-qwen service is still using port 8080 and --no-migrate was given, so the new service cannot start. Re-run without --no-migrate."
+    if legacy_holds_8080; then
+      llama_fail 1 LAI-INS-031 "the old llama service (llama-qwen or llama-coder-next) is still using port 8080 and --no-migrate was given, so the new service cannot start. Re-run without --no-migrate."
     fi
-    say "migration skipped (--no-migrate); llama-qwen is not using port 8080"
+    say "migration skipped (--no-migrate); no old llama service is using port 8080"
     return 0
   fi
   # shellcheck disable=SC2310
-  if [[ "$OPT_MIGRATE" != yes ]] && ! llama_qwen_present; then
-    say "no old llama-qwen.service found: nothing to migrate"
+  if [[ "$OPT_MIGRATE" != yes ]] && ! legacy_unit_present; then
+    say "no old llama-qwen.service or llama-coder-next.service found: nothing to migrate"
     return 0
   fi
-  say "Migrating the old llama-qwen service to the new one. The port (8080), the key and the address stay the same."
+  say "Migrating the old llama service to the new one. The port (8080), the key and the address stay the same."
   if ((DRY_RUN)); then
     if ((EUID == 0)) && [[ -x "$AIAGENT" ]]; then
       run_logged "$AIAGENT" setup migrate --dry-run || llama_fail 1 LAI-INS-033 "the migration dry run found a problem (see the lines above). Nothing was changed."
@@ -790,14 +802,14 @@ phase_migration() {
     fi
     return 0
   fi
-  confirm "Replace the old llama-qwen service with the new Local AI service now? (The old one is put back automatically if anything goes wrong.)"
+  confirm "Replace the old llama service with the new Local AI service now? (The old one is put back automatically if anything goes wrong.)"
   local rc=0
   run_or_say "$AIAGENT" setup migrate || rc=$?
   case "$rc" in
     0) MIGRATION_RAN=1; say "migration finished" ;;
-    20) llama_fail 1 LAI-INS-033 "the migration failed and was rolled back: the old llama-qwen service is running again, as before. Read the lines above and report them." ;;
+    20) llama_fail 1 LAI-INS-033 "the migration failed and was rolled back: the old llama service is running again, as before. Read the lines above and report them." ;;
     77) llama_fail 3 LAI-INS-003 "aiagent setup migrate must run as root. Run the installer with sudo." ;;
-    *) llama_fail 1 LAI-INS-033 "the migration stopped (exit $rc) and could not be finished. Read the lines above: they say whether the old llama-qwen service was put back. Report them." ;;
+    *) llama_fail 1 LAI-INS-033 "the migration stopped (exit $rc) and could not be finished. Read the lines above: they say whether the old llama service was put back. Report them." ;;
   esac
 }
 # ===============================================================================================================
@@ -1443,10 +1455,13 @@ phase_preflight() {
   p1_check_gpu
   p1_check_resources
   p1_check_ports
-  if [[ -e "$SYSTEMD_DIR/llama-qwen.service" ]]; then
-    P1_LEGACY_EXEC="$(sed -n -E 's/^ExecStart=(.*)$/\1/p' "$SYSTEMD_DIR/llama-qwen.service" | head -n 1)"
-    say "  info the old llama-qwen service is installed and will be migrated"
-  fi
+  local lu
+  for lu in "${LEGACY_UNITS[@]}"; do
+    if [[ -e "$SYSTEMD_DIR/$lu" ]]; then
+      [[ -n "${P1_LEGACY_EXEC:-}" ]] || P1_LEGACY_EXEC="$(sed -n -E 's/^ExecStart=(.*)$/\1/p' "$SYSTEMD_DIR/$lu" | head -n 1)"
+      say "  info the old $lu is installed and will be migrated"
+    fi
+  done
   p1_check_source
   p1_check_clock_power
   if ((${#P1_FAILS[@]} > 0)); then
@@ -2143,7 +2158,10 @@ phase0() {
   if [[ -n "$OPT_FROM_ARK" ]]; then source="ark:$OPT_FROM_ARK"; fi
   state_load
   if ((${#PH_STATUS[@]} > 0)); then kind="re-run"; fi
-  if [[ -e "$SYSTEMD_DIR/llama-qwen.service" ]]; then kind="migration"; fi
+  local lu
+  for lu in "${LEGACY_UNITS[@]}"; do
+    if [[ -e "$SYSTEMD_DIR/$lu" ]]; then kind="migration"; fi
+  done
   INSTALL_KIND="$kind"
   say "$(L "Local AI node installer" "Instalador de nodos de Local AI") $INSTALLER_VERSION ($INSTALLER_TAG)"
   say "source: $source"
@@ -2222,21 +2240,53 @@ rm_file_or_say() { # rm_file_or_say <path>
   if [[ -e "$1" || -L "$1" ]]; then run_or_say rm -f -- "$1"; else say "already gone: $1"; fi
 }
 
+# legacy_unit_name: the unit the migration replaced, from its plan.json ("legacy_unit"); a plan written
+# before llama-coder-next.service was known has none, and then it is llama-qwen.service.
+legacy_unit_name() {
+  local ur="$1" u=""
+  if [[ -f "$ur$LEGACY_BACKUP_DIR/plan.json" ]]; then
+    u="$(sed -n -E 's/.*"legacy_unit": *"(llama-[a-z0-9-]+\.service)".*/\1/p' "$ur$LEGACY_BACKUP_DIR/plan.json" | head -n 1)"
+  fi
+  printf '%s' "${u:-llama-qwen.service}"
+}
+
 # The legacy unit is saved by the migration (llama-router.md 4.9.2 M9). Prints the file to restore, or nothing.
 legacy_unit_source() {
-  local ur="$1"
-  if [[ -f "$ur$LEGACY_BACKUP_DIR/llama-qwen.service" ]]; then
-    printf '%s' "$ur$LEGACY_BACKUP_DIR/llama-qwen.service"
-  elif [[ -f "$SYSTEMD_DIR/llama-qwen.service" && ! -L "$SYSTEMD_DIR/llama-qwen.service" ]]; then
-    printf '%s' "$SYSTEMD_DIR/llama-qwen.service"   # not migrated, or already restored: it is still there
+  local ur="$1" u
+  u="$(legacy_unit_name "$ur")"
+  if [[ -f "$ur$LEGACY_BACKUP_DIR/$u" ]]; then
+    printf '%s' "$ur$LEGACY_BACKUP_DIR/$u"
+  elif [[ -f "$SYSTEMD_DIR/$u" && ! -L "$SYSTEMD_DIR/$u" ]]; then
+    printf '%s' "$SYSTEMD_DIR/$u"   # not migrated, or already restored: it is still there
+  fi
+}
+
+# restore_unit_file <unit> <saved file>: unmask the unit and put its file (and drop-ins) back.
+restore_unit_file() {
+  local u="$1" src="$2"
+  svc_or_say unmask "$u" || true
+  if [[ "$src" == "$SYSTEMD_DIR/$u" ]]; then return 0; fi
+  if ((DRY_RUN)); then
+    say "[dry-run] would restore $src to $SYSTEMD_DIR/$u (mode 0644)"
+    return 0
+  fi
+  mkdir -p "$SYSTEMD_DIR"
+  rm -f -- "$SYSTEMD_DIR/$u"
+  cp -- "$src" "$SYSTEMD_DIR/$u"
+  chmod 0644 "$SYSTEMD_DIR/$u"
+  say "restored $SYSTEMD_DIR/$u"
+  if [[ -d "$(dirname "$src")/$u.d" && ! -e "$SYSTEMD_DIR/$u.d" ]]; then
+    cp -r -- "$(dirname "$src")/$u.d" "$SYSTEMD_DIR/$u.d"
+    say "restored the drop-in folder $u.d"
   fi
 }
 
 # Steps 5 (a) (b) (c). Nothing under /etc/localai is touched here; the caller removes it only afterwards.
 restore_legacy() {
-  local ur="$1" src="$2" key_src="$1/etc/localai/api-key" key_dst="$1/etc/llama-qwen/api-key" tmp
+  local ur="$1" src="$2" key_src="$1/etc/localai/api-key" key_dst="$1/etc/llama-qwen/api-key" tmp unit other
+  unit="$(legacy_unit_name "$ur")"
   CUR_TAG="P0 restore-legacy"
-  say "Putting the old llama-qwen service back (same port 8080, same key)."
+  say "Putting the old llama service $unit back (same port 8080, same key)."
   # (a) the key first: a real file, so it survives the removal of /etc/localai.
   if [[ -L "$key_dst" || ! -e "$key_dst" ]]; then
     if ((DRY_RUN)); then
@@ -2253,27 +2303,18 @@ restore_legacy() {
   else
     say "already a real file: $key_dst"
   fi
-  # (b) unmask (removes the mask link), restore the unit and its drop-ins, reload.
-  svc_or_say unmask llama-qwen.service || true
-  if [[ "$src" != "$SYSTEMD_DIR/llama-qwen.service" ]]; then
-    if ((DRY_RUN)); then
-      say "[dry-run] would restore $src to $SYSTEMD_DIR/llama-qwen.service (mode 0644)"
-    else
-      mkdir -p "$SYSTEMD_DIR"
-      rm -f -- "$SYSTEMD_DIR/llama-qwen.service"
-      cp -- "$src" "$SYSTEMD_DIR/llama-qwen.service"
-      chmod 0644 "$SYSTEMD_DIR/llama-qwen.service"
-      say "restored $SYSTEMD_DIR/llama-qwen.service"
-      if [[ -d "$(dirname "$src")/llama-qwen.service.d" && ! -e "$SYSTEMD_DIR/llama-qwen.service.d" ]]; then
-        cp -r -- "$(dirname "$src")/llama-qwen.service.d" "$SYSTEMD_DIR/llama-qwen.service.d"
-        say "restored the drop-in folder llama-qwen.service.d"
-      fi
+  # (b) unmask (removes the mask link), restore the unit and its drop-ins, reload. The other legacy units the
+  # migration masked come back too, stopped and disabled: only the one that served is started.
+  restore_unit_file "$unit" "$src"
+  for other in "${LEGACY_UNITS[@]}"; do
+    if [[ "$other" != "$unit" && -f "$ur$LEGACY_BACKUP_DIR/$other" ]]; then
+      restore_unit_file "$other" "$ur$LEGACY_BACKUP_DIR/$other"
     fi
-  fi
+  done
   svc_or_say daemon-reload || fail 1 LAI-INS-080 "systemctl daemon-reload failed. Nothing under /etc/localai was removed."
   # (c) start it
-  run_or_say systemctl enable --now llama-qwen.service || fail 1 LAI-INS-080 "the old llama-qwen service did not start. Nothing under /etc/localai was removed: read 'journalctl -u llama-qwen -n 50'."
-  say "llama-qwen is enabled and started. Clients keep working with the same port and key."
+  run_or_say systemctl enable --now "$unit" || fail 1 LAI-INS-080 "the old llama service $unit did not start. Nothing under /etc/localai was removed: read 'journalctl -u ${unit%.service} -n 50'."
+  say "${unit%.service} is enabled and started. Clients keep working with the same port and key."
 }
 
 do_uninstall() {
@@ -2287,9 +2328,9 @@ do_uninstall() {
   if ((OPT_RESTORE_LEGACY)); then
     legacy_src="$(legacy_unit_source "$ur")"
     if [[ -z "$legacy_src" ]]; then
-      say "WARNING: --restore-legacy found no saved llama-qwen.service (looked in $ur$LEGACY_BACKUP_DIR/ and $SYSTEMD_DIR/)."
+      say "WARNING: --restore-legacy found no saved $(legacy_unit_name "$ur") (looked in $ur$LEGACY_BACKUP_DIR/ and $SYSTEMD_DIR/)."
       say "         There is nothing to restore, so the old service will NOT be put back. The rest of the uninstall goes on."
-      UNINSTALL_NOTES+=("the old llama-qwen service was not restored: no saved copy was found")
+      UNINSTALL_NOTES+=("the old llama service was not restored: no saved copy was found")
     elif [[ ! -f "$ur/etc/localai/api-key" ]]; then
       fail 1 LAI-INS-080 "the key $ur/etc/localai/api-key is missing, so the old service could not keep its key. Nothing was changed."
     fi
@@ -2344,7 +2385,7 @@ do_uninstall() {
   # 5. restore the legacy service BEFORE the agent and /etc/localai go
   if ((OPT_RESTORE_LEGACY)) && [[ -n "$legacy_src" ]]; then
     restore_legacy "$ur" "$legacy_src"
-    UNINSTALL_NOTES+=("the old llama-qwen service was restored and started (same port 8080 and key)")
+    UNINSTALL_NOTES+=("the old llama service $(legacy_unit_name "$ur") was restored and started (same port 8080 and key)")
   fi
 
   # 9. hardening (INST-03, issue #116 provides revert_hardening). Done before step 6 because it needs the agent

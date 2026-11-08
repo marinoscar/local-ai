@@ -298,9 +298,50 @@ var errBadKeyShape = errors.New("the key is not 64 lowercase hex digits")
 // keyFingerprint is how the key is shown: first and last four characters.
 func keyFingerprint(key []byte) string { return router.KeyFingerprint(string(bytes.TrimSpace(key))) }
 
-// unitState reads a unit.
+// legacy is the legacy unit this migration replaces (Preflight chooses it, plan.json keeps it).
+func (e *Engine) legacy() string { return e.paths.Legacy() }
+
+// useLegacy makes unit the one the migration replaces.
+func (e *Engine) useLegacy(unit string) { e.paths.LegacyUnit = unit }
+
+// installedLegacy lists the known legacy units that are a regular unit file in /etc/systemd/system (a
+// masked unit is a link to /dev/null and does not count).
+func (e *Engine) installedLegacy() []string {
+	var out []string
+	for _, u := range LegacyUnitNames {
+		if fi, err := e.fs.Lstat(e.paths.UnitFile(u)); err == nil && fi.Mode().IsRegular() {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// chooseLegacy picks the legacy unit to replace among the installed ones: the one that runs (it holds
+// port 8080), else the first enabled one, else the first one. With none installed it returns
+// LegacyUnitName, so the messages name the usual unit.
+func (e *Engine) chooseLegacy(ctx context.Context, installed []string) string {
+	if len(installed) == 0 {
+		return LegacyUnitName
+	}
+	var enabled string
+	for _, u := range installed {
+		st, err := e.sd.State(ctx, u)
+		if err != nil {
+			continue
+		}
+		if st.ActiveState == "active" || st.ActiveState == "activating" || st.ActiveState == "reloading" {
+			return u
+		}
+		if enabled == "" && st.Enabled() {
+			enabled = u
+		}
+	}
+	return orStr(enabled, installed[0])
+}
+
+// legacyActive reports whether the legacy unit runs.
 func (e *Engine) legacyActive(ctx context.Context) (bool, error) {
-	st, err := e.sd.State(ctx, LegacyUnitName)
+	st, err := e.sd.State(ctx, e.legacy())
 	if err != nil {
 		return false, err
 	}

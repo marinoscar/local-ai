@@ -53,7 +53,7 @@ func (e *Engine) rollback(ctx context.Context, p *Plan, cause string, restoreFil
 	}
 	e.auditLine("migration.llama_qwen.rolled_back", audit.ResultOK, "", map[string]string{"cause": clip(cause, 120)})
 	res := &Result{State: StateRolledBack, ModelID: p.ModelID, KeyFingerprint: p.KeyFingerprint, ClientsToUpdate: []string{}, ServeUnchanged: true}
-	e.say("Rolled back: %s serves again on port %d with the same key. Tailscale Serve was never changed.", LegacyUnitName, LegacyPort)
+	e.say("Rolled back: %s serves again on port %d with the same key. Tailscale Serve was never changed.", e.legacy(), LegacyPort)
 	return res, nil
 }
 
@@ -86,29 +86,13 @@ func (e *Engine) r1StopNew(ctx context.Context, _ *Plan, _ bool) error {
 	return nil
 }
 
-// R2: unmask the old unit, put its file (and drop-ins) back from the backup when they are missing,
-// daemon-reload.
-func (e *Engine) r2RestoreUnit(ctx context.Context, _ *Plan, _ bool) error {
-	st, err := e.sd.State(ctx, LegacyUnitName)
-	if err != nil {
-		return wrap(CodeInterrupted, "R2", err, "cannot read the state of %s", LegacyUnitName)
-	}
-	if strings.HasPrefix(st.UnitFileState, "masked") {
-		if err := e.sd.Unmask(ctx, LegacyUnitName); err != nil {
-			return wrap(CodeInterrupted, "R2", err, "cannot unmask %s", LegacyUnitName)
+// R2: unmask the old unit (and the other legacy units M9 masked), put their files (and drop-ins) back
+// from the backup when they are missing, daemon-reload.
+func (e *Engine) r2RestoreUnit(ctx context.Context, p *Plan, _ bool) error {
+	for _, u := range p.retiredUnits() {
+		if err := e.restoreUnit(ctx, u); err != nil {
+			return err
 		}
-	}
-	if !exists(e.fs, e.paths.LegacyUnitFile()) {
-		data, err := e.fs.ReadFile(e.paths.UnitBackup())
-		if err != nil {
-			return wrap(CodeInterrupted, "R2", err, "%s is missing and so is its backup %s: restore it by hand", e.paths.LegacyUnitFile(), e.paths.UnitBackup())
-		}
-		if err := config.WriteFileAtomicFS(e.fs, e.paths.LegacyUnitFile(), data, 0o644, e.rootUID, e.rootGID); err != nil {
-			return wrap(CodeInterrupted, "R2", err, "cannot restore %s", e.paths.LegacyUnitFile())
-		}
-	}
-	if err := e.restoreDropIns(); err != nil {
-		return err
 	}
 	if err := e.sd.DaemonReload(ctx); err != nil {
 		return wrap(CodeInterrupted, "R2", err, "daemon-reload failed")
@@ -116,16 +100,40 @@ func (e *Engine) r2RestoreUnit(ctx context.Context, _ *Plan, _ bool) error {
 	return nil
 }
 
+// restoreUnit unmasks one legacy unit and puts its file back from the backup when it is missing.
+func (e *Engine) restoreUnit(ctx context.Context, name string) error {
+	st, err := e.sd.State(ctx, name)
+	if err != nil {
+		return wrap(CodeInterrupted, "R2", err, "cannot read the state of %s", name)
+	}
+	if strings.HasPrefix(st.UnitFileState, "masked") {
+		if err := e.sd.Unmask(ctx, name); err != nil {
+			return wrap(CodeInterrupted, "R2", err, "cannot unmask %s", name)
+		}
+	}
+	unit, backup := e.paths.UnitFile(name), e.paths.UnitBackupOf(name)
+	if !exists(e.fs, unit) {
+		data, err := e.fs.ReadFile(backup)
+		if err != nil {
+			return wrap(CodeInterrupted, "R2", err, "%s is missing and so is its backup %s: restore it by hand", unit, backup)
+		}
+		if err := config.WriteFileAtomicFS(e.fs, unit, data, 0o644, e.rootUID, e.rootGID); err != nil {
+			return wrap(CodeInterrupted, "R2", err, "cannot restore %s", unit)
+		}
+	}
+	return e.restoreDropIns(name)
+}
+
 // restoreDropIns copies the saved drop-in files back when the directory is gone.
-func (e *Engine) restoreDropIns() error {
-	entries, err := e.fs.ReadDir(e.paths.DropInBackup())
+func (e *Engine) restoreDropIns(name string) error {
+	entries, err := e.fs.ReadDir(e.paths.DropInBackupOf(name))
 	if err != nil {
 		if isNotExist(err) {
 			return nil // there were none
 		}
-		return wrap(CodeInterrupted, "R2", err, "cannot read %s", e.paths.DropInBackup())
+		return wrap(CodeInterrupted, "R2", err, "cannot read %s", e.paths.DropInBackupOf(name))
 	}
-	dir := e.paths.LegacyDropInDir()
+	dir := e.paths.DropInDir(name)
 	if err := e.fs.MkdirAll(dir, 0o755); err != nil {
 		return wrap(CodeInterrupted, "R2", err, "cannot create %s", dir)
 	}
@@ -137,7 +145,7 @@ func (e *Engine) restoreDropIns() error {
 		if exists(e.fs, dst) {
 			continue
 		}
-		data, err := e.fs.ReadFile(filepath.Join(e.paths.DropInBackup(), ent.Name()))
+		data, err := e.fs.ReadFile(filepath.Join(e.paths.DropInBackupOf(name), ent.Name()))
 		if err != nil {
 			return wrap(CodeInterrupted, "R2", err, "cannot read the saved drop-in %s", ent.Name())
 		}
@@ -244,13 +252,22 @@ func (e *Engine) unitOwner(p *Plan) (uid, gid int, ok bool) {
 }
 
 // R5: enable and start the old service, and see it answer: /health 200, /v1/models 200 with the key and
-// 401 without.
-func (e *Engine) r5StartOld(ctx context.Context, _ *Plan, _ bool) error {
-	if err := e.sd.Enable(ctx, LegacyUnitName); err != nil {
-		return wrap(CodeInterrupted, "R5", err, "cannot enable %s", LegacyUnitName)
+// 401 without. The other legacy units are enabled again only when they were before (never started: the
+// old service holds the port).
+func (e *Engine) r5StartOld(ctx context.Context, p *Plan, _ bool) error {
+	for _, o := range p.OtherUnits {
+		if !o.Enabled {
+			continue
+		}
+		if err := e.sd.Enable(ctx, o.Unit); err != nil {
+			return wrap(CodeInterrupted, "R5", err, "cannot enable %s", o.Unit)
+		}
 	}
-	if err := e.sd.Start(ctx, LegacyUnitName); err != nil {
-		return wrap(CodeInterrupted, "R5", err, "cannot start %s", LegacyUnitName)
+	if err := e.sd.Enable(ctx, e.legacy()); err != nil {
+		return wrap(CodeInterrupted, "R5", err, "cannot enable %s", e.legacy())
+	}
+	if err := e.sd.Start(ctx, e.legacy()); err != nil {
+		return wrap(CodeInterrupted, "R5", err, "cannot start %s", e.legacy())
 	}
 	return e.waitOldAnswers(ctx, e.timing.RollbackWait)
 }
@@ -276,10 +293,10 @@ func (e *Engine) waitOldAnswers(ctx context.Context, max time.Duration) error {
 		return true, nil
 	})
 	if err != nil && !timedOut {
-		return wrap(CodeInterrupted, "R5", err, "waiting for %s was interrupted", LegacyUnitName)
+		return wrap(CodeInterrupted, "R5", err, "waiting for %s was interrupted", e.legacy())
 	}
 	if timedOut {
-		return wrap(CodeInterrupted, "R5", last, "%s did not answer within %s", LegacyUnitName, max)
+		return wrap(CodeInterrupted, "R5", last, "%s did not answer within %s", e.legacy(), max)
 	}
 	return nil
 }

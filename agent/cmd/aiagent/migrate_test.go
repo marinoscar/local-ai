@@ -106,7 +106,7 @@ func TestMigrateCommand(t *testing.T) {
 		{name: "a person types something else", m: &fakeMigrator{plan: okPlan()}, interactive: true, stdin: "y\n", args: []string{"llama-qwen"}, wantCode: 1, outHas: "Nothing was changed."},
 		{name: "end of input is a no", m: &fakeMigrator{plan: okPlan()}, interactive: true, stdin: "", args: []string{"llama-qwen"}, wantCode: 1, outHas: "Nothing was changed."},
 		{name: "a failed run prints its code", m: &fakeMigrator{plan: okPlan(), runErr: &migrate.Error{Code: doctor.LLM029, Step: "M8", Message: "the contract broke", RolledBack: true}},
-			args: []string{"llama-qwen", "--yes"}, wantCode: 1, wantRun: true, errHas: "The old llama-qwen.service is running again"},
+			args: []string{"llama-qwen", "--yes"}, wantCode: 1, wantRun: true, errHas: "The old llama service is running again"},
 		{name: "a finished migration is not confirmed again", m: &fakeMigrator{plan: &migrate.Plan{Mode: migrate.ModeDone}}, args: []string{"llama-qwen"}, wantCode: 0, wantRun: true},
 		{name: "a failed preflight read", m: &fakeMigrator{prepareErr: errors.New("boom")}, args: []string{"llama-qwen", "--yes"}, wantCode: 1, errHas: "boom"},
 		{name: "rollback dry run", m: &fakeMigrator{}, args: []string{"llama-qwen", "--rollback", "--dry-run"}, wantCode: 0, outHas: "R1 stop"},

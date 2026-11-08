@@ -23,7 +23,7 @@ var setupMigrateNow = time.Now
 // Exit codes of `aiagent setup migrate` (installer.md section 3.5). Root is checked by runSetup (exit 77).
 const (
 	setupExitUsage      = 2
-	setupExitRolledBack = 20 // the migration failed and its own rollback restored llama-qwen.service
+	setupExitRolledBack = 20 // the migration failed and its own rollback restored the old llama unit
 )
 
 // setupMigrate is the `migrate` step of `aiagent setup`.
@@ -69,7 +69,7 @@ func runSetupMigrate(ctx context.Context, args []string, stdout, stderr io.Write
 	case code == 0:
 		say("finished: ok")
 	case rolled:
-		say("finished: FAILED and rolled back; the old llama-qwen.service is running again")
+		say("finished: FAILED and rolled back; the old llama service is running again")
 	default:
 		say("finished: FAILED (exit %d); read the messages above", code)
 	}
