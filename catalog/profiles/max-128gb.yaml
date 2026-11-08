@@ -14,8 +14,8 @@ storage:
   budget_bytes: 900000000000
   min_free_bytes: 100000000000
 include:
-  # qwen3-coder-next-q4km and qwen3.8-27b-q4km are left out until they are measured with aictl bench (catalog.md section 2).
-  models: [qwen3.6-35b-a3b-q4km, whisper-large-v3-turbo, piper-en-medium, piper-es-medium, qwen3.5-4b-q4km, embeddinggemma-300m-q8]
+  # qwen3.8-27b-q4km is left out until it is measured with aictl bench (catalog.md section 2).
+  models: [qwen3-coder-next-q4km, qwen3.6-35b-a3b-q4km, whisper-large-v3-turbo, piper-en-medium, piper-es-medium, qwen3.5-4b-q4km, embeddinggemma-300m-q8]
   content:
     # tier 1
     - docs-bundle
@@ -69,7 +69,7 @@ include:
     - ted-water
     - ted-medicine
     - gutenberg-es-all
-default_model: qwen3.6-35b-a3b-q4km
+default_model: qwen3-coder-next-q4km
 survival:
   models: [qwen3.6-35b-a3b-q4km]
   default_model: qwen3.6-35b-a3b-q4km

@@ -26,8 +26,9 @@ What differs:
 | | ai-n1 | ai-n2 | ai-n3 |
 |---|---|---|---|
 | Build dir | `build-vulkan` | `build-cuda` (assumed, **verify**) | `build-cuda` (commit `f3586e66b`) |
-| Speculative | separate MTP draft GGUF (`-md`, `--spec-draft-ngl all`, `--spec-draft-n-max 2`) | **not recorded, capture during migration** | built-in MTP head (`--spec-type draft-mtp --spec-draft-n-max 3`) |
-| Extra env | `GGML_VK_SUBALLOCATION_BLOCK_SIZE=4294967296` (long context) | ? | none |
+| Unit | `llama-coder-next.service` serves (Qwen3-Coder-Next, catalog `qwen3-coder-next-q4km`); `llama-qwen.service` (Qwen3.8-27B) stopped and disabled beside it (checked 2026-11-08) | `llama-qwen.service` | `llama-qwen.service` |
+| Speculative | none for Coder-Next; the 27B unit uses a separate MTP draft GGUF (`-md`, `--spec-draft-ngl all`, `--spec-draft-n-max 3`) | **not recorded, capture during migration** | built-in MTP head (`--spec-type draft-mtp --spec-draft-n-max 3`) |
+| Extra env | none in `llama-coder-next.service` (2026-11-08); older docs list `GGML_VK_SUBALLOCATION_BLOCK_SIZE=4294967296` | ? | none |
 | Other | Cockpit on :9090 | unit and flags not recorded | OpenCode configured locally (`~/.config/opencode/opencode.json`) |
 
 ## 3. VPS (control plane)

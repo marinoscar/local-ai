@@ -283,3 +283,57 @@ models:
     client_hints:
       max_output_tokens: 0
       reasoning: false
+  - id: qwen3-coder-next-q4km
+    display_name: "Qwen3 Coder Next 80B A3B"
+    summary: "Large coding model for agentic coding across big projects. Needs a 128 GB unified-memory computer."
+    summary_es: "Modelo grande de programación para trabajo agéntico en proyectos grandes. Necesita 128 GB de memoria unificada."
+    engine: llama
+    roles: [coder, chat]
+    languages: [en, multi]
+    license: apache-2.0
+    survival_tier: 3
+    source:
+      type: huggingface
+      repo: Qwen/Qwen3-Coder-Next-GGUF
+      revision: b82fb7382639d97b38fa7672e526c760c2fb358e
+    files:
+      - kind: weights
+        name: Qwen3-Coder-Next-Q4_K_M/Qwen3-Coder-Next-Q4_K_M-00001-of-00004.gguf
+        url: null
+        size_bytes: 15524827040
+        sha256: "6bcfc9f9c37901eeb92172e2ab871224dab36a453d263bcb2547f737409534da"
+      - kind: weights
+        name: Qwen3-Coder-Next-Q4_K_M/Qwen3-Coder-Next-Q4_K_M-00002-of-00004.gguf
+        url: null
+        size_bytes: 14872168352
+        sha256: "817def0691ee9d08bf3dc4444be7aed29c9e52091e8fa9d97901ce7e7f6f01d3"
+      - kind: weights
+        name: Qwen3-Coder-Next-Q4_K_M/Qwen3-Coder-Next-Q4_K_M-00003-of-00004.gguf
+        url: null
+        size_bytes: 14503294496
+        sha256: "23aa634d47dca9b4ca3ea249384e6f01951b24c83cdc076f37f6f43d6c99883f"
+      - kind: weights
+        name: Qwen3-Coder-Next-Q4_K_M/Qwen3-Coder-Next-Q4_K_M-00004-of-00004.gguf
+        url: null
+        size_bytes: 3510702144
+        sha256: "249c768cc5f130dc731567d6edcbdacc48e14dec9e02c5dbe2b2185d2c5bdb2b"
+    requirements:
+      backends: [vulkan]
+      # Measured on ai-n1 (Radeon 8060S, Vulkan) with the model loaded at ctx 131072: 49931 MiB of
+      # VRAM + GTT, plus 10 %.
+      min_vram_mib: 54925
+      min_ram_mib: 65536
+      min_disk_bytes: 48410992032
+    llama:
+      ctx: 131072
+      n_gpu_layers: 99
+      flash_attn: "auto"
+      parallel: 1
+      mmproj_file_kind: null
+      chat_template: null
+      # The settings ai-n1's llama-coder-next.service runs with: prompt cache and Qwen's recommended sampling.
+      extra_args: ["--cache-ram", "32768", "--temp", "0.7", "--top-p", "0.8", "--top-k", "20", "--repeat-penalty", "1.05"]
+      env: {}
+    client_hints:
+      max_output_tokens: 16384
+      reasoning: false
