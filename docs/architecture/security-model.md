@@ -24,7 +24,7 @@
 | Admin PIN | `/etc/localai/admin-pin` (argon2id; 4–8 digits) | root | set by the installer, or by `aictl pin set` (root) | `aictl pin set` (root). Forgotten PIN: [runbooks/07-troubleshooting.md](../runbooks/07-troubleshooting.md) |
 | Gateway keys `lai_…` | cloud DB, stored as sha256 hashes, with the prefix kept for display | cloud only | the user issues it in the cloud UI, shown once | revoke and issue again |
 | Node keys held by the cloud | EAB encrypted credential store (deployment scope), purpose `localai_node_llama_key`, name `<node-id>` (EAB names may not contain `:`; [cloud-app.md](../specs/cloud-app.md) §3.8) | cloud API (gateway) | reported by the agent at enroll and rotate time | follows the node |
-| HF token (optional) | `/etc/localai/hf-token` (root 0600) | the agent (sync) | operator, optional, for rate limits | manual |
+| HF token (optional) | `/etc/localai/hf-token` (root 0600) | the agent (sync) | operator, optional, for rate limits: `sudo aictl ark hf-token set` (no-echo prompt or stdin, never an argument) | `sudo aictl ark hf-token set` again (root) |
 
 **Rules:**
 - No credential ever appears in logs, `aictl status`, heartbeats or error messages. Each is shown as `prefix…last4`, where the prefix is `lat_`, `nod_` or `lai_`, or the first 4 hex characters for the llama key.

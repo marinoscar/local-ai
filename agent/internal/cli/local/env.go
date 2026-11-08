@@ -163,6 +163,10 @@ const (
 	ActionCatalogUseTest = "catalog.use_test"
 	ActionConfigBackup   = "config.backup"
 	ActionConfigRestore  = "config.restore"
+	// ActionHFTokenSet is `aictl ark hf-token set`; the token is never in the record.
+	ActionHFTokenSet = "hf_token.set"
+	// ActionInventoryImport is `aictl docs inventory import`; no inventory value is in the record.
+	ActionInventoryImport = "inventory.import"
 )
 
 // Audit appends one record as actor cli-root. The log is opened without rotation (only the agent
