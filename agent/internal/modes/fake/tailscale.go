@@ -163,6 +163,13 @@ func (c *TailscaleCLI) Reset() {
 	c.mu.Unlock()
 }
 
+// SetBackend changes BackendState while other goroutines may be running commands.
+func (c *TailscaleCLI) SetBackend(state string) {
+	c.mu.Lock()
+	c.Backend = state
+	c.mu.Unlock()
+}
+
 // Run implements execx.Runner.
 func (c *TailscaleCLI) Run(_ context.Context, cmd execx.Cmd) (execx.Result, error) {
 	c.mu.Lock()
