@@ -297,7 +297,7 @@ Items come from `capabilities.manuals.items` (rendered runbooks under `/docs/`).
 │ CLOCK  Mon 2 Nov 2026, 14:05                 │                                               │
 └──────────────────────────────────────────────┴───────────────────────────────────────────────┘
 ```
-Each problem shows its code, a one-sentence title and the fix, in the UI language. There is no "Leave survival mode" button here (that is in the Dashboard and needs the PIN).
+Each problem shows its code, a one-sentence title and the fix, in the UI language. A problem whose alert carries an `action` (§3.5, [doctor-codes.md](doctor-codes.md) §1.7) also shows the **fix button** described in §4.2 under its fix. There is no "Leave survival mode" button here (that is in the Dashboard and needs the PIN).
 
 #### 4.1.9 Switch brain (button 8)
 ```
@@ -335,9 +335,20 @@ The agent computes each capability for `/portal/status`; the SPA only displays.
 | maps | a map + assets | no assets (no labels) or no search (`LAI-SVC-031`/`032`) | no map (`LAI-SVC-030`) |
 | manuals | docs present | docs rendered without inventory (`LAI-SYN-062`) | no docs; then the button opens a built-in page with the 10 most important instructions embedded in the Portal itself (§4.8) |
 
-An **unavailable** button is still focusable and pressable. Pressing it opens a full-screen explanation: what's missing (plain words), the fix (one sentence), the doctor code, and a link to the right manual page. Example: "The library has no books. Plug in the AI-ARK drive and press **Import from drive**." Buttons are never hidden, so the layout never changes in a crisis.
+An **unavailable** button is still focusable and pressable. Pressing it opens a full-screen explanation: what's missing (plain words), the fix (one sentence), the doctor code, and a link to the right manual page. Example: "The library has no books. Plug in the AI-ARK drive and press **Copy from the AI-ARK drive**." Buttons are never hidden, so the layout never changes in a crisis.
 
-If the agent's API stops responding while the Portal is open, the SPA shows a full-width banner "Lost contact with the AI service. Trying again …" and retries every 5 s; Library and Maps links still open (they fail separately if the agent is fully down). The survival runbook explains the direct Kiwix fallback at `http://127.0.0.1:8888/library/`.
+**Fix buttons** (#430). When the capability (or its alert) carries an `action` ([doctor-codes.md](doctor-codes.md) §1.7), the explanation screen, and the Status screen's problem list (§4.1.8), show it as the primary button (`agent/ui/src/portal/components/FixButton.tsx`, `actions.ts`):
+
+| `action` | Button (`fix.*` key, §4.9) | What it does |
+|---|---|---|
+| `ark.import` | **Copy from the AI-ARK drive** | `POST /api/v1/ark/import` with `{}`: the agent replaces the body with the safe default (§3.3) |
+| `service.restart:kiwix` | **Restart the library** | `POST /api/v1/services/kiwix/restart` |
+| `service.restart:whisper` | **Restart speech** | `POST /api/v1/services/whisper/restart` |
+| `portal.brain` | **Choose a brain** | opens Switch brain (§4.1.9); calls nothing |
+
+Under the button a small line gives the typed command (`fix.orType`, "Or type in a terminal: `aictl ark import`"), for an operator who prefers it; the Switch brain button has none. Pressing shows "Working on it …", then, in plain words, that the copy has started (it can take a while; the page updates by itself as the status poll sees the content) or that the service was restarted, and refreshes the status. A refusal shows "That did not work: <the agent's message>", the agent's fix and `Code: <code>` (`LAI-SVC-117` too many attempts, `LAI-SVC-118` no usable drive, `LAI-SYN-005` another copy running, the service's own code on a failed restart), announced assertively; the button stays usable. The buttons are ordinary `<button>`s in the tab order (keyboard: Tab, Enter or Space). An action the build does not know is not shown. When a button is present, the manual link is a secondary button.
+
+If the agent's API stops responding while the Portal is open, the SPA shows a full-width banner "Lost contact with the AI service. Trying again …" with one next step that works with the agent down, "If it stays, restart the computer; the printed survival card has the steps." (`banner.lostContactFix`) and the code `LAI-SVC-116`, and retries every 5 s. Its text is the Portal's own, because the agent cannot be asked. Library and Maps links still open (they fail separately if the agent is fully down). The survival runbook explains the direct Kiwix fallback at `http://127.0.0.1:8888/library/`.
 
 ### 4.3 Language
 - `portal.language: auto` resolves: `profile.survival.portal_language` (if `en`/`es`) → the desktop user's locale reported by ai-desktop (`LANG`) → the browser's `navigator.language` → `en`.
@@ -533,7 +544,7 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `library.books` | Books | Libros |
 | `library.allLanguages` | All languages | Todos los idiomas |
 | `library.backToResults` | Back to results | Volver a los resultados |
-| `library.none` | The library has no books. Plug in the AI-ARK drive and press Import from drive. | La biblioteca no tiene libros. Conecte el disco AI-ARK y presione Importar desde el disco. |
+| `library.none` | The library has no books. Plug in the AI-ARK drive and press Copy from the AI-ARK drive. | La biblioteca no tiene libros. Conecte la unidad AI-ARK y presione Copiar desde la unidad AI-ARK. |
 | `library.searchButton` | Search | Buscar |
 | `library.failed` | The search did not work. Try again. | La búsqueda no funcionó. Intente de nuevo. |
 | `reader.frame` | Article | Artículo |
@@ -607,6 +618,16 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `banner.startFailed` | Could not start survival mode. Try again. | No se pudo iniciar el modo supervivencia. Intente otra vez. |
 | `manuals.none` | The manuals are not installed. Plug in the ark drive. | Los manuales no están instalados. Conecte el disco del arca. |
 | `manuals.degraded` | These manuals were made without this computer's real settings. Addresses appear as placeholders, not real values. | Estos manuales se hicieron sin los valores reales de esta computadora. Las direcciones aparecen como marcadores, no como valores reales. |
+| `banner.lostContactFix` | If it stays, restart the computer; the printed survival card has the steps. | Si sigue así, reinicie la computadora; la tarjeta de supervivencia impresa tiene los pasos. |
+| `fix.import` | Copy from the AI-ARK drive | Copiar desde la unidad AI-ARK |
+| `fix.restartLibrary` | Restart the library | Reiniciar la biblioteca |
+| `fix.restartSpeech` | Restart speech | Reiniciar la voz |
+| `fix.brain` | Choose a brain | Elegir un cerebro |
+| `fix.orType` | Or type in a terminal: {cmd} | O escriba en una terminal: {cmd} |
+| `fix.working` | Working on it … | Trabajando en ello … |
+| `fix.importStarted` | Copying from the drive has started. It can take a while; this page updates by itself. | Comenzó la copia desde la unidad. Puede tardar; esta página se actualiza sola. |
+| `fix.restarted` | Done: it was restarted. This page updates by itself. | Listo: se reinició. Esta página se actualiza sola. |
+| `fix.failed` | That did not work: {message} | No funcionó: {message} |
 
 Doctor-code titles and fixes come from the agent in the UI language (§3.5).
 
@@ -660,6 +681,7 @@ Content (both columns):
 | Browser can't record | message | `LAI-SVC-104` |
 | Path forbidden by the chat proxy | `403` page | `LAI-SVC-115` |
 | Portal rate limit hit (model loads / speech) | `429`, message "wait a few minutes" | `LAI-SVC-114` / `LAI-SVC-015` |
+| The Portal cannot reach the agent | banner with a next step that works offline; retry every 5 s | `LAI-SVC-116` |
 | Portal rate limit hit (import / restart buttons) | `429`; the button shows the code and "wait a few minutes" | `LAI-SVC-117` |
 | **Copy from the AI-ARK drive** pressed with no usable drive | `409`; the button says to plug the drive in and press again | `LAI-SVC-118` |
 | Audio can't be decoded in the browser | message, try again | `LAI-SVC-105` |

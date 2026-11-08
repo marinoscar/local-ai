@@ -17,6 +17,9 @@ export class ApiError extends Error {
 /** The code of a session that ended (survival-portal.md section 5). */
 export const CODE_SESSION_ENDED = "LAI-SVC-110";
 
+/** The code of the lost-contact banner (survival-portal.md section 4.2): the agent is not answering, so its text is the Portal's own. */
+export const CODE_LOST_CONTACT = "LAI-SVC-116";
+
 let endedHandler: (() => void) | null = null;
 
 /** onSessionEnded registers what runs when any call answers 401 LAI-SVC-110: refetch the status, so session-only buttons lock. */
