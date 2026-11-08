@@ -1528,7 +1528,7 @@ var table = []Code{
 		ID:       SYN011,
 		Severity: Warning,
 		Title:    Msg{EN: "Manual sync in offline mode needs confirmation", ES: "La sincronización manual en modo sin conexión necesita confirmación"},
-		Fix:      Msg{EN: "Run again with `--allow-offline-mode`, or switch to online mode.", ES: "Ejecútela de nuevo con `--allow-offline-mode`, o cambie al modo en línea."},
+		Fix:      Msg{EN: "Run `aictl ark sync` in a terminal and answer yes when it asks, or switch to online mode (`aictl mode online`).", ES: "Ejecute `aictl ark sync` en una terminal y responda que sí cuando lo pregunte, o cambie al modo en línea (`aictl mode online`)."},
 	},
 	{
 		ID:       SYN020,
@@ -1612,7 +1612,7 @@ var table = []Code{
 		ID:       SYN034,
 		Severity: Warning,
 		Title:    Msg{EN: "Hugging Face needs a login or is rate-limiting", ES: "Hugging Face exige iniciar sesión o está limitando las peticiones"},
-		Fix:      Msg{EN: "Put a Hugging Face token in `/etc/localai/hf-token`, or wait an hour.", ES: "Ponga un token de Hugging Face en `/etc/localai/hf-token`, o espere una hora."},
+		Fix:      Msg{EN: "Add a token with `sudo aictl ark hf-token set`, or wait an hour.", ES: "Añada un token con `sudo aictl ark hf-token set`, o espere una hora."},
 	},
 	{
 		ID:       SYN035,
@@ -1630,7 +1630,7 @@ var table = []Code{
 		ID:       SYN041,
 		Severity: Warning,
 		Title:    Msg{EN: "Items skipped because the budget is full (a survival model, if named)", ES: "Elementos omitidos porque el presupuesto está lleno (un modelo de supervivencia, si se nombra)"},
-		Fix:      Msg{EN: "Raise `budget_bytes` or remove other content in `node.yaml`.", ES: "Aumente `budget_bytes` o quite otro contenido en `node.yaml`."},
+		Fix:      Msg{EN: "Raise the budget with `aictl ark budget <size>` (for example `500G`), or choose a smaller profile with `aictl profile set`.", ES: "Suba el presupuesto con `aictl ark budget <tamaño>` (por ejemplo `500G`), o elija un perfil más pequeño con `aictl profile set`."},
 	},
 	{
 		ID:       SYN042,
@@ -1684,7 +1684,7 @@ var table = []Code{
 		ID:       SYN062,
 		Severity: Warning,
 		Title:    Msg{EN: "Manuals were made without the real lab values", ES: "Los manuales se generaron sin los valores reales del laboratorio"},
-		Fix:      Msg{EN: "Copy `inventory.local.yaml` to `/etc/localai/` or plug in the ark drive, then sync.", ES: "Copie `inventory.local.yaml` a `/etc/localai/` o conecte la unidad del arca, y luego sincronice."},
+		Fix:      Msg{EN: "Install it with `sudo aictl docs inventory import <file>` or plug in the ark drive, then sync.", ES: "Instálelo con `sudo aictl docs inventory import <archivo>` o conecte la unidad del arca, y luego sincronice."},
 	},
 	{
 		ID:       SYN063,
@@ -1780,7 +1780,7 @@ var table = []Code{
 		ID:       ARK015,
 		Severity: Warning,
 		Title:    Msg{EN: "Several ark drives are connected; choose one", ES: "Hay varias unidades del arca conectadas; elija una"},
-		Fix:      Msg{EN: "Run the import again with `--from <root-id>` (see `aictl ark drives`).", ES: "Ejecute la importación de nuevo con `--from <id-de-raíz>` (vea `aictl ark drives`)."},
+		Fix:      Msg{EN: "Run `aictl ark import` in a terminal and choose the drive from the list it shows.", ES: "Ejecute `aictl ark import` en una terminal y elija la unidad de la lista que muestra."},
 	},
 	{
 		ID:       ARK020,

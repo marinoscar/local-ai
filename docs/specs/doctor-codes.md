@@ -308,7 +308,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-SYN-004 | warning | No successful sync for more than 14 days while online | Check the internet connection, then run `aictl ark sync`. |
 | LAI-SYN-005 | warning | Another sync is already running | Wait for it to finish, or cancel it with `aictl ark sync --cancel`. |
 | LAI-SYN-010 | warning | Manual sync refused in survival mode | Leave survival mode first (needs the PIN). |
-| LAI-SYN-011 | warning | Manual sync in offline mode needs confirmation | Run again with `--allow-offline-mode`, or switch to online mode. |
+| LAI-SYN-011 | warning | Manual sync in offline mode needs confirmation | Run `aictl ark sync` in a terminal and answer yes when it asks, or switch to online mode (`aictl mode online`). |
 | LAI-SYN-020 | warning | A download didn't match its checksum and was quarantined | Nothing to do: it will be downloaded again. If it repeats, report it. |
 | LAI-SYN-021 | warning | The source's checksum or size disagrees with the catalog | The catalog or the source is wrong. The old copy is kept and still works; the item is tried again with the next catalog update. |
 | LAI-SYN-022 | warning | Kiwix checksum file missing or unreadable | Nothing to do. It will be retried next run; the old copy is kept. |
@@ -322,10 +322,10 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-SYN-031 | warning | Download failed after all retries | Check the internet connection. It resumes where it stopped next run. |
 | LAI-SYN-032 | info | Server doesn't support resume; the file restarted from zero | Nothing to do. |
 | LAI-SYN-033 | warning | Couldn't find the newest version at the source | Nothing to do; it retries next run. If it persists, report it. |
-| LAI-SYN-034 | warning | Hugging Face needs a login or is rate-limiting | Put a Hugging Face token in `/etc/localai/hf-token`, or wait an hour. |
+| LAI-SYN-034 | warning | Hugging Face needs a login or is rate-limiting | Add a token with `sudo aictl ark hf-token set`, or wait an hour. |
 | LAI-SYN-035 | error | The same item failed in 3 runs in a row | Run `aictl doctor` and read the item's last error. |
 | LAI-SYN-040 | warning | Not enough free disk space | Free space on the disk, or lower the profile budget. Old versions in `.trash` are removed automatically when safe. |
-| LAI-SYN-041 | warning (error when a survival model is skipped) | Items skipped because the budget is full (a survival model, if named) | Raise `budget_bytes` or remove other content in `node.yaml`. |
+| LAI-SYN-041 | warning (error when a survival model is skipped) | Items skipped because the budget is full (a survival model, if named) | Raise the budget with `aictl ark budget <size>` (for example `500G`), or choose a smaller profile with `aictl profile set`. |
 | LAI-SYN-042 | error | The rebuild kit or manuals don't fit | Free disk space. Without the kit this computer can't be rebuilt offline. |
 | LAI-SYN-043 | info | Old versions were deleted to make room | Nothing to do. |
 | LAI-SYN-044 | warning | The last verified copy was kept; nothing was deleted | This is the only verified copy on this computer. Copy it to another drive first (`aictl ark sync --root <drive>`), or delete it anyway with `aictl delete <model> --allow-last-copy`. |
@@ -334,7 +334,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-SYN-052 | warning | An item's MANIFEST is missing or damaged | Run `aictl ark verify`; the item will be fetched again. |
 | LAI-SYN-060 | warning | Couldn't compute the package list for the rebuild kit | Report it: a package name in the catalog probably changed. The old package set is kept. |
 | LAI-SYN-061 | error | A tool sync needs is missing (pmtiles, git, apt-get) | Run `sudo install-node.sh --repair`. |
-| LAI-SYN-062 | warning | Manuals were made without the real lab values | Copy `inventory.local.yaml` to `/etc/localai/` or plug in the ark drive, then sync. |
+| LAI-SYN-062 | warning | Manuals were made without the real lab values | Install it with `sudo aictl docs inventory import <file>` or plug in the ark drive, then sync. |
 | LAI-SYN-063 | warning | The rebuild kit has packages from vendor repositories whose signature was not checked | Pin the repository's key and set sync.apt_unverified_repos to refuse. |
 | LAI-SYN-070 | error | A drive copy no longer matches its own checksum | That copy is damaged. Sync the drive on a computer with internet, or use another drive. |
 
@@ -356,7 +356,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-ARK-011 | info | The drive is too small for everything; lower tiers were skipped | Nothing to do, or use a bigger drive. |
 | LAI-ARK-012 | warning | The lab inventory on the drive and on this computer both changed | Compare the two files and keep the right one. The other is saved as `.conflict`. |
 | LAI-ARK-014 | error | The drive reported read/write errors | Eject it and try another USB port or cable. If it repeats, replace the drive. |
-| LAI-ARK-015 | warning | Several ark drives are connected; choose one | Run the import again with `--from <root-id>` (see `aictl ark drives`). |
+| LAI-ARK-015 | warning | Several ark drives are connected; choose one | Run `aictl ark import` in a terminal and choose the drive from the list it shows. |
 | LAI-ARK-020 | warning | The internal content folder was missing and was recreated empty | Run `aictl ark sync`, or `aictl ark import` from a drive. |
 | LAI-ARK-021 | warning | The content folder is on a network disk; it is used read-only | Move `/srv/localai` to a local disk. |
 

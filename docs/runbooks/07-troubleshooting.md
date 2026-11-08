@@ -217,7 +217,7 @@ The admin PIN protects deletes, key rotation and leaving Survival mode. Starting
    - Delete personal files you don't need (Downloads, videos).
    - Shrink the system logs: `sudo journalctl --vacuum-size=200M`.
    - Delete a model you don't use: `aictl delete <model-id>` (asks to confirm and the PIN).
-   - Lower the content budget: in `/etc/localai/node.yaml` set `profile_overrides.budget_bytes` (bytes), then `sudo systemctl restart localai-agent`. Or move content to the ark drive and use it from there.
+   - Lower the content budget: `aictl ark budget 150G` (any size; `aictl ark budget` alone shows the current one; it asks for the PIN). Or move content to the ark drive and use it from there.
 3. After `LAI-AGT-004`: `sudo systemctl restart localai-agent`.
    - **What you should see:** `aictl doctor` without `LAI-HW-008`.
 
@@ -239,16 +239,16 @@ The admin PIN protects deletes, key rotation and leaving Survival mode. Starting
    - `LAI-SYN-001`, `LAI-SYN-002`, `LAI-SYN-003` (skipped: no internet, offline/survival mode, on battery): not a failure. Fix the reason; it runs again tonight.
    - `LAI-SYN-004` (no successful sync for 14 days while online): check the internet, then `aictl ark sync --wait`.
    - `LAI-SYN-031` (download failed after all retries): check the internet; it resumes next run.
-   - `LAI-SYN-034` (Hugging Face needs a login or is rate-limiting): wait an hour, or put a Hugging Face token in `/etc/localai/hf-token` (root, mode 0600).
+   - `LAI-SYN-034` (Hugging Face needs a login or is rate-limiting): wait an hour, or save a token with `sudo aictl ark hf-token set` (menu: **Offline content and the AI-ARK drive → Save a Hugging Face token**). It asks for the token without showing it; `sudo aictl ark hf-token status` says whether one is set.
    - `LAI-SYN-040` (not enough space): [Disk full](#disk-full).
-   - `LAI-SYN-041`, `LAI-SYN-042` (a survival model, the kit or the manuals don't fit the budget): free space or raise the budget; this is **red** because the node couldn't rebuild itself or survive.
+   - `LAI-SYN-041`, `LAI-SYN-042` (a survival model, the kit or the manuals don't fit the budget): free space or raise the budget with `aictl ark budget <size>` (for example `aictl ark budget 500G`; `aictl ark budget` alone shows it); this is **red** because the node couldn't rebuild itself or survive.
    - `LAI-SYN-020`, `LAI-SYN-027`, `LAI-SYN-028` (a download didn't match its checksum): nothing to do, it's downloaded again. If it repeats, report it.
    - `LAI-SYN-021` (source disagrees with the catalog): nothing to do now. The old copy is kept and still works; the item is tried again with the next catalog update.
    - `LAI-SYN-025` (stored files no longer match, possible disk damage): `aictl ark verify --full --wait`. If files keep failing, copy the ark to another drive.
    - `LAI-SYN-030` (the server no longer has the file): `aictl catalog refresh`.
    - `LAI-SYN-035` (the same item failed 3 runs in a row): `aictl doctor` shows its last error.
    - `LAI-SYN-061` (a tool is missing): `sudo aictl kit install pmtiles` if the message names pmtiles; otherwise repair the installation (`--repair`, see [The app won't open](#the-app-wont-open) step 4).
-   - `LAI-SYN-062` (manuals made without the real lab values): copy `inventory.local.yaml` to `/etc/localai/` or plug in the drive, then sync.
+   - `LAI-SYN-062` (manuals made without the real lab values): install the inventory with `sudo aictl docs inventory import <path-to>/inventory.local.yaml` (it checks the file and never prints its values) or plug in the drive, then sync.
    - `LAI-SYN-060` (couldn't compute the package list for the rebuild kit): if the message says a keyring "does not match the fingerprint pinned in the agent", the agent refuses that vendor key on purpose and does not fall back: install the newest agent release (it carries the vendor's current key, see [06](06-rebuild-a-node-offline.md) "Rotate a vendor apt keyring"), then sync again. If it says a keyring "is not available", this node is set to refuse vendor repositories whose key it does not have. To accept them, open `/etc/localai/node.yaml`, find the `sync:` block, set `apt_unverified_repos: allow` (or delete that line, `allow` is the default), save, and run `aictl ark sync --wait` again. Any other message: report it, a package name in the catalog probably changed; the old package set is kept.
    - `LAI-SYN-063` (yellow: the rebuild kit has packages from vendor repositories whose signature was not checked): a repository was used over https without a key the agent holds (the Tailscale and NVIDIA keys are built into the agent, so this means a different repository), so the vendor's signature is not checked when the kit is built; the kit's own checksums still protect it from damage. Nothing is broken. To go back to refusing such repositories, set `apt_unverified_repos: refuse` in the `sync:` block of `/etc/localai/node.yaml` (one line); the kit's package sets that need those repositories are then not built until their keys are pinned and embedded in the agent. `aictl kit verify` shows the same warning and names the repositories.
    - `LAI-ARK-008` (drive not synced for 30+ days): plug it in overnight on a node with internet.

@@ -542,7 +542,7 @@ Budget 80.0 GB · planned 68.7 GB · free now 290.0 GB · keep free ≥ 25.0 GB
 
 Notes:
   [warning] LAI-SYN-041  Items skipped because the budget is full (a survival model, if named): maps-alpha
-    Fix: Raise `budget_bytes` or remove other content in `node.yaml`.
+    Fix: Raise the budget with `aictl ark budget <size>` (for example `500G`), or choose a smaller profile with `aictl profile set`.
 
 Downloads: 6 items, 59.2 GB from the internet, 1.0 GB local copy.
 Peak disk use during sync: 177.9 GB (free will not drop below 229.8 GB).
@@ -1347,7 +1347,7 @@ User-visible fixes are shown in the desktop and, for `LAI-ARK` codes, in the Por
 | LAI-SYN-004 | warning | No successful sync for more than 14 days while online | Check the internet connection, then run `aictl ark sync`. | Revise la conexión a internet y ejecute `aictl ark sync`. |
 | LAI-SYN-005 | warning | Another sync is already running | Wait for it to finish, or cancel it with `aictl ark sync --cancel`. | Espere a que termine, o cancélela con `aictl ark sync --cancel`. |
 | LAI-SYN-010 | warning | Manual sync refused in survival mode | Leave survival mode first (needs the PIN). | Primero salga del modo supervivencia (requiere el PIN). |
-| LAI-SYN-011 | warning | Manual sync in offline mode needs confirmation | Run again with `--allow-offline-mode`, or switch to online mode. | Ejecute otra vez con `--allow-offline-mode`, o cambie a modo en línea. |
+| LAI-SYN-011 | warning | Manual sync in offline mode needs confirmation | Run `aictl ark sync` in a terminal and answer yes when it asks, or switch to online mode (`aictl mode online`). | Ejecute `aictl ark sync` en una terminal y responda que sí cuando lo pregunte, o cambie al modo en línea (`aictl mode online`). |
 | LAI-SYN-020 | warning | A download didn't match its checksum and was quarantined | Nothing to do: it will be downloaded again. If it repeats, report it. | Nada que hacer: se descargará de nuevo. Si se repite, repórtelo. |
 | LAI-SYN-021 | warning | The source's checksum or size disagrees with the catalog | The catalog or the source is wrong. The old copy is kept and still works; the item is tried again with the next catalog update. | El catálogo o la fuente son incorrectos. Se conserva la copia anterior, que sigue funcionando; se intentará otra vez con la próxima actualización del catálogo. |
 | LAI-SYN-022 | warning | Kiwix checksum file missing or unreadable | Nothing to do. It will be retried next run; the old copy is kept. | Nada que hacer. Se reintentará; se conserva la copia anterior. |
@@ -1361,10 +1361,10 @@ User-visible fixes are shown in the desktop and, for `LAI-ARK` codes, in the Por
 | LAI-SYN-031 | warning | Download failed after all retries | Check the internet connection. It resumes where it stopped next run. | Revise la conexión. Continuará donde quedó en la próxima sincronización. |
 | LAI-SYN-032 | info | Server doesn't support resume; the file restarted from zero | Nothing to do. | Nada que hacer. |
 | LAI-SYN-033 | warning | Couldn't find the newest version at the source | Nothing to do; it retries next run. If it persists, report it. | Nada que hacer; se reintenta. Si sigue, repórtelo. |
-| LAI-SYN-034 | warning | Hugging Face needs a login or is rate-limiting | Put a Hugging Face token in `/etc/localai/hf-token`, or wait an hour. | Ponga un token de Hugging Face en `/etc/localai/hf-token`, o espere una hora. |
+| LAI-SYN-034 | warning | Hugging Face needs a login or is rate-limiting | Add a token with `sudo aictl ark hf-token set`, or wait an hour. | Añada un token con `sudo aictl ark hf-token set`, o espere una hora. |
 | LAI-SYN-035 | error | The same item failed in 3 runs in a row | Run `aictl doctor` and read the item's last error. | Ejecute `aictl doctor` y lea el último error del elemento. |
 | LAI-SYN-040 | warning | Not enough free disk space | Free space on the disk, or lower the profile budget. Old versions in `.trash` are removed automatically when safe. | Libere espacio en el disco o baje el presupuesto del perfil. Las versiones viejas se borran solas cuando es seguro. |
-| LAI-SYN-041 | warning (error when a survival model is skipped) | Items skipped because the budget is full (a survival model, if named) | Raise `budget_bytes` or remove other content in `node.yaml`. | Suba `budget_bytes` o quite otro contenido en `node.yaml`. |
+| LAI-SYN-041 | warning (error when a survival model is skipped) | Items skipped because the budget is full (a survival model, if named) | Raise the budget with `aictl ark budget <size>` (for example `500G`), or choose a smaller profile with `aictl profile set`. | Suba el presupuesto con `aictl ark budget <tamaño>` (por ejemplo `500G`), o elija un perfil más pequeño con `aictl profile set`. |
 | LAI-SYN-042 | error | The rebuild kit or manuals don't fit | Free disk space. Without the kit this computer can't be rebuilt offline. | Libere espacio. Sin el kit esta computadora no se puede reconstruir sin internet. |
 | LAI-SYN-043 | info | Old versions were deleted to make room | Nothing to do. | Nada que hacer. |
 | LAI-SYN-044 | warning | The last verified copy was kept; nothing was deleted | This is the only verified copy on this computer. Copy it to another drive first (`aictl ark sync --root <drive>`), or delete it anyway with `aictl delete <model> --allow-last-copy`. | Es la única copia verificada de este equipo. Cópiela primero a otro disco (`aictl ark sync --root <disco>`), o bórrela igualmente con `aictl delete <modelo> --allow-last-copy`. |
@@ -1373,7 +1373,7 @@ User-visible fixes are shown in the desktop and, for `LAI-ARK` codes, in the Por
 | LAI-SYN-052 | warning | An item's MANIFEST is missing or damaged | Run `aictl ark verify`; the item will be fetched again. | Ejecute `aictl ark verify`; el elemento se descargará otra vez. |
 | LAI-SYN-060 | warning | Couldn't compute the package list for the rebuild kit | Report it: a package name in the catalog probably changed. The old package set is kept. | Repórtelo: probablemente cambió el nombre de un paquete. Se conserva el conjunto anterior. |
 | LAI-SYN-061 | error | A tool sync needs is missing (pmtiles, git, apt-get) | Run `sudo install-node.sh --repair`. | Ejecute `sudo install-node.sh --repair`. |
-| LAI-SYN-062 | warning | Manuals were made without the real lab values | Copy `inventory.local.yaml` to `/etc/localai/` or plug in the ark drive, then sync. | Copie `inventory.local.yaml` a `/etc/localai/` o conecte el disco del arca, y sincronice. |
+| LAI-SYN-062 | warning | Manuals were made without the real lab values | Install it with `sudo aictl docs inventory import <file>` or plug in the ark drive, then sync. | Instálelo con `sudo aictl docs inventory import <archivo>` o conecte la unidad del arca, y luego sincronice. |
 | LAI-SYN-063 | warning | The rebuild kit has packages from vendor repositories whose signature was not checked | Pin the repository's key and set sync.apt_unverified_repos to refuse. | Fije la clave del repositorio y ponga sync.apt_unverified_repos en refuse. |
 | LAI-SYN-070 | error | A drive copy no longer matches its own checksum | That copy is damaged. Sync the drive on a computer with internet, or use another drive. | Esa copia está dañada. Sincronice el disco en una computadora con internet, o use otro disco. |
 | LAI-ARK-001 | error | No writable content root (no drive and internal read-only) | Plug in an AI-ARK drive, or run `aictl doctor`. | Conecte un disco AI-ARK, o ejecute `aictl doctor`. |
@@ -1389,7 +1389,7 @@ User-visible fixes are shown in the desktop and, for `LAI-ARK` codes, in the Por
 | LAI-ARK-011 | info | The drive is too small for everything; lower tiers were skipped | Nothing to do, or use a bigger drive. | Nada que hacer, o use un disco más grande. |
 | LAI-ARK-012 | warning | The lab inventory on the drive and on this computer both changed | Compare the two files and keep the right one. The other is saved as `.conflict`. | Compare los dos archivos y quédese con el correcto. El otro se guardó como `.conflict`. |
 | LAI-ARK-014 | error | The drive reported read/write errors | Eject it and try another USB port or cable. If it repeats, replace the drive. | Expúlselo y pruebe otro puerto o cable USB. Si se repite, cambie el disco. |
-| LAI-ARK-015 | warning | Several ark drives are connected; choose one | Run the import again with `--from <root-id>` (see `aictl ark drives`). | Ejecute la importación otra vez con `--from <root-id>` (vea `aictl ark drives`). |
+| LAI-ARK-015 | warning | Several ark drives are connected; choose one | Run `aictl ark import` in a terminal and choose the drive from the list it shows. | Ejecute `aictl ark import` en una terminal y elija la unidad de la lista que muestra. |
 | LAI-ARK-020 | warning | The internal content folder was missing and was recreated empty | Run `aictl ark sync`, or `aictl ark import` from a drive. | Ejecute `aictl ark sync`, o `aictl ark import` desde un disco. |
 | LAI-ARK-021 | warning | The content folder is on a network disk; it is used read-only | Move `/srv/localai` to a local disk. | Mueva `/srv/localai` a un disco local. |
 
