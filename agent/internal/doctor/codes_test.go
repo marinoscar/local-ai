@@ -108,6 +108,59 @@ func TestEveryRegistryCodeIsInTheTable(t *testing.T) {
 	}
 }
 
+// TestActionsMatchTheRegistry: every Action of the table is one of the closed set, and the table
+// carries exactly the actions of the registry's action table (doctor-codes.md section 1.7).
+func TestActionsMatchTheRegistry(t *testing.T) {
+	for _, c := range Codes() {
+		if c.Action != "" && !c.Action.Valid() {
+			t.Errorf("%s: action %q is not one of %v", c.ID, c.Action, Actions())
+		}
+		if c.Action != "" && c.Severity == Retired {
+			t.Errorf("%s: a retired code has no action", c.ID)
+		}
+	}
+	if ActionOf(SVC001) != ActionArkImport || ActionOf(AGT001) != "" || ActionOf(unknownCode("SVC")) != "" {
+		t.Error("ActionOf")
+	}
+	data, err := os.ReadFile("../../../docs/specs/doctor-codes.md")
+	if err != nil {
+		t.Skipf("registry not found (%v)", err)
+	}
+	s := string(data)
+	start := strings.Index(s, "### 1.7 ")
+	if start < 0 {
+		t.Fatal("the registry has no section 1.7 (actions)")
+	}
+	sect := s[start+1:]
+	if end := strings.Index(sect, "\n#"); end >= 0 {
+		sect = sect[:end]
+	}
+	row := regexp.MustCompile("(?m)^\\| `([a-z][a-z.:]*)` \\|.*\\|([^|]*)\\|$")
+	code := regexp.MustCompile(`LAI-[A-Z]+-[0-9]{3}`)
+	want := map[string]Action{}
+	listed := map[Action]bool{}
+	for _, m := range row.FindAllStringSubmatch(sect, -1) {
+		a := Action(m[1])
+		listed[a] = true
+		if !a.Valid() {
+			t.Errorf("the registry lists action %q, which is not one of %v", a, Actions())
+		}
+		for _, c := range code.FindAllString(m[2], -1) {
+			want[c] = a
+		}
+	}
+	for _, a := range Actions() {
+		if !listed[a] {
+			t.Errorf("action %q is not in the registry's action table", a)
+		}
+	}
+	for _, c := range Codes() {
+		if c.Action != want[c.ID] {
+			t.Errorf("%s: table action %q, registry %q", c.ID, c.Action, want[c.ID])
+		}
+	}
+}
+
 func TestLookupAndText(t *testing.T) {
 	c, ok := Lookup(HW012)
 	if !ok || c.ID != HW012 || c.Severity != Warning {

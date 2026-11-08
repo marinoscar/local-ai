@@ -11,6 +11,7 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "Catalog file cannot be parsed", ES: "No se puede analizar el archivo del catálogo"},
 		Fix:      Msg{EN: "Restore it", ES: "Restáurelo"},
+		Action:   "ark.import",
 	},
 	{
 		ID:       CAT010,

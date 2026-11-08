@@ -1,5 +1,10 @@
 # Doctor codes registry
 
+### 1.7 Actions
+| Action | Button | What it does | Typed command | Codes |
+|---|---|---|---|---|
+| `ark.import` | Copy | import | `aictl ark import` | LAI-CAT-001 |
+
 ## 2. Registry
 
 ### `LAI-CAT` — catalog

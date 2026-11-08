@@ -65,9 +65,24 @@ The script (bash + `grep`/`awk`, no network) runs in CI (`docs-guard`, job `doct
 3. severity or meaning differ between the owner spec and this registry (compared after trimming and collapsing whitespace; the fix text is not compared);
 4. a code appears twice, has an unknown area prefix, sits in a registry section of another area, or is defined in a spec that does not own its area;
 5. once `agent/internal/doctor/codes.go` exists: it lacks a code from this registry, has one that is not here, defines a code twice, a registry code has no table entry, an entry's `Severity` differs from the first word of the registry severity, an entry has no non-empty Spanish (`ES:`) title or fix, or a non-test Go file outside `codes.go` hard-codes a `"LAI-…"` literal instead of using the constant (the other packages alias the constants of `codes.go`: `config.CodeNodeYAMLMissing = doctor.AGT001`);
-6. a range (`..`) is used outside a documented family. The families are listed in the script (`FAMILIES`): `LAI-CAT-010..019`, `LAI-CLD-050..069`, `LAI-INS-040..044`. Adding a family means editing the script and this section.
+6. a range (`..`) is used outside a documented family. The families are listed in the script (`FAMILIES`): `LAI-CAT-010..019`, `LAI-CLD-050..069`, `LAI-INS-040..044`. Adding a family means editing the script and this section;
+7. the action table of §1.7 lists a code twice, or (once `codes.go` exists) a code's `Action:` in `codes.go` differs from the action the table lists for it, or an entry has an `Action:` the table does not list for that code.
 
-The script reads the `codes.go` layout described in its header: a const block (`AGT001 = "LAI-AGT-001"`) and one table entry per code with `ID:`, `Severity:`, `Title:` and `Fix:` on their own lines, each text as `Msg{EN: "…", ES: "…"}`. That the Spanish text is *good* is still a review item; the script and `codes_test.go` only prove it is present, differs from the English, and keeps the commands in backticks. A change to the English fix text needs the matching `codes.go` edit by hand (the script does not compare fixes), as does a new or reworded `es` text.
+The script reads the `codes.go` layout described in its header: a const block (`AGT001 = "LAI-AGT-001"`) and one table entry per code with `ID:`, `Severity:`, `Title:` and `Fix:` on their own lines, each text as `Msg{EN: "…", ES: "…"}`. That the Spanish text is *good* is still a review item; the script and `codes_test.go` only prove it is present, differs from the English, and keeps the commands in backticks. A change to the English fix text needs the matching `codes.go` edit by hand (the script does not compare fixes), as does a new or reworded `es` text. An action is one more line in the entry, `Action: "<action>",` after `Fix:` (§1.7).
+
+### 1.7 Actions: a button for the fix
+A non-expert must not need a terminal to apply a fix (AGENTS.md rule 4, [ADR-0009](../decisions/0009-optimized-for-humans.md)). A code whose fix is one of the actions below carries that action: the Survival Portal shows it as the primary button of the problem (survival-portal.md §4.2, §4.1.8) and keeps the typed command of the fix as a small second line. The agent copies the action into every alert and capability that carries the code (`action` in `GET /api/v1/status` and `GET /api/v1/portal/status`, agent.md §3.8.4, survival-portal.md §3.5).
+
+The set is **closed** (v1): adding an action means a new row here, the constant in `agent/internal/doctor/doctor.go` (`Actions()`), the route or screen it uses, and the Portal button with its EN and ES label. A code has at most one action. The fix text keeps its typed command, because the CLI, the logs and the printed runbooks still show it.
+
+| Action | Button (Portal, en) | What it does | Typed command | Codes |
+|---|---|---|---|---|
+| `ark.import` | Copy from the AI-ARK drive | `POST /api/v1/ark/import` with the safe default: the first connected, usable AI-ARK drive, the profile's items, nothing deleted (survival-portal.md §3.3) | `aictl ark import` | LAI-LLM-008, LAI-CLD-025, LAI-ARK-020, LAI-SVC-001, LAI-SVC-010, LAI-SVC-022, LAI-SVC-030, LAI-SVC-031, LAI-SVC-032, LAI-KIT-040, LAI-DRL-011 |
+| `service.restart:kiwix` | Restart the library | `POST /api/v1/services/kiwix/restart` | `aictl services restart kiwix` | LAI-SVC-002, LAI-SVC-005, LAI-DRL-030 |
+| `service.restart:whisper` | Restart speech | `POST /api/v1/services/whisper/restart` | `aictl services restart whisper` | LAI-SVC-011, LAI-DRL-032 |
+| `portal.brain` | Choose a brain | opens the Portal's Switch brain screen (`/portal/brain`); calls nothing | — | LAI-SVC-102, LAI-SVC-106, LAI-SVC-107, LAI-DRL-090 |
+
+Every action is something a Portal session may already do, so a button never needs the PIN. A code whose fix needs more than these (an item named with `--item`, a PIN, a command with a value to fill in) still gets the generic action when the generic one is safe and does the fix: `LAI-SVC-031` and `LAI-SVC-032` name one item, and `ark.import` imports every item of the profile the drive holds, which includes it. Giving an action to the codes that have none yet is a follow-up, not a rule.
 
 ## 2. Registry
 

@@ -9,7 +9,10 @@ package doctor
 //   - this file is the only non-test Go file with a quoted "LAI-..." literal: other packages use the
 //     constants (config.CodeNodeYAMLMissing = doctor.AGT001);
 //   - every table entry has a non-empty Spanish title and fix, one per line as `Title:` and `Fix:`
-//     with ES: last, and a Severity equal to the first word of the registry severity.
+//     with ES: last, and a Severity equal to the first word of the registry severity;
+//   - an entry's optional `Action: "<action>",` line (the button of the fix) is exactly the action
+//     the registry's action table (doctor-codes.md section 1.7) lists for the code, and only the
+//     codes listed there have one.
 //
 // The English title is the registry meaning; the English fix is the registry fix. Titles are one
 // sentence of at most 120 characters (codes_test.go). The Spanish text exists only here and is
@@ -729,6 +732,7 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "Model files are missing or not verified", ES: "Faltan archivos de modelos o no están verificados"},
 		Fix:      Msg{EN: "Run `aictl download <model>` (online) or `aictl ark import` (from the ark drive)", ES: "Ejecute `aictl download <modelo>` (con conexión) o `aictl ark import` (desde la unidad del arca)"},
+		Action:   "ark.import",
 	},
 	{
 		ID:       LLM009,
@@ -1335,6 +1339,7 @@ var table = []Code{
 		Severity: Critical,
 		Title:    Msg{EN: "Essential (tier 1) ark content is missing", ES: "Falta contenido esencial (nivel 1) del arca"},
 		Fix:      Msg{EN: "Press \"Sync now\" while online, or import from the AI-ARK drive (`aictl ark import`)", ES: "Pulse «Sincronizar ahora» con conexión, o importe desde la unidad AI-ARK (`aictl ark import`)"},
+		Action:   "ark.import",
 	},
 	{
 		ID:       CLD026,
@@ -1779,6 +1784,7 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "The internal content folder was missing and was recreated empty", ES: "Faltaba la carpeta de contenido interna y se volvió a crear vacía"},
 		Fix:      Msg{EN: "Run `aictl ark sync`, or `aictl ark import` from a drive.", ES: "Ejecute `aictl ark sync`, o `aictl ark import` desde un disco."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       ARK021,
@@ -1791,12 +1797,14 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "The library has no books", ES: "La biblioteca no tiene libros"},
 		Fix:      Msg{EN: "Plug in the ark drive, or run `aictl ark import`.", ES: "Conecte la unidad del arca, o ejecute `aictl ark import`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC002,
 		Severity: Error,
 		Title:    Msg{EN: "The library service isn't running", ES: "El servicio de la biblioteca no se está ejecutando"},
 		Fix:      Msg{EN: "Press **Restart library**, or run `aictl services restart kiwix`.", ES: "Pulse **Reiniciar biblioteca**, o ejecute `aictl services restart kiwix`."},
+		Action:   "service.restart:kiwix",
 	},
 	{
 		ID:       SVC003,
@@ -1815,18 +1823,21 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "The library list couldn't be rebuilt; the old list is used", ES: "No se pudo reconstruir la lista de la biblioteca; se usa la lista anterior"},
 		Fix:      Msg{EN: "Run `aictl services restart kiwix`. If it repeats, run `aictl doctor`.", ES: "Ejecute `aictl services restart kiwix`. Si se repite, ejecute `aictl doctor`."},
+		Action:   "service.restart:kiwix",
 	},
 	{
 		ID:       SVC010,
 		Severity: Error,
 		Title:    Msg{EN: "No speech-recognition model is installed", ES: "No hay ningún modelo de reconocimiento de voz instalado"},
 		Fix:      Msg{EN: "Run `aictl ark sync --item whisper-small` (online) or `aictl ark import` from the drive.", ES: "Ejecute `aictl ark sync --item whisper-small` (con conexión) o `aictl ark import` desde la unidad."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC011,
 		Severity: Error,
 		Title:    Msg{EN: "The speech-recognition service isn't running", ES: "El servicio de reconocimiento de voz no se está ejecutando"},
 		Fix:      Msg{EN: "Run `aictl services restart whisper`.", ES: "Ejecute `aictl services restart whisper`."},
+		Action:   "service.restart:whisper",
 	},
 	{
 		ID:       SVC012,
@@ -1875,6 +1886,7 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "No voice is installed", ES: "No hay ninguna voz instalada"},
 		Fix:      Msg{EN: "Answers are shown as text. Install a voice with `aictl ark import` or `aictl ark sync`.", ES: "Las respuestas se muestran como texto. Instale una voz con `aictl ark import` o `aictl ark sync`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC023,
@@ -1893,18 +1905,21 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "No offline map is installed", ES: "No hay ningún mapa sin conexión instalado"},
 		Fix:      Msg{EN: "Plug in the ark drive and run `aictl ark import`.", ES: "Conecte la unidad del arca y ejecute `aictl ark import`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC031,
 		Severity: Warning,
 		Title:    Msg{EN: "Map labels (fonts) are missing", ES: "Faltan las etiquetas del mapa (fuentes)"},
 		Fix:      Msg{EN: "Import `map-assets` from the drive: `aictl ark import --item map-assets`.", ES: "Importe `map-assets` desde la unidad: `aictl ark import --item map-assets`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC032,
 		Severity: Warning,
 		Title:    Msg{EN: "Place search isn't installed", ES: "La búsqueda de lugares no está instalada"},
 		Fix:      Msg{EN: "Import `places-central-america`: `aictl ark import --item places-central-america`.", ES: "Importe `places-central-america`: `aictl ark import --item places-central-america`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC033,
@@ -1959,6 +1974,7 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "The AI (llama) isn't answering", ES: "La IA (llama) no responde"},
 		Fix:      Msg{EN: "Press **Switch brain** and choose one, or restart the computer.", ES: "Pulse **Cambiar de cerebro** y elija uno, o reinicie el equipo."},
+		Action:   "portal.brain",
 	},
 	{
 		ID:       SVC103,
@@ -1983,12 +1999,14 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "No brain is running", ES: "No hay ningún cerebro en ejecución"},
 		Fix:      Msg{EN: "Press **Switch brain** and choose one.", ES: "Pulse **Cambiar de cerebro** y elija uno."},
+		Action:   "portal.brain",
 	},
 	{
 		ID:       SVC107,
 		Severity: Error,
 		Title:    Msg{EN: "The new brain couldn't start", ES: "El nuevo cerebro no pudo arrancar"},
 		Fix:      Msg{EN: "Choose a smaller brain. The previous one was restarted.", ES: "Elija un cerebro más pequeño. Se reinició el anterior."},
+		Action:   "portal.brain",
 	},
 	{
 		ID:       SVC108,
@@ -2541,6 +2559,7 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "The rebuild kit is missing parts for this computer", ES: "Al kit de reconstrucción le faltan partes para este equipo"},
 		Fix:      Msg{EN: "Run `aictl ark sync` with internet, or `aictl ark import` from a good drive.", ES: "Ejecute `aictl ark sync` con internet, o `aictl ark import` desde una unidad buena."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       KIT041,
@@ -2643,6 +2662,7 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "Essential content is missing", ES: "Falta contenido esencial"},
 		Fix:      Msg{EN: "Run `aictl ark sync` with internet, or `aictl ark import`.", ES: "Ejecute `aictl ark sync` con internet, o `aictl ark import`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       DRL012,
@@ -2685,6 +2705,7 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "Library search doesn't work", ES: "La búsqueda en la biblioteca no funciona"},
 		Fix:      Msg{EN: "Run `aictl services restart kiwix`.", ES: "Ejecute `aictl services restart kiwix`."},
+		Action:   "service.restart:kiwix",
 	},
 	{
 		ID:       DRL031,
@@ -2697,6 +2718,7 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "Speech recognition failed", ES: "Falló el reconocimiento de voz"},
 		Fix:      Msg{EN: "Run `aictl services restart whisper`.", ES: "Ejecute `aictl services restart whisper`."},
+		Action:   "service.restart:whisper",
 	},
 	{
 		ID:       DRL033,
@@ -2757,6 +2779,7 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "The drill couldn't restore the normal brain", ES: "El simulacro no pudo restaurar el cerebro habitual"},
 		Fix:      Msg{EN: "Press **Switch brain** and choose the usual one.", ES: "Pulse **Cambiar de cerebro** y elija el de siempre."},
+		Action:   "portal.brain",
 	},
 	{
 		ID:       DRL091,
