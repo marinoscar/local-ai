@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { HealthResult, SessionResult, StatusResult, TokenResult } from '../../src/main/agent-client';
 import type { DskCode } from '../../src/main/i18n';
+import type { SystemActions, SystemResult } from '../../src/main/system-actions';
 import {
   type ActionDeps,
   type ContentHost,
   type StartupClient,
+  NEW_TOKEN_WAIT_MS,
   RECOVERY_WINDOW_MS,
   SessionRecovery,
   handleErrorAction,
@@ -260,7 +262,7 @@ describe('error-page actions', () => {
 
   it('start-agent failure carries LAI-DSK-005 and the status excerpt; a busy start does nothing and does not retry', async () => {
     const failed = deps({ supervisor: { start: async () => ({ ok: false, code: 'LAI-DSK-005', reason: 'not-authorized', statusExcerpt: 'inactive (dead)' }) } });
-    expect(await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, failed.d)).toEqual({ ok: false, code: 'LAI-DSK-005', statusExcerpt: 'inactive (dead)' });
+    expect(await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, failed.d)).toEqual({ ok: false, code: 'LAI-DSK-005', reason: 'not-authorized', statusExcerpt: 'inactive (dead)' });
     expect(failed.log.retried).toBe(0);
     const busy = deps({ supervisor: { start: async () => ({ ok: false, busy: true }) } });
     expect(await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, busy.d)).toEqual({ ok: false, busy: true });
@@ -275,6 +277,95 @@ describe('error-page actions', () => {
     const { d, log } = deps();
     await handleErrorAction({ action: 'open-browser', code: 'LAI-DSK-007' }, d);
     expect(log.browser).toBe(1);
+  });
+
+  const fakeSystem = (answers: Partial<Record<'allowUser' | 'rotateToken' | 'reboot', SystemResult>> = {}) => {
+    const calls: string[] = [];
+    const system: SystemActions = {
+      allowUser: async () => (calls.push('allowUser'), answers.allowUser ?? { ok: true }),
+      rotateToken: async () => (calls.push('rotateToken'), answers.rotateToken ?? { ok: true }),
+      reboot: async () => (calls.push('reboot'), answers.reboot ?? { ok: true }),
+    };
+    return { system, calls };
+  };
+
+  it('allow-user runs the fixed call and does not restart the sequence (the group needs a new login)', async () => {
+    const { system, calls } = fakeSystem();
+    const { d, log } = deps({ system });
+    expect(await handleErrorAction({ action: 'allow-user', code: 'LAI-DSK-001' }, d)).toEqual({ ok: true });
+    expect(calls).toEqual(['allowUser']);
+    expect(log.retried).toBe(0);
+    const cancelled = deps({ system: fakeSystem({ allowUser: { ok: false, reason: 'cancelled' } }).system });
+    expect(await handleErrorAction({ action: 'allow-user', code: 'LAI-DSK-001' }, cancelled.d)).toEqual({ ok: false, reason: 'cancelled' });
+    const busy = deps({ system: fakeSystem({ allowUser: { ok: false, reason: 'busy' } }).system });
+    expect(await handleErrorAction({ action: 'allow-user', code: 'LAI-DSK-001' }, busy.d)).toEqual({ ok: false, busy: true });
+    expect(await handleErrorAction({ action: 'allow-user', code: 'LAI-DSK-001' }, deps().d)).toEqual({ ok: false, reason: 'unavailable' });
+  });
+
+  it('rotate-token waits until a session works (at most 15 s), then runs the start-up sequence again', async () => {
+    let clock = 0;
+    let tries = 0;
+    const { system } = fakeSystem();
+    const { d, log } = deps({
+      system,
+      sessionWorks: async () => (tries += 1) >= 3,
+      sleep: async (ms) => void (clock += ms),
+      now: () => clock,
+    });
+    expect(await handleErrorAction({ action: 'rotate-token', code: 'LAI-DSK-007' }, d)).toEqual({ ok: true });
+    expect(tries).toBe(3);
+    expect(log.retried).toBe(1);
+
+    // The agent never accepts it: the sequence runs again after the limit (and shows LAI-DSK-007 again).
+    clock = 0;
+    tries = 0;
+    const never = deps({ system, sessionWorks: async () => ((tries += 1), false), sleep: async (ms) => void (clock += ms), now: () => clock });
+    expect(await handleErrorAction({ action: 'rotate-token', code: 'LAI-DSK-007' }, never.d)).toEqual({ ok: true });
+    expect(clock).toBeGreaterThanOrEqual(NEW_TOKEN_WAIT_MS);
+    expect(tries).toBeLessThanOrEqual(NEW_TOKEN_WAIT_MS / 1000 + 2);
+    expect(never.log.retried).toBe(1);
+
+    // The password window was closed: nothing is retried.
+    const refused = deps({ system: fakeSystem({ rotateToken: { ok: false, reason: 'cancelled' } }).system });
+    expect(await handleErrorAction({ action: 'rotate-token', code: 'LAI-DSK-007' }, refused.d)).toEqual({ ok: false, reason: 'cancelled' });
+    expect(refused.log.retried).toBe(0);
+  });
+
+  it('open-library probes kiwix-serve first and opens the browser only when it answers', async () => {
+    let opened = 0;
+    const down = deps({ libraryReachable: async () => false, openLibraryInBrowser: async () => void (opened += 1) });
+    expect(await handleErrorAction({ action: 'open-library', code: 'LAI-DSK-004' }, down.d)).toEqual({ ok: false, reason: 'library-down' });
+    expect(opened).toBe(0);
+    const up = deps({ libraryReachable: async () => true, openLibraryInBrowser: async () => void (opened += 1) });
+    expect(await handleErrorAction({ action: 'open-library', code: 'LAI-DSK-004' }, up.d)).toEqual({ ok: true });
+    expect(opened).toBe(1);
+    expect(await handleErrorAction({ action: 'open-library', code: 'LAI-DSK-004' }, deps().d)).toEqual({ ok: false, reason: 'unavailable' });
+  });
+
+  it('restart-computer asks first: Cancel restarts nothing; Restart runs the fixed reboot call', async () => {
+    const no = fakeSystem();
+    expect(await handleErrorAction({ action: 'restart-computer', code: 'LAI-DSK-004' }, deps({ system: no.system, confirmRestart: async () => false }).d)).toEqual({ ok: false, cancelled: true });
+    expect(no.calls).toEqual([]);
+    const yes = fakeSystem();
+    expect(await handleErrorAction({ action: 'restart-computer', code: 'LAI-DSK-004' }, deps({ system: yes.system, confirmRestart: async () => true }).d)).toEqual({ ok: true });
+    expect(yes.calls).toEqual(['reboot']);
+    // Without a confirmation dialog it never restarts.
+    const none = fakeSystem();
+    expect(await handleErrorAction({ action: 'restart-computer', code: 'LAI-DSK-004' }, deps({ system: none.system }).d)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(none.calls).toEqual([]);
+  });
+
+  it('the new buttons are accepted only on their own pages; "Log out now" on LAI-DSK-001 only as the follow-up', () => {
+    expect(parseActionRequest({ action: 'allow-user', code: 'LAI-DSK-001' })).not.toBeNull();
+    expect(parseActionRequest({ action: 'logout', code: 'LAI-DSK-001' })).not.toBeNull();
+    expect(parseActionRequest({ action: 'allow-user', code: 'LAI-DSK-004' })).toBeNull();
+    expect(parseActionRequest({ action: 'rotate-token', code: 'LAI-DSK-007' })).not.toBeNull();
+    expect(parseActionRequest({ action: 'rotate-token', code: 'LAI-DSK-001' })).toBeNull();
+    for (const code of ['LAI-DSK-003', 'LAI-DSK-004', 'LAI-DSK-005']) {
+      expect(parseActionRequest({ action: 'restart-computer', code })).not.toBeNull();
+      expect(parseActionRequest({ action: 'open-library', code })).not.toBeNull();
+    }
+    expect(parseActionRequest({ action: 'restart-computer', code: 'LAI-DSK-006' })).toBeNull();
   });
 
   it('accepts only an action its own code has', () => {

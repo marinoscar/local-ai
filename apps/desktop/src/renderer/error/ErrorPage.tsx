@@ -1,16 +1,22 @@
 // The error page (docs/specs/desktop.md 4.2 and 5): the doctor code, the text in both languages (the chosen one first),
-// the exact fix and the buttons. The actions go through the shell bridge; the token never reaches this page.
+// the buttons that fix the problem, and the typed command folded under "Use a terminal instead". The actions go through
+// the shell bridge; the page only names an action, the main process picks the command. The token never reaches it.
 import { Alert, Box, Button, Chip, Container, Divider, Paper, Stack, Typography } from '@mui/material';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, type ReactNode, useState } from 'react';
 import {
   ACTION_LABEL,
   PAGE_STRINGS,
+  START_FAILURE_TEXT,
+  type Bilingual,
   type ErrorAction,
   type Lang,
   errorText,
   isDskCode,
+  isStartFailureReason,
   pick,
 } from '../../main/i18n';
+import type { ActionResult } from '../../shared/types';
+import { ALWAYS_USABLE, SECONDARY_ACTIONS, errorPageLayout, fixFailureNote } from './model';
 
 export interface ErrorPageProps {
   code: string | null;
@@ -18,7 +24,13 @@ export interface ErrorPageProps {
   /** `systemctl is-active` answer shown on the "agent is not running" page. */
   unit?: string | null;
   /** The shell bridge; absent in a plain browser (the buttons then do nothing). */
-  act?: (action: ErrorAction, code: string) => Promise<{ ok: boolean; code?: string; statusExcerpt?: string; busy?: boolean }>;
+  act?: (action: ErrorAction, code: string) => Promise<ActionResult>;
+}
+
+type NoteSeverity = 'info' | 'success' | 'warning' | 'error';
+interface Note {
+  severity: NoteSeverity;
+  text: string;
 }
 
 const other = (lang: Lang): Lang => (lang === 'en' ? 'es' : 'en');
@@ -42,10 +54,32 @@ function LanguageBlock({ code, lang, primary }: { code: string | null; lang: Lan
   );
 }
 
-/** What a failed "Start agent" shows under the buttons (LAI-DSK-005): both languages, the status excerpt, the command. */
-function StartFailure({ lang, excerpt, onCopy }: { lang: Lang; excerpt: string | null; onCopy: () => void }): ReactElement {
+const PRE_SX = { m: 0, p: 1.5, bgcolor: 'action.hover', borderRadius: 1, overflowX: 'auto', fontFamily: 'ui-monospace, monospace' } as const;
+
+/** A native `<details>` disclosure: closed by default, opened with Enter or Space on its summary. */
+function Disclosure({ summary, testId, children }: { summary: string; testId: string; children: ReactNode }): ReactElement {
+  return (
+    <Box
+      component="details"
+      data-testid={testId}
+      sx={{
+        '& > summary': { cursor: 'pointer', fontWeight: 600, py: 0.5, borderRadius: 1 },
+        '& > summary:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+      }}
+    >
+      <summary>{summary}</summary>
+      <Stack spacing={1.5} sx={{ mt: 1 }}>
+        {children}
+      </Stack>
+    </Box>
+  );
+}
+
+/** What a failed "Start agent" shows (LAI-DSK-005): plain words first, the raw status folded under "Details". */
+function StartFailure({ lang, excerpt, reason, onCopy }: { lang: Lang; excerpt: string | null; reason: string | null; onCopy: () => void }): ReactElement {
   const text = errorText('LAI-DSK-005', lang);
   const second = errorText('LAI-DSK-005', other(lang));
+  const why = isStartFailureReason(reason) ? START_FAILURE_TEXT[reason] : null;
   return (
     <Alert severity="error" data-testid="start-failure" sx={{ '& .MuiAlert-message': { width: '100%' } }}>
       <Stack spacing={1.5}>
@@ -53,77 +87,143 @@ function StartFailure({ lang, excerpt, onCopy }: { lang: Lang; excerpt: string |
         <Typography variant="subtitle1" component="p" sx={{ fontWeight: 600 }}>
           {text.title}
         </Typography>
-        <Typography variant="body2">
-          {text.message} <strong>{pick(PAGE_STRINGS.whatToDo, lang)}:</strong> {text.fix}
-        </Typography>
-        <Box component="pre" data-testid="failure-command" sx={{ m: 0, p: 1.5, bgcolor: 'action.hover', borderRadius: 1, overflowX: 'auto', fontFamily: 'ui-monospace, monospace' }}>
-          {text.command}
-        </Box>
-        <Typography variant="caption">{pick(PAGE_STRINGS.statusExcerpt, lang)}</Typography>
-        <Box
-          component="pre"
-          data-testid="status-excerpt"
-          sx={{ m: 0, p: 1.5, bgcolor: 'action.hover', borderRadius: 1, overflow: 'auto', maxHeight: 240, fontFamily: 'ui-monospace, monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-        >
-          {excerpt ?? pick(PAGE_STRINGS.noStatusExcerpt, lang)}
-        </Box>
+        {why ? (
+          <Typography variant="body2" data-testid="failure-what">
+            {pick(why.what, lang)} <strong>{pick(PAGE_STRINGS.whatToDo, lang)}:</strong> {pick(why.next, lang)}
+          </Typography>
+        ) : (
+          <Typography variant="body2" data-testid="failure-what">
+            {text.message} <strong>{pick(PAGE_STRINGS.whatToDo, lang)}:</strong> {text.fix}
+          </Typography>
+        )}
         <Typography variant="body2" lang={other(lang)} sx={{ opacity: 0.85 }}>
-          <strong>{second.title}.</strong> {second.message} {second.fix}
+          <strong>{second.title}.</strong> {why ? `${pick(why.what, other(lang))} ${pick(why.next, other(lang))}` : `${second.message} ${second.fix}`}
         </Typography>
-        <Box>
-          <Button size="small" variant="outlined" onClick={onCopy}>
-            {pick(PAGE_STRINGS.copyCommand, lang)}
-          </Button>
-        </Box>
+        <Disclosure summary={pick(PAGE_STRINGS.detailsSummary, lang)} testId="failure-details">
+          <Typography variant="caption">{pick(PAGE_STRINGS.statusExcerpt, lang)}</Typography>
+          <Box
+            component="pre"
+            data-testid="status-excerpt"
+            sx={{ ...PRE_SX, overflow: 'auto', maxHeight: 240, fontSize: '0.8rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+          >
+            {excerpt ?? pick(PAGE_STRINGS.noStatusExcerpt, lang)}
+          </Box>
+          <Typography variant="body2">{pick(PAGE_STRINGS.terminalHint, lang)}</Typography>
+          <Box component="pre" data-testid="failure-command" sx={PRE_SX}>
+            {text.command}
+          </Box>
+          <Box>
+            <Button size="small" variant="outlined" onClick={onCopy}>
+              {pick(PAGE_STRINGS.copyCommand, lang)}
+            </Button>
+          </Box>
+        </Disclosure>
       </Stack>
     </Alert>
   );
 }
 
 export function ErrorPage({ code, lang, unit, act }: ErrorPageProps): ReactElement {
-  const [note, setNote] = useState<string | null>(null);
-  const [starting, setStarting] = useState(false);
-  const [failure, setFailure] = useState<{ excerpt: string | null } | null>(null);
+  const [note, setNote] = useState<Note | null>(null);
+  /** The button whose work is running (one at a time); its label then says it is working. */
+  const [busy, setBusy] = useState<ErrorAction | null>(null);
+  const [failure, setFailure] = useState<{ excerpt: string | null; reason: string | null } | null>(null);
+  /** "Allow this user" worked: the page now asks to log out and in. */
+  const [allowed, setAllowed] = useState(false);
   const text = isDskCode(code) ? errorText(code, lang) : null;
-  const actions: readonly ErrorAction[] = text ? text.actions : ['open-portal'];
+  const layout = errorPageLayout(code);
+  const say = (severity: NoteSeverity, message: Bilingual): void => setNote({ severity, text: pick(message, lang) });
 
-  // LAI-DSK-005 has its own "Copy command"; the main process copies the catalog's command for that code.
-  const copyFailureCommand = async (): Promise<void> => {
+  const copy = async (forCode: string): Promise<void> => {
     try {
-      const result = act ? await act('copy-command', 'LAI-DSK-005') : { ok: false };
-      setNote(result.ok ? pick(PAGE_STRINGS.copied, lang) : pick(PAGE_STRINGS.actionFailed, lang));
+      const result = act ? await act('copy-command', forCode) : { ok: false };
+      if (result.ok) say('info', PAGE_STRINGS.copied);
+      else say('warning', PAGE_STRINGS.actionFailed);
     } catch {
-      setNote(pick(PAGE_STRINGS.actionFailed, lang));
+      say('warning', PAGE_STRINGS.actionFailed);
+    }
+  };
+
+  const run = async (action: ErrorAction): Promise<ActionResult | null> => {
+    if (!act || !code) return null;
+    try {
+      return await act(action, code);
+    } catch {
+      return { ok: false };
     }
   };
 
   const press = async (action: ErrorAction): Promise<void> => {
     if (!act || !code) return;
-    if (action === 'start-agent') {
-      // One start at a time: the button is disabled while it runs, and the main process ignores a second request too.
-      if (starting) return;
-      setStarting(true);
-      setFailure(null);
-      setNote(null);
-      try {
-        const result = await act(action, code);
+    if (action === 'copy-command') return copy(code);
+    // One privileged call at a time: the buttons are disabled while one runs, and the main process ignores a second too.
+    if (busy !== null) return;
+    setNote(null);
+    switch (action) {
+      case 'start-agent': {
+        setBusy(action);
+        setFailure(null);
+        const result = await run(action);
         // Success: the main process restarts the start-up sequence and replaces this page; keep showing "Starting...".
-        if (result.ok || result.busy) return;
-        setFailure({ excerpt: result.statusExcerpt ?? null });
-      } catch {
-        setFailure({ excerpt: null });
+        if (result && (result.ok || result.busy)) return;
+        setFailure({ excerpt: result?.statusExcerpt ?? null, reason: result?.reason ?? null });
+        setBusy(null);
+        return;
       }
-      setStarting(false);
-      return;
+      case 'allow-user': {
+        setBusy(action);
+        const result = await run(action);
+        setBusy(null);
+        if (result?.ok) {
+          setAllowed(true);
+          return;
+        }
+        const message = result ? fixFailureNote(result) : PAGE_STRINGS.fixFailed;
+        if (message) say(result?.reason === 'cancelled' ? 'warning' : 'error', message);
+        return;
+      }
+      case 'rotate-token': {
+        setBusy(action);
+        const result = await run(action);
+        if (result?.ok) {
+          // The main process waits for the agent to accept the new token, then runs the start-up sequence again.
+          say('success', PAGE_STRINGS.rotateDone);
+          return;
+        }
+        setBusy(null);
+        const message = result ? fixFailureNote(result) : PAGE_STRINGS.fixFailed;
+        if (message) say(result?.reason === 'cancelled' ? 'warning' : 'error', message);
+        return;
+      }
+      case 'restart-computer': {
+        setBusy(action);
+        const result = await run(action);
+        setBusy(null);
+        // Cancel in the confirmation: nothing to say. Success: the computer is going down.
+        if (result && !result.ok && !result.cancelled && !result.busy) say('error', PAGE_STRINGS.rebootFailed);
+        return;
+      }
+      case 'open-library': {
+        const result = await run(action);
+        if (result?.ok) say('success', PAGE_STRINGS.libraryOpened);
+        else say('warning', result?.reason === 'library-down' ? PAGE_STRINGS.libraryDown : PAGE_STRINGS.actionFailed);
+        return;
+      }
+      case 'logout': {
+        const result = await run(action);
+        if (!result?.ok) say('info', PAGE_STRINGS.logoutHint);
+        return;
+      }
+      default: {
+        const result = await run(action);
+        if (!result?.ok && action !== 'open-portal') say('warning', PAGE_STRINGS.actionFailed);
+      }
     }
-    try {
-      const result = await act(action, code);
-      if (action === 'copy-command' && result.ok) setNote(pick(PAGE_STRINGS.copied, lang));
-      else if (!result.ok && action !== 'open-portal') setNote(action === 'logout' ? pick(PAGE_STRINGS.logoutHint, lang) : pick(PAGE_STRINGS.actionFailed, lang));
-      else setNote(null);
-    } catch {
-      setNote(pick(PAGE_STRINGS.actionFailed, lang));
-    }
+  };
+
+  const label = (action: ErrorAction): string => {
+    if (busy === action) return pick(action === 'start-agent' ? PAGE_STRINGS.starting : PAGE_STRINGS.working, lang);
+    return pick(ACTION_LABEL[action], lang);
   };
 
   return (
@@ -135,31 +235,64 @@ export function ErrorPage({ code, lang, unit, act }: ErrorPageProps): ReactEleme
             {unit ? <Chip variant="outlined" label={`${pick(PAGE_STRINGS.unitState, lang)}: ${unit}`} data-testid="unit" /> : null}
           </Stack>
           <LanguageBlock code={code} lang={lang} primary />
-          {text?.command ? (
-            <Box component="pre" data-testid="command" sx={{ m: 0, p: 2, bgcolor: 'action.hover', borderRadius: 1, overflowX: 'auto', fontFamily: 'ui-monospace, monospace' }}>
-              {text.command}
+          {layout.leadCommand !== null ? (
+            <Box component="pre" data-testid="command" sx={{ ...PRE_SX, p: 2 }}>
+              {layout.leadCommand}
             </Box>
           ) : null}
-          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            {actions.map((action) => (
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }} data-testid="actions">
+            {layout.buttons.map((action) => (
               <Button
                 key={action}
-                variant={action === 'open-portal' ? 'outlined' : 'contained'}
-                disabled={action === 'start-agent' && starting}
+                data-action={action}
+                variant={SECONDARY_ACTIONS.includes(action) ? 'outlined' : 'contained'}
+                disabled={busy !== null && !ALWAYS_USABLE.includes(action)}
                 onClick={() => void press(action)}
               >
-                {action === 'start-agent' && starting ? pick(PAGE_STRINGS.starting, lang) : pick(ACTION_LABEL[action], lang)}
+                {label(action)}
               </Button>
             ))}
           </Stack>
-          {starting ? (
-            <Typography variant="body2" role="status" data-testid="starting-hint">
-              {pick(PAGE_STRINGS.startingHint, lang)}
+          {busy !== null && busy !== 'restart-computer' ? (
+            <Typography variant="body2" role="status" data-testid={busy === 'start-agent' ? 'starting-hint' : 'password-hint'}>
+              {pick(busy === 'start-agent' ? PAGE_STRINGS.startingHint : PAGE_STRINGS.passwordHint, lang)}
             </Typography>
           ) : null}
-          {failure ? <StartFailure lang={lang} excerpt={failure.excerpt} onCopy={() => void copyFailureCommand()} /> : null}
-          {actions.includes('open-browser') ? <Typography variant="body2">{pick(PAGE_STRINGS.browserHint, lang)}</Typography> : null}
-          {note ? <Alert severity="info">{note}</Alert> : null}
+          {allowed ? (
+            <Alert severity="success" data-testid="allow-done" role="status" sx={{ '& .MuiAlert-message': { width: '100%' } }}>
+              <Stack spacing={1.5}>
+                <Typography variant="body1">{pick(PAGE_STRINGS.allowUserDone, lang)}</Typography>
+                <Typography variant="body2" lang={other(lang)} sx={{ opacity: 0.85 }}>
+                  {pick(PAGE_STRINGS.allowUserDone, other(lang))}
+                </Typography>
+                <Box>
+                  <Button variant="contained" autoFocus data-action="logout" onClick={() => void press('logout')}>
+                    {pick(PAGE_STRINGS.logout, lang)}
+                  </Button>
+                </Box>
+              </Stack>
+            </Alert>
+          ) : null}
+          {failure ? <StartFailure lang={lang} excerpt={failure.excerpt} reason={failure.reason} onCopy={() => void copy('LAI-DSK-005')} /> : null}
+          {layout.buttons.includes('open-browser') ? <Typography variant="body2">{pick(PAGE_STRINGS.browserHint, lang)}</Typography> : null}
+          {note ? (
+            <Alert severity={note.severity} role="status" data-testid="note">
+              {note.text}
+            </Alert>
+          ) : null}
+          {layout.terminalCommand !== null ? (
+            <Disclosure summary={pick(PAGE_STRINGS.terminalSummary, lang)} testId="terminal">
+              <Typography variant="body2">{pick(PAGE_STRINGS.terminalHint, lang)}</Typography>
+              <Box component="pre" data-testid="command" sx={{ ...PRE_SX, p: 2 }}>
+                {layout.terminalCommand}
+              </Box>
+              <Box>
+                <Button size="small" variant="outlined" data-action="copy-command" onClick={() => void press('copy-command')}>
+                  {pick(PAGE_STRINGS.copyCommand, lang)}
+                </Button>
+              </Box>
+            </Disclosure>
+          ) : null}
           <Divider />
           <LanguageBlock code={code} lang={other(lang)} primary={false} />
         </Stack>
