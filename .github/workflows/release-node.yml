@@ -46,7 +46,7 @@ jobs:
       dry_run: ${{ steps.meta.outputs.dry_run }}
       handoff: ${{ steps.meta.outputs.handoff }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with: {fetch-depth: 0}
       - name: Validate the tag (or the dry-run version) and that a tag is on main
         id: meta
@@ -108,12 +108,12 @@ jobs:
     if: needs.prepare.outputs.handoff != 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with: {fetch-depth: 0}
       - name: Require the agent module
         run: |
           [ -f agent/go.mod ] && [ -d agent/cmd/aiagent ] || { echo "::error::agent/ does not exist yet (AGENT-01): nothing to release"; exit 1; }
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
@@ -121,7 +121,7 @@ jobs:
         id: ui
         run: |
           if [ -f agent/ui/package.json ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "agent/ui does not exist yet (survival portal epic): the release carries no UI build"; fi
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         if: steps.ui.outputs.present == 'true'
         with:
           node-version: '22'
@@ -160,7 +160,7 @@ jobs:
           echo "source tarball sha256 $a (identical across two builds)"
           mkdir -p "$RUNNER_TEMP/unsigned"
           cp "$RUNNER_TEMP/bin/aiagent-linux-amd64" "$RUNNER_TEMP/bin/aiagent-linux-arm64" "$SRC_OUT/a/$name" "$RUNNER_TEMP/unsigned/"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: node-unsigned
           path: ${{ runner.temp }}/unsigned/*
@@ -173,12 +173,12 @@ jobs:
     needs: [prepare, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: agent/go.mod
           cache: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: node-unsigned
           path: ${{ runner.temp }}/unsigned
@@ -196,10 +196,10 @@ jobs:
     needs: [prepare, build, offline-build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Install minisign
         run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: node-unsigned
           path: ${{ runner.temp }}/unsigned
@@ -216,7 +216,7 @@ jobs:
               --out "$RUNNER_TEMP/release" --allow-missing-installer --sign
           rm -f "$RUNNER_TEMP/dry.key"
           echo "Dry run for $TAG: signed with a throwaway key. NOT a release; nothing was published." >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: node-release-dry-run
           path: ${{ runner.temp }}/release/*
@@ -233,7 +233,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Require the signing secrets and the committed public key
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
@@ -244,7 +244,7 @@ jobs:
           [ -f agent/internal/kit/keys/minisign.pub ] || { echo "::error::agent/internal/kit/keys/minisign.pub is not committed (owner action: docs/architecture/release-signing.md)"; exit 1; }
       - name: Install minisign
         run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: node-unsigned
           path: ${{ runner.temp }}/unsigned

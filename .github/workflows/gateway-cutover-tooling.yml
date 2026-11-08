@@ -43,7 +43,7 @@ jobs:
     name: shellcheck, script tests, document checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: shellcheck
         run: shellcheck -S style scripts/gateway-client.sh scripts/openwebui-cutover.sh && shellcheck -S warning scripts/tests/test-gateway-client.sh scripts/tests/test-openwebui-cutover.sh
       - name: gateway-client.sh against a fake gateway
