@@ -55,11 +55,11 @@ Do this first, for every problem.
 
 1. **Use the browser instead, right now:** open `http://127.0.0.1:7070`. The Survival Portal at `http://127.0.0.1:7070/portal` needs no login. For the dashboard, get a login code with `aictl ui-code` and type it.
 2. **Read the code on the error page** and do the matching fix:
-   - `LAI-DSK-001`: this user isn't allowed yet. Run `sudo usermod -aG localai-operators $USER`, then log out and back in.
+   - `LAI-DSK-001`: this user isn't allowed yet. Press **Allow this user** and type the administrator password, then press **Log out now** and log back in. In a terminal instead: `sudo usermod -aG localai-operators $USER`, then log out and back in.
    - `LAI-DSK-002`: you were just added to the group; log out and back in once.
    - `LAI-DSK-003`: the agent's token file doesn't exist yet. Press **Start agent**. If it keeps happening, the install didn't finish: run the installer again ([05](05-add-a-node.md)).
    - `LAI-DSK-004`: the Local AI agent isn't running. Press **Start agent** and type your login password.
-   - `LAI-DSK-005`: the agent couldn't be started. Run `sudo aictl doctor` and follow it; then `journalctl -u localai-agent -n 50`.
+   - `LAI-DSK-005`: the agent couldn't be started. The page says what failed. Press **Start agent** once more; if it fails again, press **Restart the computer**. Under **Details for whoever repairs this computer** are the service status and the command for a repair: run `sudo aictl doctor` and follow it; then `journalctl -u localai-agent -n 50`.
    - `LAI-DSK-006`: the app and the agent are versions that don't work together. Update both: `sudo aictl update` with internet; without internet, check the app's package in the kit and install it:
 
      ```
@@ -68,7 +68,7 @@ Do this first, for every problem.
      ```
 
      `✓ Signature OK` must appear first. If it says the signature or a file doesn't match (`LAI-KIT-044` or `LAI-AGT-010`), **don't** install it; use the copy on the AI-ARK drive (`/media/$USER/AI-ARK/localai/kit/desktop/`) after checking it the same way.
-   - `LAI-DSK-007`: the agent refused the app's login. Run `sudo aictl token rotate`, then restart the app.
+   - `LAI-DSK-007`: the agent refused the app's login. Press **Make a new token** and type the administrator password; the app connects again by itself. In a terminal instead: `sudo aictl token rotate`, then restart the app.
    - `LAI-DSK-013`: no tray icon. In **Extensions**, turn on "AppIndicator and KStatusNotifierItem Support", then restart the app.
    - `LAI-DSK-015`: the app's security sandbox couldn't start. Reinstall it from the `.deb` (same command as `LAI-DSK-006`).
    - `LAI-DSK-016`: the app couldn't check or download an update. It shows in the menu (the three dots), under **Check for updates**, and nothing else changes. Try later, or install the update from the kit without internet (same command as `LAI-DSK-006`; [06 step 31a](06-rebuild-a-node-offline.md)). The switch is off by default, and the app does not look for updates in Offline or Survival mode even when it is on.
