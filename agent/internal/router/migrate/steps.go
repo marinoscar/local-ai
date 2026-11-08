@@ -29,13 +29,13 @@ func (e *Engine) m1Build(ctx context.Context, p *Plan) error {
 	if !p.BuildNeeded {
 		return nil
 	}
-	if c := e.currentCommit(); c != "" && sameCommit(c, p.LegacyCommit) {
+	if c := e.currentCommit(); c != "" && sameCommit(c, p.buildCommit()) {
 		return nil // an earlier run already switched
 	}
-	id, ok := e.findBuild(p.LegacyCommit, p.Backend)
+	id, ok := e.findBuild(p.buildCommit(), p.Backend)
 	if !ok {
 		res, err := e.builder.Build(ctx, BuildRequest{
-			Commit: p.LegacyCommit, Backend: p.Backend, SourceRepo: p.WorkingDirectory,
+			Commit: p.buildCommit(), Backend: p.Backend, SourceRepo: p.WorkingDirectory,
 			Progress: func(s string) { e.say("     %s", s) },
 		})
 		if err != nil {
@@ -113,8 +113,8 @@ func (e *Engine) verifyCurrent(ctx context.Context, p *Plan) error {
 	if err != nil || res.ExitCode != 0 {
 		return fail(CodeBuild, M1, "%s --version failed", bin)
 	}
-	if out := string(res.Stdout) + string(res.Stderr); !strings.Contains(out, short(p.LegacyCommit, 7)) {
-		return fail(CodeBuild, M1, "%s --version does not show commit %s", bin, short(p.LegacyCommit, 9))
+	if out := string(res.Stdout) + string(res.Stderr); !strings.Contains(out, short(p.buildCommit(), 7)) {
+		return fail(CodeBuild, M1, "%s --version does not show commit %s", bin, short(p.buildCommit(), 9))
 	}
 	if p.Backend == "cpu" || p.Backend == "" {
 		return nil
@@ -204,6 +204,17 @@ func (e *Engine) m3Models(ctx context.Context, p *Plan) error {
 func (e *Engine) moveFile(ctx context.Context, f PlanFile, newDir string, uid, gid int) error {
 	if err := e.fs.MkdirAll(path.Dir(f.New), 0o755); err != nil {
 		return wrap(CodeInterrupted, M3, err, "cannot create %s", path.Dir(f.New))
+	}
+	// A catalog name with a folder adds directories below the model's own: they get its owner and mode
+	// too (MkdirAll applies the umask, and the installer runs with 077), or localai could not reach the
+	// file and neither could the old service through its link.
+	for d := path.Dir(f.New); d != newDir && strings.HasPrefix(d, newDir+"/"); d = path.Dir(d) {
+		if err := e.fs.Chown(d, uid, gid); err != nil {
+			return wrap(CodeInterrupted, M3, err, "cannot give %s to %s", d, ServiceUser)
+		}
+		if err := e.fs.Chmod(d, 0o755); err != nil {
+			return wrap(CodeInterrupted, M3, err, "cannot set the mode of %s", d)
+		}
 	}
 	oldFi, oldErr := e.fs.Lstat(f.Old)
 	newFi, newErr := e.fs.Lstat(f.New)

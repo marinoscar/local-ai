@@ -28,6 +28,7 @@ const usage = `usage:
 var serve = app.RunServe
 
 func main() {
+	rootUmask()
 	ctx, stop := app.SignalContext(context.Background())
 	defer stop()
 	code := run(ctx, os.Args, os.Stdout, os.Stderr)

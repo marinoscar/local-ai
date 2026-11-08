@@ -726,6 +726,13 @@ phase_llama() {
     say "[dry-run] cannot tell yet which llama.cpp commit this node needs (the catalog is installed in phase 2); a real run would reuse a good build or build it here"
     return 0
   fi
+  # A migration builds the engine itself in phase 8 (llama-router.md 4.9.2 M1): the old service's own
+  # commit, or the router's reference commit when that one is too old. Nothing to pin it here, then.
+  # shellcheck disable=SC2310
+  if ! llama_resolve && [[ "$OPT_MIGRATE" != no ]] && legacy_unit_present; then
+    say "no llama.cpp commit is pinned for this node: the migration (phase 8) builds the old service's own commit, or the router's reference commit when that one is too old"
+    return 0
+  fi
   # shellcheck disable=SC2310
   llama_resolve || llama_fail 1 LAI-INS-032 "no llama.cpp commit is known for this node: there is no llama.commit in $NODE_YAML and no pins.json in the kit or in $PINS_INSTALLED. Re-run after the catalog is installed (phase 2), or use --from-ark."
   say "llama.cpp commit ${LLAMA_COMMIT:0:9} for backend $LLAMA_BACKEND (from $LLAMA_COMMIT_FROM)"

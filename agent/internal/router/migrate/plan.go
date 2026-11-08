@@ -15,6 +15,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
+	"github.com/marinoscar/local-ai/agent/internal/router"
 	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 )
 
@@ -56,6 +57,9 @@ type Plan struct {
 	Ctx              int    `json:"ctx"`
 	Backend          string `json:"backend"`
 	LegacyCommit     string `json:"legacy_commit,omitempty"`
+	// BuildCommit is the commit M1 builds: the legacy one, or router.ReferenceCommit when the legacy
+	// binary lacks a flag the router unit needs ("" in an older plan.json: the legacy one).
+	BuildCommit string `json:"build_commit,omitempty"`
 
 	// The model.
 	ModelID        string     `json:"model_id"`
@@ -114,6 +118,9 @@ func (p *Plan) retiredUnits() []string {
 	}
 	return out
 }
+
+// buildCommit is the commit M1 builds and verifies.
+func (p *Plan) buildCommit() string { return orStr(p.BuildCommit, p.LegacyCommit) }
 
 // OK is true when nothing stops the migration.
 func (p *Plan) OK() bool { return len(p.Problems) == 0 }
@@ -541,6 +548,9 @@ func (e *Engine) planBuild(ctx context.Context, p *Plan, u *LegacyUnit, f *ExecF
 	}
 	p.CurrentCommit = e.currentCommit()
 	p.LegacyCommit = e.legacyCommit(ctx, f.Binary)
+	if p.LegacyCommit != "" {
+		e.planBuildCommit(ctx, p, f.Binary)
+	}
 	switch {
 	case p.LegacyCommit == "" && p.CurrentCommit == "":
 		e.add(p, CodeStopped, "commit_unknown", "cannot tell which llama.cpp commit %s was built from (%s --version shows none), and there is no build in %s: run aictl rebuild-llama first", path.Base(path.Dir(path.Dir(f.Binary))), path.Base(f.Binary), e.paths.Current())
@@ -548,7 +558,7 @@ func (e *Engine) planBuild(ctx context.Context, p *Plan, u *LegacyUnit, f *ExecF
 	case p.LegacyCommit == "":
 		p.Warnings = append(p.Warnings, "the legacy binary's commit is unknown; the build in current is kept")
 		return
-	case p.CurrentCommit != "" && sameCommit(p.CurrentCommit, p.LegacyCommit):
+	case p.CurrentCommit != "" && sameCommit(p.CurrentCommit, p.buildCommit()):
 		return
 	}
 	p.BuildNeeded = true
@@ -561,8 +571,47 @@ func (e *Engine) planBuild(ctx context.Context, p *Plan, u *LegacyUnit, f *ExecF
 		if code == "" {
 			code = CodeBuild
 		}
-		pr := e.add(p, code, "cannot_build", "llama.cpp %s cannot be built for %s here: %v", short(p.LegacyCommit, 9), p.Backend, err)
-		p.with(pr, "commit", p.LegacyCommit)
+		pr := e.add(p, code, "cannot_build", "llama.cpp %s cannot be built for %s here: %v", short(p.buildCommit(), 9), p.Backend, err)
+		p.with(pr, "commit", p.buildCommit())
+	}
+}
+
+// planBuildCommit picks what M1 builds. The legacy commit keeps the engine as it was, but a legacy
+// binary can predate a flag the router unit passes (ai-n1's cbe28bb3c has no --models-memory-margin),
+// which M5 would only find after M1 built and switched it: here, before anything changes, such a commit
+// is replaced by router.ReferenceCommit, which the migration builds from the legacy checkout (it never
+// uses the network), so that checkout must hold it.
+func (e *Engine) planBuildCommit(ctx context.Context, p *Plan, binary string) {
+	var rcfg catalog.Router
+	if e.cat != nil {
+		if prof, ok := e.cat.Profile(e.config.Get().Profile); ok {
+			rcfg = prof.Router
+		}
+	}
+	res, err := e.run(ctx, e.timing.VersionCmd, binary, "--help")
+	if err != nil {
+		return // a binary that cannot even print its help is reported by the checks that run it
+	}
+	help := string(res.Stdout) + string(res.Stderr)
+	var missing []string
+	for _, f := range router.RouterFlags(rcfg) {
+		if !strings.Contains(help, f) {
+			missing = append(missing, f)
+		}
+	}
+	if len(missing) == 0 || sameCommit(p.LegacyCommit, router.ReferenceCommit) {
+		return
+	}
+	p.BuildCommit = router.ReferenceCommit
+	p.Warnings = append(p.Warnings, fmt.Sprintf("the old llama.cpp %s does not know %s, which the router needs: the migration builds %s instead, the commit the router is verified with",
+		short(p.LegacyCommit, 9), strings.Join(missing, ", "), short(router.ReferenceCommit, 9)))
+	if p.CurrentCommit != "" && sameCommit(p.CurrentCommit, router.ReferenceCommit) {
+		return // already built and switched on
+	}
+	if r, err := e.runNamed(ctx, "git", "-C", p.WorkingDirectory, "cat-file", "-e", router.ReferenceCommit+"^{commit}"); err != nil || r.ExitCode != 0 {
+		pr := e.add(p, CodeStopped, "source_missing", "llama.cpp %s is not in %s: run `git -C %s fetch origin` as its owner, then run the migration again",
+			short(router.ReferenceCommit, 9), orStr(p.WorkingDirectory, "the legacy checkout"), orStr(p.WorkingDirectory, "<checkout>"))
+		p.with(pr, "commit", router.ReferenceCommit)
 	}
 }
 
@@ -637,9 +686,9 @@ func (e *Engine) Steps(p *Plan) []string {
 	}
 	add(M0, "preflight: %s (model %s, key %s)", status, orStr(p.ModelID, "unknown"), orStr(p.KeyFingerprint, "unknown"))
 	if p.BuildNeeded {
-		add(M1, "build llama.cpp %s for %s from %s, then switch current", short(p.LegacyCommit, 9), p.Backend, orStr(p.WorkingDirectory, "the kit mirror"))
+		add(M1, "build llama.cpp %s for %s from %s, then switch current", short(p.buildCommit(), 9), p.Backend, orStr(p.WorkingDirectory, "the kit mirror"))
 	} else {
-		add(M1, "no build needed: current already has commit %s", short(orStr(p.CurrentCommit, p.LegacyCommit), 9))
+		add(M1, "no build needed: current already has commit %s", short(orStr(p.CurrentCommit, p.buildCommit()), 9))
 	}
 	add(M2, "copy the API key to %s (byte copy, root 0600)", e.paths.NewKey)
 	for _, f := range p.Files {
