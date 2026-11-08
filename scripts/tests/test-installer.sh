@@ -1029,5 +1029,52 @@ t "an agent preflight refusal exits 3" 3 "This computer is not supported" realv 
 t "dry run online: profile step says what it would do" 0 "[dry-run] would run: aiagent setup profile-suggest --json" dryv -- "${I2_RA[@]}"
 t "dry run offline: the staged agent really suggests a profile" 0 "Profile chosen: small-8gb" dryv -- "${I2_RA[@]}" --from-ark "$I2_ARK"
 
+echo "== guided mode (#429): no arguments on a terminal asks instead of requiring flags"
+G="$w/guide"; mkdir -p "$G/media/u" "$G/empty-media"
+# g <answers> [VAR=value ...]: run the stamped installer with NO arguments; the answers are the "terminal" input.
+g() {
+  local answers="$1"; shift
+  printf '%b' "$answers" >"$G/in"; : >"$G/out"; : >"$G/rec"
+  env LAI_INSTALLER_DEV=1 LAI_INSTALLER_GUIDE=1 LAI_INSTALLER_GUIDE_IN="$G/in" LAI_INSTALLER_GUIDE_OUT="$G/out" \
+    LAI_INSTALLER_GUIDE_RECORD="$G/rec" LAI_INSTALLER_MEDIA="$G/empty-media" LAI_INSTALL_NODE_YAML="$G/none.yaml" \
+    LAI_INSTALL_STATE_DIR="$G/state" "$@" bash "$STAMPED"
+}
+gout() { cat "$G/out"; }
+grec() { cat "$G/rec"; }
+
+t "defaults: preview then 'not now' leaves nothing changed (exit 4)" 4 "" g 'ai-n4\n\n\n\n'
+t "...the four questions were asked" 0 "4/4  Preview" gout
+t "...the one-line equivalent is shown" 0 "--node-id ai-n4 --cloud-url https://ai.marin.cr --enroll" gout
+t "...the preview is a dry run of those flags" 0 "preview: --node-id ai-n4 --cloud-url https://ai.marin.cr --enroll --dry-run" grec
+t "...and the real install did not run" 1 "" grep -q '^run:' "$G/rec"
+t "...it says nothing was changed" 0 "Nothing was changed" gout
+t "no cloud, preview, then yes: runs the real install with the flags" 0 "" g 'ai-n4\nn\ny\ny\n'
+t "...run line" 0 "run: --node-id ai-n4" grec
+t "...no --enroll when the cloud was declined" 1 "" grep -q -- '--enroll' "$G/rec"
+t "a wrong name is explained and asked again" 0 "" g 'bob\nAI-N7\nn\nn\ny\n'
+t "...the explanation" 0 'is not a node name. It is ai-n and a number' gout
+t "...upper case is accepted as the same name" 0 "run: --node-id ai-n7" grec
+t "five wrong names: exit 2, nothing changed" 2 "" g 'a\nb\nc\nd\ne\n'
+t "...says so" 0 "No valid name was given. Nothing was changed." gout
+t "no answer at all (end of input): exit 2" 2 "" g ''
+mkdir -p "$G/media/u/AI-ARK/localai"
+t "a connected AI-ARK drive is offered, cloud off by default" 0 "" g 'ai-n4\n\n\nn\ny\n' LAI_INSTALLER_MEDIA="$G/media"
+t "...installs from the drive" 0 "run: --node-id ai-n4 --from-ark $G/media/u/AI-ARK" grec
+t "...and the drive was named" 0 "An AI-ARK drive is connected: $G/media/u/AI-ARK" gout
+printf 'node:\n  id: ai-n3\n' >"$G/node.yaml"
+t "an existing node name is the suggestion" 0 "" g '\nn\nn\ny\n' LAI_INSTALL_NODE_YAML="$G/node.yaml"
+t "...kept" 0 "run: --node-id ai-n3" grec
+t "...and explained" 0 "already set up as ai-n3" gout
+t "a different name than the existing one is warned about" 0 "" g 'ai-n5\nn\nn\ny\n' LAI_INSTALL_NODE_YAML="$G/node.yaml"
+t "...LAI-INS-020 named" 0 "LAI-INS-020" gout
+t "a failing preview stops with its exit code and changes nothing" 1 "" g 'ai-n4\nn\ny\n' LAI_INSTALLER_GUIDE_PREVIEW_RC=1
+t "...explained" 0 "The preview stopped with a problem" gout
+t "a non-answer to yes/no is asked again" 0 "" g 'ai-n4\nmaybe\nn\nn\ny\n'
+t "...with a hint" 0 "Please answer y (yes) or n (no)." gout
+t "an argument means no questions" 0 "" bash -c '! env LAI_INSTALLER_DEV=1 LAI_INSTALLER_GUIDE=1 LAI_INSTALLER_GUIDE_IN=/dev/null LAI_INSTALLER_GUIDE_OUT="$1" bash "$2" --version >/dev/null 2>&1 || ! grep -q "Node name" "$1"' _ "$G/out2" "$STAMPED"
+: >"$G/out3"
+t "LAI_INSTALLER_GUIDED=1 (the second run) never asks again" 0 "" bash -c 'env LAI_INSTALLER_DEV=1 LAI_INSTALLER_GUIDE=1 LAI_INSTALLER_GUIDED=1 LAI_INSTALLER_GUIDE_IN=/dev/null LAI_INSTALLER_GUIDE_OUT="$1" LAI_INSTALL_STATE_DIR="$3" timeout 60 bash "$2" >/dev/null 2>&1; ! grep -q "Node name" "$1"' _ "$G/out3" "$STAMPED" "$G/state3"
+t "without a terminal and without the dev hook, no questions (help text documents guided mode)" 0 "asks what it needs (guided mode)" bash "$STAMPED" --help
+
 echo; echo "passed: $pass  failed: $failn"
 [[ $failn -eq 0 ]]
