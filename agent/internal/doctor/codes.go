@@ -1537,7 +1537,7 @@ var table = []Code{
 		ID:       SYN021,
 		Severity: Warning,
 		Title:    Msg{EN: "The source's checksum or size disagrees with the catalog", ES: "La suma de verificación o el tamaño de la fuente no coincide con el catálogo"},
-		Fix:      Msg{EN: "The catalog or the source is wrong. Report it to the maintainer. The old copy is kept.", ES: "El catálogo o la fuente son incorrectos. Informe al mantenedor. Se conserva la copia anterior."},
+		Fix:      Msg{EN: "The catalog or the source is wrong. The old copy is kept and still works; the item is tried again with the next catalog update.", ES: "El catálogo o la fuente son incorrectos. Se conserva la copia anterior, que sigue funcionando; se intentará otra vez con la próxima actualización del catálogo."},
 	},
 	{
 		ID:       SYN022,
@@ -2540,7 +2540,7 @@ var table = []Code{
 		ID:       KIT021,
 		Severity: Error,
 		Title:    Msg{EN: "The new build doesn't work; the old one is still in use", ES: "La nueva compilación no funciona; se sigue usando la anterior"},
-		Fix:      Msg{EN: "Nothing breaks. Report the log.", ES: "No se rompe nada. Informe del registro."},
+		Fix:      Msg{EN: "Nothing breaks: the old build keeps working. Keep the log on the ark drive so it can be fixed later.", ES: "No se rompe nada: la versión anterior sigue funcionando. Guarde el registro en la unidad del arca para arreglarlo después."},
 	},
 	{
 		ID:       KIT022,
@@ -2785,6 +2785,6 @@ var table = []Code{
 		ID:       DRL091,
 		Severity: Warning,
 		Title:    Msg{EN: "Something tried to use the internet during the drill", ES: "Algo intentó usar internet durante el simulacro"},
-		Fix:      Msg{EN: "Report the details; offline use may be affected.", ES: "Informe de los detalles; el uso sin conexión puede verse afectado."},
+		Fix:      Msg{EN: "Offline use may be affected. Test the feature named in the details (`aictl drill show`) with the network unplugged.", ES: "El uso sin conexión puede verse afectado. Pruebe sin red la función nombrada en los detalles (`aictl drill show`)."},
 	},
 }

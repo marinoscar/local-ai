@@ -279,7 +279,7 @@ Logs (component `drill`): `check_id`, `result`, `ms`, `code`, with the `run_id`.
 | LAI-DRL-080 | warning | Laptop power settings aren't right | Run `sudo install-node.sh --repair`, then reboot. | Ejecute `sudo install-node.sh --repair` y reinicie. |
 | LAI-DRL-081 | warning | The clock looks wrong | Set the date and time in Settings. | Ajuste la fecha y hora en Configuración. |
 | LAI-DRL-090 | error | The drill couldn't restore the normal brain | Press **Switch brain** and choose the usual one. | Presione **Cambiar cerebro** y elija el habitual. |
-| LAI-DRL-091 | warning | Something tried to use the internet during the drill | Report the details; offline use may be affected. | Reporte los detalles; el uso sin internet puede verse afectado. |
+| LAI-DRL-091 | warning | Something tried to use the internet during the drill | Offline use may be affected. Test the feature named in the details (`aictl drill show`) with the network unplugged. | El uso sin conexión puede verse afectado. Pruebe sin red la función nombrada en los detalles (`aictl drill show`). |
 
 ## 9. Test plan
 ### 9.1 Unit

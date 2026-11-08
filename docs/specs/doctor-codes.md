@@ -310,7 +310,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-SYN-010 | warning | Manual sync refused in survival mode | Leave survival mode first (needs the PIN). |
 | LAI-SYN-011 | warning | Manual sync in offline mode needs confirmation | Run again with `--allow-offline-mode`, or switch to online mode. |
 | LAI-SYN-020 | warning | A download didn't match its checksum and was quarantined | Nothing to do: it will be downloaded again. If it repeats, report it. |
-| LAI-SYN-021 | warning | The source's checksum or size disagrees with the catalog | The catalog or the source is wrong. Report it to the maintainer. The old copy is kept. |
+| LAI-SYN-021 | warning | The source's checksum or size disagrees with the catalog | The catalog or the source is wrong. The old copy is kept and still works; the item is tried again with the next catalog update. |
 | LAI-SYN-022 | warning | Kiwix checksum file missing or unreadable | Nothing to do. It will be retried next run; the old copy is kept. |
 | LAI-SYN-023 | warning | Map extract failed `pmtiles verify` | Nothing to do: it will be rebuilt next run. |
 | LAI-SYN-024 | warning | A source mirror is damaged or missing the pinned commit | Run `aictl ark sync --item <id>`. If it repeats, delete the mirror with `aictl ark prune`. |
@@ -511,7 +511,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-KIT-013 | error | The NVIDIA driver isn't loaded | Restart and choose the previous kernel in "Advanced options", or install the driver from the kit. |
 | LAI-KIT-014 | error | Not enough disk space to build | Free 5 GB and try again. |
 | LAI-KIT-020 | error | The build failed | Read the build log shown; run `aictl rebuild-llama --dry-run`. |
-| LAI-KIT-021 | error | The new build doesn't work; the old one is still in use | Nothing breaks. Report the log. |
+| LAI-KIT-021 | error | The new build doesn't work; the old one is still in use | Nothing breaks: the old build keeps working. Keep the log on the ark drive so it can be fixed later. |
 | LAI-KIT-022 | retired (v0.1) | The new build failed after switching; the old one was restored (replaced by `LAI-LLM-019`) | No longer used. |
 | LAI-KIT-030 | error | The agent source in the kit isn't complete | Sync the kit with internet. |
 | LAI-KIT-040 | warning | The rebuild kit is missing parts for this computer | Run `aictl ark sync` with internet, or `aictl ark import` from a good drive. |
@@ -557,4 +557,4 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-DRL-080 | warning | Laptop power settings aren't right | Run `sudo install-node.sh --repair`, then reboot. |
 | LAI-DRL-081 | warning | The clock looks wrong | Set the date and time in Settings. |
 | LAI-DRL-090 | error | The drill couldn't restore the normal brain | Press **Switch brain** and choose the usual one. |
-| LAI-DRL-091 | warning | Something tried to use the internet during the drill | Report the details; offline use may be affected. |
+| LAI-DRL-091 | warning | Something tried to use the internet during the drill | Offline use may be affected. Test the feature named in the details (`aictl drill show`) with the network unplugged. |

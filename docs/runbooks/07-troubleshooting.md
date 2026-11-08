@@ -243,7 +243,7 @@ The admin PIN protects deletes, key rotation and leaving Survival mode. Starting
    - `LAI-SYN-040` (not enough space): [Disk full](#disk-full).
    - `LAI-SYN-041`, `LAI-SYN-042` (a survival model, the kit or the manuals don't fit the budget): free space or raise the budget; this is **red** because the node couldn't rebuild itself or survive.
    - `LAI-SYN-020`, `LAI-SYN-027`, `LAI-SYN-028` (a download didn't match its checksum): nothing to do, it's downloaded again. If it repeats, report it.
-   - `LAI-SYN-021` (source disagrees with the catalog): report it to the catalog maintainer. The old copy is kept.
+   - `LAI-SYN-021` (source disagrees with the catalog): nothing to do now. The old copy is kept and still works; the item is tried again with the next catalog update.
    - `LAI-SYN-025` (stored files no longer match, possible disk damage): `aictl ark verify --full --wait`. If files keep failing, copy the ark to another drive.
    - `LAI-SYN-030` (the server no longer has the file): `aictl catalog refresh`.
    - `LAI-SYN-035` (the same item failed 3 runs in a row): `aictl doctor` shows its last error.
