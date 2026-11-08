@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Install this app's CLI from source:
 #
-#   curl -fsSL https://raw.githubusercontent.com/marinoscar/local-ai/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/marinoscar/local-ai/deploy/cloud/install.sh | bash
+#
+# The default ref is deploy/cloud, not main: in this monorepo the app lives in
+# apps/cloud of main, and only the generated deploy/cloud branch holds it as
+# the flat tree this script builds (docs/specs/cloud-app.md section 3.13,
+# interim until upstream seam request SR-3).
 #
 # Fetched and run BEFORE the repository exists on disk, so it cannot read
 # packages/shared/identity.json: the CLI name and the repository below are
@@ -10,13 +15,13 @@
 #
 # Environment:
 #   INSTALL_REPO     git URL to clone (default below)
-#   INSTALL_REF      branch or tag (default main)
+#   INSTALL_REF      branch or tag (default deploy/cloud)
 #   INSTALL_BIN_DIR  where the shim goes (default ~/.local/bin)
 set -euo pipefail
 
 CLI_NAME="laictl"
 REPO="${INSTALL_REPO:-https://github.com/marinoscar/local-ai.git}"
-REF="${INSTALL_REF:-main}"
+REF="${INSTALL_REF:-deploy/cloud}"
 HOME_DIR="$HOME/.$CLI_NAME"
 APP_DIR="$HOME_DIR/app"
 BIN_DIR="${INSTALL_BIN_DIR:-$HOME/.local/bin}"
@@ -60,3 +65,7 @@ case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) say "Add $BIN_DIR to your PATH to run $CLI_NAME." ;;
 esac
+say ""
+say "Next, on the server (as root): $CLI_NAME deploy doctor, then"
+say "  $CLI_NAME deploy install --repo $REPO --ref $REF --no-version-bump --domain <your domain>"
+say "Guide: apps/cloud/apps/cli/README.md on the main branch."

@@ -28,7 +28,7 @@
 | [doctor-codes.md](specs/doctor-codes.md) | Registry of all `LAI-*` codes | all |
 
 ## Doing a common task
-- Deploy or update the cloud app at `ai.marin.cr` (DNS, `deploy/cloud` branch, VPS install, backing up `SECRETS_ENCRYPTION_KEY`): [runbooks/10-lab-operations.md, Part 9](runbooks/10-lab-operations.md#part-9-deploying-and-updating-the-cloud). Design: [cloud-app.md §3.13](specs/cloud-app.md#313-deploy-laictl-deploy-to-the-vps).
+- Deploy or update the cloud app at `ai.marin.cr` (DNS, `deploy/cloud` branch, VPS install, backing up `SECRETS_ENCRYPTION_KEY`): [runbooks/10-lab-operations.md, Part 9](runbooks/10-lab-operations.md#part-9-deploying-and-updating-the-cloud). Design: [cloud-app.md §3.13](specs/cloud-app.md#313-deploy-laictl-deploy-to-the-vps). Installing and using the cloud CLI `laictl` (one-line installer, `deploy doctor|install|update`): [apps/cloud/apps/cli/README.md](../apps/cloud/apps/cli/README.md).
 
 ## Writing rules
 - Runbooks: numbered steps, exact commands or buttons, a "What you should see" after each step, and "If it doesn't work" with a doctor code. Write for someone who has never used a terminal. Spanish summaries are welcome for the survival runbook.

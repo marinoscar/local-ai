@@ -303,7 +303,7 @@ Use this when the cloud app at `https://ai.marin.cr` is installed for the first 
     node apps/cli/dist/cli.js deploy doctor --domain ai.marin.cr
     node apps/cli/dist/cli.js deploy install --domain ai.marin.cr --ref deploy/cloud --no-version-bump --name local-ai-cloud
     ```
-    (`--no-version-bump` because the branch is generated; versions are changed on `main`.) The installer asks for the settings of `.env`. Answer like this, and let it generate the secrets it offers to generate:
+    (`--no-version-bump` because the branch is generated; versions are changed on `main`.) If you prefer `laictl` on the `PATH`, install it with the one-line installer of the [laictl README](../../apps/cloud/apps/cli/README.md#install) and run the same `deploy` commands as `laictl deploy …`, adding `--repo https://github.com/marinoscar/local-ai.git` when you are not inside this folder. Keep this folder anyway: the stack-agent of Part 10 runs from it. The installer asks for the settings of `.env`. Answer like this, and let it generate the secrets it offers to generate:
 
     | Question | Answer |
     |---|---|
@@ -362,8 +362,10 @@ An update is two parts: the code lands on `main` (a pull request, with `cloud-ci
 70. **Update the VPS.** Over SSH, as `root`:
     ```bash
     cd /opt/infra/apps/local-ai-cloud-src
+    git pull --ff-only && npm ci --workspace=cli && npm run build --workspace=cli
     node apps/cli/dist/cli.js deploy update --name local-ai-cloud --no-version-bump
     ```
+    The second line updates the CLI itself first: a CLI older than the revision it deploys can stop the build with `required variable … is missing a value`. If you installed `laictl` with the one-line installer, re-run that installer instead, then `laictl deploy update --name local-ai-cloud --no-version-bump`.
     To move to a newer agent release first change `AIAGENT_VERSION` in the install folder's `.env` to the new `<AIAGENT_VERSION>`, then run the `deploy update` line.
     - **What you should see:** a green summary that names the same seven-character code as the branch's newest commit (step 69); `curl -s https://ai.marin.cr/api/health/ready` answers `ok`; the Lab page loads and the nodes' cards come back within a minute (they keep reporting by themselves).
     - **If it doesn't work:** the summary shows an older code: run `git pull --ff-only` in this folder and the `deploy update` line again. The build fails: the old cloud keeps running; read the error, fix it on `main`, wait for the branch (step 69) and run the update again. Nodes are not affected in the meantime. A restore of the whole cloud from a database copy needs the key from step 62.
