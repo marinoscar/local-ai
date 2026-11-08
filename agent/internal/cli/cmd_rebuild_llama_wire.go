@@ -18,6 +18,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/cli/i18n"
 	"github.com/marinoscar/local-ai/agent/internal/cli/local"
 	"github.com/marinoscar/local-ai/agent/internal/cli/out"
+	"github.com/marinoscar/local-ai/agent/internal/cli/progress"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/kit"
@@ -435,18 +436,33 @@ func llamaOptions(c *Call, env local.Env, host kitHost, set llamaSettings, roots
 // ---- progress, the heartbeat and Ctrl-C ----------------------------------------------------------
 
 // llamaPrinter serialises everything the command writes to stderr while the engine runs: the stage
-// lines, the "still working" line of the heartbeat, the Ctrl-C question and the engine's -v log.
+// lines, the compile progress (cmd_rebuild_llama_progress.go), the "still working" line of the
+// heartbeat, the Ctrl-C question and the engine's -v log.
 type llamaPrinter struct {
 	c  *Call
 	mu sync.Mutex
+
+	// tty: stderr is a terminal, so the compile progress is one updating line (rend).
+	tty  bool
+	rend *progress.TextRenderer
+	// meter reads the ninja lines; tenth is the last tenth of the build a plain line was printed
+	// for; lastCompile is when the last ninja line came; paused is set while the Ctrl-C question
+	// waits for its answer.
+	meter       ninjaMeter
+	tenth       int
+	lastCompile time.Time
+	paused      bool
 }
 
-func newLlamaPrinter(c *Call) *llamaPrinter { return &llamaPrinter{c: c} }
+func newLlamaPrinter(c *Call) *llamaPrinter {
+	return &llamaPrinter{c: c, tty: !c.Global.JSON && !c.Global.Quiet && llamaStderrTTY(c)}
+}
 
-// line prints one progress line ("… message") to stderr.
+// line prints one progress line ("… message") to stderr, under the live compile line.
 func (p *llamaPrinter) line(msg string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.clearLive()
 	p.c.Out.Progress(msg)
 }
 
@@ -468,6 +484,7 @@ var llamaProgressES = []struct{ en, es string }{
 	{"Looking for the llama.cpp source ", "Buscando el código fuente de llama.cpp "},
 	{"Unpacking the CUDA redistributable ", "Descomprimiendo el redistribuible de CUDA "},
 	{"Compiling (this takes a while)", "Compilando (tarda un rato)"},
+	{"Carrying on with the build that was stopped before", "Se continúa la compilación que se detuvo antes"},
 	{"Installing the programs", "Instalando los programas"},
 	{"Testing the new build", "Probando la nueva versión"},
 	{"Switching to the new build", "Cambiando a la nueva versión"},
@@ -497,6 +514,7 @@ func llamaProgressText(l Lang, msg string) string {
 func (p *llamaPrinter) Write(b []byte) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.clearLive()
 	return p.c.Stderr.Write(b)
 }
 
@@ -515,6 +533,9 @@ func (p *llamaPrinter) startHeartbeat(buildsDir string) (stop func()) {
 		for {
 			select {
 			case <-tick:
+				if p.compiledRecently(llamaHeartbeatEvery) {
+					continue // the compile progress already says that it is working
+				}
 				el := llamaClock().Sub(start)
 				p.line(fmt.Sprintf(pick(p.c.Lang, "Still working on the build (%s so far)", "Sigue la compilación (%s hasta ahora)"), out.Duration(el.Round(time.Second))))
 				if p.c.Global.Verbose {
@@ -626,9 +647,14 @@ func (c *Call) askToStop(ctx context.Context, pr *llamaPrinter) bool {
 		return true
 	}
 	pr.mu.Lock()
+	pr.clearLive()
+	pr.paused = true // the compile progress must not draw over the question
 	fmt.Fprint(c.Stderr, "\n"+pick(c.Lang, "Stop the build?", "¿Detener la compilación?")+i18n.T(c.Lang, i18n.KeyConfirmSuffix))
 	pr.mu.Unlock()
 	line, err := c.Term.ReadLine(ctx)
+	pr.mu.Lock()
+	pr.paused = false
+	pr.mu.Unlock()
 	if err != nil {
 		return false
 	}

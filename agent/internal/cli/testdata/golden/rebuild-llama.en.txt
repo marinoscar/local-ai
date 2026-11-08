@@ -1,4 +1,6 @@
 == stdout ==
+i It tries, in order: cuda; Vulkan; the processor only (cpu). It stops at the
+  first that works.
 ✓ Build f3586e66b-cuda passed its test (CUDA0: NVIDIA GeForce RTX 2070 with
   Max-Q Design).
 ✓ Switched to the new build. qwen3.5-9b-q4km is loaded again.

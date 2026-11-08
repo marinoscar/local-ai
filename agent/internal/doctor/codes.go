@@ -414,6 +414,7 @@ const (
 	KIT047 = "LAI-KIT-047"
 	KIT048 = "LAI-KIT-048"
 	KIT049 = "LAI-KIT-049"
+	KIT050 = "LAI-KIT-050"
 
 	// LAI-DRL
 	DRL001 = "LAI-DRL-001"
@@ -2635,6 +2636,12 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "A build could not be exported to the kit", ES: "No se pudo exportar una compilación al kit"},
 		Fix:      Msg{EN: "The kit's other files are untouched. Free some space on the drive, then run `sudo aictl kit export-build` again.", ES: "Los demás archivos del kit no se tocaron. Libere espacio en el disco y ejecute `sudo aictl kit export-build` otra vez."},
+	},
+	{
+		ID:       KIT050,
+		Severity: Error,
+		Title:    Msg{EN: "No configuration backup of this node was found", ES: "No se encontró ninguna copia de la configuración de este nodo"},
+		Fix:      Msg{EN: "Plug in the AI-ARK drive that holds it, or give the file: `sudo aictl backup-config --restore <file>`. With no backup, skip this step.", ES: "Conecte el disco AI-ARK que la tiene, o indique el archivo: `sudo aictl backup-config --restore <archivo>`. Sin copia, omita este paso."},
 	},
 	{
 		ID:       DRL001,

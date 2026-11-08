@@ -174,18 +174,31 @@ func TestRebuildLlamaOffersTheReadyMadeBuildBeforeCompiling(t *testing.T) {
 			t.Fatalf("exit %d request %+v\n%s", r.code, f.lastReq(t), r.errOut)
 		}
 	})
-	t.Run("--yes never chooses it for the operator: the hint names the file", func(t *testing.T) {
+	t.Run("--yes with no backend flags uses it by itself (issue #433)", func(t *testing.T) {
 		f := newLlamaFix(t)
 		file, _ := exportInto(t, f.kitRoot(), llamaSpec())
-		r := runCLI(t, DefaultRegistry, localOpts(fake.Typed(true, "y")), "rebuild-llama", "--yes")
+		f.eng.res.Restored = true
+		r := runCLI(t, DefaultRegistry, localOpts(fake.Typed(true)), "rebuild-llama", "--yes")
+		if r.code != 0 || f.lastReq(t).Prebuilt != file || !strings.Contains(unwrap(r.out), "i Using the ready-made build "+filepath.Base(file)+" from the kit instead of compiling.") {
+			t.Fatalf("exit %d\n%s\n%s", r.code, r.out, r.errOut)
+		}
+		js := runCLI(t, DefaultRegistry, localOpts(fake.Typed(true)), "--json", "rebuild-llama", "--yes")
+		if js.code != 0 || f.lastReq(t).Prebuilt != file || js.errOut != "" {
+			t.Fatalf("--json: exit %d\n%s\n%s", js.code, js.out, js.errOut)
+		}
+	})
+	t.Run("an explicit backend keeps the hint and never chooses it for the operator", func(t *testing.T) {
+		f := newLlamaFix(t)
+		file, _ := exportInto(t, f.kitRoot(), llamaSpec())
+		r := runCLI(t, DefaultRegistry, localOpts(fake.Typed(true, "y")), "rebuild-llama", "--yes", "--backend", "cuda")
 		if r.code != 0 || f.lastReq(t).Prebuilt != "" || !strings.Contains(unwrap(r.out), "sudo aictl rebuild-llama --prebuilt "+file) {
 			t.Fatalf("exit %d\n%s\n%s", r.code, r.out, r.errOut)
 		}
 	})
-	t.Run("--json and --source make no offer", func(t *testing.T) {
+	t.Run("--json with an explicit backend, and --source, make no offer", func(t *testing.T) {
 		f := newLlamaFix(t)
 		exportInto(t, f.kitRoot(), llamaSpec())
-		for _, args := range [][]string{{"--json", "rebuild-llama", "--yes"}, {"rebuild-llama", "--yes", "--source", "/tmp/s"}} {
+		for _, args := range [][]string{{"--json", "rebuild-llama", "--yes", "--backend", "cuda"}, {"rebuild-llama", "--yes", "--source", "/tmp/s"}} {
 			r := runCLI(t, DefaultRegistry, localOpts(fake.Typed(true, "y")), args...)
 			if r.code != 0 || f.lastReq(t).Prebuilt != "" || strings.Contains(r.out+r.errOut, "ready-made") {
 				t.Fatalf("%v: exit %d\n%s\n%s", args, r.code, r.out, r.errOut)

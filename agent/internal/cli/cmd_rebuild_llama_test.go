@@ -284,7 +284,7 @@ func TestRebuildLlamaYesAndJSONDoNotChangeTheRequest(t *testing.T) {
 			t.Fatalf("%v: exit %d\n%s\n%s", pre, r.code, r.out, r.errOut)
 		}
 		req := f.lastReq(t)
-		req.Progress = nil
+		req.Progress, req.Output = nil, nil // how progress is shown is not what is built
 		reqs = append(reqs, req)
 	}
 	for i := 1; i < len(reqs); i++ {
@@ -601,12 +601,12 @@ func TestRebuildLlamaPostSwitchFailureGolden(t *testing.T) {
 	f := newLlamaFix(t)
 	f.eng.err = llamaBuildErr(doctor.LLM019, build.StageCheck, "The new llama.cpp build did not work; the previous build is still in use.",
 		"cause", "completion_failed", "rolled_back", true, "previous_build", "0a1b2c3d4-cuda", "log_path", "/opt/localai/llama.cpp/builds/"+lShort+"-cuda/build.log")
-	r := f.run(t, "rebuild-llama", "--yes")
+	r := f.run(t, "rebuild-llama", "--yes", "--backend", "cuda") // an explicit backend: no fallback
 	if r.code != ExitFailed {
 		t.Fatalf("exit %d\n%s", r.code, r.errOut)
 	}
 	checkGolden(t, "rebuild-llama.llm019.en", r)
-	es := runCLI(t, DefaultRegistry, localOpts(nil), "--lang", "es", "rebuild-llama", "--yes")
+	es := runCLI(t, DefaultRegistry, localOpts(nil), "--lang", "es", "rebuild-llama", "--yes", "--backend", "cuda")
 	if es.code != ExitFailed || strings.Contains(es.errOut, "did not work") {
 		t.Fatalf("es: exit %d\n%s", es.code, es.errOut)
 	}

@@ -1,4 +1,6 @@
 == stdout ==
+i Prueba, por orden: cuda; Vulkan; solo el procesador (cpu). Se detiene en la
+  primera que funcione.
 ✓ La versión f3586e66b-cuda superó su prueba (CUDA0: NVIDIA GeForce RTX 2070
   with Max-Q Design).
 ✓ Se cambió a la nueva versión. qwen3.5-9b-q4km está cargado otra vez.

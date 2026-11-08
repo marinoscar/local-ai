@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -43,6 +44,10 @@ type Cmd struct {
 	// (the caller must be root; the start fails otherwise). `aictl key copy` uses it to run the
 	// clipboard tool as $SUDO_USER.
 	Credential *Credential
+	// Tee, when set, also receives everything the program writes to stdout and stderr, as it is
+	// written (a long build shows its progress from it). The output cap does not apply to it, its
+	// errors are ignored, and the two streams reach it one write at a time.
+	Tee io.Writer
 }
 
 // Credential is the user and group a program runs as.
@@ -110,6 +115,20 @@ func (b *capBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// teeWriter passes writes on to Cmd.Tee one at a time and never fails: a reader of the progress
+// that goes away must not stop the program.
+type teeWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (t *teeWriter) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	_, _ = t.w.Write(p)
+	return len(p), nil
+}
+
 // Run starts the program in its own process group, enforces the timeout (killing the whole group)
 // and caps its output. It returns ErrInvalid for a malformed Cmd, ErrTimeout when the timeout
 // expired, ctx.Err() when ctx was cancelled, and the start error if the program could not start.
@@ -134,6 +153,10 @@ func (Exec) Run(ctx context.Context, c Cmd) (Result, error) {
 	cmd.WaitDelay = 2 * time.Second // do not hang on pipes a grandchild might still hold
 	stdout, stderr := &capBuffer{max: c.MaxOut}, &capBuffer{max: c.MaxOut}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
+	if c.Tee != nil {
+		t := &teeWriter{w: c.Tee}
+		cmd.Stdout, cmd.Stderr = io.MultiWriter(stdout, t), io.MultiWriter(stderr, t)
+	}
 
 	start := time.Now()
 	err := cmd.Run()

@@ -282,6 +282,8 @@ Restoring a prebuilt: `aictl rebuild-llama --prebuilt <file>` verifies sha256, e
 
 Synopsis and flags are owned by [aictl.md](aictl.md) §4.23 (`--cuda-arch <list>`: semicolon-separated compute capabilities such as `75;86`; `--yes`; the global `--json`). The build itself (source location `/opt/localai/llama.cpp/src/<commit>/`, cmake flags including `-G Ninja`, 3 h timeout, smoke test, install, switch, post-switch check, `LAI-LLM-018`/`019`) is [llama-router.md](llama-router.md) §4.10; this section only adds the offline source, the preflight (`--dry-run`) and the prebuilt path. Defaults: commit = `node.yaml: llama.commit`; backend = node backend; cuda-arch = detected compute capability; source = kit tarball if present on any root, else the mirror (`git archive` from `kit/git/llama.cpp.git`), else (online only) GitHub; `--activate` on; keep 2 builds.
 
+**No backend flags: the command picks its own fallbacks** (issue #433, [aictl.md](aictl.md) §4.23 has the words). When none of `--backend`, `--cuda-arch`, `--jobs`, `--source` and `--prebuilt` is given (and not `--dry-run`), a person rebuilding a node offline does not have to choose between them by reading codes. The options are tried in this order, each only when the one before failed in a way the next can get around: (1) the ready-made build in `kit/prebuilt/` that fits this computer exactly (§4.2); (2) building on the node's backend; (3) building for Vulkan, when that backend is cuda; (4) building for the processor (cpu), which needs only the generic tools. The next option is tried after `LAI-HW-019`, `LAI-KIT-011` to `013`, `LAI-LLM-018` for a failed compile (`cause` `exit`, `timeout`, `exec`) or for missing tools of the backend alone (`nvcc`, `glslc`, …), `LAI-LLM-019` when the previous build was put back, and, for the ready-made build, `LAI-KIT-048` and `LAI-KIT-001`; anything else ends the command with its own code (the source: `LAI-KIT-001`/`002`; the disk: `LAI-KIT-014`; a missing generic tool: `LAI-KIT-010` or `LAI-LLM-018` naming `cmake`, `ninja`, a compiler, `pkg-config` or `git`; a busy agent; a lock; a rollback that failed; a stop). A compile that ran out of memory (the end of `build.log` says `Killed signal terminated program`, `died due to signal 9`, `virtual memory exhausted`, `Cannot allocate memory` or `std::bad_alloc`) is tried once more on the same backend with half the parallel jobs (at least 1) before moving on. `llama.backend` of `node.yaml` is not changed by a fallback: the next rebuild tries the node's backend first again.
+
 #### 4.3.1 Procedure
 1. **Preflight** (also the whole of `--dry-run`, which prints each check with ✓/✗ and exits 0 only if all pass):
    - source available and its sha256 matches the one the kit recorded (`LAI-KIT-001`; where it is recorded: [below](#what-the-code-does-kit-04)); for the mirror, `git cat-file -e <commit>^{commit}` (`LAI-KIT-002`);
@@ -411,12 +413,13 @@ Plain list, also printed in the rebuild runbook:
 | Ready-made build the kit's list does not record, or whose size changed | refuse; nothing changed | `LAI-KIT-001` |
 | New agent not healthy within 60 s | `aiagent.prev` put back and the agent restarted | `LAI-KIT-021` |
 | A build cannot be exported (no writable root, disk full, not the program `BUILD.json` describes) | the build stays in use; a warning after a rebuild | `LAI-KIT-049` |
+| `aictl backup-config --restore latest` (or the list of `--restore` with no file) finds no backup of this node in any `kit/config/` | nothing changed; exit 5 | `LAI-KIT-050` |
 | Agent source not fully vendored | fails with GOPROXY=off | `LAI-KIT-030` |
 | Kit incomplete for this node / for the lab | READY red / yellow | `LAI-KIT-040` / `041` |
 | Kit debs for another codename | red (error) | `LAI-KIT-042` |
 | Toolkit/driver mismatch | red | `LAI-KIT-043` |
 | Signature check of agent binaries fails | refuse to install from the kit | `LAI-KIT-044` |
-| Power loss mid-build | scratch dir is discarded on the next run; `current` never pointed at a partial build | — |
+| Power loss or Ctrl-C mid-build | the next run of the same build carries on in the kept build tree (`builds/<build-id>.tmp/build`, when it has its `CMakeCache.txt`; anything else of the `.tmp` is discarded); `current` never pointed at a partial build | — |
 
 ## 7. Security considerations
 - Every kit artifact is verified before use: catalog pins, signed apt indexes, minisign for agent binaries, GitHub digests where available.
@@ -450,6 +453,7 @@ Plain list, also printed in the rebuild runbook:
 | LAI-KIT-047 | error | Installing from the kit failed | Nothing was replaced. Read the message, then run `aictl kit verify --full` and try again. | No se reemplazó nada. Lea el mensaje, ejecute `aictl kit verify --full` e intente otra vez. |
 | LAI-KIT-048 | error | The ready-made build doesn't fit this computer | Nothing was changed. Build from the kit source instead: `sudo aictl rebuild-llama --from-kit` (or `rebuild-whisper`). | No se cambió nada. Compile desde el código fuente del kit: `sudo aictl rebuild-llama --from-kit` (o `rebuild-whisper`). |
 | LAI-KIT-049 | error | A build could not be exported to the kit | The kit's other files are untouched. Free some space on the drive, then run `sudo aictl kit export-build` again. | Los demás archivos del kit no se tocaron. Libere espacio en el disco y ejecute `sudo aictl kit export-build` otra vez. |
+| LAI-KIT-050 | error | No configuration backup of this node was found | Plug in the AI-ARK drive that holds it, or give the file: `sudo aictl backup-config --restore <file>`. With no backup, skip this step. | Conecte el disco AI-ARK que la tiene, o indique el archivo: `sudo aictl backup-config --restore <archivo>`. Sin copia, omita este paso. |
 
 ## 9. Test plan
 
