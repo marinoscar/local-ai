@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { CODE_LOST_CONTACT } from "../api";
 import { t, useLang } from "../i18n/i18n";
 import { batteryLevel, type PortalStatus, type StatusState } from "../status";
 import { Banner } from "./Banner";
@@ -38,7 +39,11 @@ function Banners({ state }: { state: StatusState }) {
   return (
     <>
       {state.lost ? (
-        <Banner kind="danger" assertive text={t("banner.lostContact")} />
+        <Banner kind="danger" assertive text={t("banner.lostContact")}>
+          <span className="banner-note">
+            {`${t("banner.lostContactFix")} ${t("common.code", { code: CODE_LOST_CONTACT })}`}
+          </span>
+        </Banner>
       ) : null}
       {status && status.mode !== "survival" ? (
         <Banner kind="warn" text={t("banner.survivalOff")}>

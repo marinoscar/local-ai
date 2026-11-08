@@ -473,6 +473,28 @@ func TestImportWithSeveralDrivesAndNoSourceIsARK015WithTheirIds(t *testing.T) {
 	}
 }
 
+// The Portal's import (FirstDrive, survival-portal.md section 3.3): several drives are never a
+// question, the first one in mount order is the source; with none the answer is 409 LAI-SVC-118.
+func TestPortalImportTakesTheFirstDriveOrIsSVC118(t *testing.T) {
+	x := newE2E(t)
+	second := ark.Root{ID: "ark-0e0f1011", Kind: ark.KindArkDrive, Path: filepath.Join(x.base, "drive2", "localai"), State: ark.StateReady, MountID: 9}
+	if err := os.MkdirAll(second.Path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	x.roots = append(x.roots, second)
+	x.put(x.drive, "m-small", []string{"w2"})
+	if st := x.importRun(api.ArkImportRequest{FirstDrive: true}); resultsByItem(st)["m-small"].Result != "verified" {
+		t.Fatalf("%+v", st.Items)
+	}
+
+	x.roots = x.roots[:1] // internal only
+	_, err := x.imp.StartImport(bg, api.ArkImportRequest{FirstDrive: true})
+	var ae *api.Error
+	if !errors.As(err, &ae) || ae.Code != doctor.SVC118 || ae.Status != http.StatusConflict {
+		t.Fatalf("no drive: %v", err)
+	}
+}
+
 func TestImportErrorsMapToTheRoutesAnswers(t *testing.T) {
 	x := newE2E(t)
 	for _, tc := range []struct {

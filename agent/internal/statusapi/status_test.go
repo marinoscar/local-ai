@@ -293,6 +293,29 @@ func TestStatusForCloud(t *testing.T) {
 	}
 }
 
+// TestStatusAlertAction: an alert carries the action of its code (doctor-codes.md section 1.7) in
+// the local body, none when the code has no action, and never in the cloud copy.
+func TestStatusAlertAction(t *testing.T) {
+	r := newRig(t, func(r *rig, _ *statusapi.Deps) {
+		r.alerts.list = []doctor.Alert{
+			{Code: doctor.SVC001, Severity: doctor.Error, Title: "x", Fix: "y", Since: t0},
+			{Code: doctor.HW012, Severity: doctor.Warning, Title: "x", Fix: "y", Since: t0},
+		}
+	})
+	st := decode[statusapi.Status](t, r.get("/status", "op"))
+	if len(st.Alerts) != 2 || st.Alerts[0].Action != string(doctor.ActionArkImport) || st.Alerts[1].Action != "" {
+		t.Errorf("alerts = %+v", st.Alerts)
+	}
+	cloud := r.deps.Builder().Build(context.Background(), true, statusapi.BuildOptions{Lang: doctor.LangEN})
+	body, err := json.Marshal(cloud)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), `"action"`) {
+		t.Errorf("the cloud body carries an action: %s", body)
+	}
+}
+
 // TestStatusRouteMetadata: the auth level and the deadline of every route (agent.md section 3.8).
 func TestStatusRouteMetadata(t *testing.T) {
 	var found int

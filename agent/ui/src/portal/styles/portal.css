@@ -406,6 +406,22 @@ body {
   margin-top: 20px;
 }
 
+/* The button of a fix (doctor-codes.md section 1.7): the button, the typed command under it, the result. */
+.fix {
+  margin: 12px 0;
+}
+.fix-command {
+  font-size: 0.9rem;
+  margin: 6px 0 0;
+}
+.fix-result {
+  margin: 8px 0 0;
+  font-weight: 700;
+}
+.fix-failed p {
+  margin: 4px 0;
+}
+
 /* Lock dialog */
 .dialog {
   max-width: 40rem;

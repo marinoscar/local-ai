@@ -115,7 +115,7 @@ export const DOCTOR_FIXES: Readonly<Record<string, DoctorFixRow>> = {
   'LAI-SYN-010': { severity: "warning", meaning: "Manual sync refused in survival mode", fix: "Leave survival mode first (needs the PIN)." },
   'LAI-SYN-011': { severity: "warning", meaning: "Manual sync in offline mode needs confirmation", fix: "Run again with `--allow-offline-mode`, or switch to online mode." },
   'LAI-SYN-020': { severity: "warning", meaning: "A download didn't match its checksum and was quarantined", fix: "Nothing to do: it will be downloaded again. If it repeats, report it." },
-  'LAI-SYN-021': { severity: "warning", meaning: "The source's checksum or size disagrees with the catalog", fix: "The catalog or the source is wrong. Report it to the maintainer. The old copy is kept." },
+  'LAI-SYN-021': { severity: "warning", meaning: "The source's checksum or size disagrees with the catalog", fix: "The catalog or the source is wrong. The old copy is kept and still works; the item is tried again with the next catalog update." },
   'LAI-SYN-022': { severity: "warning", meaning: "Kiwix checksum file missing or unreadable", fix: "Nothing to do. It will be retried next run; the old copy is kept." },
   'LAI-SYN-023': { severity: "warning", meaning: "Map extract failed `pmtiles verify`", fix: "Nothing to do: it will be rebuilt next run." },
   'LAI-SYN-024': { severity: "warning", meaning: "A source mirror is damaged or missing the pinned commit", fix: "Run `aictl ark sync --item <id>`. If it repeats, delete the mirror with `aictl ark prune`." },

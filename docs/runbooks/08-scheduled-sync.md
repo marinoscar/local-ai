@@ -176,7 +176,7 @@ When the timer's drill is skipped (one of the reasons above), it prints `i Drill
     - **Pass:** every check passed.Exit code 0.    - **Pass with warnings** (exit 8): everything essential works, something is slow or second-best (for example `LAI-DRL-021` a brain slower than expected, `LAI-DRL-031` speech less accurate, `LAI-DRL-033` a language uses another language's voice). Fix when convenient.
     - **Fail** (exit 9): a check failed. Each failed check has a code and a fix. The most important ones: `LAI-DRL-011` essential content missing, `LAI-DRL-012` stored files damaged, `LAI-DRL-020` a survival brain couldn't start, `LAI-DRL-023` the photo brain failed the test image, `LAI-DRL-030` library search broken, `LAI-DRL-050` Portal or chat broken, `LAI-DRL-060` manuals missing, `LAI-DRL-071` llama.cpp couldn't be rebuilt offline, `LAI-DRL-090` the normal brain wasn't put back (press **Switch brain** and choose it).
     - **"Survival mode is ready on this node."** means every critical check passed or only warned. That's the one that matters in an emergency.
-    - `LAI-DRL-091` (something tried to use the internet during the drill): report it; an offline feature may be broken.
+    - `LAI-DRL-091` (something tried to use the internet during the drill): an offline feature may be broken. Run `aictl drill show` to see which one, and test it with the network unplugged.
     - All codes: [drill.md §8](../specs/drill.md#8-doctor-codes-shown-in-the-desktop-english-and-spanish). The cloud shows the result on the node card ("Drill ✔") and raises `LAI-CLD-024` on failure.
 
 ---

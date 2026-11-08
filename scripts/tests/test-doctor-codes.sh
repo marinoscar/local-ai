@@ -31,6 +31,7 @@ run codes-go-drift 1 "LAI-CAT-001 is defined twice in codes.go" "LAI-CAT-077 is 
 run codes-go-no-es 1 "LAI-CAT-001 has no Spanish (ES) title in codes.go" "LAI-CAT-010 has no Spanish (ES) fix in codes.go"
 run codes-go-no-entry 1 "LAI-CAT-010 has no table entry in codes.go"
 run codes-go-severity 1 'LAI-CAT-001 severity in codes.go is "critical" but the registry says "error"'
+run codes-go-action 1 "LAI-CAT-001 is listed twice in the action table" 'LAI-CAT-001 action in codes.go is "service.restart:kiwix" but the action table' 'LAI-CAT-010 has action "ark.import" in codes.go but the action table'
 
 echo "== real repo =="
 out="$("$CHECK" 2>&1)"; rc=$?

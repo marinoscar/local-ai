@@ -76,6 +76,49 @@ type Code struct {
 	Title Msg
 	// Fix says what to do, in one or two sentences.
 	Fix Msg
+	// Action is the button that performs the fix, "" for a code whose fix is only words or a typed
+	// command (doctor-codes.md section 1.7). A UI shows it as the primary button and keeps the typed
+	// command of the fix as the second line.
+	Action Action
+}
+
+// Action is the button of a fix: a closed set (doctor-codes.md section 1.7). The value is a stable
+// word; the UI owns the label and the typed command shown under it.
+type Action string
+
+// The actions.
+const (
+	// ActionArkImport copies content from a connected AI-ARK drive (POST /ark/import).
+	ActionArkImport Action = "ark.import"
+	// ActionRestartKiwix restarts the library service (POST /services/kiwix/restart).
+	ActionRestartKiwix Action = "service.restart:kiwix"
+	// ActionRestartWhisper restarts the speech-recognition service (POST /services/whisper/restart).
+	ActionRestartWhisper Action = "service.restart:whisper"
+	// ActionPortalBrain opens the Portal's Switch brain screen; it calls nothing.
+	ActionPortalBrain Action = "portal.brain"
+)
+
+// Actions returns the closed set of actions, sorted.
+func Actions() []Action {
+	return []Action{ActionArkImport, ActionPortalBrain, ActionRestartKiwix, ActionRestartWhisper}
+}
+
+// Valid reports whether a is one of Actions.
+func (a Action) Valid() bool {
+	for _, x := range Actions() {
+		if x == a {
+			return true
+		}
+	}
+	return false
+}
+
+// ActionOf returns the action of code, "" when it has none or is not in the table.
+func ActionOf(code string) Action {
+	if c, ok := index[code]; ok {
+		return c.Action
+	}
+	return ""
 }
 
 // CodePattern is the format of a code (doctor-codes.md section 1.1).

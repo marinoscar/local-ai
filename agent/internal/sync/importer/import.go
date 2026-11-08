@@ -177,6 +177,18 @@ func (r Result) Lookup(id string) (plan.CatalogItem, bool) {
 	return plan.CatalogItem{}, false
 }
 
+// FirstSource is the drive the Portal's import reads from (survival-portal.md section 3.3): the first
+// ark drive that can be read, in the order of the roots (mount order), so several drives are never a
+// question. ErrNoDrive when there is none; an unclean drive does not count (importable).
+func (p *Planner) FirstSource() (ark.Root, error) {
+	for _, r := range p.d.G.Roots() {
+		if r.Kind == ark.KindArkDrive && importable(r) {
+			return r, nil
+		}
+	}
+	return ark.Root{}, ErrNoDrive
+}
+
 // Source resolves the drive an import reads from: the named root, or the only drive that can be read.
 func (p *Planner) Source(from string) (ark.Root, error) {
 	roots := p.d.G.Roots()

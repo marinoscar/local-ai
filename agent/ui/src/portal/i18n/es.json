@@ -107,7 +107,7 @@
   "library.books": "Libros",
   "library.allLanguages": "Todos los idiomas",
   "library.backToResults": "Volver a los resultados",
-  "library.none": "La biblioteca no tiene libros. Conecte el disco AI-ARK y presione Importar desde el disco.",
+  "library.none": "La biblioteca no tiene libros. Conecte la unidad AI-ARK y presione Copiar desde la unidad AI-ARK.",
   "maps.title": "Mapas",
   "maps.whereami": "Dónde estoy",
   "maps.iAmHere": "Estoy aquí",
@@ -180,5 +180,15 @@
   "manuals.degraded": "Estos manuales se hicieron sin los valores reales de esta computadora. Las direcciones aparecen como marcadores, no como valores reales.",
   "library.searchButton": "Buscar",
   "library.failed": "La búsqueda no funcionó. Intente de nuevo.",
-  "reader.frame": "Artículo"
+  "reader.frame": "Artículo",
+  "banner.lostContactFix": "Si sigue así, reinicie la computadora; la tarjeta de supervivencia impresa tiene los pasos.",
+  "fix.import": "Copiar desde la unidad AI-ARK",
+  "fix.restartLibrary": "Reiniciar la biblioteca",
+  "fix.restartSpeech": "Reiniciar la voz",
+  "fix.brain": "Elegir un cerebro",
+  "fix.orType": "O escriba en una terminal: {cmd}",
+  "fix.working": "Trabajando en ello …",
+  "fix.importStarted": "Comenzó la copia desde la unidad. Puede tardar; esta página se actualiza sola.",
+  "fix.restarted": "Listo: se reinició. Esta página se actualiza sola.",
+  "fix.failed": "No funcionó: {message}"
 }

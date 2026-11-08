@@ -101,7 +101,7 @@ When the computer is in Survival mode, the **Local AI** app fills the whole scre
 14. Press **4**. Type what you are looking for (for example `water purification`) and press **Enter**.
 15. Click a result to read it. **Back to results** returns to the list. The **Books** list on the right opens one book (for example WikiMed for medicine, iFixit for repairs).
    - **What you should see:** a list of articles; the article opens inside the Portal.
-   - **If it doesn't work:** "The library has no books" (`LAI-SVC-001`): plug in the AI-ARK drive (Part 6). "The library is not running" (`LAI-SVC-002`): see Part 8.
+   - **If it doesn't work:** "The library has no books" (`LAI-SVC-001`): plug in the AI-ARK drive, wait 10 seconds, then press the button **Copy from the AI-ARK drive** on that screen. It says "Copying from the drive has started"; the books appear by themselves when it is done. "The library is not running" (`LAI-SVC-002`): press **Restart the library**, or see Part 8.
 
 ### First aid (press F)
 16. On the home screen, press **F**, or click a button in the **FIRST AID** row (CPR, Choking, Severe bleeding, Burns, Broken bone, Snake bite, **More …**).
@@ -121,7 +121,7 @@ When the computer is in Survival mode, the **Local AI** app fills the whole scre
 
 ### Button 7: Status and battery
 21. Press **7**.
-   - **What you should see:** the battery level and time left, which brain is running, the mode, the ark colour, the clock, **What works** and **Problems**. Each problem has a code and a one-line fix.
+   - **What you should see:** the battery level and time left, which brain is running, the mode, the ark colour, the clock, **What works** and **Problems**. Each problem has a code and a one-line fix. Some problems also have a button that does the fix for you (for example **Restart the library** or **Copy from the AI-ARK drive**): press it and read the line under it.
    - **Ark colour:** **Green** = everything is here and up to date. **Yellow** = everything essential is here. **Red** = something essential is missing; read the problems.
 
 ### Button 8: Switch brain
@@ -180,13 +180,14 @@ The **AI-ARK drive** is the portable copy of everything. It is **not encrypted**
 34. **Plug it in.** Use any USB port. Wait about 10 seconds.
    - **What you should see:** Button 7 shows "Ark drive connected". Brains, books and maps on the drive become available.
    - **If it doesn't work:** "plugged in but not mounted" (`LAI-ARK-005`): open the **Files** app and click **AI-ARK** on the left, or press **Mount** in the Local AI app. "needs to be set up" (`LAI-ARK-010`): it is a new, empty drive; see runbook 04.
-35. **Copy content inside (optional, makes it faster and safer).** In a terminal:
+35. **Copy content inside (optional, makes it faster and safer).** When the Portal shows a problem with the button **Copy from the AI-ARK drive** (for example "The library has no books"), press it. Nothing is deleted. Or, in a terminal:
 
    ```
    aictl ark import --wait
    ```
 
-   - **What you should see:** a progress line, then `✓`. This works with no internet.
+   - **What you should see:** the Portal says "Copying from the drive has started"; the terminal shows a progress line, then `✓`. This works with no internet.
+   - **If it doesn't work:** `LAI-SVC-118` (no usable drive): plug the drive in, wait a minute, press the button again. `LAI-SVC-117` (too many tries): wait a few minutes.
 36. **Before unplugging: eject.** Press **Eject** in the Local AI app. In a terminal, first find the drive's id (it looks like `ark-3f9c0a12`), then eject it:
 
    ```
@@ -231,9 +232,10 @@ The **AI-ARK drive** is the portable copy of everything. It is **not encrypted**
    - `LAI-SVC-106` or `LAI-SVC-102` (no brain / the AI isn't answering): press **8 Switch brain** and choose one. Still broken: restart the computer and wait 2 minutes.
    - `LAI-LLM-021` (no brain could start at all): run `aictl restart llama`. The library, maps and manuals still work meanwhile.
    - `LAI-SVC-107` (new brain couldn't start): choose a smaller brain.
-   - `LAI-SVC-001` (library has no books) or `LAI-SVC-030` (no map): plug in the AI-ARK drive, then run `aictl ark import --wait`.
-   - `LAI-SVC-002` (library not running): run `aictl restart kiwix`.
-   - `LAI-SVC-010` or `LAI-SVC-011` (voice input missing or stopped): run `aictl restart whisper`. Meanwhile use Chat (button 1).
+   - `LAI-SVC-001` (library has no books) or `LAI-SVC-030` (no map): plug in the AI-ARK drive, then press **Copy from the AI-ARK drive** in the Portal (on the Library or Maps screen, or under the problem on button 7). Or run `aictl ark import --wait`.
+   - `LAI-SVC-002` (library not running): press **Restart the library** under the problem on button 7. Or run `aictl services restart kiwix`.
+   - `LAI-SVC-011` (voice input stopped): press **Restart speech** under the problem on button 7. Or run `aictl services restart whisper`. `LAI-SVC-010` (voice input missing): press **Copy from the AI-ARK drive**. Meanwhile use Chat (button 1).
+   - `LAI-SVC-116` ("Lost contact with the AI service"): wait a minute; the Portal tries again by itself. If it stays, restart the computer (step 42).
    - `LAI-SVC-103` (microphone blocked): allow the microphone in the browser (lock icon next to the address), or plug in a headset.
    - `LAI-SVC-111`, `LAI-SVC-112`, `LAI-HW-013`, `LAI-HW-014` (battery low): plug in the charger. See Parts 4 and 5.
    - `LAI-HW-009`, `LAI-HW-010`, `LAI-HW-011` (too hot): put the laptop on a hard, flat surface; don't block the vents.
@@ -514,7 +516,7 @@ Cuando la computadora está en modo supervivencia, la app **Local AI** llena tod
 14. Presione **4**. Escriba lo que busca (por ejemplo `purificar agua`) y presione **Enter**.
 15. Haga clic en un resultado para leerlo. **Volver a los resultados** regresa a la lista. La lista **Libros** a la derecha abre un libro (por ejemplo WikiMed para medicina, iFixit para reparaciones).
    - **Lo que debería ver:** una lista de artículos; el artículo se abre dentro del Portal.
-   - **Si no funciona:** "La biblioteca no tiene libros" (`LAI-SVC-001`): conecte el disco AI-ARK (Parte 6). "La biblioteca no está funcionando" (`LAI-SVC-002`): vea la Parte 8.
+   - **Si no funciona:** "La biblioteca no tiene libros" (`LAI-SVC-001`): conecte el disco AI-ARK, espere 10 segundos y presione el botón **Copiar desde la unidad AI-ARK** en esa pantalla. Dice "Comenzó la copia desde la unidad"; los libros aparecen solos cuando termina. "La biblioteca no está funcionando" (`LAI-SVC-002`): presione **Reiniciar la biblioteca**, o vea la Parte 8.
 
 ### Primeros auxilios (presione F)
 16. En la pantalla de inicio, presione **F**, o haga clic en un botón de la fila **PRIMEROS AUXILIOS** (RCP, Atragantamiento, Sangrado grave, Quemaduras, Hueso roto, Mordedura de serpiente, **Más …**).
@@ -534,7 +536,7 @@ Cuando la computadora está en modo supervivencia, la app **Local AI** llena tod
 
 ### Botón 7: Estado y batería
 21. Presione **7**.
-   - **Lo que debería ver:** el nivel de batería y el tiempo que queda, qué cerebro está funcionando, el modo, el color del arca, el reloj, **Qué funciona** y **Problemas**. Cada problema tiene un código y una solución de una línea.
+   - **Lo que debería ver:** el nivel de batería y el tiempo que queda, qué cerebro está funcionando, el modo, el color del arca, el reloj, **Qué funciona** y **Problemas**. Cada problema tiene un código y una solución de una línea. Algunos problemas también tienen un botón que hace la solución por usted (por ejemplo **Reiniciar la biblioteca** o **Copiar desde la unidad AI-ARK**): presiónelo y lea la línea de abajo.
    - **Color del arca:** **Verde** = todo está aquí y al día. **Amarillo** = todo lo esencial está aquí. **Rojo** = falta algo esencial; lea los problemas.
 
 ### Botón 8: Cambiar cerebro
@@ -593,13 +595,14 @@ El **disco AI-ARK** es la copia portátil de todo. **No está cifrado**, así qu
 34. **Conéctelo.** Use cualquier puerto USB. Espere unos 10 segundos.
    - **Lo que debería ver:** el botón 7 dice "Disco del arca conectado". Los cerebros, libros y mapas del disco quedan disponibles.
    - **Si no funciona:** "conectado pero no montado" (`LAI-ARK-005`): abra la aplicación **Archivos** y haga clic en **AI-ARK** a la izquierda, o presione **Montar** en la aplicación Local AI. "hay que prepararlo" (`LAI-ARK-010`): es un disco nuevo y vacío; vea el manual 04.
-35. **Copiar el contenido a la computadora (opcional, más rápido y seguro).** En una terminal:
+35. **Copiar el contenido a la computadora (opcional, más rápido y seguro).** Cuando el Portal muestre un problema con el botón **Copiar desde la unidad AI-ARK** (por ejemplo "La biblioteca no tiene libros"), presiónelo. No se borra nada. O, en una terminal:
 
    ```
    aictl ark import --wait
    ```
 
-   - **Lo que debería ver:** una línea de progreso y luego `✓`. Funciona sin internet.
+   - **Lo que debería ver:** el Portal dice "Comenzó la copia desde la unidad"; la terminal muestra una línea de progreso y luego `✓`. Funciona sin internet.
+   - **Si no funciona:** `LAI-SVC-118` (no hay un disco utilizable): conecte el disco, espere un minuto y presione el botón otra vez. `LAI-SVC-117` (demasiados intentos): espere unos minutos.
 36. **Antes de desconectarlo: expúlselo.** Presione **Expulsar** en la aplicación Local AI. En una terminal, primero busque el identificador del disco (se ve como `ark-3f9c0a12`) y luego expúlselo:
 
    ```
@@ -644,9 +647,10 @@ El **disco AI-ARK** es la copia portátil de todo. **No está cifrado**, así qu
    - `LAI-SVC-106` o `LAI-SVC-102` (no hay cerebro / la IA no responde): presione **8 Cambiar cerebro** y elija uno. Si sigue mal: reinicie la computadora y espere 2 minutos.
    - `LAI-LLM-021` (ningún cerebro pudo iniciar): ejecute `aictl restart llama`. Mientras tanto la biblioteca, los mapas y los manuales siguen funcionando.
    - `LAI-SVC-107` (el cerebro nuevo no pudo iniciar): elija un cerebro más pequeño.
-   - `LAI-SVC-001` (la biblioteca no tiene libros) o `LAI-SVC-030` (no hay mapa): conecte el disco AI-ARK y ejecute `aictl ark import --wait`.
-   - `LAI-SVC-002` (la biblioteca no está funcionando): ejecute `aictl restart kiwix`.
-   - `LAI-SVC-010` o `LAI-SVC-011` (falta o se detuvo el reconocimiento de voz): ejecute `aictl restart whisper`. Mientras tanto use Conversar (botón 1).
+   - `LAI-SVC-001` (la biblioteca no tiene libros) o `LAI-SVC-030` (no hay mapa): conecte el disco AI-ARK y presione **Copiar desde la unidad AI-ARK** en el Portal (en la pantalla Biblioteca o Mapas, o debajo del problema en el botón 7). O ejecute `aictl ark import --wait`.
+   - `LAI-SVC-002` (la biblioteca no está funcionando): presione **Reiniciar la biblioteca** debajo del problema en el botón 7. O ejecute `aictl services restart kiwix`.
+   - `LAI-SVC-011` (se detuvo el reconocimiento de voz): presione **Reiniciar la voz** debajo del problema en el botón 7. O ejecute `aictl services restart whisper`. `LAI-SVC-010` (falta el reconocimiento de voz): presione **Copiar desde la unidad AI-ARK**. Mientras tanto use Conversar (botón 1).
+   - `LAI-SVC-116` ("Se perdió contacto con el servicio de IA"): espere un minuto; el Portal lo intenta otra vez solo. Si sigue así, reinicie la computadora (paso 42).
    - `LAI-SVC-103` (micrófono bloqueado): permita el micrófono en el navegador (candado junto a la dirección), o conecte audífonos con micrófono.
    - `LAI-SVC-111`, `LAI-SVC-112`, `LAI-HW-013`, `LAI-HW-014` (batería baja): conecte el cargador. Vea las Partes 4 y 5.
    - `LAI-HW-009`, `LAI-HW-010`, `LAI-HW-011` (muy caliente): ponga la laptop sobre una superficie dura y plana; no tape las rejillas.

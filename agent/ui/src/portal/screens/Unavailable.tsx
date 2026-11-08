@@ -1,3 +1,5 @@
+import { isFixAction } from "../actions";
+import { FixButton } from "../components/FixButton";
 import { t, type Key } from "../i18n/i18n";
 import { navigate } from "../router";
 import type { CapName, PortalStatus } from "../status";
@@ -23,6 +25,8 @@ export function Unavailable({
 }) {
   const code = status.capabilities[cap]?.code;
   const alert = code ? status.alerts.find((a) => a.code === code) : undefined;
+  // The button of the fix (survival-portal.md section 4.2): the capability's, else its alert's.
+  const action = status.capabilities[cap]?.action ?? alert?.action;
   return (
     <section className="screen" aria-labelledby="screen-title">
       <h1 id="screen-title" className="screen-title">
@@ -37,11 +41,12 @@ export function Unavailable({
         <p className="lead">{t(NONE[cap])}</p>
       )}
       {code ? <p className="code">{t("common.code", { code })}</p> : null}
+      {isFixAction(action) ? <FixButton action={action} /> : null}
       <div className="actions">
         {cap !== "manuals" ? (
           <button
             type="button"
-            className="btn btn-primary"
+            className={isFixAction(action) ? "btn" : "btn btn-primary"}
             onClick={() => navigate("manuals")}
           >
             {t("unavailable.manual")}

@@ -578,7 +578,12 @@ export interface paths {
          *     `LAI-CAT-002` in the run's `warnings` and the import goes on). An item the profile does not list is
          *     refused (`not_in_profile`) unless `add_to_profile` is set, which needs `items` and admin* (`403`
          *     with `details.pin_required` for an operator without the PIN; not needed for a dry run). The run has
-         *     trigger `import`. ark-sync.md sections 3.5 and 4.14. agent.md section 3.8.20.
+         *     trigger `import`. A Portal session (the **Copy from the AI-ARK drive** button) has its body ignored and
+         *     replaced by the safe default: a real import of the profile's items from the first connected drive
+         *     that can be read (several drives are never `LAI-ARK-015`; none is `409 LAI-SVC-118`), no catalog, no
+         *     `add_to_profile`, never a dry run; 3 per hour per session (`429 LAI-SVC-117`). An import never
+         *     deletes anything. ark-sync.md sections 3.5 and 4.14. agent.md section 3.8.20. survival-portal.md
+         *     section 3.3.
          *
          */
         post: operations["importArk"];
@@ -813,6 +818,56 @@ export interface paths {
          *
          */
         post: operations["controlService"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/services/kiwix/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restart the library (kiwix)
+         * @description The same restart as `POST /services/kiwix/restart` through `/services/{name}/{action}`, as its own route so
+         *     a Portal session can reach it (the **Restart the library** button, survival-portal.md section 3.3) while the
+         *     generic route stays operator-only: never llama, never a stop. The body is ignored. A Portal session
+         *     may restart 6 times per hour, kiwix and the other service together (`429 LAI-SVC-117`). Audit
+         *     `service.restart`. agent.md section 3.8.22.
+         *
+         */
+        post: operations["restartKiwix"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/services/whisper/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restart speech recognition (whisper)
+         * @description The same restart as `POST /services/whisper/restart` through `/services/{name}/{action}`, as its own route so
+         *     a Portal session can reach it (the **Restart speech** button, survival-portal.md section 3.3) while the
+         *     generic route stays operator-only: never llama, never a stop. The body is ignored. A Portal session
+         *     may restart 6 times per hour, whisper and the other service together (`429 LAI-SVC-117`). Audit
+         *     `service.restart`. agent.md section 3.8.22.
+         *
+         */
+        post: operations["restartWhisper"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1196,10 +1251,16 @@ export interface components {
             severity: components["schemas"]["Severity"];
             title: string;
             fix: string;
+            action?: components["schemas"]["DoctorAction"];
             /** Format: date-time */
             since?: string;
             details?: Record<string, never>;
         };
+        /**
+         * @description The button of a fix (doctor-codes.md section 1.7): a closed set. Present on an alert or a capability only when its code has one; not in the state pushed to the cloud.
+         * @enum {string}
+         */
+        DoctorAction: "ark.import" | "service.restart:kiwix" | "service.restart:whisper" | "portal.brain";
         /** @enum {string} */
         Severity: "info" | "warning" | "error" | "critical";
         /** @description One companion service. `name` and `unit` are always present (`unit` is null for piper and maps). The agent
@@ -1461,19 +1522,21 @@ export interface components {
                     speed_hint?: "fast" | "medium" | "slow";
                 }[];
             };
-            /** @description survival-portal.md section 4.2. code is present only when a problem causes the state (needs_switch has none). */
+            /** @description survival-portal.md section 4.2. code is present only when a problem causes the state (needs_switch has none); action when that code has one (doctor-codes.md section 1.7). */
             capabilities: {
                 chat: {
                     /** @enum {string} */
                     state: "ready" | "degraded" | "unavailable";
                     code?: string;
                     reason?: string;
+                    action?: components["schemas"]["DoctorAction"];
                 };
                 photo: {
                     /** @enum {string} */
                     state: "ready" | "degraded" | "unavailable";
                     code?: string;
                     reason?: string;
+                    action?: components["schemas"]["DoctorAction"];
                     /** @description Present with reason needs_switch: the model to switch to. */
                     vision_model?: string;
                 };
@@ -1482,6 +1545,7 @@ export interface components {
                     state: "ready" | "degraded" | "unavailable";
                     code?: string;
                     reason?: string;
+                    action?: components["schemas"]["DoctorAction"];
                     stt: boolean;
                     tts_languages: string[];
                 };
@@ -1490,6 +1554,7 @@ export interface components {
                     state: "ready" | "degraded" | "unavailable";
                     code?: string;
                     reason?: string;
+                    action?: components["schemas"]["DoctorAction"];
                     books: {
                         content_id: string;
                         title: string;
@@ -1503,6 +1568,7 @@ export interface components {
                     state: "ready" | "degraded" | "unavailable";
                     code?: string;
                     reason?: string;
+                    action?: components["schemas"]["DoctorAction"];
                     search: boolean;
                     gps: boolean;
                 };
@@ -1511,6 +1577,7 @@ export interface components {
                     state: "ready" | "degraded" | "unavailable";
                     code?: string;
                     reason?: string;
+                    action?: components["schemas"]["DoctorAction"];
                     items: {
                         id: string;
                         title: string;
@@ -1536,6 +1603,7 @@ export interface components {
                 severity: components["schemas"]["Severity"];
                 title: string;
                 fix: string;
+                action?: components["schemas"]["DoctorAction"];
             }[];
         };
         PortalModel: {
@@ -3579,12 +3647,14 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            /** @description LAI-SYN-005 a run is already active (details.run_id); LAI-ARK-015 several drives are mounted and from_root is absent (details.roots); LAI-ARK-004 the drive is unclean; LAI-ARK-001 the internal root cannot be written. */
+            /** @description LAI-SYN-005 a run is already active (details.run_id); LAI-ARK-015 several drives are mounted and from_root is absent (details.roots); LAI-ARK-004 the drive is unclean; LAI-ARK-001 the internal root cannot be written; LAI-SVC-118 (Portal session) no AI-ARK drive that can be read is connected. */
             409: components["responses"]["Conflict"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             /** @description LAI-CAT-003: the profile of the internal root is not in the catalog. */
             422: components["responses"]["Unprocessable"];
+            /** @description LAI-SVC-117: a Portal session made 3 imports in the last hour (Retry-After). */
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["Internal"];
             503: components["responses"]["Starting"];
         };
@@ -3908,6 +3978,78 @@ export interface operations {
             /** @description LAI-AGT-099: a stop that did not stop, an allowlist violation or a bug (details service, unit, action, reason, active, sub, op_id). */
             500: components["responses"]["Internal"];
             /** @description The start or restart left the unit not running: LAI-LLM-001 for llama, LAI-SVC-002 for kiwix, LAI-SVC-011 for whisper (details.reason is job_failed, timeout, wrong_state or unavailable). */
+            502: components["responses"]["BadGateway"];
+            503: components["responses"]["Starting"];
+            504: components["responses"]["GatewayTimeout"];
+        };
+    };
+    restartKiwix: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restarted. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceActionResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description LAI-AGT-022 another operation is running. */
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["TooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description LAI-SVC-117: a Portal session made 6 restarts in the last hour (Retry-After). */
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["Internal"];
+            /** @description LAI-SVC-002: the restart left the unit not running (details.reason is job_failed, timeout, wrong_state or unavailable). */
+            502: components["responses"]["BadGateway"];
+            503: components["responses"]["Starting"];
+            504: components["responses"]["GatewayTimeout"];
+        };
+    };
+    restartWhisper: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restarted. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceActionResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description LAI-AGT-022 another operation is running. */
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["TooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description LAI-SVC-117: a Portal session made 6 restarts in the last hour (Retry-After). */
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["Internal"];
+            /** @description LAI-SVC-011: the restart left the unit not running (details.reason is job_failed, timeout, wrong_state or unavailable). */
             502: components["responses"]["BadGateway"];
             503: components["responses"]["Starting"];
             504: components["responses"]["GatewayTimeout"];

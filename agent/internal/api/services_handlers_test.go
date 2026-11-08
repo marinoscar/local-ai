@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -192,6 +193,36 @@ func TestServicesAuth(t *testing.T) {
 	expectError(t, r.get("/services", map[string]string{"X-Test-Principal": "portal"}), 401, CodePortalSessionEnded)
 	if rec := r.post("/services/kiwix/start", "{}", map[string]string{"X-Test-Principal": "socket"}); rec.Code != 200 {
 		t.Errorf("a socket operator was refused: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// The two restarts of the Portal's buttons (survival-portal.md section 3.3): a Portal session may
+// restart kiwix and whisper through their literal routes, and nothing else on /services.
+func TestServicesPortalRestarts(t *testing.T) {
+	r := newSvcRig(t)
+	portal := map[string]string{"X-Test-Principal": "portal", "Origin": "http://127.0.0.1:7070"}
+	for _, name := range []string{"kiwix", "whisper"} {
+		rec := r.post("/services/"+name+"/restart", `{"force": true, "ignored": 1}`, portal)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", name, rec.Code, rec.Body)
+		}
+		if m := decodeMap(t, rec); m["name"] != name || m["active"] != "active" {
+			t.Errorf("%s: body %v", name, m)
+		}
+	}
+	evs := r.audit.events()
+	if len(evs) != 2 || evs[0].Action != "service.restart" || evs[1].Action != "service.restart" || evs[1].Target["service"] != "whisper" {
+		t.Errorf("audit = %+v", evs)
+	}
+	for _, path := range []string{"/services/llama/restart", "/services/kiwix/stop", "/services/whisper/start", "/services/llama/stop"} {
+		expectError(t, r.post(path, "{}", portal), 401, CodePortalSessionEnded)
+	}
+	if calls := r.llama.callList(); len(calls) != 0 {
+		t.Errorf("llama was touched: %v", calls)
+	}
+	// An operator uses the literal route too, with the same answer.
+	if rec := r.post("/services/kiwix/restart", "{}", map[string]string{"X-Test-Principal": "bearer"}); rec.Code != http.StatusOK {
+		t.Errorf("operator: %d %s", rec.Code, rec.Body)
 	}
 }
 
@@ -548,14 +579,24 @@ func TestServicesRegistration(t *testing.T) {
 		t.Error("the same routes were registered twice")
 	}
 	routes := reg.Routes()
-	if len(routes) != 2 {
+	if len(routes) != 4 {
 		t.Fatalf("routes = %+v", routes)
 	}
 	for _, rt := range routes {
-		if len(rt.Auth) != 1 || rt.Auth[0] != AuthOp || rt.Handler == nil {
-			t.Errorf("route %s %s: %+v", rt.Method, rt.Pattern, rt)
+		portalToo := rt.Pattern == "/services/kiwix/restart" || rt.Pattern == "/services/whisper/restart"
+		switch {
+		case rt.Handler == nil:
+			t.Errorf("route %s %s has no handler", rt.Method, rt.Pattern)
+		case portalToo && !reflect.DeepEqual(rt.Auth, []Level{AuthOp, AuthPortal}):
+			t.Errorf("route %s %s: auth %v, want op and portal", rt.Method, rt.Pattern, rt.Auth)
+		case !portalToo && (len(rt.Auth) != 1 || rt.Auth[0] != AuthOp):
+			t.Errorf("route %s %s: auth %v, want op only", rt.Method, rt.Pattern, rt.Auth)
 		}
 		switch rt.Method + " " + rt.Pattern {
+		case "POST /services/kiwix/restart", "POST /services/whisper/restart":
+			if rt.Timeout != 120*time.Second || !rt.Mutating() || rt.GateExempt {
+				t.Errorf("POST: %+v", rt)
+			}
 		case "GET /services":
 			if rt.Timeout != 5*time.Second || rt.Mutating() {
 				t.Errorf("GET /services: %+v", rt)

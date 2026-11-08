@@ -1,4 +1,6 @@
 import "../styles/status-brain.css";
+import { isFixAction } from "../actions";
+import { FixButton } from "../components/FixButton";
 import { clockText, durationText } from "../format";
 import { t, useLang, type Key } from "../i18n/i18n";
 import { navigate } from "../router";
@@ -149,6 +151,9 @@ export function Status({ status }: { status: PortalStatus }) {
                   <span className="code">{a.code}</span>
                   <span className="block">{a.title}</span>
                   <span className="block">{a.fix}</span>
+                  {isFixAction(a.action) ? (
+                    <FixButton action={a.action} />
+                  ) : null}
                 </li>
               ))}
             </ul>

@@ -439,7 +439,7 @@ func TestRebuildWhisperErrors(t *testing.T) {
 		{"the compile failed", be(doctor.KIT020, build.StageBuild, "Building whisper.cpp failed: cmake exited with status 1.", "log_path", "/opt/localai/whisper.cpp/builds/x.tmp.failed/build.log"),
 			ExitFailed, doctor.KIT020, []string{"Building whisper.cpp failed", "The log is in /opt/localai/whisper.cpp/builds/x.tmp.failed/build.log.", "run `sudo aictl rebuild-whisper --dry-run`"}},
 		{"the new build does not work", be(doctor.KIT021, build.StageSmoke, "The new whisper.cpp build did not start: whisper-cli --help exited with status 127.", "cause", "smoke_exit"),
-			ExitFailed, doctor.KIT021, []string{"did not start", "Nothing breaks."}},
+			ExitFailed, doctor.KIT021, []string{"did not start", "Nothing breaks: the old build keeps working."}},
 		{"the commit is not in the kit", be(doctor.KIT002, build.StageSource, "The kit and this computer do not have the whisper.cpp version abc1234. Sync the kit with internet, or choose a commit that is in the kit."),
 			ExitFailed, doctor.KIT002, []string{"do not have the whisper.cpp version abc1234", "Fix: Sync the kit with internet, or choose a commit that is in the kit."}},
 		{"a damaged kit source", be(doctor.KIT001, build.StageSource, "A whisper.cpp source package of the kit is damaged."), ExitFailed, doctor.KIT001, []string{"damaged", "aictl kit verify --full"}},

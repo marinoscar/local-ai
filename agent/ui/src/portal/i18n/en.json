@@ -107,7 +107,7 @@
   "library.books": "Books",
   "library.allLanguages": "All languages",
   "library.backToResults": "Back to results",
-  "library.none": "The library has no books. Plug in the AI-ARK drive and press Import from drive.",
+  "library.none": "The library has no books. Plug in the AI-ARK drive and press Copy from the AI-ARK drive.",
   "maps.title": "Maps",
   "maps.whereami": "Where am I",
   "maps.iAmHere": "I am here",
@@ -180,5 +180,15 @@
   "manuals.degraded": "These manuals were made without this computer's real settings. Addresses appear as placeholders, not real values.",
   "library.searchButton": "Search",
   "library.failed": "The search did not work. Try again.",
-  "reader.frame": "Article"
+  "reader.frame": "Article",
+  "banner.lostContactFix": "If it stays, restart the computer; the printed survival card has the steps.",
+  "fix.import": "Copy from the AI-ARK drive",
+  "fix.restartLibrary": "Restart the library",
+  "fix.restartSpeech": "Restart speech",
+  "fix.brain": "Choose a brain",
+  "fix.orType": "Or type in a terminal: {cmd}",
+  "fix.working": "Working on it …",
+  "fix.importStarted": "Copying from the drive has started. It can take a while; this page updates by itself.",
+  "fix.restarted": "Done: it was restarted. This page updates by itself.",
+  "fix.failed": "That did not work: {message}"
 }

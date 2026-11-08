@@ -20,6 +20,8 @@ export interface LibraryBook {
 export interface Capability {
   state: CapState;
   code?: string;
+  /** The button of the fix of code (doctor-codes.md section 1.7), when it has one. */
+  action?: string;
   reason?: string;
   /** Only on library. */
   books?: LibraryBook[];
@@ -58,6 +60,8 @@ export interface Alert {
   severity: string;
   title: string;
   fix: string;
+  /** The button of the fix (doctor-codes.md section 1.7), when the code has one. */
+  action?: string;
 }
 
 export interface FirstAidEntry {

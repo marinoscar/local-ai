@@ -13,11 +13,15 @@
 #     a code twice, a registry code has no table entry with a non-empty Spanish (`ES:`) title and
 #     fix, an entry's Severity differs from the first word of the registry severity, or a non-test
 #     Go file outside codes.go hard-codes a "LAI-..." literal;
-#  5. a range (LAI-AAA-NNN..MMM) is used but is not a documented family (FAMILIES below).
+#  5. a range (LAI-AAA-NNN..MMM) is used but is not a documented family (FAMILIES below);
+#  6. the action table (registry section 1.7) lists a code twice, or (with codes.go) an entry's
+#     `Action: "..."` differs from the action the table lists for the code, or is not listed there.
 #
 # codes.go layout read by rule 4: a const block `AGT001 = "LAI-AGT-001"` and a table of entries
 # `ID: AGT001,` / `Severity: Warning,` / `Title: Msg{EN: "...", ES: "..."},` / `Fix: Msg{...},`,
-# one field per line (see agent/internal/doctor/codes.go).
+# one field per line, and an optional `Action: "<action>",` line (see agent/internal/doctor/codes.go).
+# The action table (rule 6) is the table of the registry section headed `### 1.7`: rows
+# `| `<action>` | ... | <codes> |`, the codes in the last cell.
 #
 # Usage: scripts/check-doctor-codes.sh [--root DIR]     (DIR defaults to the git toplevel; tests use fixtures)
 # Exit:  0 consistent, 1 problems (printed as `ERROR <file>:<line>: ...`), 2 usage error.
@@ -27,7 +31,7 @@ root=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:-}"; [[ -n "$root" ]] || { echo "usage: $0 [--root DIR]" >&2; exit 2; }; shift 2 ;;
-    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "usage: $0 [--root DIR]" >&2; exit 2 ;;
   esac
 done
@@ -61,6 +65,19 @@ extract() { # extract <file>
 }
 
 extract "$REG" >"$tmp/reg.tsv"
+
+# The action table of registry section 1.7, as TSV: line code action (one line per listed code).
+awk '
+  /^### / { inact = ($0 ~ /^### 1\.7 /); next }
+  /^## / { inact = 0; next }
+  inact && /^\| *`[a-z][a-z.:]*` *\|/ {
+    match($0, /`[a-z][a-z.:]*`/); act = substr($0, RSTART + 1, RLENGTH - 2)
+    n = split($0, c, "|"); last = c[n - 1]
+    while (match(last, /LAI-[A-Z]+-[0-9][0-9][0-9]/)) {
+      printf "%d\t%s\t%s\n", NR, substr(last, RSTART, RLENGTH), act
+      last = substr(last, RSTART + RLENGTH)
+    }
+  }' "$REG" >"$tmp/actions.tsv"
 : >"$tmp/spec.tsv"
 for f in docs/specs/*.md; do
   [[ "$f" == "$REG" ]] && continue
@@ -95,8 +112,9 @@ if [[ -f "$CODES_GO" ]]; then
       name = $1; match($0, /"LAI-[A-Z]+-[0-9][0-9][0-9]"/)
       printf "C\t%s\t%s\t%d\n", name, substr($0, RSTART + 1, RLENGTH - 2), NR; next
     }
-    function flush() { if (cur != "") printf "E\t%s\t%d\t%s\t%d\t%d\n", cur, line, sev, tes, fes }
-    /^[ \t]*ID:[ \t]*[A-Za-z][A-Za-z0-9_]*,/ { flush(); cur = $2; sub(/,$/, "", cur); line = NR; sev = ""; tes = 0; fes = 0; next }
+    function flush() { if (cur != "") printf "E\t%s\t%d\t%s\t%d\t%d\t%s\n", cur, line, sev, tes, fes, act }
+    /^[ \t]*ID:[ \t]*[A-Za-z][A-Za-z0-9_]*,/ { flush(); cur = $2; sub(/,$/, "", cur); line = NR; sev = ""; tes = 0; fes = 0; act = ""; next }
+    /^[ \t]*Action:[ \t]*"/ { match($0, /"[^"]*"/); act = substr($0, RSTART + 1, RLENGTH - 2); next }
     /^[ \t]*Severity:/ { v = $2; sub(/,$/, "", v); sev = tolower(v); next }
     /^[ \t]*Title:/ { if ($0 ~ /ES:[ \t]*"[^"]/) tes = 1; next }
     /^[ \t]*Fix:/   { if ($0 ~ /ES:[ \t]*"[^"]/) fes = 1; next }
@@ -150,6 +168,13 @@ awk -v owners="$OWNERS" -v families="$FAMILIES" -v hasgo="$has_go" -v reg="$REG"
     }
     for (c in rsev) if (!(c in sloc)) err(reg ":" rline[c], c " is in the registry but missing from its owner spec table")
 
+    # --- the action table (section 1.7): one action per code
+    while ((getline line < (tmp "/actions.tsv")) > 0) {
+      split(line, f, "\t")
+      if (f[2] in ract) { err(reg ":" f[1], f[2] " is listed twice in the action table (also at line " raline[f[2]] ")"); continue }
+      ract[f[2]] = f[3]; raline[f[2]] = f[1]
+    }
+
     # --- mentions anywhere
     while ((getline line < (tmp "/mentions.txt")) > 0) {
       i = match(line, /:[0-9]+:LAI-/); if (!i) continue
@@ -179,7 +204,7 @@ awk -v owners="$OWNERS" -v families="$FAMILIES" -v hasgo="$has_go" -v reg="$REG"
       while ((getline line < (tmp "/goentries.tsv")) > 0) {
         split(line, f, "\t")
         if (f[1] == "C") gname[f[2]] = f[3]
-        else ent[f[2]] = f[3] "\t" f[4] "\t" f[5] "\t" f[6]
+        else ent[f[2]] = f[3] "\t" f[4] "\t" f[5] "\t" f[6] "\t" f[7]
       }
       for (nm in ent) if (!(nm in gname)) { split(ent[nm], g, "\t"); err("agent/internal/doctor/codes.go:" g[1], "table entry " nm " is not a constant defined in codes.go") }
       for (nm in gname) {
@@ -191,6 +216,8 @@ awk -v owners="$OWNERS" -v families="$FAMILIES" -v hasgo="$has_go" -v reg="$REG"
         if (g[2] != rs[1]) err(CODES_GO_LOC ":" g[1], c " severity in codes.go is \"" g[2] "\" but the registry says \"" rs[1] "\"")
         if (g[3] != 1) err(CODES_GO_LOC ":" g[1], c " has no Spanish (ES) title in codes.go")
         if (g[4] != 1) err(CODES_GO_LOC ":" g[1], c " has no Spanish (ES) fix in codes.go")
+        if (g[5] != "" && !(c in ract)) err(CODES_GO_LOC ":" g[1], c " has action \"" g[5] "\" in codes.go but the action table (" reg " section 1.7) lists none for it")
+        else if (c in ract && g[5] != ract[c]) err(CODES_GO_LOC ":" g[1], c " action in codes.go is \"" g[5] "\" but the action table (" reg ":" raline[c] ") says \"" ract[c] "\"")
       }
       while ((getline line < (tmp "/golit.txt")) > 0)
         err(line, "hard-coded LAI code literal outside codes.go; use the constant defined in codes.go")

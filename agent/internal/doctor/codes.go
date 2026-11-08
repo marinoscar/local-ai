@@ -9,7 +9,10 @@ package doctor
 //   - this file is the only non-test Go file with a quoted "LAI-..." literal: other packages use the
 //     constants (config.CodeNodeYAMLMissing = doctor.AGT001);
 //   - every table entry has a non-empty Spanish title and fix, one per line as `Title:` and `Fix:`
-//     with ES: last, and a Severity equal to the first word of the registry severity.
+//     with ES: last, and a Severity equal to the first word of the registry severity;
+//   - an entry's optional `Action: "<action>",` line (the button of the fix) is exactly the action
+//     the registry's action table (doctor-codes.md section 1.7) lists for the code, and only the
+//     codes listed there have one.
 //
 // The English title is the registry meaning; the English fix is the registry fix. Titles are one
 // sentence of at most 120 characters (codes_test.go). The Spanish text exists only here and is
@@ -307,6 +310,9 @@ const (
 	SVC113 = "LAI-SVC-113"
 	SVC114 = "LAI-SVC-114"
 	SVC115 = "LAI-SVC-115"
+	SVC116 = "LAI-SVC-116"
+	SVC117 = "LAI-SVC-117"
+	SVC118 = "LAI-SVC-118"
 
 	// LAI-GW
 	GW001 = "LAI-GW-001"
@@ -729,6 +735,7 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "Model files are missing or not verified", ES: "Faltan archivos de modelos o no están verificados"},
 		Fix:      Msg{EN: "Run `aictl download <model>` (online) or `aictl ark import` (from the ark drive)", ES: "Ejecute `aictl download <modelo>` (con conexión) o `aictl ark import` (desde la unidad del arca)"},
+		Action:   "ark.import",
 	},
 	{
 		ID:       LLM009,
@@ -1335,6 +1342,7 @@ var table = []Code{
 		Severity: Critical,
 		Title:    Msg{EN: "Essential (tier 1) ark content is missing", ES: "Falta contenido esencial (nivel 1) del arca"},
 		Fix:      Msg{EN: "Press \"Sync now\" while online, or import from the AI-ARK drive (`aictl ark import`)", ES: "Pulse «Sincronizar ahora» con conexión, o importe desde la unidad AI-ARK (`aictl ark import`)"},
+		Action:   "ark.import",
 	},
 	{
 		ID:       CLD026,
@@ -1532,7 +1540,7 @@ var table = []Code{
 		ID:       SYN021,
 		Severity: Warning,
 		Title:    Msg{EN: "The source's checksum or size disagrees with the catalog", ES: "La suma de verificación o el tamaño de la fuente no coincide con el catálogo"},
-		Fix:      Msg{EN: "The catalog or the source is wrong. Report it to the maintainer. The old copy is kept.", ES: "El catálogo o la fuente son incorrectos. Informe al mantenedor. Se conserva la copia anterior."},
+		Fix:      Msg{EN: "The catalog or the source is wrong. The old copy is kept and still works; the item is tried again with the next catalog update.", ES: "El catálogo o la fuente son incorrectos. Se conserva la copia anterior, que sigue funcionando; se intentará otra vez con la próxima actualización del catálogo."},
 	},
 	{
 		ID:       SYN022,
@@ -1779,6 +1787,7 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "The internal content folder was missing and was recreated empty", ES: "Faltaba la carpeta de contenido interna y se volvió a crear vacía"},
 		Fix:      Msg{EN: "Run `aictl ark sync`, or `aictl ark import` from a drive.", ES: "Ejecute `aictl ark sync`, o `aictl ark import` desde un disco."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       ARK021,
@@ -1791,12 +1800,14 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "The library has no books", ES: "La biblioteca no tiene libros"},
 		Fix:      Msg{EN: "Plug in the ark drive, or run `aictl ark import`.", ES: "Conecte la unidad del arca, o ejecute `aictl ark import`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC002,
 		Severity: Error,
 		Title:    Msg{EN: "The library service isn't running", ES: "El servicio de la biblioteca no se está ejecutando"},
 		Fix:      Msg{EN: "Press **Restart library**, or run `aictl services restart kiwix`.", ES: "Pulse **Reiniciar biblioteca**, o ejecute `aictl services restart kiwix`."},
+		Action:   "service.restart:kiwix",
 	},
 	{
 		ID:       SVC003,
@@ -1815,18 +1826,21 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "The library list couldn't be rebuilt; the old list is used", ES: "No se pudo reconstruir la lista de la biblioteca; se usa la lista anterior"},
 		Fix:      Msg{EN: "Run `aictl services restart kiwix`. If it repeats, run `aictl doctor`.", ES: "Ejecute `aictl services restart kiwix`. Si se repite, ejecute `aictl doctor`."},
+		Action:   "service.restart:kiwix",
 	},
 	{
 		ID:       SVC010,
 		Severity: Error,
 		Title:    Msg{EN: "No speech-recognition model is installed", ES: "No hay ningún modelo de reconocimiento de voz instalado"},
 		Fix:      Msg{EN: "Run `aictl ark sync --item whisper-small` (online) or `aictl ark import` from the drive.", ES: "Ejecute `aictl ark sync --item whisper-small` (con conexión) o `aictl ark import` desde la unidad."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC011,
 		Severity: Error,
 		Title:    Msg{EN: "The speech-recognition service isn't running", ES: "El servicio de reconocimiento de voz no se está ejecutando"},
 		Fix:      Msg{EN: "Run `aictl services restart whisper`.", ES: "Ejecute `aictl services restart whisper`."},
+		Action:   "service.restart:whisper",
 	},
 	{
 		ID:       SVC012,
@@ -1875,6 +1889,7 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "No voice is installed", ES: "No hay ninguna voz instalada"},
 		Fix:      Msg{EN: "Answers are shown as text. Install a voice with `aictl ark import` or `aictl ark sync`.", ES: "Las respuestas se muestran como texto. Instale una voz con `aictl ark import` o `aictl ark sync`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC023,
@@ -1893,18 +1908,21 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "No offline map is installed", ES: "No hay ningún mapa sin conexión instalado"},
 		Fix:      Msg{EN: "Plug in the ark drive and run `aictl ark import`.", ES: "Conecte la unidad del arca y ejecute `aictl ark import`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC031,
 		Severity: Warning,
 		Title:    Msg{EN: "Map labels (fonts) are missing", ES: "Faltan las etiquetas del mapa (fuentes)"},
 		Fix:      Msg{EN: "Import `map-assets` from the drive: `aictl ark import --item map-assets`.", ES: "Importe `map-assets` desde la unidad: `aictl ark import --item map-assets`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC032,
 		Severity: Warning,
 		Title:    Msg{EN: "Place search isn't installed", ES: "La búsqueda de lugares no está instalada"},
 		Fix:      Msg{EN: "Import `places-central-america`: `aictl ark import --item places-central-america`.", ES: "Importe `places-central-america`: `aictl ark import --item places-central-america`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       SVC033,
@@ -1959,6 +1977,7 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "The AI (llama) isn't answering", ES: "La IA (llama) no responde"},
 		Fix:      Msg{EN: "Press **Switch brain** and choose one, or restart the computer.", ES: "Pulse **Cambiar de cerebro** y elija uno, o reinicie el equipo."},
+		Action:   "portal.brain",
 	},
 	{
 		ID:       SVC103,
@@ -1983,12 +2002,14 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "No brain is running", ES: "No hay ningún cerebro en ejecución"},
 		Fix:      Msg{EN: "Press **Switch brain** and choose one.", ES: "Pulse **Cambiar de cerebro** y elija uno."},
+		Action:   "portal.brain",
 	},
 	{
 		ID:       SVC107,
 		Severity: Error,
 		Title:    Msg{EN: "The new brain couldn't start", ES: "El nuevo cerebro no pudo arrancar"},
 		Fix:      Msg{EN: "Choose a smaller brain. The previous one was restarted.", ES: "Elija un cerebro más pequeño. Se reinició el anterior."},
+		Action:   "portal.brain",
 	},
 	{
 		ID:       SVC108,
@@ -2037,6 +2058,24 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "That chat page isn't available from the Portal", ES: "Esa página del chat no está disponible desde el Portal"},
 		Fix:      Msg{EN: "Use the chat normally; settings and downloads are done by an operator in the Local AI app.", ES: "Use el chat con normalidad; los ajustes y las descargas los hace un operador en la aplicación Local AI."},
+	},
+	{
+		ID:       SVC116,
+		Severity: Warning,
+		Title:    Msg{EN: "The Portal lost contact with the AI service", ES: "La pantalla perdió contacto con el servicio de IA"},
+		Fix:      Msg{EN: "Wait a minute: it tries again by itself. If it stays, restart the computer; the printed survival card has the steps.", ES: "Espere un minuto: lo intenta otra vez solo. Si sigue así, reinicie la computadora; la tarjeta de supervivencia impresa tiene los pasos."},
+	},
+	{
+		ID:       SVC117,
+		Severity: Warning,
+		Title:    Msg{EN: "Too many repair attempts from the Portal; wait a few minutes", ES: "Demasiados intentos de reparación desde el Portal; espere unos minutos"},
+		Fix:      Msg{EN: "Wait a few minutes, then press the button again.", ES: "Espere unos minutos y vuelva a presionar el botón."},
+	},
+	{
+		ID:       SVC118,
+		Severity: Warning,
+		Title:    Msg{EN: "No usable AI-ARK drive is connected to copy from", ES: "No hay una unidad AI-ARK utilizable conectada para copiar"},
+		Fix:      Msg{EN: "Plug in the AI-ARK drive, wait a minute, then press **Copy from the AI-ARK drive** again.", ES: "Conecte la unidad AI-ARK, espere un minuto y presione otra vez **Copiar desde la unidad AI-ARK**."},
 	},
 	{
 		ID:       GW001,
@@ -2522,7 +2561,7 @@ var table = []Code{
 		ID:       KIT021,
 		Severity: Error,
 		Title:    Msg{EN: "The new build doesn't work; the old one is still in use", ES: "La nueva compilación no funciona; se sigue usando la anterior"},
-		Fix:      Msg{EN: "Nothing breaks. Report the log.", ES: "No se rompe nada. Informe del registro."},
+		Fix:      Msg{EN: "Nothing breaks: the old build keeps working. Keep the log on the ark drive so it can be fixed later.", ES: "No se rompe nada: la versión anterior sigue funcionando. Guarde el registro en la unidad del arca para arreglarlo después."},
 	},
 	{
 		ID:       KIT022,
@@ -2541,6 +2580,7 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "The rebuild kit is missing parts for this computer", ES: "Al kit de reconstrucción le faltan partes para este equipo"},
 		Fix:      Msg{EN: "Run `aictl ark sync` with internet, or `aictl ark import` from a good drive.", ES: "Ejecute `aictl ark sync` con internet, o `aictl ark import` desde una unidad buena."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       KIT041,
@@ -2643,6 +2683,7 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "Essential content is missing", ES: "Falta contenido esencial"},
 		Fix:      Msg{EN: "Run `aictl ark sync` with internet, or `aictl ark import`.", ES: "Ejecute `aictl ark sync` con internet, o `aictl ark import`."},
+		Action:   "ark.import",
 	},
 	{
 		ID:       DRL012,
@@ -2685,6 +2726,7 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "Library search doesn't work", ES: "La búsqueda en la biblioteca no funciona"},
 		Fix:      Msg{EN: "Run `aictl services restart kiwix`.", ES: "Ejecute `aictl services restart kiwix`."},
+		Action:   "service.restart:kiwix",
 	},
 	{
 		ID:       DRL031,
@@ -2697,6 +2739,7 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "Speech recognition failed", ES: "Falló el reconocimiento de voz"},
 		Fix:      Msg{EN: "Run `aictl services restart whisper`.", ES: "Ejecute `aictl services restart whisper`."},
+		Action:   "service.restart:whisper",
 	},
 	{
 		ID:       DRL033,
@@ -2757,11 +2800,12 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "The drill couldn't restore the normal brain", ES: "El simulacro no pudo restaurar el cerebro habitual"},
 		Fix:      Msg{EN: "Press **Switch brain** and choose the usual one.", ES: "Pulse **Cambiar de cerebro** y elija el de siempre."},
+		Action:   "portal.brain",
 	},
 	{
 		ID:       DRL091,
 		Severity: Warning,
 		Title:    Msg{EN: "Something tried to use the internet during the drill", ES: "Algo intentó usar internet durante el simulacro"},
-		Fix:      Msg{EN: "Report the details; offline use may be affected.", ES: "Informe de los detalles; el uso sin conexión puede verse afectado."},
+		Fix:      Msg{EN: "Offline use may be affected. Test the feature named in the details (`aictl drill show`) with the network unplugged.", ES: "El uso sin conexión puede verse afectado. Pruebe sin red la función nombrada en los detalles (`aictl drill show`)."},
 	},
 }

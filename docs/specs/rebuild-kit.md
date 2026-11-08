@@ -437,7 +437,7 @@ Plain list, also printed in the rebuild runbook:
 | LAI-KIT-013 | error | The NVIDIA driver isn't loaded | Restart and choose the previous kernel in "Advanced options", or install the driver from the kit. | Reinicie y elija el kernel anterior en "Opciones avanzadas", o instale el controlador del kit. |
 | LAI-KIT-014 | error | Not enough disk space to build | Free 5 GB and try again. | Libere 5 GB e intente otra vez. |
 | LAI-KIT-020 | error | The build failed | Read the build log shown; run `aictl rebuild-llama --dry-run`. | Lea el registro mostrado; ejecute `aictl rebuild-llama --dry-run`. |
-| LAI-KIT-021 | error | The new build doesn't work; the old one is still in use | Nothing breaks. Report the log. | Nada se dañó. Reporte el registro. |
+| LAI-KIT-021 | error | The new build doesn't work; the old one is still in use | Nothing breaks: the old build keeps working. Keep the log on the ark drive so it can be fixed later. | No se rompe nada: la versión anterior sigue funcionando. Guarde el registro en la unidad del arca para arreglarlo después. |
 | LAI-KIT-022 | retired (v0.1) | The new build failed after switching; the old one was restored (replaced by `LAI-LLM-019`) | No longer used. | Ya no se usa. |
 | LAI-KIT-030 | error | The agent source in the kit isn't complete | Sync the kit with internet. | Sincronice el kit con internet. |
 | LAI-KIT-040 | warning | The rebuild kit is missing parts for this computer | Run `aictl ark sync` with internet, or `aictl ark import` from a good drive. | Ejecute `aictl ark sync` con internet, o `aictl ark import` desde un buen disco. |

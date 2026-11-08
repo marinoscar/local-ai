@@ -141,6 +141,8 @@ let down = false;
 let seen = [];
 let streams = [];
 let loadAnswer = 202;
+// The answer of the fix buttons (POST /ark/import, /services/{kiwix|whisper}/restart): 2xx, 409 or 429.
+let fixAnswer = 0;
 
 function send(res, code, body, headers = {}) {
   res.writeHead(code, headers);
@@ -175,6 +177,7 @@ createServer(async (req, res) => {
       down = false;
       seen = [];
       loadAnswer = 202;
+      fixAnswer = 0;
       return send(res, 200, "ok");
     }
     if (p === "/__status" && req.method === "POST") {
@@ -190,6 +193,10 @@ createServer(async (req, res) => {
     }
     if (p === "/__load") {
       loadAnswer = Number(url.searchParams.get("status") || 202);
+      return send(res, 200, "ok");
+    }
+    if (p === "/__fix") {
+      fixAnswer = Number(url.searchParams.get("status") || 0);
       return send(res, 200, "ok");
     }
     if (p === "/__streams")
@@ -237,6 +244,23 @@ createServer(async (req, res) => {
         { "Content-Type": "application/json" },
       );
     return send(res, loadAnswer, "{}", { "Content-Type": "application/json" });
+  }
+  if (
+    req.method === "POST" &&
+    (p === "/api/v1/ark/import" ||
+      /^\/api\/v1\/services\/(kiwix|whisper)\/restart$/.test(p))
+  ) {
+    seen.push({ path: p, body: await readBody(req) });
+    const errors = {
+      409: { code: "LAI-SVC-118", message: "No usable AI-ARK drive is connected to copy from", fix: "Plug in the AI-ARK drive, wait a minute, then press Copy from the AI-ARK drive again." },
+      429: { code: "LAI-SVC-117", message: "Too many repair attempts from the Portal; wait a few minutes", fix: "Wait a few minutes, then press the button again." },
+    };
+    if (errors[fixAnswer])
+      return send(res, fixAnswer, JSON.stringify({ error: errors[fixAnswer] }), { "Content-Type": "application/json" });
+    const ok = p === "/api/v1/ark/import"
+      ? [202, { run_id: "run-20261102T031500Z-b7c2", state: "running", events: "/api/v1/events?types=sync.*" }]
+      : [200, { name: p.split("/")[4], active: "active", restored_models: [], op_id: "op_7k2m9q4r8t1c" }];
+    return send(res, ok[0], JSON.stringify(ok[1]), { "Content-Type": "application/json" });
   }
   if (p === "/api/v1/events") {
     res.writeHead(200, {

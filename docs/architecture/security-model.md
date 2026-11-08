@@ -48,7 +48,8 @@
   - `/chat/*` (through the key-injecting proxy),
   - speech: `POST /api/v1/speech/stt`, `POST /api/v1/speech/tts`, `GET /api/v1/speech/voices`,
   - `POST /api/v1/models/{id}/load` for models that are `loadable` only (body forced by the agent),
-  - `GET /api/v1/events` filtered to `mode.*`, `model.*`, `service.state`, `drive.*`, `alert.*`.
+  - `GET /api/v1/events` filtered to `mode.*`, `model.*`, `service.state`, `drive.*`, `alert.*`,
+  - the buttons of a fix ([doctor-codes.md](../specs/doctor-codes.md) §1.7): `POST /api/v1/ark/import` with its body replaced by the safe default (the first usable AI-ARK drive, the profile's items, no catalog, no `node.yaml` change; an import only copies verified items in and never deletes), 3 per hour; `POST /api/v1/services/kiwix/restart` and `POST /api/v1/services/whisper/restart`, 6 per hour together. Never `llama`, never a stop, never sync, prune or eject: those stay operator routes. Why this is safe: each is something a person at the keyboard needs in an emergency, each is idempotent or bounded by a run slot, and the worst a hostile page could do through it (it would also need the Portal cookie and a same-origin `Origin`) is restart a companion service a few times or copy content the profile already wants.
 
   Everything else answers `401 LAI-SVC-110`. Mutating requests also need a same-origin `Origin`. Every Portal session is dropped when the mode leaves survival. Details: [survival-portal.md](../specs/survival-portal.md) §3.3, [agent.md](../specs/agent.md) §3.9.
 

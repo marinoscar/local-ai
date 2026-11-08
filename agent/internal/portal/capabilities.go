@@ -106,6 +106,7 @@ type Inputs struct {
 type ChatCap struct {
 	State  string `json:"state"`
 	Code   string `json:"code,omitempty"`
+	Action string `json:"action,omitempty"`
 	Reason string `json:"reason,omitempty"`
 }
 
@@ -113,6 +114,7 @@ type ChatCap struct {
 type PhotoCap struct {
 	State       string `json:"state"`
 	Code        string `json:"code,omitempty"`
+	Action      string `json:"action,omitempty"`
 	Reason      string `json:"reason,omitempty"`
 	VisionModel string `json:"vision_model,omitempty"`
 }
@@ -121,6 +123,7 @@ type PhotoCap struct {
 type TalkCap struct {
 	State       string   `json:"state"`
 	Code        string   `json:"code,omitempty"`
+	Action      string   `json:"action,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
 	STT         bool     `json:"stt"`
 	TTSLanguage []string `json:"tts_languages"`
@@ -130,6 +133,7 @@ type TalkCap struct {
 type LibraryCap struct {
 	State  string `json:"state"`
 	Code   string `json:"code,omitempty"`
+	Action string `json:"action,omitempty"`
 	Reason string `json:"reason,omitempty"`
 	Books  []Book `json:"books"`
 }
@@ -138,6 +142,7 @@ type LibraryCap struct {
 type MapsCap struct {
 	State  string `json:"state"`
 	Code   string `json:"code,omitempty"`
+	Action string `json:"action,omitempty"`
 	Reason string `json:"reason,omitempty"`
 	Search bool   `json:"search"`
 	// GPS is false: no position source is wired into the Portal yet.
@@ -148,6 +153,7 @@ type MapsCap struct {
 type ManualsCap struct {
 	State  string   `json:"state"`
 	Code   string   `json:"code,omitempty"`
+	Action string   `json:"action,omitempty"`
 	Reason string   `json:"reason,omitempty"`
 	Items  []Manual `json:"items"`
 }
@@ -174,6 +180,20 @@ func ComputeCapabilities(in Inputs) Capabilities {
 		Maps:    computeMaps(in),
 		Manuals: computeManuals(in),
 	}
+}
+
+// WithActions sets the action of every capability whose code has one (doctor-codes.md section 1.7):
+// the Unavailable screen shows it as the primary button. ComputeCapabilities stays free of it, so
+// the table of section 4.2 is tested on its own.
+func WithActions(c Capabilities) Capabilities {
+	act := func(code string) string { return string(doctor.ActionOf(code)) }
+	c.Chat.Action = act(c.Chat.Code)
+	c.Photo.Action = act(c.Photo.Code)
+	c.Talk.Action = act(c.Talk.Code)
+	c.Library.Action = act(c.Library.Code)
+	c.Maps.Action = act(c.Maps.Code)
+	c.Manuals.Action = act(c.Manuals.Code)
+	return c
 }
 
 func computeChat(in Inputs) ChatCap {

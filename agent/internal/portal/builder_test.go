@@ -328,6 +328,38 @@ func TestBuilderAlerts(t *testing.T) {
 	}
 }
 
+// TestBuilderActions: an alert and a capability carry the action of their code (doctor-codes.md
+// section 1.7): the Portal's button. A code without one carries none.
+func TestBuilderActions(t *testing.T) {
+	r := newFullRig(t)
+	r.alerts.list = []doctor.Alert{
+		{Code: doctor.SVC002, Severity: doctor.Error},
+		{Code: doctor.SVC013, Severity: doctor.Info},
+	}
+	st := r.build(t, "en")
+	got := map[string]string{}
+	for _, a := range st.Alerts {
+		got[a.Code] = a.Action
+	}
+	if got[doctor.SVC002] != string(doctor.ActionRestartKiwix) || got[doctor.SVC013] != "" {
+		t.Errorf("alert actions = %v", got)
+	}
+
+	caps := portal.WithActions(portal.Capabilities{
+		Chat:    portal.ChatCap{State: portal.StateUnavailable, Code: doctor.SVC106},
+		Library: portal.LibraryCap{State: portal.StateUnavailable, Code: doctor.SVC001},
+		Talk:    portal.TalkCap{State: portal.StateUnavailable, Code: doctor.SVC011},
+		Maps:    portal.MapsCap{State: portal.StateUnavailable, Code: doctor.SVC030},
+		Photo:   portal.PhotoCap{State: portal.StateUnavailable, Code: doctor.SVC040},
+		Manuals: portal.ManualsCap{State: portal.StateReady},
+	})
+	if caps.Chat.Action != string(doctor.ActionPortalBrain) || caps.Library.Action != string(doctor.ActionArkImport) ||
+		caps.Talk.Action != string(doctor.ActionRestartWhisper) || caps.Maps.Action != string(doctor.ActionArkImport) ||
+		caps.Photo.Action != "" || caps.Manuals.Action != "" {
+		t.Errorf("capability actions = %+v", caps)
+	}
+}
+
 // TestBuilderAlertLanguage: titles and fixes follow the language, codes never change.
 func TestBuilderAlertLanguage(t *testing.T) {
 	r := newFullRig(t)

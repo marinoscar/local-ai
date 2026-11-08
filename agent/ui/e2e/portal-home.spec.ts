@@ -335,6 +335,10 @@ test.describe("banners", () => {
         hasText: "Lost contact with the AI service.",
       }),
     ).toBeVisible();
+    // A code and one next step that works with the agent down (#430).
+    await expect(
+      page.locator(".banner-note", { hasText: "restart the computer" }),
+    ).toContainText("Code: LAI-SVC-116");
     await page.getByRole("button", { name: /Library/ }).click();
     await expect(page).toHaveURL(/\/portal\/library$/);
     await page.request.get("/__down?on=0");
