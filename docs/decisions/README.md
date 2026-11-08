@@ -12,5 +12,6 @@ Each ADR records one decision, its context and the alternatives rejected. To cha
 | [0006](0006-standalone-offline.md) | Offline nodes are standalone. There is no LAN mesh | Accepted |
 | [0007](0007-public-repo-redaction.md) | The repo stays public, and lab inventory is redacted with placeholders | Accepted |
 | [0008](0008-cloud-on-eab.md) | The cloud app is built on EnterpriseAppBase packages | Accepted |
+| [0009](0009-optimized-for-humans.md) | Everything is optimized for humans: nothing to memorize, menus over flags, state first | Accepted |
 
 Template: copy [0000-template.md](0000-template.md).
