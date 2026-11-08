@@ -1,14 +1,17 @@
 // The reader frame's rules (survival-portal.md section 4.1.5): which paths it may show and how a
 // Portal path carries them. Pure functions, so they are unit-tested without a browser.
 
-/** The only places the iframe may load from: the agent's own proxies and docs. */
-export const READER_PREFIXES = ["/library/", "/maps/", "/docs/"] as const;
+/**
+ * The only places the iframe may load from: the agent's own proxies and docs. /chat/ is the llama
+ * WebUI: it opens in the frame so "⌂ Home" and Esc are always on screen (issue #431).
+ */
+export const READER_PREFIXES = ["/library/", "/maps/", "/docs/", "/chat/"] as const;
 
 // eslint-disable-next-line no-control-regex
 const BAD_CHARS = /[\\\u0000-\u001f\u007f]/;
 
 /**
- * safeReaderSrc returns src when it is a same-origin path under /library/, /maps/ or /docs/;
+ * safeReaderSrc returns src when it is a same-origin path under /library/, /maps/, /docs/ or /chat/;
  * otherwise null. It refuses absolute URLs, protocol-relative URLs, backslashes, control
  * characters and any dot segment, so the query cannot become an open redirect.
  */

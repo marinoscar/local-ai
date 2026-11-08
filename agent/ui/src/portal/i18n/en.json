@@ -41,7 +41,7 @@
   "lock.title": "To use this, start Survival mode or log in.",
   "lock.login": "Log in",
   "chat.opening": "Opening the chat …",
-  "chat.tip": "To come back here, press the browser Back button or go to 127.0.0.1:7070/portal",
+  "chat.tip": "The chat opens below a bar with ⌂ Home. Press ⌂ Home or Esc to come back here.",
   "chat.openNow": "Open chat now",
   "chat.noBrain": "No brain is running.",
   "chat.chooseBrain": "Choose a brain",
