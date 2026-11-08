@@ -158,7 +158,7 @@ Sin internet, desde la unidad AI-ARK: `sudo bash /media/<usuario>/AI-ARK/localai
 
 ### `aictl`
 
-`aictl` es la línea de comandos del agente del nodo. Ejecute `aictl help` para ver la lista completa, y `aictl help <comando>` para un solo comando. Los que más usará:
+`aictl` es la línea de comandos del agente del nodo. **Escriba `aictl` y presione Enter**: se abre un menú y usted elige con las flechas (o el número) y Enter. No hay nada que memorizar: cada tarea común está ahí, y cada una muestra el comando escrito que ejecutó, así aprende el camino rápido mientras la usa ([aictl.md §3.6](docs/specs/aictl.md#36-full-screen-menu-aictl-with-no-arguments)). Los scripts y las tuberías nunca ven el menú. Ejecute `aictl help` para ver la lista completa de comandos escritos, y `aictl help <comando>` para uno solo. Los que más usará:
 
 | Comando | Qué hace |
 |---|---|

@@ -35,6 +35,6 @@ The mode is remembered after a restart. Leaving Survival mode needs the **admin 
 | You run the **whole lab**? | [10-lab-operations.md](10-lab-operations.md) |
 
 ## Three things to remember
-1. **The first thing to try is always the doctor.** Open a terminal (**Ctrl + Alt + T**), type `aictl doctor`, press **Enter**, and do what it says. Every problem comes with a code and a one-line fix.
+1. **The first thing to try is always the doctor.** Open a terminal (**Ctrl + Alt + T**), type `aictl`, press **Enter**. A menu opens: press **2** (Find and fix problems) and do what it says. Every problem comes with a code and a one-line fix. Everything else is in the same menu, so you do not need to remember any command (typed in one line: `aictl doctor`).
 2. **If the app doesn't open,** any web browser works: go to `http://127.0.0.1:7070`.
 3. **Plug it in.** A laptop on battery stops when the battery is empty.

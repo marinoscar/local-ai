@@ -24,7 +24,7 @@ Line 1 says what happened and gives the **code** in brackets. Line 2 is the fix.
 
 Do this first, for every problem.
 
-1. Run:
+1. Open the menu and choose the health check: type `aictl`, press **Enter**, then press **2** (Find and fix problems). Or type it in one line:
 
    ```
    aictl doctor
