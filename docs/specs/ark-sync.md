@@ -143,6 +143,9 @@ Validation errors in this block are `LAI-AGT` config errors (agent.md). Unknown 
 
 **Exit codes** ([aictl.md](aictl.md) §3.4 is authoritative): with `--wait` or `--scheduled`, `0` = the run finished and every item is verified or up to date, `8` = finished with warnings (some items failed or were skipped; last good copies kept), `9` = finished with errors (run `failed` or aborted). A `--scheduled` run that is **skipped** in preflight (§4.3) prints `i Sync skipped: <reason>.` and exits `0`. Exit `3` only ever means "agent not reachable".
 | `aictl ark eject <root-id>` | `POST /ark/drives/{root_id}/eject` | §4.1.5 |
+| `sudo aictl ark format` | `lsblk` and the disk programs in `aictl`; then `POST /ark/drives/{root_id}/init` | §4.17: erases a disk the person picks by number, after the admin PIN and the word `ERASE` |
+| `sudo aictl ark repair <root-id>` | `POST /ark/drives/{root_id}/eject` `{"keep_powered": true}`, then `fsck.ext4` in `aictl` | §4.17.3, the fix of `LAI-ARK-004` |
+| `sudo aictl ark new-id <root-id\|mount-path>` | `udisksctl`, `fsck.ext4` and `tune2fs` in `aictl` | §4.17.4, the fix of `LAI-ARK-006` |
 | `aictl ark init <mount-path\|device\|root-id>` | `POST /ark/drives/{root_id}/init` | Creates `localai/` and `ROOT.json` on an empty AI-ARK filesystem. The CLI resolves a mount path or device to the drive's `root_id` with `GET /ark/drives` first (every drive with a filesystem UUID is listed with its `root_id`, including `uninitialized` ones) |
 | `aictl ark mount <root-id>` | `POST /ark/drives/{root_id}/mount` | Mounts a detected but unmounted AI-ARK filesystem (`LAI-ARK-005`) |
 | `aictl ark drives set-profile <root-id> <profile>` | `PUT /ark/drives/{root_id}/profile` (PIN) | Writes `ROOT.json` `profile` |
@@ -233,7 +236,7 @@ Drive `state` ∈ `ready | read_only | unclean | not_mounted | unusable | ejecti
 - `add_to_profile: true` needs `items` (`400 LAI-AGT-020`, `details.field: "items"`, `reason: "required_with_add_to_profile"`) and, because it changes `node.yaml`, **admin\*** (`403 LAI-SEC-002` with `details.pin_required: true` for an operator over TCP without the PIN grant; a socket peer in `localai-operators` and root have it). A dry run needs nothing: it only shows what would be added.
 - Every import that is not a dry run is audited as `ark.import` (`from_root`, number of `items`, `add_to_profile`, `catalog`, `run_id`).
 
-**`POST /api/v1/ark/drives/{root_id}/eject`** (op) body `{"force": false}` (body optional; `force: true` = "eject anyway": unload models whose only copy is on this drive instead of refusing) → `202 {"state": "ejecting"}`, then the event `drive.unmounted` with `{"root_id", "safe_to_unplug": true}`; or `409` with `LAI-ARK-009` and `details.blockers: [{"kind": "process|model|sync", "name", "pid"}]` (`pid` is 0 for a model; `sync` is the agent's own transfer or check that did not let go within 30 s). The checks (§4.1.5 steps 1 to 6) run before the answer, so a refusal is the answer and the drive is back in the state it had; the unmount (steps 7 to 9) runs after the `202`. `force` never overrides a program that has a file open. A drive that is not mounted, or is already `ejecting`, is `409 LAI-AGT-020` with `details.state`; another action running on the same drive is `409 LAI-AGT-022`. A drive that is mounted but not set up (`uninitialized`) can be ejected too.
+**`POST /api/v1/ark/drives/{root_id}/eject`** (op) body `{"force": false, "keep_powered": false}` (body optional; `force: true` = "eject anyway": unload models whose only copy is on this drive instead of refusing; `keep_powered: true` skips the power-off of step 8, for `aictl ark repair`, which checks the unmounted filesystem right after, §4.17.3) → `202 {"state": "ejecting"}`, then the event `drive.unmounted` with `{"root_id", "safe_to_unplug": true}`; or `409` with `LAI-ARK-009` and `details.blockers: [{"kind": "process|model|sync", "name", "pid"}]` (`pid` is 0 for a model; `sync` is the agent's own transfer or check that did not let go within 30 s). The checks (§4.1.5 steps 1 to 6) run before the answer, so a refusal is the answer and the drive is back in the state it had; the unmount (steps 7 to 9) runs after the `202`. `force` never overrides a program that has a file open. A drive that is not mounted, or is already `ejecting`, is `409 LAI-AGT-020` with `details.state`; another action running on the same drive is `409 LAI-AGT-022`. A drive that is mounted but not set up (`uninitialized`) can be ejected too.
 
 **`POST /api/v1/ark/drives/{root_id}/init`** (op) body `{}` → `200` with the drive object of `GET /ark/drives` (state now `ready`). Only for a drive in state `uninitialized`; any other state → `409 LAI-AGT-020` with `details.state` (the drive's current state). Refused (`409 LAI-AGT-020`, `details.reason: localai_exists`) if `<mount>/localai` already holds anything: an **empty** `localai/` directory counts as no `localai/` (§3.2), so it is set up in place, but a directory with content, or a file in its place, is never touched. A write that fails is `409` with `LAI-ARK-003` (read-only), `LAI-SYN-040` (full) or `LAI-ARK-014` (I/O error), `details.reason` `read_only`, `disk_full` or `io_error`. The drive extras (§4.15) are written after a successful init.
 
@@ -361,8 +364,8 @@ Notes:
 #### 4.1.3 Unclean filesystems
 An ext4 filesystem mounted after an unplug without eject may have `errors_count` 0 but a dirty journal; the kernel replays the journal on mount, so that case is fine. `errors_count > 0` means real corruption was detected. The agent:
 1. marks the root read-only (`unclean`),
-2. raises `LAI-ARK-004` with the fix "Unmount the drive and run `sudo fsck.ext4 -f /dev/<device>`. Then plug it in again.",
-3. never runs `fsck` itself (it needs the filesystem unmounted, and a non-expert must not be surprised by a long repair),
+2. raises `LAI-ARK-004`, whose fix names `sudo aictl ark repair <root-id>` (and the menu entry) first and `sudo fsck.ext4 -f /dev/<device>` as the last resort (§8; the drive list fills in the root id and the device),
+3. never runs `fsck` itself (it needs the filesystem unmounted, and a non-expert must not be surprised by a long repair). A person runs it on purpose with `sudo aictl ark repair` (§4.17.3), which ejects the drive through the agent and checks it from `aictl`,
 4. schedules a **serve-time verification**: before a model on that root is loaded or a ZIM is added to the library, its files are re-hashed. Items that fail are marked `quarantined` in memory (the drive is read-only, so nothing moves on disk).
 
 #### 4.1.4 Surprise removal
@@ -381,7 +384,7 @@ When a drive root disappears from mountinfo without an eject:
 6. Check that no process holds files on the mount: walk `/proc/*/fd` and `/proc/*/cwd` for paths under the mount (as root; `ark.FindBlockers`). A process that vanishes or cannot be read during the walk is skipped. Blockers are listed by process name and pid (kind `process`; the agent's own pid is kind `sync`) in the `LAI-ARK-009` details. A refusal at step 3 or 6 puts the drive back in the state it had (`Ejector.AbortEject`), so the person can fix it and press **Eject** again.
    Steps 1 to 6 run before the route answers. If they pass, the route answers `202` and steps 7 to 9 follow.
 7. `syncfs(2)` on the mount, then `umount <mount>` (via `umount(2)`, no lazy or forced flag; on `EBUSY` retry 3 times, 2 s apart). A failed `syncfs` is logged and the unmount decides; an `EINVAL` (somebody else unmounted it first) counts as done. If the unmount still fails, the drive goes back to its previous state (no `drive.unmounted` is published), `LAI-ARK-009` is raised as an alert with `reason` and the programs that hold the drive then, and the next **Eject** starts clean; the alert is cleared by the next eject that works.
-8. `udisksctl power-off --no-user-interaction -b <whole-disk device>` (best effort; some USB bridges don't support it). The whole disk is found in sysfs (`/sys/class/block/<name>` resolves to the device directory; a partition's directory has a `partition` file and sits inside its disk's): `sdb1` gives `sdb`, `nvme1n1p1` gives `nvme1n1`. A device-mapper, LUKS, md or loop volume lives under `/sys/devices/virtual` and is skipped.
+8. Unless the request said `keep_powered` (`ark.EjectOptions.KeepPowered`): `udisksctl power-off --no-user-interaction -b <whole-disk device>` (best effort; some USB bridges don't support it). The whole disk is found in sysfs (`/sys/class/block/<name>` resolves to the device directory; a partition's directory has a `partition` file and sits inside its disk's): `sdb1` gives `sdb`, `nvme1n1p1` gives `nvme1n1`. A device-mapper, LUKS, md or loop volume lives under `/sys/devices/virtual` and is skipped.
 9. Emit `drive.unmounted` with `safe_to_unplug: true` (`Ejector.FinishEject`, which also runs the `OnRemoved` hooks; the eject publishes no event of its own for a drive in the active set). The UI shows "You can unplug the drive now." / "Ya puede desconectar el disco."
 
 A drive that is mounted but not in the active set (`uninitialized`, or one whose `ROOT.json` is damaged) is ejected too: nothing uses it, so steps 1 to 5 are skipped, and the eject itself publishes the `drive.unmounted` event (the detector never announced the drive). After step 8 a drive whose power-off failed shows up again as `not_mounted` at the next scan (`LAI-ARK-005`); that is expected.
@@ -1196,11 +1199,69 @@ When the node is enrolled and in `online` mode ([cloud-app.md](cloud-app.md) §3
 
 ### 4.17 Formatting a new AI-ARK drive
 
-> **WARNING: these commands ERASE the whole drive.** Choosing the wrong device erases the wrong disk, including the computer's own disk. Read the device name twice. Unplug every other USB disk first.
->
 > **The ark drive is not encrypted.** Anyone who finds it can read everything on it, including `inventory.local.yaml`. That is on purpose, so it can be used in an emergency. Don't store personal secrets on it.
 
-Use a USB 3 SSD of at least 1 TB (2 TB recommended for the `ark-drive-full` profile). Spinning disks work but sync and model loading are slower.
+Use a USB 3 SSD of at least 1 TB (2 TB recommended for the `ark-drive-full` profile). Spinning disks work but sync and model loading are slower. Don't use exFAT, NTFS or FAT32: they can't store Unix permissions, so the rebuild kit wouldn't work (ADR-0005).
+
+**The common path** ([ADR-0009](../decisions/0009-optimized-for-humans.md)): `sudo aictl`, entry 6 (*Offline content and the AI-ARK drive*), then *Format a new drive as AI-ARK*; or type `sudo aictl ark format`. The same menu has *Repair a drive* (`sudo aictl ark repair <root-id>`, the fix of `LAI-ARK-004`) and *Give a copied drive a new id* (`sudo aictl ark new-id <root-id>`, the fix of `LAI-ARK-006`). [Runbook 04](../runbooks/04-ark-drive.md) follows them step by step. The raw commands are kept in §4.17.5 as the last resort. Code: `agent/internal/ark/prep` (the disk list and the programs), `agent/internal/cli/cmd_ark_prep.go` (the questions and the steps).
+
+#### 4.17.1 Who runs the disk programs (the privileged split)
+
+**Decision: `wipefs`, `parted`, `mkfs.ext4`, `fsck.ext4` and `tune2fs` run in `sudo aictl`, never in the agent.** `aictl ark init` and `aictl ark eject` are thin clients of op routes because what they do (create a folder, unmount) cannot destroy data. Erasing a disk can, so it stays out of the daemon:
+
+- The agent is reachable over HTTP (the socket, TCP with the token, the Portal, the desktop). A route that erases or rewrites a disk would turn any bug or leaked credential of that surface into a disk eraser. With the programs in `aictl`, erasing a disk needs a person with `sudo` at a terminal, the admin PIN and the typed word `ERASE`. The agent's rules stay as they are: it never formats a drive, never runs `fsck` (§4.1.3) and mounts only on request (§4.1.2).
+- `aictl` runs the same Go packages as the agent ([aictl.md](aictl.md) §2), so the disk code is shared and tested once (`prep.Tools`, a fixed argv per program, a fake in the tests).
+- The agent still does everything it does for any drive, through the routes `aictl ark eject` and `ark init` use: it lists the drives (`GET /ark/drives`), ejects one with the disk left powered (`keep_powered`, §3.5) so every drive user lets go first, sets a new drive up (`POST /ark/drives/{root_id}/init`) and checks the admin PIN (`POST /pin/verify`). So a repaired drive is released exactly as an eject releases it, and a formatted one is set up exactly as `ark init` sets it up.
+- The admin PIN is asked by `format` even when the caller is root, which the agent would otherwise take as admin: the PIN says the person is the administrator, `ERASE` says they mean this disk. `--yes` answers neither, nor the disk number, and `--json` is refused.
+- `new-id` does not use the agent's eject: the agent addresses a drive by root id and both copies have the same one, so it would eject the copy in use. The copy that shows `LAI-ARK-006` is `unusable`, so nothing of the agent holds it; `aictl` unmounts it with `udisksctl unmount`.
+- **Desktop buttons are a follow-up.** The desktop app runs as the person, not root, so a *Format* or *Repair* button needs a privileged helper (for example opening `sudo aictl ark format` in a terminal); it is not part of this version.
+
+Once the person has answered, Ctrl-C does not stop the disk work: a half-written partition table or a check cut short is worse than waiting. The command says so (`Stopping now would leave the drive half done, so this goes on to the end.`) and finishes. Every program runs with an empty stdin (a program that asks a question gets "no" and stops), a time limit, and a device path that must be a plain `/dev/<name>` taken from `lsblk --json` or the agent's drive list, never from what the person typed.
+
+#### 4.17.2 `aictl ark format`
+
+1. Root (else `LAI-CLI-006`, exit 4) and a terminal (`--json`, a pipe or `--yes` alone: `LAI-CLI-007`, exit 2), before any disk is read.
+2. `lsblk --json --bytes --output NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,RM,HOTPLUG,LABEL,FSTYPE,UUID,MOUNTPOINTS`. A whole disk (`TYPE` `disk`) is **offered** (`prep.Classify`) only when all of these hold; the checks run in this order and the first that fails is the reason shown under "Not offered:":
+   | Check | Not offered when | Shown as |
+   |---|---|---|
+   | path | not a plain `/dev/<name>` | its device name cannot be used |
+   | system disk | it or anything on it is mounted at `/`, `/boot`, `/boot/efi`, `/usr`, `/var`, `/home`, `/srv/localai`, `/var/lib/localai`, `/etc/localai` or `/opt/localai`, at the target of one of them that is a symbolic link, or at a directory above one of them; or it holds an active swap | this computer's own disk (it holds `<mount>`); this computer uses it as swap |
+   | mounted | anything on it is mounted (a desktop opened it) | open at `<mount>`; eject it in the file manager first |
+   | stacked | a device-mapper, LUKS, RAID or LVM device sits on it | in use (encrypted, RAID or LVM) |
+   | removable | neither `RM` nor `HOTPLUG` is set and `TRAN` is not `usb` | a disk inside this computer |
+   | media | `SIZE` is 0 | no media (an empty card reader) |
+   No disk offered: `LAI-ARK-016`, exit 5.
+3. The offered disks are numbered (path, model, size, bus, and the names on it or `empty`). The person types a number (`Type the number of the disk to erase, or press Enter to stop:`), then the admin PIN (`POST /pin/verify`, up to three tries), then `ERASE`, exactly and in capitals, after the disk is shown again (`Everything on this disk will be erased: … This cannot be undone. Type ERASE to erase it, or press Enter to stop:`). Any other answer, an empty one or the end of the input: `i Nothing was changed.`, exit 0. Ctrl-C at a question: exit 130.
+4. `lsblk` again: the disk must still be offered and be the same one (path, size, model and serial, `prep.SameDisk`). Otherwise `LAI-ARK-016`, exit 6, `The disk changed or was opened since it was listed, so nothing was erased.`
+5. `wipefs --all` on each of its partitions, then on the disk; `parted --script <disk> mklabel gpt mkpart AI-ARK ext4 1MiB 100%`; `udevadm settle --timeout=30`; `lsblk` again, which must show exactly one partition, not mounted; `wipefs --all <partition>` (the new partition starts where an old one usually did, so an old filesystem must not reappear for the desktop to open); `mkfs.ext4 -L AI-ARK -m 0 -E lazy_itable_init=0,lazy_journal_init=0 <partition>` (`-m 0` gives back the 5 % reserved for root, `lazy_itable_init=0` makes the first sync faster); `udevadm settle`; `udisksctl mount --no-user-interaction -b <partition>` (an `AlreadyMounted` answer, the desktop was faster, counts as mounted). Each step prints one progress line. A program that fails ends the command with `LAI-ARK-017`, exit 1, and says what was left (`The disk was partly erased; nothing else was touched. Run sudo aictl ark format again to finish.`); a program that is missing names its package and `sudo aictl kit install-debs --packages <package>`.
+6. The agent lists the new drive within seconds (its mount table watch, §4.1.2); `aictl` waits up to 45 s for `GET /ark/drives` to show the partition with a root id, then calls `POST /ark/drives/{root_id}/init` (no second typed answer: `ERASE` was it). `✓ The new AI-ARK drive is ready (<root-id>, mounted at <path>). Fill it with aictl ark sync --root <root-id> --wait (needs internet; leave it overnight).`
+
+#### 4.17.3 `aictl ark repair <root-id>`
+
+The fix of `LAI-ARK-004`.
+1. Root; `GET /ark/drives`; the drive is found by root id, mount path or device (§3.4). Refused before any question (exit 6): a copy that shows `LAI-ARK-006` (give it its own id first), a drive that is `unusable` or has no root id, one that is `ejecting`; and, from `lsblk`, a device that is not ext4 labelled `AI-ARK`, sits on a system disk (the checks of §4.17.2) or shares its disk with another mounted filesystem.
+2. `Check and repair <name> (<root-id>)? It is taken out of use while the check runs, from minutes to over an hour. Do not unplug it meanwhile. [y/N]` (`--yes` answers).
+3. A mounted drive is ejected through the agent with `{"keep_powered": true}`: steps 1 to 7 of §4.1.5, so models, the library and whisper let go of it first. A refusal (`LAI-ARK-009`) lists the blockers and ends the command, nothing changed (exit 6).
+4. `lsblk` again: nothing on the drive may be mounted.
+5. `fsck.ext4 -f -y -C 1 <device>`. Its completion lines (`<pass> <done> <total> <device>`) become one progress line per pass and tenth: `… Checking step 2 of 5 (folders): 40%`.
+6. `udisksctl mount --no-user-interaction -b <device>`, and up to 45 s for the agent to list the drive mounted.
+7. The exit code of fsck (a bit mask) says what happened: `0` `✓ No errors were found. <name> is mounted again at <path>.`; `1` or `2` `✓ Errors were found and fixed. …` (exit 0); `4` some errors are left, `LAI-ARK-018`, exit 1 (the drive stays `unclean`: read-only, re-verified before it is served, §4.1.3); `8` or more the check could not run, `LAI-ARK-017`, exit 1. A drive that could not be mounted again is `LAI-ARK-017` with `Unplug it and plug it in again.` `--json` prints `{"root_id", "device", "result", "fsck_exit", "mount"}`.
+
+#### 4.17.4 `aictl ark new-id <root-id|mount-path>`
+
+The fix of `LAI-ARK-006`. Two drives with the same filesystem UUID are clones; the second one is `unusable` (§4.1.2).
+1. Root; `GET /ark/drives`. The target is the one matching drive that shows `LAI-ARK-006`: the root id matches both copies and picks the unusable one, a mount path or a device picks that drive. A match without `LAI-ARK-006` is refused (exit 6, `This drive does not share its id with another drive, so nothing was changed.`); two copies that match are exit 2 (give the mount path). The `lsblk` checks of §4.17.3.
+2. `Give the copy at <path> a new id? The other drive keeps <root-id>. Nothing on the drive is deleted. [y/N]` (`--yes` answers).
+3. `udisksctl unmount --no-user-interaction -b <device>` (§4.17.1 says why not the agent's eject); `lsblk`: nothing mounted.
+4. `fsck.ext4 -f -y -C 1 <device>`, with the progress of §4.17.3: `tune2fs -U` on a filesystem with metadata checksums needs a freshly checked one. Errors left or a check that failed stop here: the id is not changed and the copy is mounted again.
+5. `tune2fs -U random <device>`.
+6. `udisksctl mount`, then up to 45 s for `GET /ark/drives` to list the device under a root id other than the old one. That is the whole re-registration: the root id comes from the UUID (§3.2) and a stale `root_id` in `ROOT.json` is ignored. `✓ The copy now has its own id, <root-id>, and is mounted at <path>. Both drives can be used.` `--json` prints `{"old_root_id", "root_id", "device", "mount"}`.
+
+#### 4.17.5 Manual commands (last resort)
+
+Only when `aictl` cannot run (no agent binary yet, a broken install). [Runbook 04](../runbooks/04-ark-drive.md), Appendix A, has the same steps with explanations.
+
+> **WARNING: these commands ERASE the whole drive.** Choosing the wrong device erases the wrong disk, including the computer's own disk. Read the device name twice. Unplug every other USB disk first.
 
 1. Plug in **only** the new drive. List disks:
    ```
@@ -1247,7 +1308,9 @@ Use a USB 3 SSD of at least 1 TB (2 TB recommended for the `ark-drive-full` prof
 
 If it doesn't work: `blkid` shows `TYPE="exfat"` or `ntfs` → step 5 didn't run on the right partition; repeat from step 1. See [runbooks/07-troubleshooting.md](../runbooks/07-troubleshooting.md).
 
-Don't use exFAT, NTFS or FAT32: they can't store Unix permissions, so the rebuild kit wouldn't work (ADR-0005).
+**Repair by hand** (`LAI-ARK-004`, last resort): read the drive's device and mount path in `aictl ark drives`, stop what uses it, then `sudo umount <mount path>` (an eject would also power the disk off), `sudo fsck.ext4 -f /dev/sdX1` (answer `y` to each fix), and unplug and plug the drive in again.
+
+**New id by hand** (`LAI-ARK-006`, last resort): with both copies plugged in, read the device and mount path of the copy that shows `LAI-ARK-006` in `aictl ark drives`, then `sudo umount <mount path>`, `sudo fsck.ext4 -f /dev/sdX1`, `sudo tune2fs -U random /dev/sdX1`, and unplug and plug that drive in again.
 
 ## 5. Failure handling and edge cases
 
@@ -1279,9 +1342,12 @@ Don't use exFAT, NTFS or FAT32: they can't store Unix permissions, so the rebuil
 | Docs rendered without the survival-card PDF (no Chromium) | docs yellow, item still verified | `LAI-CLI-014` |
 | Drive with label AI-ARK but exFAT/NTFS | `unusable`, never touched | `LAI-ARK-002` |
 | Drive mounted read-only | served and importable, not written | `LAI-ARK-003` |
-| Drive has ext4 errors | read-only + serve-time verification; tell user to fsck | `LAI-ARK-004` |
+| Drive has ext4 errors | read-only + serve-time verification; the fix names `sudo aictl ark repair` (§4.17.3) | `LAI-ARK-004` |
 | Drive plugged in, not mounted | UI offers Mount | `LAI-ARK-005` |
-| Two drives with the same UUID | second ignored | `LAI-ARK-006` |
+| Two drives with the same UUID | second ignored; the fix names `sudo aictl ark new-id` (§4.17.4) | `LAI-ARK-006` |
+| No disk can be formatted (none plugged in, or every one is open or the computer's own) | `aictl ark format` lists why each disk is not offered and stops | `LAI-ARK-016` |
+| A disk program fails during format, repair or new-id | stop at that step, say what was left changed | `LAI-ARK-017` |
+| The repair leaves errors | drive mounted again (still `unclean`, served only after re-verification) | `LAI-ARK-018` |
 | Drive pulled without eject | transfers checkpointed, services switch copies | `LAI-ARK-007` |
 | Drive last synced > 30 d / > 90 d | yellow / red | `LAI-ARK-008` |
 | Import with several drives and no `--from` | refused, drives listed | `LAI-ARK-015` |
@@ -1309,6 +1375,7 @@ Don't use exFAT, NTFS or FAT32: they can't store Unix permissions, so the rebuil
 - **inventory.local.yaml** is 0600 on the drive. The drive is unencrypted by design (T9), which the formatting section warns about.
 - **Deletion** is centralised in `retention.CanDelete`, which enforces R1 and is unit-tested exhaustively.
 - **Mount handling.** The agent never mounts or formats drives on its own. `aictl ark init` only creates a directory and a JSON file.
+- **Disk programs** (`wipefs`, `parted`, `mkfs.ext4`, `fsck.ext4`, `tune2fs`, `udisksctl`) run only in `sudo aictl ark format|repair|new-id`, never in the agent and never behind an HTTP route (§4.17.1). Each is a fixed argv (`prep.ExecTools`), a device path comes only from `lsblk --json` or the agent's drive list and must be a plain `/dev/<name>`, and erasing needs root, the admin PIN and the typed word `ERASE`.
 - **Throttling proxy** listens on loopback only, accepts only CONNECT to hosts in the item's allowlist (from its catalog URLs), and dies with the subprocess.
 
 ## 7. Observability
@@ -1419,6 +1486,7 @@ User-visible fixes are shown in the desktop and, for `LAI-ARK` codes, in the Por
 | re-verification and serve-time (`internal/sync/verify`) | oldest `last_reverified_at` first across roots, ties by root then id; `reverify_days` due filter, `--full`, a named item whatever its age, a named item that is nowhere; the budget (a fake clock advanced by every file read: stops within the budget plus one file, the left copies listed, the stamped ones stamped, the others not), checked between the files of one item (the item keeps its old date); a context cancelled in the middle of a file (nothing settled, nothing changed); a flipped byte (quarantine with `reason.json`, index and journal updated, the neighbour untouched), the same on a directory item (a flipped page, a tampered `SHA256SUMS`, a missing page), an unreadable file, a bit flipped only on the read path; an older version in `.trash` restored, a rotten trash entry not restored; a read-only root and an unclean one (every file under the root byte-identical before and after, the copy excluded in memory, BestCopy falls to the other root's copy, a copy that passes is offered on an unclean root); a full disk and a root that went read-only at the quarantine (the copy stays, is excluded, the next pass finishes it); a rename that fails after `reason.json` was written (a second pass quarantines it, both reasons kept); an item mid-swap left alone; a manifest replaced while it was read; serve-time: hashed once per mount, a damaged copy never offered, a verdict kept and forgotten on unmount, clean roots free, concurrent askers share one read, a cancelled check leaves no verdict |
 | import (`internal/sync/importer`, `run`, `run/adapt`) | the source (named by id, mount point or path; the only drive; several: `LAI-ARK-015` with the ids in mount order; none; unknown; the internal root; an unclean drive refused; a read-only one accepted); the plan (every row a local copy from the drive and never the network; an item only on a second drive unresolved; older on the drive keeps the node's copy; newer taken although its refresh is not due; the input not modified; same answer twice); `--item` with and without `--add-to-profile` (refused `not_in_profile`; model to `add_models`, content to `add_content`; a removed item wanted again; a dry run writes nothing; no items is a mistake; no editor; editor failing); `--catalog` (newer and valid installed, not newer left alone including `-9` against `-10`, invalid or unreadable version a warning and the import goes on, none on the drive, dry run); `node.yaml` merge (kept comments and keys, sorted, no duplicates, a list that is not a list); the pin check (`LAI-SYN-021`), trusting the drive where the catalog pins nothing; a row that would use the network refused; the engine (survival and offline and online, own machine, the sync machine never used, `LAI-SYN-070` reported to the wiring, `not_in_profile` listed, warnings, a plan that fails fails the run with its code, no `checked_current_at`, a read-only internal root refused, the slot shared); the dial: `NoNetwork`/`RefuseDial` return `ErrNetworkRefused` or panic; the routes (`202`, dry run `200` as an array, `403` for `add_to_profile` without admin\*, `409 LAI-ARK-015` with `details.roots`, every error passes through, audit, validation); end to end with the real machine, downloader, index, retention and planner over temp directories and a panicking dialer: an import into an empty internal root in survival mode, a damaged drive copy, the dry run, several drives, a verify run followed by a re-import |
 | sync units | the two ini blocks of §3.7 equal the embedded files byte for byte; `SuccessExitStatus=8` exactly; `systemd-analyze verify` (`scripts/verify-units.sh`) |
+| drive preparation (`internal/ark/prep`, `internal/cli/cmd_ark_prep_test.go`, §4.17) | never offered: the disk of `/` and `/boot` (even on USB), a swap disk, the disk of a Local AI data directory, of a mount above one and of the target of a linked one, a disk or partition mounted, LUKS, RAID or LVM on it, a non-removable SATA or NVMe disk, no media, a path that is not a plain `/dev/<name>`; offered: a blank or unmounted USB or removable disk; lsblk JSON of several util-linux versions; the exact argv of every program, an empty stdin, a bad device refused before anything runs; fsck completion lines and exit codes; `format`: only the chosen disk is touched, in order; a wrong, empty or out-of-range number, an empty PIN, three wrong PINs, a wrong, lower-case or empty word, the end of the input and Ctrl-C at each question change nothing; `--yes` answers none of them; `--json`, no terminal and not root are refused before any disk is read; a disk swapped or opened before the erase is refused; each program failing; `repair`: clean, fixed, errors left, failed, the eject body `keep_powered`, one progress line per pass and tenth, refusals (copy, unusable, system disk, unknown, not root, no answer, Ctrl-C), blockers; `new-id`: by id, path and device, never the agent's eject, no copy, two copies, errors left keep the id, `tune2fs` failing; Ctrl-C after the yes finishes the work; the menu pickers |
 | scheduled client | skipped → 0; done ok → 0; failed items → 8; run failed → 9; agent down → 3; one journal line per item; SIGTERM sends one `DELETE` and leaves after the grace |
 
 Static check (CI): a test greps `internal/sync` and `internal/ark` for `os.Remove`, `os.RemoveAll`, `unix.Unlink` outside `retention/` and fails if any is found.
@@ -1449,6 +1517,7 @@ Static check (CI): a test greps `internal/sync` and `internal/ark` for `os.Remov
 6. Read-only: `sudo mount -o remount,ro /media/<user>/AI-ARK` → `aictl ark drives` shows `read_only` and `LAI-ARK-003`.
 7. Import offline: `aictl mode offline`, then `aictl ark import --from <root-id> --item whisper-small --dry-run`, then without `--dry-run`. Expect success with no network.
 8. Bit rot: copy a small item's file, flip one byte with `printf '\x00' | sudo dd of=<file> bs=1 seek=1000 conv=notrunc`, run `aictl ark verify --item <id>`. Expect `LAI-SYN-025`, the file quarantined, READY red/yellow, and the next sync restores it.
+9. Format, repair, new id (§4.17; a spare USB disk with nothing on it that matters): `sudo aictl ark format` numbers the spare disk only and lists the computer's own disk under "Not offered"; a wrong number, a wrong PIN and `erase` in lower case each end with `Nothing was changed.` and `lsblk` shows the disk unchanged; the right number, PIN and `ERASE` end with `The new AI-ARK drive is ready`. `sudo aictl ark repair <root-id>` → `No errors were found.` and the drive `ready` again. Clone it to a second spare disk (`sudo dd if=/dev/sdX of=/dev/sdY bs=4M`), plug both in: one shows `LAI-ARK-006`; `sudo aictl ark new-id <root-id>` → `The copy now has its own id`, and `aictl ark drives` lists two different ids. Record the commands and output in the PR.
 
 ## 10. Implementation breakdown
 
