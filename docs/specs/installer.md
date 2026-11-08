@@ -318,7 +318,7 @@ Lists (exact names checked per codename at implementation):
 - Failure: `LAI-INS-030` with apt's last 20 lines.
 
 #### P7. llama.cpp build or reuse
-The commit is `node.yaml: llama.commit` if present, else the pinned commit in the catalog's `kit/catalog/pins.json` ([rebuild-kit.md](rebuild-kit.md) §Pins). Then:
+The commit is `node.yaml: llama.commit` if present, else the pinned commit in the catalog's `kit/catalog/pins.json` ([rebuild-kit.md](rebuild-kit.md) §Pins). If neither names one and a legacy llama unit is installed (and not `--no-migrate`), the phase builds nothing and says so: the migration builds the engine itself in P8 ([llama-router.md](llama-router.md) §4.9.2 M1). Then:
 1. If `/opt/localai/llama.cpp/builds/<commit[:9]>-<backend>/bin/llama-server` exists and its smoke test passes → reuse it (done).
 2. Else, **reuse the source** where possible: if the desktop user has `~/llama.cpp` (as on ai-n1/n2/n3 today) and `git -C ~/llama.cpp cat-file -e <commit>^{commit}` succeeds, build from a `git worktree`-free export of it (`git -C ~/llama.cpp archive <commit> | tar -x -C /opt/localai/llama.cpp/src/<commit>`), which also reuses ccache. Otherwise use the kit tarball (offline) or download the tarball from GitHub (`https://github.com/ggml-org/llama.cpp/archive/<commit>.tar.gz`, sha256 recorded), extracted to the same `/opt/localai/llama.cpp/src/<commit>/`, the only source location ([llama-router.md](llama-router.md) §4.10.1).
 3. Build with `aictl rebuild-llama --commit <commit> --backend <backend> --source /opt/localai/llama.cpp/src/<commit> --no-activate` ([llama-router.md](llama-router.md) §4.10, [aictl.md](aictl.md) §4.23), so the installer and the offline rebuild share one builder. The old build dirs under `~/llama.cpp/build-cuda` and `build-vulkan` are **not** used as install targets (they link shared libraries by absolute path) and are never deleted.
@@ -479,7 +479,7 @@ It never changes the node id, key, agent token, PIN, cloud credential, profile, 
 
 - The script is downloaded and hash-checked before running; the agent binary is verified with minisign (key embedded in the script) and SHA256SUMS; offline artifacts are verified against kit manifests and the same signature.
 - The credential never appears in argv: `--enroll` reads it from `/dev/tty` (hidden), `--enroll-file` from a file, and it is passed to `aictl` on stdin. The cloud dialog uses `--enroll`.
-- `umask 077` for the whole run; secrets never appear in the log (§4.6).
+- `umask 077` for the whole run; secrets never appear in the log (§4.6). The agent it calls (`aiagent setup …`, `aiagent migrate`, `aictl rebuild-llama`, the catalog install) sets its own umask to 022 when it runs as root, so what it shares with `localai` (builds and programs under `/opt/localai`, models under `/srv/localai`, `/etc/localai/catalog`) is readable; every secret is written with an explicit 0600/0640 mode, which a umask can only narrow.
 - No `curl | sh` of third-party scripts (Tailscale is installed from its signed apt repo).
 - The installer never opens ports, never enables `ufw` rules on its own, never runs `tailscale serve` or `funnel`, and never restarts logind.
 - The offline `[trusted=yes]` apt source exists only during P6 and is limited to the kit repo whose files were re-verified.

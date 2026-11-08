@@ -3,7 +3,7 @@ id: max-128gb
 display_name: "Large unified-memory node (128 GB)"
 match:
   backends: [vulkan]
-  vram_mib: {min: 65536}
+  vram_mib: {min: 49152}   # 48 GiB: a unified-memory node is matched on its GTT (ai-n1 reports 62061 MiB)
   ram_mib: {min: 65536}
 router:
   models_max: 3

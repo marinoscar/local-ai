@@ -8,6 +8,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
+	"github.com/marinoscar/local-ai/agent/internal/router"
 	"github.com/marinoscar/local-ai/agent/internal/services"
 )
 
@@ -161,5 +162,73 @@ func TestMigrateFindsTheShardsOfACatalogNameWithAFolder(t *testing.T) {
 		if tgt, err := w.fs.Readlink("/home/labuser/models/m1/" + name); err != nil || tgt != "/srv/localai/models/model-one/Sub/"+name {
 			t.Fatalf("the old path of %s: %q %v", name, tgt, err)
 		}
+	}
+	// The folder below the model's own belongs to localai with mode 0755, like the model folder: under
+	// the installer's umask 077 MkdirAll alone left it root 0700 on ai-n1.
+	w.fs.mu.Lock()
+	sub := w.fs.nodes["/srv/localai/models/model-one/Sub"]
+	w.fs.mu.Unlock()
+	if sub == nil || sub.uid != 990 || sub.gid != 990 || sub.mode != 0o755 {
+		t.Fatalf("the Sub folder: %+v", sub)
+	}
+}
+
+// oldEngineWorld is ai-n1 before its migration: the legacy llama.cpp (cbe28bb3c) predates
+// --models-memory-margin, and the node's profile asks for a margin.
+func oldEngineWorld(t *testing.T) *world {
+	t.Helper()
+	w := newWorld(t, worldOpts{})
+	w.commit, w.legacyOldRouter = "cbe28bb3c", true
+	prof := catalog.Profile{ID: "max-128gb", Router: catalog.Router{ModelsMax: 3, MemoryMarginMiB: 1024}}
+	w.cat = catalog.New(w.cat.Version, w.cat.Models, nil, []catalog.Profile{prof})
+	w.cfgNode.cfg.Profile = "max-128gb"
+	return w
+}
+
+func TestPreflightBuildsTheReferenceCommitWhenTheLegacyOneLacksARouterFlag(t *testing.T) {
+	w := oldEngineWorld(t)
+	p, err := w.engine().Preflight(context.Background())
+	if err != nil || !p.OK() {
+		t.Fatalf("%v %+v", err, p.Problems)
+	}
+	if p.BuildCommit != router.ReferenceCommit || !p.BuildNeeded {
+		t.Fatalf("build commit %q, needed %v", p.BuildCommit, p.BuildNeeded)
+	}
+	if !strings.Contains(strings.Join(p.Warnings, "\n"), "does not know --models-memory-margin") {
+		t.Fatalf("warnings: %q", p.Warnings)
+	}
+	res, err := w.run(w.engine())
+	if err != nil || res.State != StateDone {
+		t.Fatalf("%+v %v\n%s", res, err, w.out.String())
+	}
+	if len(w.builder.built) != 1 || w.builder.built[0].Commit != router.ReferenceCommit {
+		t.Fatalf("built: %+v", w.builder.built)
+	}
+	if got := w.currentCommitOnDisk(); got != router.ReferenceCommit {
+		t.Fatalf("current is %q", got)
+	}
+}
+
+func TestPreflightStopsWhenTheReferenceCommitIsNotInTheCheckout(t *testing.T) {
+	w := oldEngineWorld(t)
+	w.refMissing = true
+	p, err := w.engine().Preflight(context.Background())
+	if err != nil || p.OK() || p.Problems[0].Cause != "source_missing" || !strings.Contains(p.Problems[0].Message, "fetch origin") {
+		t.Fatalf("%v %+v", err, p.Problems)
+	}
+	if _, err := w.run(w.engine()); err == nil || len(w.builder.built) != 0 {
+		t.Fatalf("the run went on: %v %+v", err, w.builder.built)
+	}
+	if st, _ := w.sd.State(context.Background(), LegacyUnitName); !st.Active() {
+		t.Fatal("the old service was stopped")
+	}
+}
+
+func TestPreflightKeepsALegacyCommitThatKnowsTheRouterFlags(t *testing.T) {
+	w := oldEngineWorld(t)
+	w.legacyOldRouter = false
+	p, err := w.engine().Preflight(context.Background())
+	if err != nil || !p.OK() || p.BuildCommit != "" || p.buildCommit() != "cbe28bb3c" {
+		t.Fatalf("%v %+v build commit %q", err, p.Problems, p.BuildCommit)
 	}
 }

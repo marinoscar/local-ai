@@ -252,3 +252,22 @@ func TestCatalogSuggestUsesItsProfiles(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// TestRealCatalogMatchesTheLabNodes runs the profiles of the repository's catalog (not labProfiles) on
+// each lab node: ai-n1's max-128gb used to ask for 65536 MiB while the node reports 62061 MiB of GTT, so
+// the installer chose cpu-only for it.
+func TestRealCatalogMatchesTheLabNodes(t *testing.T) {
+	cat, err := Load(filepath.Join("..", "..", "..", "catalog"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for hw, want := range map[string]string{"ai-n1": "max-128gb", "ai-n2": "cuda-12gb", "ai-n3": "small-8gb", "cpu": CPUOnlyProfileID} {
+		snap := loadHW(t, hw)
+		if hw == "ai-n1" {
+			snap.GPUs[0].VRAMTotalMiB = 62061 // what ai-n1 reports (aiagent setup profile-suggest, 2026-11-08)
+		}
+		if got, reasons := Suggest(cat.Profiles, snap); got != want {
+			t.Errorf("%s: Suggest = %q (%q), want %q", hw, got, reasons, want)
+		}
+	}
+}

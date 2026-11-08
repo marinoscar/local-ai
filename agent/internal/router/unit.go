@@ -221,6 +221,20 @@ func RenderUnit(in UnitInputs) (UnitRender, error) {
 
 // routerArgs are the router-mode arguments before host, port and key (section 3.2): no per-model
 // arguments, because router arguments win over presets and every child inherits them.
+// ReferenceCommit is the llama.cpp commit the router contract is verified against (llama-router.md, top
+// of the page). The legacy migration builds it when the old service's own commit predates a router flag.
+const ReferenceCommit = "f3586e66bc916d672773d4a6505513ba91a3595c"
+
+// RouterFlags names the llama-server flags the router unit passes for a profile's router block, so a
+// binary can be checked for them (`--help`) before it is switched on.
+func RouterFlags(r catalog.Router) []string {
+	var out []string
+	for _, a := range routerArgs(r) {
+		out = append(out, a[0])
+	}
+	return out
+}
+
 func routerArgs(r catalog.Router) [][]string {
 	max := r.ModelsMax
 	if max < 1 {

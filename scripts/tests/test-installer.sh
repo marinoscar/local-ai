@@ -715,6 +715,10 @@ t "backend: defaults to cpu" 0 "cpu" llrun 'llama_resolve; echo $LLAMA_BACKEND'
 echo "-- reuse"
 b9="$LL/builds/${C40:0:9}-cpu"; rm -rf "$LL/builds/"* "$LL/src/"* "$LL/current"
 t "no commit, real run -> exit 1 LAI-INS-032" 1 "LAI-INS-032" llenvrun LAI_INSTALL_NODE_YAML="$NONE" LAI_INSTALL_PINS="$w/nope.json" -- 'phase_llama'
+echo '[Service]' >"$w/lsystemd/llama-coder-next.service"
+t "no commit but an old llama service -> left to the migration" 0 "the migration (phase 8) builds" llenvrun LAI_INSTALL_NODE_YAML="$NONE" LAI_INSTALL_PINS="$w/nope.json" -- 'phase_llama'
+t "   ...unless --no-migrate: then LAI-INS-032" 1 "LAI-INS-032" llenvrun LAI_INSTALL_NODE_YAML="$NONE" LAI_INSTALL_PINS="$w/nope.json" -- 'OPT_MIGRATE=no; phase_llama'
+rm -f "$w/lsystemd/llama-coder-next.service"
 t "first run builds with the shared builder" 0 "build finished" llrun 'OPT_YES=1; phase_llama'
 t "aictl got commit, backend, the one source folder, --no-activate" 0 "" grep -qF "aictl rebuild-llama --commit $C40 --backend cpu --source $LL/src/$C40 --no-activate" "$FAKE_LOG"
 t "source is in the one source location, tree is 0755" 0 "" bash -c '[ -f "$1/CMakeLists.txt" ] && [ "$(stat -c %a "$1")" = 755 ]' _ "$LL/src/$C40"

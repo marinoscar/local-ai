@@ -402,6 +402,16 @@ func (x *fakeExec) Run(_ context.Context, c execx.Cmd) (execx.Result, error) {
 			return ok("--models-preset PATH\n--models-max N\n--models-memory-margin MiB\n")
 		}
 		return ok("version: 6000 (commit " + w.commit + ")\n")
+	case base == "llama-server" && strings.HasPrefix(c.Path, "/home/") && strings.HasSuffix(args, "--help"):
+		if w.legacyOldRouter {
+			return ok("--models-preset PATH\n--models-max N\n--no-models-autoload\n")
+		}
+		return ok("--models-preset PATH\n--models-max N\n--models-memory-margin MiB\n--no-models-autoload\n")
+	case base == "git":
+		if w.refMissing {
+			return exit(128)
+		}
+		return exit(0)
 	case base == "llama-server" && strings.HasPrefix(c.Path, "/home/"):
 		if w.legacyVersionOut == "" {
 			return ok("version: 6000 (commit " + w.commit + ")\n")
@@ -683,7 +693,11 @@ type world struct {
 	execCalls      []string
 	ssPID          int
 	legacyNoAuth   bool
-	ssDual         bool
+	// legacyOldRouter makes the legacy binary predate --models-memory-margin; refMissing makes the
+	// legacy checkout lack router.ReferenceCommit.
+	legacyOldRouter bool
+	refMissing      bool
+	ssDual          bool
 }
 
 type lockedBuf struct {
