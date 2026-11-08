@@ -9,8 +9,12 @@ name: release-node
 #       -> offline-build (the tarball builds with no network, the section 4.3.4 command; no secrets)
 #       -> release (environment `release`: stamp, SHA256SUMS, sign, verify with the committed key, draft release).
 #
-# workflow_dispatch is a DRY RUN: the same build and offline proof, then the assets are assembled and signed with a
-# throwaway key generated inside the job and uploaded as a workflow artifact. No release, no tag, no real key.
+# workflow_dispatch is a DRY RUN by default: the same build and offline proof, then the assets are assembled and signed
+# with a throwaway key generated inside the job and uploaded as a workflow artifact. No release, no tag, no real key.
+# workflow_dispatch with `release: true` (on main only) is a REAL release of the current main HEAD as node-v<version>:
+# the tag is created by the release itself, so starting one needs no tag push (issue #441).
+# Every real release publishes itself once SHA256SUMS verifies with the committed key, then downloads what GitHub serves
+# and verifies it again; a failure moves it back to a draft (release-signing.md section 2).
 on:
   push:
     tags: ['node-v*']
@@ -20,6 +24,11 @@ on:
         description: 'Dry run only: the semver to build as (e.g. 0.0.1-rc.1). Nothing is published or signed with the real key.'
         required: false
         default: '0.0.0-dryrun.1'
+      release:
+        description: 'Real release of main HEAD as node-v<version> (tag created by the release, then published). Off: dry run.'
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -33,6 +42,7 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       prerelease: ${{ steps.meta.outputs.prerelease }}
       dry_run: ${{ steps.meta.outputs.dry_run }}
+      create_tag: ${{ steps.meta.outputs.create_tag }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: {fetch-depth: 0}
@@ -40,24 +50,33 @@ jobs:
         id: meta
         env:
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_RELEASE: ${{ inputs.release }}
         run: |
           set -euo pipefail
           semver='^([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$'
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             [[ "$INPUT_VERSION" =~ $semver ]] || { echo "::error::version '$INPUT_VERSION' is not a semver"; exit 1; }
-            version="${BASH_REMATCH[1]}"; pre="${BASH_REMATCH[2]}"; tag="node-v$version"; dry=true
+            version="${BASH_REMATCH[1]}"; pre="${BASH_REMATCH[2]}"; tag="node-v$version"; dry=true; create=false
+            if [[ "$INPUT_RELEASE" == "true" ]]; then
+              [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "::error::a real release is started from main only (this run is on $GITHUB_REF)"; exit 1; }
+              [[ "$version" != 0.0.0-dryrun* ]] || { echo "::error::give the real version (for example 0.1.0-rc.3), not the dry-run default"; exit 1; }
+              if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+                echo "::error::$tag already exists: a pushed tag is never moved. Choose the next version."; exit 1
+              fi
+              dry=false; create=true
+            fi
           else
             tag="$GITHUB_REF_NAME"
             [[ "$tag" == node-v* && "${tag#node-v}" =~ $semver ]] || { echo "::error::tag '$tag' is not node-v<semver>"; exit 1; }
-            version="${BASH_REMATCH[1]}"; pre="${BASH_REMATCH[2]}"; dry=false
+            version="${BASH_REMATCH[1]}"; pre="${BASH_REMATCH[2]}"; dry=false; create=false
             git fetch --no-tags origin main
             git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
               || { echo "::error::$tag does not point at a commit on main"; exit 1; }
           fi
           # pre is the semver pre-release part (e.g. -rc.1): such a release is marked as a pre-release
           if [[ -n "$pre" ]]; then prerelease=--prerelease; else prerelease=""; fi
-          { echo "tag=$tag"; echo "version=$version"; echo "prerelease=$prerelease"; echo "dry_run=$dry"; } >> "$GITHUB_OUTPUT"
-          echo "release $tag (version $version, dry run: $dry)"
+          { echo "tag=$tag"; echo "version=$version"; echo "prerelease=$prerelease"; echo "dry_run=$dry"; echo "create_tag=$create"; } >> "$GITHUB_OUTPUT"
+          echo "release $tag (version $version, dry run: $dry, tag created by the release: $create)"
 
   build:
     needs: prepare
@@ -212,18 +231,48 @@ jobs:
           scripts/release/assemble-node-release.sh --tag "$RELEASE_TAG" --bin-dir "$RUNNER_TEMP/unsigned" \
             --tarball "$RUNNER_TEMP/unsigned/local-ai-$RELEASE_TAG-src.tar.gz" \
             --pubkey agent/internal/kit/keys/minisign.pub --out "$RUNNER_TEMP/release" --sign
-      - name: Create the draft release (the owner checks it, then publishes it)
+      - name: Create the draft release and check its assets
+        id: draft
         env:
           GH_TOKEN: ${{ github.token }}
           REL: ${{ runner.temp }}/release
           TAG: ${{ needs.prepare.outputs.tag }}
           VERSION: ${{ needs.prepare.outputs.version }}
           PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          CREATE_TAG: ${{ needs.prepare.outputs.create_tag }}
         run: |
           set -euo pipefail
+          # A tag push: the tag must exist. A `release: true` dispatch: the tag is created on this run's commit (main HEAD)
+          # when the release is published, so the tag and the built commit are the same.
+          if [[ "$CREATE_TAG" == "true" ]]; then where=(--target "$GITHUB_SHA"); else where=(--verify-tag); fi
           # PRERELEASE is empty or the single flag --prerelease
           # shellcheck disable=SC2086
-          gh release create "$TAG" --draft --verify-tag --generate-notes $PRERELEASE \
+          gh release create "$TAG" --draft "${where[@]}" --generate-notes $PRERELEASE \
             --title "Agent $VERSION" \
             "$REL/aiagent-linux-amd64" "$REL/aiagent-linux-arm64" "$REL/SHA256SUMS" "$REL/SHA256SUMS.minisig" \
             "$REL/install-node.sh" "$REL/local-ai-$TAG-src.tar.gz"
+          id="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.draft and .tag_name==\"$TAG\") | .id" | head -n 1)"
+          [ -n "$id" ] || { echo "::error::the draft release for $TAG was not found"; exit 1; }
+          have="$(gh api "repos/$GITHUB_REPOSITORY/releases/$id/assets" --jq '.[].name' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
+          want="$(printf '%s\n' aiagent-linux-amd64 aiagent-linux-arm64 SHA256SUMS SHA256SUMS.minisig install-node.sh "local-ai-$TAG-src.tar.gz" | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
+          [ "$have" = "$want" ] || { echo "::error::the draft holds [$have], expected [$want]"; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "draft $TAG (release $id) holds the six assets"
+      - name: Publish the release (a pre-release when the version has a dash), then verify what was published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_ID: ${{ steps.draft.outputs.id }}
+        run: |
+          set -euo pipefail
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false --jq '"published " + .tag_name + " prerelease=" + (.prerelease|tostring)'
+          # The same check a node does: the committed public key must verify what GitHub now serves. If it does not, pull
+          # the release back to a draft so no node takes it.
+          if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/published" \
+              && scripts/release-sign.sh verify "$RUNNER_TEMP/published" agent/internal/kit/keys/minisign.pub; then
+            echo "published and verified: $TAG"
+          else
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=true >/dev/null
+            echo "::error::the published assets of $TAG do not verify; the release was moved back to a draft. Fix with a new version."
+            exit 1
+          fi

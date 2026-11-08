@@ -20,14 +20,17 @@ Tag names and the moving tag `catalog-stable`: [overview.md §3.8](overview.md#3
 ## 2. How a release is made
 
 1. A change merges to `main` with CI green.
-2. The owner pushes a tag on a commit that is on `main`: `git tag node-v0.1.0 && git push origin node-v0.1.0` (or `catalog-<CATALOG_VERSION>`).
+2. A release is started in one of two ways (issue #441):
+   - a tag pushed on a commit that is on `main`: `git tag node-v0.1.0 && git push origin node-v0.1.0` (or `catalog-<CATALOG_VERSION>`);
+   - for the agent, **Actions → release-node → Run workflow** on `main` with `version` (for example `0.1.0-rc.3`) and `release: true`. The run builds the current `main` HEAD and the release itself creates the tag `node-v<version>` on that commit when it publishes. It refuses a version whose tag already exists (a tag is never moved) and any branch but `main`. This is how a session without permission to push tags starts a release.
 3. The workflow ([release-node.yml](../../.github/workflows/release-node.yml) or [release-catalog.yml](../../.github/workflows/release-catalog.yml)) runs in the protected `release` environment and:
    - refuses a tag that is not well formed or not on `main`;
    - for the agent: runs the same checks and static builds as CI ([`scripts/agent-ci.sh`](../../scripts/agent-ci.sh)), with the version, commit and a fixed build time from the tag; builds the local UI (when `agent/ui/` exists) and the reproducible source tarball (built twice, the two must be identical, [rebuild-kit.md](../specs/rebuild-kit.md) §4.1.1); proves in a network namespace (`unshare -n`) that the tarball builds offline and reports the release version; and only then, in the protected `release` environment, stamps the version and the public key into `install-node.sh` ([`scripts/release/assemble-node-release.sh`](../../scripts/release/assemble-node-release.sh));
    - for the catalog: runs `aictl catalog lint catalog/` with the freshly built agent (an unlinted catalog is never published), then builds a reproducible `catalog.tar.gz` of `catalog/` and `docs/`;
    - writes `SHA256SUMS`, signs it ([`scripts/release-sign.sh`](../../scripts/release-sign.sh)), and **verifies the signature with the public key committed in the repository** (so a wrong or stale secret fails the run);
-   - creates a **draft** release.
-4. **The owner checks the draft, then publishes it.** Nothing is public, and no node sees it, before this step. Check by hand:
+   - creates a **draft** release and checks that it holds the six assets;
+   - **publishes it** (a pre-release when the version has a `-`), then downloads what GitHub now serves and verifies it again with the committed public key. If that fails, the release is moved back to a draft and the run fails, so no node takes it.
+4. **No manual step is needed.** The `release` environment's required reviewers, if the owner sets any in Settings → Environments, are the only gate before the signing; without them a release runs end to end. The owner may still check a published release by hand:
    ```
    minisign -Vm SHA256SUMS -p minisign.pub && sha256sum -c SHA256SUMS
    ```
