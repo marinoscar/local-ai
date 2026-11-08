@@ -27,6 +27,8 @@ COPY packages/localai-ui ./packages/localai-ui/
 COPY apps/web ./apps/web
 # `tsc --noEmit` in the build also checks the web tests, and apps/web/src/localai/lab/fixture.ts imports this fixture.
 COPY apps/api/test/fixtures/localai ./apps/api/test/fixtures/localai/
+# The same check covers src/localai/doctorFixes.test.ts, which imports the generator and its type declarations (#457).
+COPY scripts/gen-doctor-fixes.mjs scripts/gen-doctor-fixes.d.mts ./scripts/
 WORKDIR /app/apps/web
 RUN npm run build
 
