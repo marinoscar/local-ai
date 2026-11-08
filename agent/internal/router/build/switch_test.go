@@ -440,16 +440,46 @@ func TestFailedCheckWithNoPreviousBuildHasNothingToGoBackTo(t *testing.T) {
 	}
 }
 
-func TestRollbackThatCannotRestartIsReported(t *testing.T) {
-	h := newHarness(t)
-	h.agent.errs = []error{errors.New("first restart fails"), errors.New("second restart fails too")}
-	_, err := h.build()
-	e := mustErr(t, err)
-	if e.Code != doctor.LLM019 || e.Details["rolled_back"] != false || !strings.Contains(e.Message, "could not be put back") {
-		t.Fatalf("%+v", e)
+// The service starts on neither build (ai-n1: an old llama unit still held port 8080): the build is
+// not blamed, current is back on the previous build, and the code says why the service is down.
+func TestServiceThatStartsOnNoBuildIsNotBlamedOnTheBuild(t *testing.T) {
+	tests := []struct {
+		name     string
+		portBusy func() bool
+		code     string
+		cause    string
+		port     bool
+	}{
+		{name: "another program holds the port", portBusy: func() bool { return true },
+			code: doctor.LLM003, cause: "port_in_use", port: true},
+		{name: "the port is free", portBusy: func() bool { return false },
+			code: doctor.LLM001, cause: "service_not_starting"},
+		{name: "the port cannot be checked", code: doctor.LLM001, cause: "service_not_starting"},
 	}
-	if h.link() != "builds/"+oldID {
-		t.Errorf("the link is still put back: %q", h.link())
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.opts.PortInUse = tc.portBusy
+			h.agent.errs = []error{errors.New("first restart fails"), errors.New("second restart fails too")}
+			_, err := h.build()
+			e := mustErr(t, err)
+			if e.Code != tc.code || e.Details["cause"] != tc.cause || e.Details["rolled_back"] != true || e.Details["port_in_use"] != tc.port {
+				t.Fatalf("%+v", e)
+			}
+			if strings.Contains(e.Message, "did not work") || strings.Contains(e.Message, "could not be put back") ||
+				!strings.Contains(e.Message, "not the cause") || !strings.Contains(e.Message, "previous build is selected again") {
+				t.Errorf("message = %q", e.Message)
+			}
+			if got := strings.Contains(e.Message, "Another program is using the port"); got != tc.port {
+				t.Errorf("port sentence = %v in %q", got, e.Message)
+			}
+			if e.Details["previous_restart_error"] != "second restart fails too" {
+				t.Errorf("previous_restart_error = %v", e.Details["previous_restart_error"])
+			}
+			if h.link() != "builds/"+oldID {
+				t.Errorf("the link is not put back: %q", h.link())
+			}
+		})
 	}
 }
 

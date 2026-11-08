@@ -382,9 +382,13 @@ type Options struct {
 	// and `systemctl restart localai-llama` is used. Probe runs the post-switch check; nil skips the
 	// check with a warning. Recorder is told the installed build after a restart that did not go
 	// through the agent (the agent records it itself on its own restart path); nil skips it.
-	Agent    Agent
-	Probe    Probe
-	Recorder StateRecorder
+	Agent Agent
+	Probe Probe
+	// PortInUse reports whether another program holds the service's port (llama: ports.llama). It
+	// is asked only when the service started on neither build, to tell LAI-LLM-003 from
+	// LAI-LLM-001; nil means unknown (LAI-LLM-001).
+	PortInUse func() bool
+	Recorder  StateRecorder
 	// PreviousBuild returns state.llama.previous_build, so that retention keeps it when current did
 	// not change (--no-activate); nil means unknown.
 	PreviousBuild func() string
