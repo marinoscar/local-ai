@@ -40,6 +40,10 @@ func TestIntegrationPortalSessionScopeOverTheRouteTable(t *testing.T) {
 		t.Fatalf("POST /mode/survival = %d %s", rp.status, rp.body)
 	}
 	r.waitMode(state.ModeSurvival)
+	// The state snapshot says survival a moment before the mode engine commits it, and a Portal cookie
+	// is honoured only on the engine's view (portal.Sessions.Allowed -> modeName). Wait for both, or
+	// the first Portal route of the table (POST /ark/import) can race that window (issue #446).
+	waitUntil(t, "the mode engine reports survival", func() bool { return d.modeName() == string(state.ModeSurvival) })
 
 	cookie, err := d.portalStore().Issue()
 	if err != nil {
