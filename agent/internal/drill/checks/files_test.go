@@ -240,7 +240,9 @@ func TestManifestScanErrorAndNoRoots(t *testing.T) {
 	boom := errors.New("drive hung")
 	c := NewManifestCheck(ManifestDeps{
 		Roots: r.rootList, Ready: r.ready,
-		Scan: func(context.Context, config.FS, ark.Root) ([]ark.ScannedItem, []ark.Problem, error) { return nil, nil, boom },
+		Scan: func(context.Context, config.FS, ark.Root) ([]ark.ScannedItem, []ark.Problem, error) {
+			return nil, nil, boom
+		},
 	})
 	if out := run(t, c); out.Result != drill.ResultFail || out.Code != doctor.DRL011 {
 		t.Errorf("scan error: %+v", out)
