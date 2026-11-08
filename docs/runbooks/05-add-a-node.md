@@ -400,7 +400,7 @@ To rehearse with a test name first, the lab owner can set the setting `vps.stagi
 
 ## Part 9. Update the lab inventory
 
-33. **Real values, private:** add the node to `inventory.local.yaml` on the owner's machine (id, public host, machine, hardware, backend, profile, `tailnet_ip`, `lan_ip`, `serve_pattern`). Copy it to the ark drive by plugging the drive in (sync copies it), or to `/etc/localai/inventory.local.yaml` on owner nodes.
+33. **Real values, private:** add the node to `inventory.local.yaml` on the owner's machine (id, public host, machine, hardware, backend, profile, `tailnet_ip`, `lan_ip`, `serve_pattern`). Copy it to the ark drive by plugging the drive in (sync copies it), or install it on owner nodes with `sudo aictl docs inventory import <path-to>/inventory.local.yaml` (it checks the file and never prints its values).
 34. **Redacted values, in this repo** (an issue and a PR, [AGENTS.md](../../AGENTS.md)):
     - `inventory.example.yaml`: add an `ai-n4` entry with placeholders (`<TAILNET_IP_AI_N4>`, `<LAN_IP_AI_N4>`).
     - [architecture/lab-inventory.md](../architecture/lab-inventory.md) §1: add a row (public endpoint, machine name, hardware, backend, profile, pattern, model, status), with placeholders for IPs.

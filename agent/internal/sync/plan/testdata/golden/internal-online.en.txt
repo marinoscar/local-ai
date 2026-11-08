@@ -16,7 +16,7 @@ Budget 80.0 GB · planned 68.7 GB · free now 290.0 GB · keep free ≥ 25.0 GB
 
 Notes:
   [warning] LAI-SYN-041  Items skipped because the budget is full (a survival model, if named): maps-alpha
-    Fix: Raise `budget_bytes` or remove other content in `node.yaml`.
+    Fix: Raise the budget with `aictl ark budget <size>` (for example `500G`), or choose a smaller profile with `aictl profile set`.
   [info] LAI-SYN-051  Content no longer in the profile is using disk space: osm-north-america
     Fix: Run `aictl ark prune --orphans` if you don't need it.
 

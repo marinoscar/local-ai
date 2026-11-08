@@ -108,7 +108,7 @@ When the timer's drill is skipped (one of the reasons above), it prints `i Drill
 
    - **What you should see:** a progress line per download, then the summary. Ctrl-C asks "Cancel the sync too? [y/N]"; **N** keeps it running in the background.
    - Only one root: `--root internal` or `--root <ark-root-id>`. Only one item: `--item <id>`.
-   - **If it doesn't work:** `LAI-SYN-005`: a sync is already running (`aictl ark status` shows it; stop it with `aictl ark sync --cancel`). `LAI-SYN-011`: the node is in offline mode; add `--allow-offline-mode` to use whatever network exists, or `aictl mode online`. `LAI-SYN-010`: refused in survival mode.
+   - **If it doesn't work:** `LAI-SYN-005`: a sync is already running (`aictl ark status` shows it; stop it with `aictl ark sync --cancel`). `LAI-SYN-011`: the node is in offline mode. Run the same command in a terminal and answer `y` when it asks `Sync anyway over the internet?`, or switch with `aictl mode online`. `LAI-SYN-010`: refused in survival mode.
 7. **Stop a running sync:** `aictl ark sync --cancel`. Half-downloaded files are kept and resume next time. The same happens when you stop the nightly run with `sudo systemctl stop localai-sync`: it asks the agent to cancel and waits up to 50 seconds for it to stop.
 8. **Re-check every file now** (finds disk damage; long on big drives):
 
