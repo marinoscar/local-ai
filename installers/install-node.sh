@@ -34,23 +34,23 @@ readonly LOG_MAX_BYTES=$((10 * 1024 * 1024))
 readonly PHASE_TOTAL=15
 
 # Phase table (installer.md section 4.3). P0 (arguments and log) is the driver itself; P1..P15 are listed here.
-# Fields: id|function suffix|display name|owner item and issue.
+# Fields: id|function suffix|display name|owner item and issue|display name in Spanish (--lang es, issue #436).
 readonly -a PHASE_TABLE=(
-  "P1|preflight|preflight|INST-02, issue #148"
-  "P2|stage|stage artifacts|INST-02, issue #148"
-  "P3|profile|profile|INST-02, issue #148"
-  "P4|hardening|laptop hardening|INST-03, issue #116"
-  "P5|users_dirs|users, groups and directories|INST-04, issue #149"
-  "P6|packages|packages|INST-04, issue #149"
-  "P7|llama|llama.cpp build or reuse|INST-05, issue #151"
-  "P8|migration|migration|INST-05, issue #151"
-  "P9|agent|agent, node.yaml, units|INST-06, issue #153"
-  "P10|api_key|API key|INST-06, issue #153"
-  "P11|tailscale|tailscale|INST-07, issue #154"
-  "P12|pin|admin PIN|INST-06, issue #153"
-  "P13|enroll|cloud enrollment|INST-06, issue #153"
-  "P14|content|initial content|INST-07, issue #154"
-  "P15|verify|verify and summary|INST-07, issue #154"
+  "P1|preflight|preflight|INST-02, issue #148|comprobación previa"
+  "P2|stage|stage artifacts|INST-02, issue #148|preparar los archivos"
+  "P3|profile|profile|INST-02, issue #148|perfil"
+  "P4|hardening|laptop hardening|INST-03, issue #116|ajustes de portátil"
+  "P5|users_dirs|users, groups and directories|INST-04, issue #149|usuarios, grupos y carpetas"
+  "P6|packages|packages|INST-04, issue #149|paquetes"
+  "P7|llama|llama.cpp build or reuse|INST-05, issue #151|compilar o reutilizar llama.cpp"
+  "P8|migration|migration|INST-05, issue #151|migración"
+  "P9|agent|agent, node.yaml, units|INST-06, issue #153|agente, node.yaml, servicios"
+  "P10|api_key|API key|INST-06, issue #153|clave de API"
+  "P11|tailscale|tailscale|INST-07, issue #154|tailscale"
+  "P12|pin|admin PIN|INST-06, issue #153|PIN de administrador"
+  "P13|enroll|cloud enrollment|INST-06, issue #153|alta en la nube"
+  "P14|content|initial content|INST-07, issue #154|contenido inicial"
+  "P15|verify|verify and summary|INST-07, issue #154|comprobación y resumen"
 )
 readonly REPAIR_UNINSTALL_OWNER="INST-08, issue #155"
 
@@ -64,13 +64,156 @@ OPT_CLOUD_URL="https://ai.marin.cr"; OPT_MIGRATE="auto"; DRY_RUN=0; OPT_YES=0; O
 OPT_KEEP_INVENTORY=0; OPT_HARDENING="auto"; OPT_NO_SSH=0; OPT_NO_POLKIT=0; OPT_NO_TAILSCALE=""; OPT_NO_SYNC=0
 OPT_SERVE_PATTERN=""; OPT_REBOOT=0; OPT_REPAIR=0; OPT_UNINSTALL=0; OPT_PURGE_CONFIG=0; OPT_PURGE_CONTENT=0
 OPT_REVERT_HARDENING=0; OPT_RESTORE_LEGACY=0; LOG="$DEFAULT_LOG"; OPT_DESKTOP_USER=""; OPT_AGENT_SHA256=""
-OPT_VERBOSE=0; OPT_HELP=0; OPT_VERSION=0
+OPT_VERBOSE=0; OPT_HELP=0; OPT_VERSION=0; OPT_LANG=""
 
 # Runtime state
 STATE_DIR="$DEFAULT_STATE_DIR"; STATE_FILE=""; LOCK_FILE=""; SYSTEMD_DIR=/etc/systemd/system
 CUR_TAG="P0 args"; CUR_PHASE_ID=""; LAST_OUTPUT=(); XTRACE_PID=""; STATE_TMP=""; LOG_OPEN=""
 declare -A PH_STATUS=() PH_VERSION=() PH_FINISHED=() PH_DETAILS=()
 INSTALL_KIND="fresh"; STUBS_RUN=0
+
+# ---------------------------------------------------------------------------------------------------------------
+# Language (issue #436; ADR-0009 rule 7; installer.md section 8): English or Spanish. --lang en|es wins (parse_args);
+# otherwise the first of LC_ALL, LC_MESSAGES, LANG that is set decides: es, es_* or es.* is Spanish, else English.
+# The doctor-code sentences come from the generated block below (one source: agent/internal/doctor/codes.go).
+# ---------------------------------------------------------------------------------------------------------------
+lang_from_env() {
+  local v="${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}"
+  case "$v" in es|es_*|es.*|es@*) printf es ;; *) printf en ;; esac
+}
+UI_LANG="$(lang_from_env)"
+
+# L <english> <spanish>: the text in the user's language.
+L() { if [[ "$UI_LANG" == es ]]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
+
+# BEGIN GENERATED ins-codes (scripts/check-installer-codes.sh --write; source: agent/internal/doctor/codes.go). Do not edit.
+# ins_text <LAI-INS-code> <title|fix>: the sentence of the code in $UI_LANG (en or es); exit 1 if unknown.
+ins_text() {
+  case "$1 $2 ${UI_LANG:-en}" in
+    'LAI-INS-001 title en') printf '%s' 'Unsupported Ubuntu version or architecture' ;;
+    'LAI-INS-001 title es') printf '%s' 'Versión de Ubuntu o arquitectura no admitida' ;;
+    'LAI-INS-001 fix en') printf '%s' 'Install Ubuntu 24.04 or 26.04 LTS (amd64 or arm64).' ;;
+    'LAI-INS-001 fix es') printf '%s' 'Instale Ubuntu 24.04 o 26.04 LTS (amd64 o arm64).' ;;
+    'LAI-INS-002 title en') printf '%s' 'Running inside a container' ;;
+    'LAI-INS-002 title es') printf '%s' 'Se ejecuta dentro de un contenedor' ;;
+    'LAI-INS-002 fix en') printf '%s' 'Run the installer on the real machine.' ;;
+    'LAI-INS-002 fix es') printf '%s' 'Ejecute el instalador en la máquina real.' ;;
+    'LAI-INS-003 title en') printf '%s' 'Not run with sudo from a normal user' ;;
+    'LAI-INS-003 title es') printf '%s' 'No se ejecutó con sudo desde un usuario normal' ;;
+    'LAI-INS-003 fix en') printf '%s' 'Run '\''sudo bash install-node.sh …'\'' from the desktop user'\''s terminal.' ;;
+    'LAI-INS-003 fix es') printf '%s' 'Ejecute '\''sudo bash install-node.sh …'\'' desde la terminal del usuario del escritorio.' ;;
+    'LAI-INS-004 title en') printf '%s' 'Another installer is running' ;;
+    'LAI-INS-004 title es') printf '%s' 'Se está ejecutando otro instalador' ;;
+    'LAI-INS-004 fix en') printf '%s' 'Wait for it to finish.' ;;
+    'LAI-INS-004 fix es') printf '%s' 'Espere a que termine.' ;;
+    'LAI-INS-010 title en') printf '%s' 'NVIDIA GPU found but its driver doesn'\''t work' ;;
+    'LAI-INS-010 title es') printf '%s' 'Se encontró una GPU NVIDIA pero su controlador no funciona' ;;
+    'LAI-INS-010 fix en') printf '%s' 'Accept the driver install and reboot, or continue without GPU.' ;;
+    'LAI-INS-010 fix es') printf '%s' 'Acepte la instalación del controlador y reinicie, o continúe sin GPU.' ;;
+    'LAI-INS-011 title en') printf '%s' 'Secure Boot may block the NVIDIA driver' ;;
+    'LAI-INS-011 title es') printf '%s' 'Secure Boot puede bloquear el controlador de NVIDIA' ;;
+    'LAI-INS-011 fix en') printf '%s' 'At the next boot choose "Enroll MOK" and type the password you set.' ;;
+    'LAI-INS-011 fix es') printf '%s' 'En el próximo arranque elija «Enroll MOK» e introduzca la contraseña que definió.' ;;
+    'LAI-INS-012 title en') printf '%s' 'Less than 8 GB of RAM' ;;
+    'LAI-INS-012 title es') printf '%s' 'Menos de 8 GB de RAM' ;;
+    'LAI-INS-012 fix en') printf '%s' 'Only the cpu-only profile will work well.' ;;
+    'LAI-INS-012 fix es') printf '%s' 'Solo funcionará bien el perfil cpu-only.' ;;
+    'LAI-INS-013 title en') printf '%s' 'Not enough free disk space' ;;
+    'LAI-INS-013 title es') printf '%s' 'No hay suficiente espacio libre en disco' ;;
+    'LAI-INS-013 fix en') printf '%s' 'Free space or use '\''--yes'\'' to accept a smaller budget.' ;;
+    'LAI-INS-013 fix es') printf '%s' 'Libere espacio o use '\''--yes'\'' para aceptar un presupuesto menor.' ;;
+    'LAI-INS-014 title en') printf '%s' 'A needed port is in use' ;;
+    'LAI-INS-014 title es') printf '%s' 'Un puerto necesario está en uso' ;;
+    'LAI-INS-014 fix en') printf '%s' 'Stop the program shown, then re-run.' ;;
+    'LAI-INS-014 fix es') printf '%s' 'Detenga el programa indicado y vuelva a ejecutar.' ;;
+    'LAI-INS-015 title en') printf '%s' 'No internet for an online install' ;;
+    'LAI-INS-015 title es') printf '%s' 'Sin internet para una instalación en línea' ;;
+    'LAI-INS-015 fix en') printf '%s' 'Connect to the internet, or use '\''--from-ark <drive>'\''.' ;;
+    'LAI-INS-015 fix es') printf '%s' 'Conéctese a internet, o use '\''--from-ark <unidad>'\''.' ;;
+    'LAI-INS-016 title en') printf '%s' 'The ark drive lacks files for this computer' ;;
+    'LAI-INS-016 title es') printf '%s' 'A la unidad del arca le faltan archivos para este equipo' ;;
+    'LAI-INS-016 fix en') printf '%s' 'Sync the drive on a computer with internet first.' ;;
+    'LAI-INS-016 fix es') printf '%s' 'Sincronice primero la unidad en un equipo con internet.' ;;
+    'LAI-INS-017 title en') printf '%s' 'The clock is wrong' ;;
+    'LAI-INS-017 title es') printf '%s' 'El reloj es incorrecto' ;;
+    'LAI-INS-017 fix en') printf '%s' 'Set the date and time, then re-run.' ;;
+    'LAI-INS-017 fix es') printf '%s' 'Ponga la fecha y la hora y vuelva a ejecutar.' ;;
+    'LAI-INS-020 title en') printf '%s' 'This computer already has a different node id' ;;
+    'LAI-INS-020 title es') printf '%s' 'Este equipo ya tiene un id de nodo distinto' ;;
+    'LAI-INS-020 fix en') printf '%s' 'Keep the old id, or uninstall with '\''--purge-config'\'' first.' ;;
+    'LAI-INS-020 fix es') printf '%s' 'Conserve el id antiguo, o desinstale antes con '\''--purge-config'\''.' ;;
+    'LAI-INS-021 title en') printf '%s' 'The agent download failed its signature check' ;;
+    'LAI-INS-021 title es') printf '%s' 'La descarga del agente no superó la comprobación de firma' ;;
+    'LAI-INS-021 fix en') printf '%s' 'Download again; if it repeats, don'\''t install and report it.' ;;
+    'LAI-INS-021 fix es') printf '%s' 'Descargue de nuevo; si se repite, no lo instale e infórmelo.' ;;
+    'LAI-INS-030 title en') printf '%s' 'Package installation failed' ;;
+    'LAI-INS-030 title es') printf '%s' 'Falló la instalación de paquetes' ;;
+    'LAI-INS-030 fix en') printf '%s' 'Read the apt messages above, fix, and re-run.' ;;
+    'LAI-INS-030 fix es') printf '%s' 'Lea los mensajes de apt de más arriba, corrija y vuelva a ejecutar.' ;;
+    'LAI-INS-031 title en') printf '%s' 'The old llama-qwen service is still using port 8080' ;;
+    'LAI-INS-031 title es') printf '%s' 'El antiguo servicio llama-qwen sigue usando el puerto 8080' ;;
+    'LAI-INS-031 fix en') printf '%s' 'Re-run without '\''--no-migrate'\''.' ;;
+    'LAI-INS-031 fix es') printf '%s' 'Vuelva a ejecutar sin '\''--no-migrate'\''.' ;;
+    'LAI-INS-032 title en') printf '%s' 'Building llama.cpp failed' ;;
+    'LAI-INS-032 title es') printf '%s' 'Falló la compilación de llama.cpp' ;;
+    'LAI-INS-032 fix en') printf '%s' 'Read '\''build.log'\'' in the failed build folder under '\''/opt/localai/llama.cpp/builds/'\'' (named in the message); run '\''sudo install-node.sh --repair'\''.' ;;
+    'LAI-INS-032 fix es') printf '%s' 'Lea '\''build.log'\'' en la carpeta de compilación fallida de '\''/opt/localai/llama.cpp/builds/'\'' (indicada en el mensaje); ejecute '\''sudo install-node.sh --repair'\''.' ;;
+    'LAI-INS-033 title en') printf '%s' 'Migration failed and was rolled back' ;;
+    'LAI-INS-033 title es') printf '%s' 'La migración falló y se deshizo' ;;
+    'LAI-INS-033 fix en') printf '%s' 'The old service is running again. Read the log and report it.' ;;
+    'LAI-INS-033 fix es') printf '%s' 'El servicio antiguo vuelve a estar en marcha. Lea el registro e infórmelo.' ;;
+    'LAI-INS-034 title en') printf '%s' 'The agent didn'\''t start' ;;
+    'LAI-INS-034 title es') printf '%s' 'El agente no arrancó' ;;
+    'LAI-INS-034 fix en') printf '%s' 'Run '\''journalctl -u localai-agent -n 50'\'' and '\''sudo install-node.sh --repair'\''.' ;;
+    'LAI-INS-034 fix es') printf '%s' 'Ejecute '\''journalctl -u localai-agent -n 50'\'' y '\''sudo install-node.sh --repair'\''.' ;;
+    'LAI-INS-035 title en') printf '%s' 'Users, folders, permissions or companion programs could not be set up' ;;
+    'LAI-INS-035 title es') printf '%s' 'No se pudieron preparar los usuarios, carpetas, permisos o programas acompañantes' ;;
+    'LAI-INS-035 fix en') printf '%s' 'Read the lines above, fix what they name (disk full, read-only disk, damaged ark drive), and re-run '\''sudo install-node.sh'\''.' ;;
+    'LAI-INS-035 fix es') printf '%s' 'Lea las líneas anteriores, corrija lo que indican (disco lleno, disco de solo lectura, unidad ark dañada) y vuelva a ejecutar '\''sudo install-node.sh'\''.' ;;
+    'LAI-INS-040 title en') printf '%s' 'Lid/power-key settings aren'\''t active' ;;
+    'LAI-INS-040 title es') printf '%s' 'Los ajustes de la tapa y del botón de encendido no están activos' ;;
+    'LAI-INS-040 fix en') printf '%s' 'Reboot the computer (don'\''t restart logind).' ;;
+    'LAI-INS-040 fix es') printf '%s' 'Reinicie el equipo (no reinicie logind).' ;;
+    'LAI-INS-041 title en') printf '%s' 'Sleep targets aren'\''t masked' ;;
+    'LAI-INS-041 title es') printf '%s' 'Los destinos de suspensión no están enmascarados' ;;
+    'LAI-INS-041 fix en') printf '%s' 'Run '\''sudo install-node.sh --repair'\''.' ;;
+    'LAI-INS-041 fix es') printf '%s' 'Ejecute '\''sudo install-node.sh --repair'\''.' ;;
+    'LAI-INS-042 title en') printf '%s' 'GNOME idle suspend is still on' ;;
+    'LAI-INS-042 title es') printf '%s' 'La suspensión por inactividad de GNOME sigue activada' ;;
+    'LAI-INS-042 fix en') printf '%s' 'Log in as the desktop user and run '\''sudo install-node.sh --repair'\''.' ;;
+    'LAI-INS-042 fix es') printf '%s' 'Inicie sesión como usuario del escritorio y ejecute '\''sudo install-node.sh --repair'\''.' ;;
+    'LAI-INS-043 title en') printf '%s' 'Power profile isn'\''t "performance"' ;;
+    'LAI-INS-043 title es') printf '%s' 'El perfil de energía no es «performance»' ;;
+    'LAI-INS-043 fix en') printf '%s' 'Run '\''powerprofilesctl set performance'\''.' ;;
+    'LAI-INS-043 fix es') printf '%s' 'Ejecute '\''powerprofilesctl set performance'\''.' ;;
+    'LAI-INS-044 title en') printf '%s' 'Wi-Fi power save is on' ;;
+    'LAI-INS-044 title es') printf '%s' 'El ahorro de energía del Wi-Fi está activado' ;;
+    'LAI-INS-044 fix en') printf '%s' 'Run '\''sudo install-node.sh --repair'\''; use Ethernet if possible.' ;;
+    'LAI-INS-044 fix es') printf '%s' 'Ejecute '\''sudo install-node.sh --repair'\''; use Ethernet si es posible.' ;;
+    'LAI-INS-050 title en') printf '%s' 'Tailscale serve pattern doesn'\''t match the inventory' ;;
+    'LAI-INS-050 title es') printf '%s' 'El patrón de Tailscale Serve no coincide con el inventario' ;;
+    'LAI-INS-050 fix en') printf '%s' 'Use '\''--serve-pattern'\'' with the value in the inventory.' ;;
+    'LAI-INS-050 fix es') printf '%s' 'Use '\''--serve-pattern'\'' con el valor del inventario.' ;;
+    'LAI-INS-060 title en') printf '%s' 'The admin PIN wasn'\''t set' ;;
+    'LAI-INS-060 title es') printf '%s' 'No se definió el PIN de administrador' ;;
+    'LAI-INS-060 fix en') printf '%s' 'Run '\''sudo aictl pin set'\''.' ;;
+    'LAI-INS-060 fix es') printf '%s' 'Ejecute '\''sudo aictl pin set'\''.' ;;
+    'LAI-INS-070 title en') printf '%s' 'A reboot is needed to finish the install' ;;
+    'LAI-INS-070 title es') printf '%s' 'Hace falta reiniciar para terminar la instalación' ;;
+    'LAI-INS-070 fix en') printf '%s' 'Reboot when convenient.' ;;
+    'LAI-INS-070 fix es') printf '%s' 'Reinicie cuando le convenga.' ;;
+    'LAI-INS-080 title en') printf '%s' 'Putting the old llama-qwen service back failed' ;;
+    'LAI-INS-080 title es') printf '%s' 'Falló la restauración del servicio llama-qwen antiguo' ;;
+    'LAI-INS-080 fix en') printf '%s' 'Nothing under /etc/localai was removed. Read the message above, fix it, and run the same --uninstall command again.' ;;
+    'LAI-INS-080 fix es') printf '%s' 'No se eliminó nada de /etc/localai. Lea el mensaje anterior, corríjalo y vuelva a ejecutar el mismo comando --uninstall.' ;;
+    'LAI-INS-081 title en') printf '%s' 'The uninstaller refused to delete a path it does not own' ;;
+    'LAI-INS-081 title es') printf '%s' 'El desinstalador se negó a borrar una ruta que no le pertenece' ;;
+    'LAI-INS-081 fix en') printf '%s' 'Nothing was deleted. Report the log at /var/log/localai-install.log.' ;;
+    'LAI-INS-081 fix es') printf '%s' 'No se borró nada. Informe del registro en /var/log/localai-install.log.' ;;
+    *) return 1 ;;
+  esac
+}
+# END GENERATED ins-codes
 
 # ---------------------------------------------------------------------------------------------------------------
 # scrub: remove secrets from anything that reaches the screen or the log (installer.md section 4.6).
@@ -107,11 +250,20 @@ leave() {
 }
 
 # fail <exit> <doctor-code> <cause and one-sentence fix>: the way a refusal leaves the script.
+# In Spanish the code's own sentences (what happened, what to do) come first, and the cause, which names paths and
+# values and exists only in English, follows as the detail.
 fail() {
-  local rc="$1" code="$2"
+  local rc="$1" code="$2" title fix
   shift 2
-  say "ERROR $code: $*"
-  say "More: docs/specs/doctor-codes.md ($code)"
+  if [[ "$UI_LANG" == es ]] && title="$(ins_text "$code" title)" && fix="$(ins_text "$code" fix)"; then
+    say "ERROR $code: $title."
+    say "  Qué hacer: $fix"
+    say "  Detalle (en inglés): $*"
+    say "Más información: docs/specs/doctor-codes.md ($code)"
+  else
+    say "ERROR $code: $*"
+    say "$(L More "Más información"): docs/specs/doctor-codes.md ($code)"
+  fi
   leave "$rc"
 }
 
@@ -132,7 +284,8 @@ on_error() {
     local l
     for l in "${LAST_OUTPUT[@]}"; do say "  | $l"; done
   fi
-  say "No doctor code is registered for an unexpected failure: read the log at $LOG and report it."
+  say "$(L "No doctor code is registered for an unexpected failure: read the log at $LOG and report it." \
+    "No hay código de diagnóstico para un fallo inesperado: lea el registro $LOG e infórmelo.")"
   if [[ -n "$CUR_PHASE_ID" ]]; then
     set_phase "$CUR_PHASE_ID" failed "exit $rc at line $line" || true
   fi
@@ -141,7 +294,8 @@ on_error() {
 
 on_signal() {
   trap - INT TERM
-  say "Aborted by the user (signal). Nothing is half-written; re-run to resume."
+  say "$(L "Aborted by the user (signal). Nothing is half-written; re-run to resume." \
+    "Cancelado por el usuario (señal). Nada quedó a medias; vuelva a ejecutar para continuar.")"
   leave 4
 }
 
@@ -832,7 +986,11 @@ check_pin() {
 # pin_skip <reason>: P12 never fails the install; it records the warning for the summary.
 pin_skip() {
   PIN_SKIPPED=1
-  say "WARNING LAI-INS-060: $1 The admin PIN isn't set; run 'sudo aictl pin set'."
+  if [[ "$UI_LANG" == es ]]; then
+    say "AVISO LAI-INS-060: $(ins_text LAI-INS-060 title). $(ins_text LAI-INS-060 fix) Detalle (en inglés): $1"
+  else
+    say "WARNING LAI-INS-060: $1 The admin PIN isn't set; run 'sudo aictl pin set'."
+  fi
   return 0
 }
 
@@ -980,36 +1138,32 @@ P1_FAILS=(); P1_REFUSE=0; P1_ARCH=""; P1_CODENAME=""; P1_VERSION_ID=""; P1_BACKE
 P1_GPU_NAME=""; P1_CUDA_CC=""; P1_DRIVER_BROKEN=0; P1_LEGACY_EXEC=""; P1_RAM_MIB=0; IS_LAPTOP=0; ON_BATTERY=0
 REBOOT_NEEDED=0; P2_TMP=""; AGENT_BIN=""; P3_PROFILE=""; P3_MIN_FREE_BYTES=0
 
-# p1_fix <code>: the one-sentence fix (installer.md section 5; kept equal to docs/specs/doctor-codes.md).
-p1_fix() {
-  case "$1" in
-    LAI-INS-001) echo "Install Ubuntu 24.04 or 26.04 LTS (amd64 or arm64)." ;;
-    LAI-INS-002) echo "Run the installer on the real machine." ;;
-    LAI-INS-003) echo "Run 'sudo bash install-node.sh ...' from the desktop user's terminal." ;;
-    LAI-INS-010) echo "Accept the driver install and reboot, or continue without GPU." ;;
-    LAI-INS-011) echo "At the next boot choose \"Enroll MOK\" and type the password you set." ;;
-    LAI-INS-012) echo "Only the cpu-only profile will work well." ;;
-    LAI-INS-013) echo "Free space or use --yes to accept a smaller budget." ;;
-    LAI-INS-014) echo "Stop the program shown, then re-run." ;;
-    LAI-INS-015) echo "Connect to the internet, or use --from-ark <drive>." ;;
-    LAI-INS-016) echo "Sync the drive on a computer with internet first." ;;
-    LAI-INS-017) echo "Set the date and time, then re-run." ;;
-    LAI-INS-021) echo "Download again; if it repeats, don't install and report it." ;;
-    *) echo "" ;;
-  esac
-}
+# p1_fix <code>: the one-sentence fix in the user's language (installer.md section 5; the generated ins_text block,
+# copied from agent/internal/doctor/codes.go). Empty for a code without one.
+p1_fix() { ins_text "$1" fix || true; }
 
 # p1_problem <code> <message> [refuse]: an error (the install cannot go on). All problems are listed together.
+# Spanish: the code's title, then the English message as the detail, then the fix.
 p1_problem() {
   P1_FAILS+=("$1")
-  say "  FAIL $1: $2"
-  say "       fix: $(p1_fix "$1")"
+  if [[ "$UI_LANG" == es ]]; then
+    say "  FALLO $1: $(ins_text "$1" title)."
+    say "       detalle (en inglés): $2"
+    say "       solución: $(p1_fix "$1")"
+  else
+    say "  FAIL $1: $2"
+    say "       fix: $(p1_fix "$1")"
+  fi
   [[ "${3:-}" != refuse ]] || P1_REFUSE=1
 }
 # p1_warning <code|-> <message>: said, never blocks.
 p1_warning() {
   if [[ "$1" == "-" ]]; then
-    say "  WARN: $2"
+    say "  $(L WARN AVISO): $2"
+  elif [[ "$UI_LANG" == es ]]; then
+    say "  AVISO $1: $(ins_text "$1" title)."
+    say "       detalle (en inglés): $2"
+    say "       solución: $(p1_fix "$1")"
   else
     say "  WARN $1: $2"
     say "       fix: $(p1_fix "$1")"
@@ -1277,12 +1431,13 @@ p_fail() {
   local rc="$1" code="$2"
   shift 2
   [[ -z "$CUR_PHASE_ID" ]] || set_phase "$CUR_PHASE_ID" failed "$code"
+  if [[ "$UI_LANG" == es ]]; then fail "$rc" "$code" "$*"; fi   # fail prints the Spanish fix itself
   fail "$rc" "$code" "$* $(p1_fix "$code")"
 }
 
 phase_preflight() {
   P1_FAILS=(); P1_REFUSE=0
-  say "Checking this computer (nothing is changed yet)..."
+  say "$(L "Checking this computer (nothing is changed yet)..." "Comprobando este equipo (todavía no se cambia nada)...")"
   p1_check_root
   p1_check_system
   p1_check_gpu
@@ -1295,17 +1450,18 @@ phase_preflight() {
   p1_check_source
   p1_check_clock_power
   if ((${#P1_FAILS[@]} > 0)); then
-    say "Preflight found ${#P1_FAILS[@]} problem(s): ${P1_FAILS[*]}. Fix them and run again."
+    say "$(L "Preflight found ${#P1_FAILS[@]} problem(s): ${P1_FAILS[*]}. Fix them and run again." \
+      "La comprobación previa encontró ${#P1_FAILS[@]} problema(s): ${P1_FAILS[*]}. Corríjalos y vuelva a ejecutar.")"
     if ((P1_REFUSE)); then
       set_phase P1 failed "refused: ${P1_FAILS[*]}"
-      say "This computer is not supported. NOTHING WAS CHANGED."
+      say "$(L "This computer is not supported. NOTHING WAS CHANGED." "Este equipo no es compatible. NO SE CAMBIÓ NADA.")"
       leave 3
     fi
     return 1
   fi
   p1_offer_driver
   DETECTED_BACKEND="$P1_BACKEND"   # read by P6 and P7 (--backend wins there)
-  say "Preflight passed: backend $P1_BACKEND, $P1_RAM_MIB MiB RAM."
+  say "$(L "Preflight passed: backend $P1_BACKEND, $P1_RAM_MIB MiB RAM." "Comprobación previa superada: backend $P1_BACKEND, $P1_RAM_MIB MiB de RAM.")"
 }
 
 # ---- P2 ---------------------------------------------------------------------------------------------------------
@@ -1789,12 +1945,13 @@ revert_hardening() {
 
 # run_phase <index 1..15> <table entry>
 run_phase() {
-  local n="$1" entry="$2" id fn name rc=0 start=$SECONDS
-  IFS='|' read -r id fn name _ <<<"$entry"
+  local n="$1" entry="$2" id fn name name_es rc=0 start=$SECONDS
+  IFS='|' read -r id fn name _ name_es <<<"$entry"
+  [[ "$UI_LANG" != es || -z "$name_es" ]] || name="$name_es"
   CUR_PHASE_ID="$id"; CUR_TAG="$id $fn"
   say "==> [$n/$PHASE_TOTAL] $name"
   if [[ "${PH_STATUS[$id]:-}" == "done" ]] && "check_${fn}"; then
-    say "already done"
+    say "$(L "already done" "ya está hecho")"
     CUR_PHASE_ID=""
     return 0
   fi
@@ -1805,14 +1962,15 @@ run_phase() {
   case "$rc" in
     0)
       set_phase "$id" "done" "${PHASE_DETAILS_OUT:-}"
-      say "phase $id $name: done in ${dur}s" ;;
+      say "$(L "phase $id $name: done in ${dur}s" "fase $id $name: hecha en ${dur} s")" ;;
     "$PHASE_NOT_IMPLEMENTED")
       set_phase "$id" not-implemented "not implemented yet in installer $INSTALLER_VERSION"
       STUBS_RUN=$((STUBS_RUN + 1))
-      say "phase $id $name: not implemented, skipped in ${dur}s" ;;
+      say "$(L "phase $id $name: not implemented, skipped in ${dur}s" "fase $id $name: no implementada, omitida en ${dur} s")" ;;
     *)
       set_phase "$id" failed "exit $rc"
-      say "phase $id $name: FAILED (exit $rc) in ${dur}s. Re-run to resume at this phase."
+      say "$(L "phase $id $name: FAILED (exit $rc) in ${dur}s. Re-run to resume at this phase." \
+        "fase $id $name: FALLÓ (salida $rc) en ${dur} s. Vuelva a ejecutar para continuar en esta fase.")"
       leave 1 ;;
   esac
   CUR_PHASE_ID=""
@@ -1827,6 +1985,7 @@ usage() {
 Usage: sudo bash install-node.sh [options]
 
   Run it with no options on a terminal and it asks what it needs (guided mode).
+  En español: sudo bash install-node.sh --lang es
 
   --node-id <ai-nN>        node id, e.g. ai-n4 (ai-n followed by 1..9999)
   --profile <id>           catalog profile id
@@ -1849,6 +2008,8 @@ Usage: sudo bash install-node.sh [options]
   --repair                 repair an existing install
   --uninstall              remove the install (with --purge-config --purge-content --revert-hardening --restore-legacy)
   --log <path>             default /var/log/localai-install.log
+  --lang <en|es>           language of the messages (default: Spanish when LC_ALL, LC_MESSAGES or LANG starts
+                           with "es", else English); idioma de los mensajes: --lang es para español
   -v                       shell trace into the log only
   --version, -h, --help
 
@@ -1861,7 +2022,7 @@ parse_args() {
   local val
   while (($# > 0)); do
     case "$1" in
-      --node-id|--profile|--backend|--from-ark|--enroll-file|--cloud-url|--pin-file|--inventory|--serve-pattern|--log|--desktop-user|--agent-sha256)
+      --node-id|--profile|--backend|--from-ark|--enroll-file|--cloud-url|--pin-file|--inventory|--serve-pattern|--log|--desktop-user|--agent-sha256|--lang)
         if (($# < 2)) || [[ "$2" == --* ]]; then usage_error "$1 needs a value"; fi
         val="$2"
         case "$1" in
@@ -1879,6 +2040,7 @@ parse_args() {
           --log) LOG="$val" ;;
           --desktop-user) id -u "$val" >/dev/null 2>&1 || usage_error "--desktop-user: user '$val' does not exist"; OPT_DESKTOP_USER="$val" ;;
           --agent-sha256) [[ "$val" =~ ^[0-9a-f]{64}$ ]] || usage_error "--agent-sha256 must be 64 lowercase hex characters"; OPT_AGENT_SHA256="$val" ;;
+          --lang) [[ "$val" == en || "$val" == es ]] || usage_error "--lang must be en (English) or es (español)"; OPT_LANG="$val"; UI_LANG="$val" ;;
           *) usage_error "internal: unhandled flag $1" ;;
         esac
         shift 2 ;;
@@ -1983,13 +2145,13 @@ phase0() {
   if ((${#PH_STATUS[@]} > 0)); then kind="re-run"; fi
   if [[ -e "$SYSTEMD_DIR/llama-qwen.service" ]]; then kind="migration"; fi
   INSTALL_KIND="$kind"
-  say "Local AI node installer $INSTALLER_VERSION ($INSTALLER_TAG)"
+  say "$(L "Local AI node installer" "Instalador de nodos de Local AI") $INSTALLER_VERSION ($INSTALLER_TAG)"
   say "source: $source"
   say "started: $(now_utc)"
   say "kind: $kind"
   say "log: $LOG (0600)"
   say "verification key: ${INSTALLER_MINISIGN_PUBKEY:0:12}..."
-  if ((DRY_RUN)); then say "[dry-run] DRY RUN: nothing will be changed except this log"; fi
+  if ((DRY_RUN)); then say "[dry-run] $(L "DRY RUN: nothing will be changed except this log" "SIMULACIÓN: no se cambiará nada salvo este registro")"; fi
   say "options: node-id=${OPT_NODE_ID:-auto} profile=${OPT_PROFILE:-auto} backend=${OPT_BACKEND:-detect} cloud-url=$OPT_CLOUD_URL migrate=$OPT_MIGRATE hardening=$OPT_HARDENING serve-pattern=${OPT_SERVE_PATTERN:-auto} no-tailscale=$OPT_NO_TAILSCALE no-sync=$OPT_NO_SYNC no-ssh=$OPT_NO_SSH no-polkit=$OPT_NO_POLKIT reboot=$OPT_REBOOT yes=$OPT_YES enroll=$((OPT_ENROLL || ${#OPT_ENROLL_FILE} > 0)) desktop-user=${OPT_DESKTOP_USER:-none}"
 }
 
@@ -2313,6 +2475,8 @@ do_repair() {
 # the same choices as one typed line, optionally previews them as a dry run, and then runs ITSELF again with those
 # flags (LAI_INSTALLER_GUIDED=1 so the second run never asks again). Everything after that is the normal path.
 # Without a terminal, or with any argument, nothing here runs.
+# Language (issue #436): every line below is English or Spanish ($UI_LANG: --lang, else the locale), and the
+# preview and the final run get the same --lang.
 # Dev hooks (LAI_INSTALLER_DEV=1 only): LAI_INSTALLER_GUIDE=1 forces it; LAI_INSTALLER_GUIDE_IN / _OUT replace
 # /dev/tty; LAI_INSTALLER_MEDIA replaces /media; LAI_INSTALLER_GUIDE_RECORD=<file> records the preview and the final
 # run ("preview: <args>", "run: <args>") instead of running them.
@@ -2337,8 +2501,9 @@ guide_ask() {
 
 # guide_yes <question> <y|n default>: 0 for yes. Anything but y/yes/n/no asks again (three times, then the default).
 guide_yes() {
-  local q="$1" def="$2" hint="y/N" i
-  [[ "$def" == y ]] && hint="Y/n"
+  local q="$1" def="$2" hint i
+  hint="$(L y/N s/N)"
+  [[ "$def" == y ]] && hint="$(L Y/n S/n)"
   for i in 1 2 3; do
     guide_ask "$q ($hint)" ""
     case "${GUIDE_REPLY,,}" in
@@ -2347,7 +2512,7 @@ guide_yes() {
       n|no) return 1 ;;
     esac
     ((GUIDE_EOF)) && { [[ "$def" == y ]]; return; }
-    guide_say "  Please answer y (yes) or n (no)."
+    guide_say "  $(L "Please answer y (yes) or n (no)." "Responda s (sí) o n (no).")"
   done
   [[ "$def" == y ]]
 }
@@ -2371,13 +2536,13 @@ guided_setup() {
 
   guide_say ""
   guide_say "=================================================================="
-  guide_say " Local AI: set up this computer as an AI node"
+  guide_say " $(L "Local AI: set up this computer as an AI node" "Local AI: preparar este equipo como nodo de IA")"
   guide_say "=================================================================="
-  guide_say "I will ask up to 4 questions. Press Enter to take the suggested"
-  guide_say "answer, shown in [brackets]. Nothing changes until you say so."
+  guide_say "$(L "I will ask up to 4 questions. Press Enter to take the suggested" "Le haré hasta 4 preguntas. Pulse Intro para aceptar la respuesta")"
+  guide_say "$(L "answer, shown in [brackets]. Nothing changes until you say so." "sugerida, entre [corchetes]. No se cambia nada hasta que usted lo diga.")"
   if ((EUID != 0 && !DEV)); then
     guide_say ""
-    guide_say "This installer needs administrator rights. Run it again like this:"
+    guide_say "$(L "This installer needs administrator rights. Run it again like this:" "Este instalador necesita permisos de administrador. Ejecútelo de nuevo así:")"
     guide_say "  sudo bash $self"
     leave 3
   fi
@@ -2388,75 +2553,84 @@ guided_setup() {
   existing="$(node_yaml_get node id)"
   [[ "$existing" =~ $NODE_ID_RE ]] || existing=""
   guide_say ""
-  guide_say "1/4  Node name"
+  guide_say "1/4  $(L "Node name" "Nombre del nodo")"
   if [[ -n "$existing" ]]; then
-    guide_say "     This computer is already set up as $existing. Keep that name."
+    guide_say "     $(L "This computer is already set up as $existing. Keep that name." "Este equipo ya está configurado como $existing. Conserve ese nombre.")"
   else
-    guide_say "     The cloud's \"Add node\" page gives each computer a name like ai-n4."
+    guide_say "     $(L "The cloud's \"Add node\" page gives each computer a name like ai-n4." "La página «Add node» de la nube da a cada equipo un nombre como ai-n4.")"
   fi
   while :; do
-    guide_ask "     Name" "$existing"
+    guide_ask "     $(L Name Nombre)" "$existing"
     id="${GUIDE_REPLY,,}"
     if [[ "$id" =~ $NODE_ID_RE ]]; then break; fi
     tries=$((tries + 1))
     if ((GUIDE_EOF || tries >= 5)); then
-      guide_say "     No valid name was given. Nothing was changed."
+      guide_say "     $(L "No valid name was given. Nothing was changed." "No se dio un nombre válido. No se cambió nada.")"
       leave 2
     fi
     if [[ -z "$id" ]]; then
-      guide_say "     A name is needed. Find it on the cloud's Add node page, or ask the lab owner."
+      guide_say "     $(L "A name is needed. Find it on the cloud's Add node page, or ask the lab owner." "Hace falta un nombre. Búsquelo en la página Add node de la nube, o pregunte al responsable del laboratorio.")"
     else
-      guide_say "     \"$id\" is not a node name. It is ai-n and a number, for example ai-n4."
+      guide_say "     $(L "\"$id\" is not a node name. It is ai-n and a number, for example ai-n4." "«$id» no es un nombre de nodo. Es ai-n y un número, por ejemplo ai-n4.")"
     fi
   done
   if [[ -n "$existing" && "$id" != "$existing" ]]; then
-    guide_say "     Note: this computer is set up as $existing; the installer will refuse to rename it (LAI-INS-020)."
+    guide_say "     $(L "Note: this computer is set up as $existing; the installer will refuse to rename it (LAI-INS-020)." "Atención: este equipo está configurado como $existing; el instalador se negará a cambiarle el nombre (LAI-INS-020).")"
   fi
 
   # 2. Source: an AI-ARK drive if one is connected, else the internet.
   local drives=() from="" d
   while IFS= read -r d; do [[ -z "$d" ]] || drives+=("$d"); done < <(guide_ark_drives)
   guide_say ""
-  guide_say "2/4  Where to install from"
+  guide_say "2/4  $(L "Where to install from" "Desde dónde instalar")"
   if ((${#drives[@]} > 0)); then
-    guide_say "     An AI-ARK drive is connected: ${drives[0]}"
-    guide_say "     Installing from it needs no internet."
-    if guide_yes "     Install from the drive?" y; then from="${drives[0]}"; fi
+    guide_say "     $(L "An AI-ARK drive is connected:" "Hay una unidad AI-ARK conectada:") ${drives[0]}"
+    guide_say "     $(L "Installing from it needs no internet." "Instalar desde ella no necesita internet.")"
+    if guide_yes "     $(L "Install from the drive?" "¿Instalar desde la unidad?")" y; then from="${drives[0]}"; fi
   else
-    guide_say "     No AI-ARK drive is connected, so everything is downloaded from the internet."
-    guide_say "     (To install with no internet, plug in the AI-ARK drive and start again.)"
+    guide_say "     $(L "No AI-ARK drive is connected, so everything is downloaded from the internet." "No hay ninguna unidad AI-ARK conectada, así que todo se descarga de internet.")"
+    guide_say "     $(L "(To install with no internet, plug in the AI-ARK drive and start again.)" "(Para instalar sin internet, conecte la unidad AI-ARK y empiece de nuevo.)")"
   fi
 
   # 3. Cloud link: on by default online (the Add node page's command enrolls), off from the drive.
   local enroll=0 cdef=y
   [[ -n "$from" ]] && cdef=n
   guide_say ""
-  guide_say "3/4  Connect to the lab's cloud ($OPT_CLOUD_URL)"
-  guide_say "     You need the node credential (it starts with nod_) from the Add node page."
-  guide_say "     It is asked for later, hidden. You can also connect later: sudo aictl cloud enroll"
-  if guide_yes "     Connect now?" "$cdef"; then enroll=1; fi
+  guide_say "3/4  $(L "Connect to the lab's cloud" "Conectar con la nube del laboratorio") ($OPT_CLOUD_URL)"
+  guide_say "     $(L "You need the node credential (it starts with nod_) from the Add node page." "Necesita la credencial del nodo (empieza por nod_) de la página Add node.")"
+  guide_say "     $(L "It is asked for later, hidden. You can also connect later:" "Se pide más adelante, oculta. También puede conectar después:") sudo aictl cloud enroll"
+  if guide_yes "     $(L "Connect now?" "¿Conectar ahora?")" "$cdef"; then enroll=1; fi
 
   # 4. Preview first.
   local preview=0
   guide_say ""
-  guide_say "4/4  Preview"
-  if guide_yes "     First show what would be done, without changing anything? (recommended)" y; then preview=1; fi
+  guide_say "4/4  $(L Preview "Vista previa")"
+  if guide_yes "     $(L "First show what would be done, without changing anything? (recommended)" "¿Mostrar primero lo que se haría, sin cambiar nada? (recomendado)")" y; then preview=1; fi
 
   local args=(--node-id "$id")
   [[ -z "$from" ]] || args+=(--from-ark "$from")
   ((enroll)) && args+=(--cloud-url "$OPT_CLOUD_URL" --enroll)
+  args+=(--lang "$UI_LANG")   # the re-run speaks the same language, whatever the environment of sudo says
   guide_say ""
-  guide_say "Ready:"
-  guide_say "  Node name:     $id"
-  guide_say "  Install from:  ${from:-the internet}"
-  if ((enroll)); then guide_say "  Cloud:         connect now (the credential is asked for, hidden)"
-  else guide_say "  Cloud:         later (sudo aictl cloud enroll)"; fi
-  guide_say "The same, typed in one line:"
+  if [[ "$UI_LANG" == es ]]; then
+    guide_say "Listo:"
+    guide_say "  Nombre del nodo:  $id"
+    guide_say "  Instalar desde:   ${from:-internet}"
+    if ((enroll)); then guide_say "  Nube:             conectar ahora (la credencial se pide, oculta)"
+    else guide_say "  Nube:             más tarde (sudo aictl cloud enroll)"; fi
+  else
+    guide_say "Ready:"
+    guide_say "  Node name:     $id"
+    guide_say "  Install from:  ${from:-the internet}"
+    if ((enroll)); then guide_say "  Cloud:         connect now (the credential is asked for, hidden)"
+    else guide_say "  Cloud:         later (sudo aictl cloud enroll)"; fi
+  fi
+  guide_say "$(L "The same, typed in one line:" "Lo mismo, escrito en una línea:")"
   guide_say "  sudo bash $self ${args[*]}"
 
   if ((preview)); then
     guide_say ""
-    guide_say "Preview (nothing is changed):"
+    guide_say "$(L "Preview (nothing is changed):" "Vista previa (no se cambia nada):")"
     local prc=0
     if ((DEV)) && [[ -n "${LAI_INSTALLER_GUIDE_RECORD:-}" ]]; then
       printf 'preview: %s\n' "${args[*]} --dry-run" >>"$LAI_INSTALLER_GUIDE_RECORD"
@@ -2466,17 +2640,17 @@ guided_setup() {
     fi
     if ((prc != 0)); then
       guide_say ""
-      guide_say "The preview stopped with a problem (exit $prc). The lines above say what and how to fix it."
-      guide_say "Nothing was changed. Fix it, then run the installer again."
+      guide_say "$(L "The preview stopped with a problem (exit $prc). The lines above say what and how to fix it." "La vista previa se detuvo por un problema (salida $prc). Las líneas de arriba dicen cuál y cómo corregirlo.")"
+      guide_say "$(L "Nothing was changed. Fix it, then run the installer again." "No se cambió nada. Corríjalo y vuelva a ejecutar el instalador.")"
       leave "$prc"
     fi
     guide_say ""
-    if ! guide_yes "That was only a preview. Install for real now?" n; then
-      guide_say "Nothing was changed. Run the installer again any time."
+    if ! guide_yes "$(L "That was only a preview. Install for real now?" "Eso fue solo una vista previa. ¿Instalar de verdad ahora?")" n; then
+      guide_say "$(L "Nothing was changed. Run the installer again any time." "No se cambió nada. Ejecute el instalador de nuevo cuando quiera.")"
       leave 4
     fi
-  elif ! guide_yes "Start the installation now?" n; then
-    guide_say "Nothing was changed. Run the installer again any time."
+  elif ! guide_yes "$(L "Start the installation now?" "¿Empezar la instalación ahora?")" n; then
+    guide_say "$(L "Nothing was changed. Run the installer again any time." "No se cambió nada. Ejecute el instalador de nuevo cuando quiera.")"
     leave 4
   fi
   exec 7<&- 8>&-
@@ -2508,7 +2682,8 @@ main() {
       leave 2
     fi
   fi
-  if ((argc == 0)) && guide_wanted; then guided_setup; fi
+  # Guided mode: no arguments, or only --lang (so "install-node.sh --lang es" asks its questions in Spanish).
+  if { ((argc == 0)) || { ((argc == 2)) && [[ -n "$OPT_LANG" ]]; }; } && guide_wanted; then guided_setup; fi
 
   if ((DEV)); then
     STATE_DIR="${LAI_INSTALL_STATE_DIR:-$DEFAULT_STATE_DIR}"
@@ -2516,7 +2691,11 @@ main() {
   fi
   STATE_FILE="$STATE_DIR/state.json"
   if ((EUID != 0 && !DRY_RUN && !DEV)); then
-    printf 'ERROR LAI-INS-003: not run as root. Run "sudo bash install-node.sh ..." from the desktop user terminal.\n' >&2
+    if [[ "$UI_LANG" == es ]]; then
+      printf 'ERROR LAI-INS-003: %s. %s\n' "$(ins_text LAI-INS-003 title)" "$(ins_text LAI-INS-003 fix)" >&2
+    else
+      printf 'ERROR LAI-INS-003: not run as root. Run "sudo bash install-node.sh ..." from the desktop user terminal.\n' >&2
+    fi
     leave 3
   fi
 
@@ -2539,10 +2718,14 @@ main() {
   done
   CUR_TAG="P15 summary"
   if ((STUBS_RUN > 0)); then
-    say "THIS INSTALLER IS INCOMPLETE: $STUBS_RUN of $PHASE_TOTAL phases are not implemented yet and did nothing."
-    say "No node was installed or configured by this run."
+    say "$(L "THIS INSTALLER IS INCOMPLETE: $STUBS_RUN of $PHASE_TOTAL phases are not implemented yet and did nothing." \
+      "ESTE INSTALADOR ESTÁ INCOMPLETO: $STUBS_RUN de $PHASE_TOTAL fases aún no están implementadas y no hicieron nada.")"
+    say "$(L "No node was installed or configured by this run." "Esta ejecución no instaló ni configuró ningún nodo.")"
   fi
-  if ((DRY_RUN)); then say "[dry-run] done: nothing was changed. Exit 0 means every implemented step would succeed."; fi
+  if ((DRY_RUN)); then
+    say "[dry-run] $(L "done: nothing was changed. Exit 0 means every implemented step would succeed." \
+      "terminado: no se cambió nada. La salida 0 significa que todos los pasos implementados funcionarían.")"
+  fi
   return 0
 }
 
@@ -2796,12 +2979,13 @@ phase_verify() {
     return "$PHASE_NOT_IMPLEMENTED"
   fi
 
-  say "Checking the install:"
+  say "$(L "Checking the install:" "Comprobando la instalación:")"
   local out rc=0
   out="$("$agent" setup verify "${common[@]}" "${inv_args[@]}" 2>&1)" || rc=$?
   say "$out"
   if ((rc != 0)); then
-    say "The post-install checks found a problem (see the line with LAI-INS above). The install is NOT finished: fix it and re-run."
+    say "$(L "The post-install checks found a problem (see the line with LAI-INS above). The install is NOT finished: fix it and re-run." \
+      "Las comprobaciones finales encontraron un problema (vea la línea con LAI-INS más arriba). La instalación NO ha terminado: corríjalo y vuelva a ejecutar.")"
     return 1
   fi
 
@@ -2833,7 +3017,7 @@ phase_verify() {
   if ((OPT_REBOOT && REBOOT_REQUIRED)); then
     local secs
     secs="$(i07_dev LAI_INSTALLER_COUNTDOWN 10)"
-    say "Rebooting in $secs seconds. Press Ctrl-C to cancel."
+    say "$(L "Rebooting in $secs seconds. Press Ctrl-C to cancel." "Reiniciando en $secs segundos. Pulse Ctrl-C para cancelar.")"
     if ((DRY_RUN)); then
       say "[dry-run] would reboot after the countdown"
     else
