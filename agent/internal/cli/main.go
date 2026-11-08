@@ -39,6 +39,9 @@ type Env struct {
 	// Terminal is the person at the keyboard for prompts (confirmations and the PIN). Nil means a
 	// non-interactive terminal reading Stdin, so no prompt is ever shown.
 	Terminal Terminal
+	// Keys reads single key presses for the full-screen menu (menu_host.go). Nil means no menu:
+	// `aictl` with no arguments then prints the command list, as it always did.
+	Keys KeySource
 	// Version is the CLI version compared with the agent's.
 	Version string
 	// ClientConfig, if set, may adjust the client configuration (test hooks).
@@ -60,6 +63,7 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		Geteuid:  os.Geteuid,
 		Version:  app.Version,
 		Terminal: NewOSTerminal(os.Stdin),
+		Keys:     NewOSKeys(os.Stdin),
 	}
 	if f, ok := stdout.(*os.File); ok {
 		if fi, err := f.Stat(); err == nil {
@@ -289,6 +293,10 @@ func Run(ctx context.Context, env Env, reg *Registry, args []string) int {
 		return code
 	}
 	if len(rest) == 0 {
+		// ADR-0009: a person at a terminal gets the menu instead of a list to memorize.
+		if !g.JSON && menuAvailable(env) {
+			return runMenu(env, reg, g)
+		}
 		if g.JSON {
 			return rep.fail(NewCLIError(g.Lang, CodeUsage, pick(g.Lang, "No command given.", "No se indicó ningún comando.")))
 		}
