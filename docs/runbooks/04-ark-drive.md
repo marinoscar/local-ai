@@ -4,7 +4,7 @@ Use this when you buy, format, fill, plug in, eject, store or refresh the portab
 
 > **Before you start**
 > - You need: a node with internet (for the first fill), a USB 3 SSD, and a terminal (**Ctrl + Alt + T**).
-> - Formatting **erases the whole drive**. Unplug every other USB disk first. Formatting, repairing and fixing a copied drive are in the menu (`sudo aictl`, entry 6); the raw commands are only a last resort (Appendices A and B).
+> - Formatting **erases the whole drive**. Unplug every other USB disk first. Formatting, repairing and fixing a copied drive are in the menu (`sudo aictl`, entry 6, then *The AI-ARK drive itself*); the raw commands are only a last resort (Appendices A and B).
 > - **Time:** formatting 10 minutes. First fill: many hours (leave it overnight, plugged into power). Later refreshes: minutes to an hour.
 
 > 🛠 Verify when implemented (Epic E3 ark sync and drive; E8 for the desktop buttons).
@@ -39,7 +39,7 @@ How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting
    - **What you should see:** the window closes. The drive stays plugged in.
    - **If it doesn't work:** nothing happens when you plug it in: that is fine, go on.
 
-6. **Open the menu as administrator.** Press **Ctrl + Alt + T**, type `sudo aictl` and press **Enter**. Type your login password if it asks (nothing shows while you type). Choose **6** (*Offline content and the AI-ARK drive*), then **Format a new drive as AI-ARK (erases it)**.
+6. **Open the menu as administrator.** Press **Ctrl + Alt + T**, type `sudo aictl` and press **Enter**. Type your login password if it asks (nothing shows while you type). Choose **6** (*Offline content and the AI-ARK drive*), then **The AI-ARK drive itself**, then **Format a new drive as AI-ARK (erases it)**.
    - The typed command is `sudo aictl ark format`; it does exactly the same.
    - **What you should see:** `Disks that can be erased and made an AI-ARK drive:` with your drive on a numbered line (its name, size and `usb`), and under `Not offered:` the other disks with the reason, for example `this computer's own disk (it holds /)`.
    - **If it doesn't work:** `Run it with sudo` (`LAI-CLI-006`): you typed `aictl` without `sudo`. Your drive is under `Not offered`: `open at …` means the desktop opened it, eject it (step 5) and try again; `a disk inside this computer` means it is not a USB disk. No disk at all (`LAI-ARK-016`): try another USB port or cable, wait 10 seconds, try again.
@@ -59,7 +59,7 @@ How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting
     - **What you should see:** `✓ The new AI-ARK drive is ready (ark-3f9c0a12, mounted at /media/root/AI-ARK).` The `ark-…` value is the drive's **root id**. Write it on the drive's label.
     - **If it doesn't work:** `LAI-ARK-017` (a disk tool failed): the message says what was left. Unplug the drive, plug it in again and repeat from step 6. If it fails again, use [Appendix A](#appendix-a-format-a-drive-by-hand-last-resort). Pressing **Ctrl + C** here does not stop it: it finishes so the drive is not left half done.
 
-11. **Press Enter** to go back to the menu, then choose **List the connected drives**.
+11. **Press Enter** to go back to the menu, then choose **The AI-ARK drive itself**, then **List the connected drives**.
     - **What you should see:** `AI-ARK  ark-3f9c0a12  /media/root/AI-ARK  ext4  … free  ✓ ready`.
 
 12. **Set it up** (only for a drive that shows `uninitialized`, `LAI-ARK-010`: one formatted by hand or with another tool; the menu of step 6 already did this):
@@ -210,12 +210,12 @@ How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting
 
 ## Part 8. Repairs
 
-28. **Filesystem errors** (`unclean`, `LAI-ARK-004`). Leave the drive plugged in. Press **Ctrl + Alt + T**, type `sudo aictl`, press **Enter**, choose **6** (*Offline content and the AI-ARK drive*), then **Repair a drive**, and pick the drive marked `has errors`. Answer `y`.
+28. **Filesystem errors** (`unclean`, `LAI-ARK-004`). Leave the drive plugged in. Press **Ctrl + Alt + T**, type `sudo aictl`, press **Enter**, choose **6** (*Offline content and the AI-ARK drive*), then **The AI-ARK drive itself**, then **Repair a drive**, and pick the drive marked `has errors`. Answer `y`.
     - The typed command is `sudo aictl ark repair <root-id>` (the root id is in `aictl ark drives`).
     - **What you should see:** `Ejecting the drive (it stays plugged in)`, then lines like `Checking step 2 of 5 (folders): 40%`. It can take from minutes to over an hour on a big drive; don't unplug it. At the end: `✓ No errors were found.` or `✓ Errors were found and fixed.`, and the drive is mounted again.
     - Then run `aictl ark verify --root <root-id> --wait` (Part 13).
     - **If it doesn't work:** `LAI-ARK-009` (files in use): close the programs it names, or switch brain, and repeat. `LAI-ARK-018` (some errors are left): the drive may be failing; prepare a new drive (Part 2), fill it, and stop using this one. `LAI-ARK-017` (the check could not run): unplug the drive, plug it in again and repeat; last resort: [Appendix B](#appendix-b-repair-or-give-a-new-id-by-hand-last-resort).
-29. **Cloned drive** (two drives, same id, `LAI-ARK-006`). Plug in **both** drives. In `sudo aictl`, choose **6**, then **Give a copied drive a new id**, pick the copy it offers, and answer `y`.
+29. **Cloned drive** (two drives, same id, `LAI-ARK-006`). Plug in **both** drives. In `sudo aictl`, choose **6**, then **The AI-ARK drive itself**, then **Give a copied drive a new id**, pick the copy it offers, and answer `y`.
     - The typed command is `sudo aictl ark new-id <root-id>` (the id that `aictl ark drives` shows twice).
     - **What you should see:** `✓ The copy now has its own id, ark-…, and is mounted at …. Both drives can be used.` Nothing on the drive is deleted. `aictl ark drives` lists two different ids.
     - **If it doesn't work:** `This drive does not share its id with another drive`: only one copy is plugged in; plug in both. `LAI-ARK-017`: unplug the copy, plug it in again and repeat; last resort: [Appendix B](#appendix-b-repair-or-give-a-new-id-by-hand-last-resort).
