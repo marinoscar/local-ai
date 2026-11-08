@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/audit"
+	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/execx"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 )
@@ -223,19 +224,47 @@ func (m *Manager) activate(ctx context.Context, a activation, progress func(Stag
 			rolled = true
 			if _, rerr := m.restartLlama(rctx); rerr != nil {
 				m.log.Error(m.opt.Recipe.Service+" did not restart on the previous build", "error", rerr)
+				if err != nil && m.opt.Recipe.Service == LlamaRecipe.Service {
+					// llama started on neither build: the build is not the cause.
+					return res, m.serviceDown(a, fail, switchStage(check), err, rerr)
+				}
 				rolled = false
 			}
 		}
 	}
-	stage := StageCheck
-	if check == nil {
-		stage = StageSwitch
-	}
-	e := fail(CodeBuildUnusable, stage, cause, cerr, rolled, "restart_error", errString(err))
+	e := fail(CodeBuildUnusable, switchStage(check), cause, cerr, rolled, "restart_error", errString(err))
 	if ctx.Err() != nil {
 		return res, &Error{Code: e.Code, Stage: e.Stage, Message: e.Message, Err: ctx.Err(), Details: e.Details}
 	}
 	return res, e
+}
+
+// switchStage is where a failed switch stopped: the check when the service restarted, else the switch.
+func switchStage(check *Error) Stage {
+	if check != nil {
+		return StageCheck
+	}
+	return StageSwitch
+}
+
+// serviceDown is the result of a switch whose service started on neither the new build nor the
+// previous one (after current was put back): something outside the build stops it, most often another
+// program on its port, such as an old llama service that still runs. The new build is not blamed and
+// current points at the previous build again.
+func (m *Manager) serviceDown(a activation, fail func(string, Stage, string, error, bool, ...any) *Error, st Stage, err, rerr error) *Error {
+	code, cause := doctor.LLM001, "service_not_starting"
+	busy := m.opt.PortInUse != nil && m.opt.PortInUse()
+	if busy {
+		code, cause = doctor.LLM003, "port_in_use"
+	}
+	e := fail(code, st, cause, err, true, "restart_error", errString(err), "previous_restart_error", errString(rerr), "port_in_use", busy)
+	svc := m.opt.Recipe.Service
+	e.Message = fmt.Sprintf("The new %s build %s was not switched on: %s did not start on it, nor on the previous build, so the build is not the cause. The previous build is selected again.",
+		m.opt.Recipe.Name, a.plan.BuildID, svc)
+	if busy {
+		e.Message += " Another program is using the port of " + svc + "."
+	}
+	return e
 }
 
 func errString(err error) string {

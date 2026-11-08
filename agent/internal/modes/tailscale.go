@@ -26,6 +26,10 @@ const (
 	TailscaleChangeTimeout = 10 * time.Second
 	// DefaultReconcileEvery is the drift reconciler period (agent.md section 4.7.4).
 	DefaultReconcileEvery = 5 * time.Minute
+	// DefaultRetryEvery is how soon the reconciler tries again while the last pass found tailscaled
+	// not running or not logged in yet (LAI-NET-002, LAI-NET-003): at boot the agent can start before
+	// tailscaled is Running, and the finding must not wait a whole period to clear.
+	DefaultRetryEvery = 15 * time.Second
 
 	tailscaleMaxOut = 1 << 20
 	backendRunning  = "Running"
@@ -85,6 +89,9 @@ type TailscaleOptions struct {
 	Clock config.Clock
 	// Interval is the reconcile period; default DefaultReconcileEvery.
 	Interval time.Duration
+	// RetryInterval is the period of the early retry while tailscaled is not ready; default
+	// DefaultRetryEvery (never longer than Interval).
+	RetryInterval time.Duration
 	// HTTP is the client of CheckServeReachable; default a dedicated client without proxy env.
 	HTTP HTTPDoer
 	// Logger defaults to a discarding logger. Messages never carry the tailnet name.
@@ -107,6 +114,7 @@ type TailscaleManager struct {
 	online   func() bool
 	clock    config.Clock
 	interval time.Duration
+	retry    time.Duration
 	http     HTTPDoer
 	log      *slog.Logger
 
@@ -134,7 +142,7 @@ func NewTailscaleManager(o TailscaleOptions) (*TailscaleManager, error) {
 		return nil, errors.New("modes: TailscaleOptions needs Run and Settings")
 	}
 	m := &TailscaleManager{runner: o.Run, lookup: o.Lookup, settings: o.Settings, st: o.State, online: o.Online,
-		clock: o.Clock, interval: o.Interval, http: o.HTTP, log: o.Logger}
+		clock: o.Clock, interval: o.Interval, retry: o.RetryInterval, http: o.HTTP, log: o.Logger}
 	if m.lookup == nil {
 		m.lookup = execx.Lookup
 	}
@@ -143,6 +151,12 @@ func NewTailscaleManager(o TailscaleOptions) (*TailscaleManager, error) {
 	}
 	if m.interval <= 0 {
 		m.interval = DefaultReconcileEvery
+	}
+	if m.retry <= 0 {
+		m.retry = DefaultRetryEvery
+	}
+	if m.retry > m.interval {
+		m.retry = m.interval
 	}
 	if m.http == nil {
 		m.http = newProbeClient(30 * time.Second)
@@ -869,8 +883,22 @@ func (m *TailscaleManager) CheckServeReachable(ctx context.Context) []doctor.Res
 // Name implements app.Worker.
 func (m *TailscaleManager) Name() string { return "tailscale" }
 
-// Start runs the drift reconciler: a pass every Interval (5 min) while the node is online. It returns
-// at once; the loop ends with ctx or Stop.
+// notReady reports whether the last pass found tailscaled not running or not logged in yet.
+func (m *TailscaleManager) notReady() bool {
+	m.cmu.Lock()
+	defer m.cmu.Unlock()
+	for _, r := range m.results {
+		if r.Code == doctor.NET002 || r.Code == doctor.NET003 {
+			return true
+		}
+	}
+	return false
+}
+
+// Start runs the drift reconciler: a pass every Interval (5 min) while the node is online, and every
+// RetryInterval (15 s) while the last pass found tailscaled not running or not logged in yet, so a
+// boot-time LAI-NET-002/003 clears soon after tailscaled is up. One ticker at the retry period drives
+// both. It returns at once; the loop ends with ctx or Stop.
 func (m *TailscaleManager) Start(ctx context.Context) error {
 	m.loopMu.Lock()
 	defer m.loopMu.Unlock()
@@ -880,7 +908,8 @@ func (m *TailscaleManager) Start(ctx context.Context) error {
 	lctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	m.loopCancel, m.loopDone = cancel, done
-	tk := m.clock.NewTicker(m.interval)
+	tk := m.clock.NewTicker(m.retry)
+	last := m.clock.Now()
 	go func() {
 		defer close(done)
 		defer tk.Stop()
@@ -890,6 +919,11 @@ func (m *TailscaleManager) Start(ctx context.Context) error {
 				return
 			case <-tk.C():
 			}
+			now := m.clock.Now()
+			if now.Sub(last) < m.interval && !m.notReady() {
+				continue
+			}
+			last = now
 			pctx, pcancel := context.WithTimeout(lctx, 60*time.Second)
 			if _, err := m.Reconcile(pctx); err != nil && lctx.Err() == nil {
 				m.log.Warn("tailscale reconcile aborted", "error", err.Error())

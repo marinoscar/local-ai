@@ -937,6 +937,51 @@ func TestReconcilerLoop(t *testing.T) {
 	}
 }
 
+func TestReconcilerRetriesSoonWhileTailscaleIsNotReady(t *testing.T) {
+	// At boot the agent can start before tailscaled is Running: the first pass finds LAI-NET-003.
+	r := newTSRig(t, "B", true, "none")
+	r.cli.SetBackend("Starting")
+	ws, err := r.on()
+	if err != nil || !reflect.DeepEqual(warningCodes(ws), []string{doctor.NET003}) {
+		t.Fatalf("ws %v err %v", ws, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := r.mgr.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		sctx, scancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer scancel()
+		_ = r.mgr.Stop(sctx)
+	}()
+	waitFor(t, "the loop's ticker", func() bool { return r.clk.Tickers() == 1 })
+
+	// Still starting: the next retry tick passes again and keeps the finding.
+	seen := r.onlineCalls.Load()
+	r.clk.Advance(modes.DefaultRetryEvery)
+	waitFor(t, "a retry pass", func() bool { return r.onlineCalls.Load() > seen })
+	if find(r.mgr.ServeResults(), doctor.NET003) == nil {
+		t.Fatalf("results = %v", resultCodes(r.mgr.ServeResults()))
+	}
+
+	// tailscaled is up: the following retry tick clears LAI-NET-003 and publishes, long before the
+	// five-minute period.
+	r.cli.SetBackend("Running")
+	r.clk.Advance(modes.DefaultRetryEvery)
+	waitFor(t, "NET-003 cleared", func() bool { return find(r.mgr.ServeResults(), doctor.NET003) == nil })
+	waitFor(t, "the pattern applied", func() bool { return r.has("127.0.0.1:8080") })
+
+	// Ready: retry ticks no longer run passes; only the period does.
+	seen = r.onlineCalls.Load()
+	r.clk.Advance(modes.DefaultRetryEvery)
+	r.clk.Advance(modes.DefaultRetryEvery)
+	time.Sleep(50 * time.Millisecond)
+	if got := r.onlineCalls.Load(); got != seen {
+		t.Errorf("passes ran on retry ticks while tailscale is ready (%d -> %d)", seen, got)
+	}
+}
+
 func TestStatusAndTailnetURL(t *testing.T) {
 	t.Run("pattern B", func(t *testing.T) {
 		r := newTSRig(t, "B", true, "none")

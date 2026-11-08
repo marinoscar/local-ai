@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
@@ -203,6 +206,18 @@ type llamaProbe struct {
 	once sync.Once
 	rt   llamaRouter
 	err  error
+}
+
+// llamaPortInUse reports whether another program listens on the llama port: a loopback bind that
+// fails with "address already in use". It is asked only after localai-llama started on no build, so
+// the listener cannot be our own service.
+func llamaPortInUse(port int) bool {
+	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	if err != nil {
+		return errors.Is(err, syscall.EADDRINUSE)
+	}
+	_ = ln.Close()
+	return false
 }
 
 func newLlamaProbe(c *Call, env local.Env, set llamaSettings) *llamaProbe {
@@ -404,6 +419,7 @@ func llamaOptions(c *Call, env local.Env, host kitHost, set llamaSettings, roots
 		Audit:       localAudit{env},
 		Agent:       llamaAgent{whisperServices{c}},
 		Probe:       newLlamaProbe(c, env, set),
+		PortInUse:   func() bool { return llamaPortInUse(set.Port) },
 		Recorder:    llamaStateRecorder{env},
 		PreviousBuild: func() string {
 			if v, ok := readStateView(env); ok && v.Llama.PreviousBuild != nil {
