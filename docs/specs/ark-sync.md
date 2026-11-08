@@ -147,6 +147,7 @@ Validation errors in this block are `LAI-AGT` config errors (agent.md). Unknown 
 | `aictl ark mount <root-id>` | `POST /ark/drives/{root_id}/mount` | Mounts a detected but unmounted AI-ARK filesystem (`LAI-ARK-005`) |
 | `aictl ark drives set-profile <root-id> <profile>` | `PUT /ark/drives/{root_id}/profile` (PIN) | Writes `ROOT.json` `profile` |
 | `aictl ark prune [--root <id>] [--orphans] [--trash] [--dry-run] [--yes]` | `POST /ark/prune` (PIN) | Deletes orphans and trash. Needs `--orphans`, `--trash` or both. Shows the list first (the dry run), then asks to type `DELETE` (`--yes` answers it). Never deletes the last verified copy (§4.10 R1/R6); there is no override flag |
+| `aictl ark budget [<size> \| default]` | `GET /profile`; a change `PUT /profile` (PIN) | Shows or sets the internal root's budget (`profile_overrides.budget_bytes`, §4.4.3) without editing `node.yaml`; `default` goes back to the profile's. Named by the fix of `LAI-SYN-041` |
 
 ### 3.5 HTTP API (shapes; routes from agent.md §3.8)
 

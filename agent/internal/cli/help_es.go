@@ -17,6 +17,7 @@ var helpES = map[string]string{
 	"ark verify":             "Comprueba que el contenido guardado coincide con sus sumas de verificación.",
 	"ark import":             "Copia contenido de un disco del arca a este equipo (sin internet).",
 	"ark prune":              "Borra el contenido que el perfil ya no quiere y las versiones anteriores.",
+	"ark budget":             "Muestra o cambia cuánto disco puede usar el contenido sin conexión.",
 	"backup-config":          "Guarda la configuración de este nodo en un archivo, o la restaura desde uno.",
 	"bench":                  "Mide la memoria y la velocidad de un modelo, para el catálogo.",
 	"catalog":                "Comprueba y administra el catálogo de modelos y contenido del arca.",
