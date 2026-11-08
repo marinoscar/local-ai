@@ -237,7 +237,7 @@ The exact procedure is [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting-
     - **What you should see:** the plan, then copy progress, then `✓` and the internal disk's new readiness.
     - Only one item: `aictl ark import --item <id> --wait`. An item that isn't in this node's profile needs `--add-to-profile` (PIN).
     - Newer catalog on the drive (for example the node was offline for months): add `--catalog` to install it first.
-    - Several drives plugged in: add `--from <root-id>`.
+    - Several drives plugged in: the command lists them with a number each. Type the number of the drive to copy from and press Enter.
     - **If it doesn't work:** `LAI-SYN-070`: a copy on the drive is damaged; that item is skipped. Sync the drive on a node with internet, or use another drive. `LAI-SYN-040`: not enough space inside; import fewer items.
 27. **A computer with no Local AI software:** open **START-HERE.html** on the drive, or follow [01 Part 9](01-survival-mode.md). To build a full node from the drive with no internet: [06-rebuild-a-node-offline.md](06-rebuild-a-node-offline.md).
 

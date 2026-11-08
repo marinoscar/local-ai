@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -41,7 +42,8 @@ func init() {
   --wait                Follow the run and exit 0 (all items ok), 8 (some failed or were skipped,
                         the last good copies are kept) or 9 (the run failed or was stopped).
   --dry-run             Show what would be downloaded and change nothing.
-  --allow-offline-mode  Allow a manual sync while the node is in offline mode.
+  --allow-offline-mode  Allow a manual sync while the node is in offline mode (on a terminal,
+                        the command asks instead).
   --scheduled           What the nightly timer runs: implies --wait; a run that is skipped (offline,
                         battery, other mode, turned off, another sync running) exits 0.
   --cancel              Stop the running sync (partial downloads stay and resume later).
@@ -73,8 +75,8 @@ Without --wait it returns as soon as the run has started.`,
 		at(&Command{
 			Name: "import", Summary: "Copy content from an ark drive to this computer (no internet needed).",
 			Usage: "[--from <root-id>] [--item <id>]... [--add-to-profile] [--catalog] [--dry-run] [--wait]",
-			Description: `Works in every mode, including survival. Without --from it uses the only connected drive
-(with several drives it stops and lists them).
+			Description: `Works in every mode, including survival. Without --from it uses the only connected drive; with
+several, it asks which one on a terminal (and stops and lists them otherwise).
   --add-to-profile  Add an item that is not in this node's profile to the profile overrides.
   --catalog         Also install a newer catalog found on the drive.`,
 			Flags: func(fs *flag.FlagSet) {
@@ -147,7 +149,24 @@ func arkSync(c *Call) error {
 	if c.Bool("dry-run") {
 		return c.arkPlan("/ark/sync", body)
 	}
-	return c.arkRun(arkRunSpec{kind: kindSync, path: "/ark/sync", body: body, wait: c.Bool("wait") || scheduled, scheduled: scheduled})
+	spec := arkRunSpec{kind: kindSync, path: "/ark/sync", body: body, wait: c.Bool("wait") || scheduled, scheduled: scheduled}
+	err = c.arkRun(spec)
+	if !scheduled && isOfflineRefusal(err) && c.canAsk() {
+		// A person at a terminal is asked instead of being told to type a flag (ADR-0009).
+		ok, cerr := c.Confirm(pick(c.Lang, "This node is offline. Sync anyway over the internet?",
+			"Este nodo está sin conexión. ¿Sincronizar de todos modos por internet?"))
+		if cerr != nil {
+			return cerr
+		}
+		if !ok {
+			c.Out.Info(pick(c.Lang, "Nothing was started. This computer stays in offline mode.",
+				"No se inició nada. Este equipo sigue en modo sin conexión."))
+			return nil
+		}
+		body["allow_offline_mode"] = true
+		return c.arkRun(spec)
+	}
+	return err
 }
 
 func arkSyncCancel(c *Call) error {
@@ -200,7 +219,9 @@ func arkImport(c *Call) error {
 		if err := c.checkRoot("--from", from, false); err != nil {
 			return err
 		}
-	} else if from, err = c.onlyDrive(); err != nil {
+	} else if from, err = c.onlyDrive(); errors.Is(err, errNoDriveChosen) {
+		return nil
+	} else if err != nil {
 		return err
 	}
 	body := map[string]any{
@@ -214,8 +235,9 @@ func arkImport(c *Call) error {
 }
 
 // onlyDrive is the root id of the one connected ark drive: a drive with a root id that is ready to
-// read from. None is "not found" (5); several is a usage error (2) that lists them, the same list the
-// agent would answer with LAI-ARK-015.
+// read from. None is "not found" (5). Several: a person at a terminal picks one from a numbered list
+// (pickDrive); otherwise (no terminal, --json, --yes) it is a usage error (2) that lists them, the
+// same list the agent would answer with LAI-ARK-015.
 func (c *Call) onlyDrive() (string, error) {
 	ctx, cancel := c.withDefaultTimeout(30 * time.Second)
 	defer cancel()
@@ -223,19 +245,16 @@ func (c *Call) onlyDrive() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var res struct {
-		Drives []struct {
-			RootID *string `json:"root_id"`
-			State  string  `json:"state"`
-		} `json:"drives"`
-	}
-	if _, _, err := c.callWith(cl, ctx, http.MethodGet, "/ark/drives", nil, &res); err != nil {
+	all, err := c.listDrives(ctx, cl)
+	if err != nil {
 		return "", err
 	}
+	var usable []wireDrive
 	var ids []string
-	for _, d := range res.Drives {
-		if d.RootID != nil && *d.RootID != "" && (d.State == "ready" || d.State == "read_only") {
-			ids = append(ids, *d.RootID)
+	for _, d := range all {
+		if d.id() != "" && (d.State == "ready" || d.State == "read_only") {
+			usable = append(usable, d)
+			ids = append(ids, d.id())
 		}
 	}
 	switch len(ids) {
@@ -248,7 +267,11 @@ func (c *Call) onlyDrive() (string, error) {
 			"Conecte la unidad AI-ARK y revísela con `aictl ark drives`.")
 		return "", e
 	}
-	return "", c.codeError(doctor.ARK015, ExitUsage, pick(c.Lang, "Connected: ", "Conectadas: ")+strings.Join(ids, ", ")+".")
+	several := c.codeError(doctor.ARK015, ExitUsage, pick(c.Lang, "Connected: ", "Conectadas: ")+strings.Join(ids, ", ")+".")
+	if !c.canAsk() {
+		return "", several
+	}
+	return c.pickDrive(usable, several)
 }
 
 func arkSetProfile(c *Call) error {

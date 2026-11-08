@@ -76,7 +76,7 @@ In **Survival mode** the same thing is the Portal's button **8 Switch brain** ([
    ```
 
    - **What you should see:** download progress until the file is downloaded and verified. Without `--wait`, follow it with `aictl ark status`.
-   - **If it doesn't work:** `LAI-SYN-010`: refused in Survival mode. In Offline mode add `--allow-offline-mode`. With no internet, import from the ark drive instead ([04](04-ark-drive.md), `aictl ark import --item <model-id> --wait`).
+   - **If it doesn't work:** `LAI-SYN-010`: refused in Survival mode. In Offline mode the command asks `Sync anyway over the internet?`: type `y` and press Enter. With no internet, import from the ark drive instead ([04](04-ark-drive.md), `aictl ark import --item <model-id> --wait`).
 
 10. **Choose the boot model:**
 
