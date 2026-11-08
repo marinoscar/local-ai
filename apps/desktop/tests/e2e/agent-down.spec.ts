@@ -105,7 +105,11 @@ test('authorization needed: pkexec is asked; dismissed (exit 126) shows LAI-DSK-
 
   const text = await bodyText(id);
   expect(text).toContain('LAI-DSK-005');
-  expect(text).toContain('sudo aictl doctor');
+  // Plain words first (exit 126: the password window was closed); the raw status and the command are folded.
+  expect(text).toContain('The password window was closed');
+  expect(text).not.toContain('sudo aictl doctor');
+  expect(await evaluateIn<boolean>(run!.app, id, "document.querySelector('[data-testid=failure-details]').open === false")).toBe(true);
+  expect(await evaluateIn<string>(run!.app, id, "document.querySelector('[data-testid=failure-details]').textContent")).toContain('sudo aictl doctor');
   const excerpt = await evaluateIn<string>(run!.app, id, "document.querySelector('[data-testid=status-excerpt]').textContent");
   expect(excerpt).toContain('Active: failed');
   expect(excerpt).not.toMatch(/lat_/);

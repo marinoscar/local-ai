@@ -2198,7 +2198,7 @@ var table = []Code{
 		ID:       DSK001,
 		Severity: Error,
 		Title:    Msg{EN: "This user isn't allowed to control Local AI", ES: "Este usuario no tiene permiso para controlar Local AI"},
-		Fix:      Msg{EN: "Run `sudo usermod -aG localai-operators $USER`, then log out and log back in", ES: "Ejecute `sudo usermod -aG localai-operators $USER`, y luego cierre sesión y vuelva a entrar"},
+		Fix:      Msg{EN: "Press \"Allow this user\" and enter the administrator password, then log out and log back in (in a terminal: `sudo usermod -aG localai-operators $USER`)", ES: "Pulse «Permitir este usuario» e introduzca la contraseña de administrador; luego cierre sesión y vuelva a entrar (en una terminal: `sudo usermod -aG localai-operators $USER`)"},
 	},
 	{
 		ID:       DSK002,
@@ -2222,7 +2222,7 @@ var table = []Code{
 		ID:       DSK005,
 		Severity: Error,
 		Title:    Msg{EN: "The agent couldn't be started", ES: "No se pudo iniciar el agente"},
-		Fix:      Msg{EN: "Open a terminal and run `sudo aictl doctor`; follow what it says", ES: "Abra una terminal y ejecute `sudo aictl doctor`; siga lo que indique"},
+		Fix:      Msg{EN: "Press \"Start agent\" once more; if it fails again, press \"Restart the computer\". For a repair: `sudo aictl doctor`", ES: "Pulse «Iniciar agente» una vez más; si vuelve a fallar, pulse «Reiniciar la computadora». Para una reparación: `sudo aictl doctor`"},
 	},
 	{
 		ID:       DSK006,
@@ -2234,7 +2234,7 @@ var table = []Code{
 		ID:       DSK007,
 		Severity: Error,
 		Title:    Msg{EN: "The agent refused this app's login", ES: "El agente rechazó el inicio de sesión de esta aplicación"},
-		Fix:      Msg{EN: "Run `sudo aictl token rotate`, then restart ai-desktop. Meanwhile use a browser with `aictl ui-code`", ES: "Ejecute `sudo aictl token rotate` y reinicie ai-desktop. Mientras tanto use un navegador con `aictl ui-code`"},
+		Fix:      Msg{EN: "Press \"Make a new token\" and enter the administrator password (in a terminal: `sudo aictl token rotate`). Meanwhile use a browser with `aictl ui-code`", ES: "Pulse «Crear un token nuevo» e introduzca la contraseña de administrador (en una terminal: `sudo aictl token rotate`). Mientras tanto use un navegador con `aictl ui-code`"},
 	},
 	{
 		ID:       DSK008,

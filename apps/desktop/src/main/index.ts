@@ -19,7 +19,8 @@ import { createCloudProxy, createLabCacheStore, labNodeUrl } from './cloud-api';
 import { CLOUD_TEXT, CODE_LINK_REMOVED, CODE_NO_KEYRING, CloudSession, LinkWindowController, abortableSleep, createCloudHttp, createLoopbackDispatcher, modeFromEvent, modeFromStatus, withCode, type LinkWindowFactory } from './cloud-link';
 import { AGENT_HOST, AGENT_PORT, applyProcessSwitches, egressGuard, getEgressState, getUpdaterSession, installEgressGuard, installMainProcessGuard, patchEgressState, runAsUpdater, setEgressLogger, type GuardedSessions } from './egress-guard';
 import { KeyCopier, copyNotification, createKeyActions, createKeyApi } from './clipboard';
-import { DIALOG_TEXT, errorText, pick, resolveLang } from './i18n';
+import { DIALOG_TEXT, PAGE_STRINGS, START_FAILURE_TEXT, errorText, isStartFailureReason, pick, resolveLang } from './i18n';
+import { LIBRARY_URL, createSystemActions } from './system-actions';
 import { CHANNELS, type SettingsStore, type StartupPhase, buildDesktopStatus, createHostHandlers, createSettingsStore, createShellHandlers, isAllowedOrigin, registerHandlers } from './ipc';
 import { type LogEntry, type Logger, createFileLogger } from './log';
 import { ABOUT, buildMenuTemplate } from './menu';
@@ -131,14 +132,18 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     sessionFetch: (input, init) => sessions.agent.fetch(input, init),
     log,
   });
+  // The same binaries (and the same test hooks) as "Start agent": a test build without a pkexec stub never runs pkexec,
+  // and with a systemctl stub "Restart the computer" runs the stub, never the real reboot.
+  const binaries = resolveStartBinaries(process.env, testHooksAllowed(app.isPackaged, process.execPath));
   const supervisor = createAgentSupervisor({
     start: {
-      binaries: resolveStartBinaries(process.env, testHooksAllowed(app.isPackaged, process.execPath)),
+      binaries,
       exec: execFileRunner,
       health: async () => (await client.health({ tries: 1 })).reachable,
       log,
     },
   });
+  const systemActions = createSystemActions({ binaries, exec: execFileRunner, log });
   const feed = new AgentFeed(client);
 
   // -- survival UX (DSK-09): the full-screen Portal and the 32 px strip ---------------------------------------------
@@ -436,6 +441,21 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     // The LAI-DSK-007 fallback: the agent's own UI in the default browser (loopback only; desktop.md 5).
     openAgentInBrowser: () => shell.openExternal(`http://${AGENT_HOST}:${AGENT_PORT}/`),
     retry: () => void start(),
+    system: systemActions,
+    confirmRestart: () =>
+      dialogs.confirm({ title: pick(PAGE_STRINGS.rebootTitle, lang), message: pick(PAGE_STRINGS.rebootMessage, lang), confirmLabel: pick(PAGE_STRINGS.rebootYes, lang), cancelLabel: pick(PAGE_STRINGS.rebootNo, lang) }),
+    // kiwix-serve keeps running without the agent (companion-services.md): a loopback probe, then the default browser.
+    libraryReachable: async () => {
+      try {
+        const res = await fetch(LIBRARY_URL, { signal: AbortSignal.timeout(1500), redirect: 'manual' });
+        await res.body?.cancel();
+        return res.status < 500;
+      } catch {
+        return false;
+      }
+    },
+    openLibraryInBrowser: () => shell.openExternal(LIBRARY_URL),
+    sessionWorks: async () => (await client.recreateSession()).ok,
     log,
   };
   const version = app.getVersion();
@@ -493,9 +513,11 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
           const result = await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, errorActions);
           // `busy`: a start is already running (the error page's button, or an earlier click): nothing to say.
           if (result.ok || result.busy === true) return;
+          // Plain words first (what failed, the next step); the excerpt and the command are for whoever repairs it.
           const copy = errorText('LAI-DSK-005', lang);
+          const why = isStartFailureReason(result.reason) ? `${pick(START_FAILURE_TEXT[result.reason].what, lang)} ${pick(START_FAILURE_TEXT[result.reason].next, lang)}\n\n` : '';
           const excerpt = result.statusExcerpt !== undefined ? `\n\n${result.statusExcerpt}` : '';
-          await dialogs.alert({ title: copy.title, message: copy.message, detail: `${copy.fix} ${copy.command ?? ''}${excerpt}\n\n${copy.code}`, okLabel: pick(DIALOG_TEXT.ok, lang) });
+          await dialogs.alert({ title: copy.title, message: copy.message, detail: `${why}${copy.fix}${excerpt}\n\n${copy.command ?? ''}\n${copy.code}`, okLabel: pick(DIALOG_TEXT.ok, lang) });
         },
       },
       log,

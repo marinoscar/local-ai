@@ -239,11 +239,14 @@ The **AI-ARK drive** is the portable copy of everything. It is **not encrypted**
    - `LAI-HW-009`, `LAI-HW-010`, `LAI-HW-011` (too hot): put the laptop on a hard, flat surface; don't block the vents.
    - `LAI-ARK-005` (drive not mounted): open the drive in the **Files** app.
    - `LAI-ARK-007` (drive pulled out without eject): plug it back in once; next time press **Eject** first.
-   - `LAI-DSK-001` or `LAI-DSK-002` (app says this user isn't allowed): use the browser way (step 6). Later fix it as the message says.
+   - `LAI-DSK-001` (app says this user isn't allowed): press **Allow this user** in the app and type the administrator password in the window that appears. Then press **Log out now** and log back in. Meanwhile the browser way (step 6) works. Or in a terminal: `sudo usermod -aG localai-operators $USER`, then log out and back in.
+   - `LAI-DSK-002` (you were allowed but haven't logged in again): press **Log out now** in the app and log back in.
    - `LAI-DSK-004` or `LAI-CLI-001` (the Local AI service isn't running): press **Start agent** in the app and type your login password. Or in a terminal: `sudo systemctl start localai-agent`.
+   - `LAI-DSK-005` (the app couldn't start the service): the app says in plain words what failed. Press **Start agent** once more; if it fails again, press **Restart the computer** in the app. Or in a terminal: `sudo aictl doctor`.
+   - `LAI-DSK-007` (the service refused the app's login): press **Make a new token** in the app and type the administrator password; the app connects again by itself. Or in a terminal: `sudo aictl token rotate`.
    - `LAI-SEC-004` (too many wrong PIN tries): wait the time shown.
-41. **Library only, without the AI service.** If everything else fails but the library program still runs, open the browser at `http://127.0.0.1:8888/library/`.
-42. **If nothing works:** restart the computer (top-right corner → power icon → **Restart**) and wait 2 minutes. Then try Part 2 again.
+41. **Library only, without the AI service.** If everything else fails but the library program still runs, press **Open the library only** on the app's error page: the library opens in the web browser. Or open the browser at `http://127.0.0.1:8888/library/`. If the app says the library is not running either, go to step 42.
+42. **If nothing works:** press **Restart the computer** on the app's error page and confirm with **Restart**, or use the top-right corner → power icon → **Restart**. Wait 2 minutes. Then try Part 2 again.
 
 More: runbook 07 (Troubleshooting) has one section per problem, and a list of every code.
 
@@ -649,11 +652,14 @@ El **disco AI-ARK** es la copia portátil de todo. **No está cifrado**, así qu
    - `LAI-HW-009`, `LAI-HW-010`, `LAI-HW-011` (muy caliente): ponga la laptop sobre una superficie dura y plana; no tape las rejillas.
    - `LAI-ARK-005` (disco no montado): abra el disco en la aplicación **Archivos**.
    - `LAI-ARK-007` (disco desconectado sin expulsar): conéctelo otra vez una vez; la próxima vez presione **Expulsar** antes.
-   - `LAI-DSK-001` o `LAI-DSK-002` (la aplicación dice que este usuario no tiene permiso): use el navegador (paso 6). Después arréglelo como dice el mensaje.
+   - `LAI-DSK-001` (la aplicación dice que este usuario no tiene permiso): presione **Permitir este usuario** en la aplicación y escriba la contraseña de administrador en la ventana que aparece. Luego presione **Cerrar sesión ahora** y vuelva a entrar. Mientras tanto funciona el navegador (paso 6). O en una terminal: `sudo usermod -aG localai-operators $USER`, y luego cierre sesión y vuelva a entrar.
+   - `LAI-DSK-002` (ya tiene permiso pero no ha vuelto a entrar): presione **Cerrar sesión ahora** en la aplicación y vuelva a entrar.
    - `LAI-DSK-004` o `LAI-CLI-001` (el servicio Local AI no está funcionando): presione **Start agent** (iniciar agente) en la aplicación y escriba su contraseña de inicio de sesión. O en una terminal: `sudo systemctl start localai-agent`.
+   - `LAI-DSK-005` (la aplicación no pudo iniciar el servicio): la aplicación dice con palabras sencillas qué falló. Presione **Iniciar agente** una vez más; si vuelve a fallar, presione **Reiniciar la computadora** en la aplicación. O en una terminal: `sudo aictl doctor`.
+   - `LAI-DSK-007` (el servicio rechazó el inicio de sesión de la aplicación): presione **Crear un token nuevo** en la aplicación y escriba la contraseña de administrador; la aplicación se conecta otra vez por sí sola. O en una terminal: `sudo aictl token rotate`.
    - `LAI-SEC-004` (demasiados intentos de PIN equivocados): espere el tiempo indicado.
-41. **Solo la biblioteca, sin el servicio de IA.** Si todo lo demás falla pero el programa de la biblioteca sigue funcionando, abra el navegador en `http://127.0.0.1:8888/library/`.
-42. **Si nada funciona:** reinicie la computadora (esquina superior derecha → ícono de apagado → **Reiniciar**) y espere 2 minutos. Luego intente la Parte 2 otra vez.
+41. **Solo la biblioteca, sin el servicio de IA.** Si todo lo demás falla pero el programa de la biblioteca sigue funcionando, presione **Abrir solo la biblioteca** en la página de error de la aplicación: la biblioteca se abre en el navegador. O abra el navegador en `http://127.0.0.1:8888/library/`. Si la aplicación dice que la biblioteca tampoco funciona, vaya al paso 42.
+42. **Si nada funciona:** presione **Reiniciar la computadora** en la página de error de la aplicación y confirme con **Reiniciar**, o use la esquina superior derecha → ícono de apagado → **Reiniciar**. Espere 2 minutos. Luego intente la Parte 2 otra vez.
 
 Más: el manual 07 (Troubleshooting, solución de problemas) tiene una sección por problema y una lista de todos los códigos.
 

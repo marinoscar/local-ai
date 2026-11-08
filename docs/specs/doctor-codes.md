@@ -430,13 +430,13 @@ The script reads the `codes.go` layout described in its header: a const block (`
 
 | Code | Sev | Meaning | Fix (plain language) |
 |---|---|---|---|
-| LAI-DSK-001 | error | This user isn't allowed to control Local AI | Run `sudo usermod -aG localai-operators $USER`, then log out and log back in |
+| LAI-DSK-001 | error | This user isn't allowed to control Local AI | Press "Allow this user" and enter the administrator password, then log out and log back in (in a terminal: `sudo usermod -aG localai-operators $USER`) |
 | LAI-DSK-002 | warning | You were added to the operators group but haven't logged in again | Log out and log back in once |
 | LAI-DSK-003 | error | The agent's key file doesn't exist yet | Press "Start agent". If it keeps happening, reinstall with `install-node.sh` (runbook 05) |
 | LAI-DSK-004 | error | The Local AI agent is not running | Press "Start agent" and enter the administrator password |
-| LAI-DSK-005 | error | The agent couldn't be started | Open a terminal and run `sudo aictl doctor`; follow what it says |
+| LAI-DSK-005 | error | The agent couldn't be started | Press "Start agent" once more; if it fails again, press "Restart the computer". For a repair: `sudo aictl doctor` |
 | LAI-DSK-006 | error | ai-desktop and the agent are different versions that don't work together | Update both from the rebuild kit or with `sudo aictl update` |
-| LAI-DSK-007 | error | The agent refused this app's login | Run `sudo aictl token rotate`, then restart ai-desktop. Meanwhile use a browser with `aictl ui-code` |
+| LAI-DSK-007 | error | The agent refused this app's login | Press "Make a new token" and enter the administrator password (in a terminal: `sudo aictl token rotate`). Meanwhile use a browser with `aictl ui-code` |
 | LAI-DSK-008 | warning | No password keyring to protect the lab key | Accept weaker storage, or set up the GNOME keyring and connect again |
 | LAI-DSK-009 | warning | The lab connection code expired or was refused | Press "Connect to the lab" again and enter the new code within 15 minutes |
 | LAI-DSK-010 | info | Can't reach the lab | Nothing to fix here; this computer works normally. The Lab tab retries by itself |

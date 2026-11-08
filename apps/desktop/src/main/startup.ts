@@ -4,6 +4,7 @@ import { checkApiVersion, type AgentClient, type TokenResult } from './agent-cli
 import { type DskCode, type ErrorAction, ERROR_ACTIONS, ERROR_COPY, isDskCode } from './i18n';
 import { type Logger, NULL_LOGGER } from './log';
 import type { AgentSupervisor } from './agent-supervisor';
+import type { SystemActions, SystemFailure } from './system-actions';
 
 export const MODULE = 'startup' as const;
 
@@ -200,8 +201,20 @@ export interface ActionDeps {
   logout(): Promise<boolean>;
   /** Opens `http://127.0.0.1:7070/` in the default browser (the LAI-DSK-007 fallback). */
   openAgentInBrowser(): Promise<void>;
-  /** Restarts the start-up sequence (after "Start agent" worked). */
+  /** Restarts the start-up sequence (after "Start agent" or "Make a new token" worked). */
   retry(): void;
+  /** The fixed privileged calls (system-actions.ts). Absent: those buttons answer `unavailable`. */
+  system?: SystemActions;
+  /** The native "Restart the computer?" dialog (main process, so a page cannot skip it). Absent: never restarts. */
+  confirmRestart?(): Promise<boolean>;
+  /** Is kiwix-serve answering on 127.0.0.1:8888? Absent: "Open the library only" answers `unavailable`. */
+  libraryReachable?(): Promise<boolean>;
+  /** Opens the library (`http://127.0.0.1:8888/library/`) in the default browser. */
+  openLibraryInBrowser?(): Promise<void>;
+  /** One session attempt with a freshly read token: true once the agent accepts it (after "Make a new token"). */
+  sessionWorks?(): Promise<boolean>;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
   log?: Logger;
 }
 
@@ -212,15 +225,26 @@ export interface ActionResult {
   statusExcerpt?: string;
   /** "Start agent" was pressed while a start was already running: nothing was done. */
   busy?: boolean;
+  /** Why a button did not work: a fixed word (`StartFailure` of "Start agent", `SystemFailure`, `library-down`), never output. */
+  reason?: string;
+  /** "Restart the computer" was answered with Cancel: nothing was done. */
+  cancelled?: boolean;
 }
+
+/** The agent re-reads its token file within 10 s of a change (aictl.md 4.21): wait a little longer than that. */
+export const NEW_TOKEN_WAIT_MS = 15_000;
+const NEW_TOKEN_POLL_MS = 1000;
 
 export function parseActionRequest(payload: unknown): { action: ErrorAction; code: DskCode } | null {
   if (typeof payload !== 'object' || payload === null) return null;
   const { action, code } = payload as { action?: unknown; code?: unknown };
   if (typeof action !== 'string' || !(ERROR_ACTIONS as readonly string[]).includes(action) || !isDskCode(code)) return null;
-  // The page may only ask for a button its own code has.
-  return (ERROR_COPY[code].actions as readonly string[]).includes(action) ? { action: action as ErrorAction, code } : null;
+  // The page may only ask for a button its own code has (shown, or shown after another one worked).
+  const allowed: readonly string[] = [...ERROR_COPY[code].actions, ...(ERROR_COPY[code].followUp ?? [])];
+  return allowed.includes(action) ? { action: action as ErrorAction, code } : null;
 }
+
+const systemFailure = (reason: SystemFailure): ActionResult => (reason === 'busy' ? { ok: false, busy: true } : { ok: false, reason });
 
 export async function handleErrorAction(request: { action: ErrorAction; code: DskCode }, deps: ActionDeps): Promise<ActionResult> {
   switch (request.action) {
@@ -248,7 +272,40 @@ export async function handleErrorAction(request: { action: ErrorAction; code: Ds
         return { ok: true };
       }
       if (result.code === undefined) return { ok: false, busy: true };
-      return { ok: false, code: result.code, ...(result.statusExcerpt !== undefined ? { statusExcerpt: result.statusExcerpt } : {}) };
+      return { ok: false, code: result.code, reason: result.reason, ...(result.statusExcerpt !== undefined ? { statusExcerpt: result.statusExcerpt } : {}) };
+    }
+    case 'allow-user': {
+      if (deps.system === undefined) return { ok: false, reason: 'unavailable' };
+      const result = await deps.system.allowUser();
+      // The new group reaches this login only after logging out and in: the page then offers "Log out now".
+      return result.ok ? { ok: true } : systemFailure(result.reason);
+    }
+    case 'rotate-token': {
+      if (deps.system === undefined) return { ok: false, reason: 'unavailable' };
+      const result = await deps.system.rotateToken();
+      if (!result.ok) return systemFailure(result.reason);
+      // The agent picks the new file up within 10 s. Wait for a session that works, then run the start-up sequence
+      // again (it shows the dashboard, or this page again if the agent still refuses).
+      const sleep = deps.sleep ?? wait;
+      const now = deps.now ?? Date.now;
+      if (deps.sessionWorks !== undefined) {
+        const deadline = now() + NEW_TOKEN_WAIT_MS;
+        while (!(await deps.sessionWorks()) && now() < deadline) await sleep(NEW_TOKEN_POLL_MS);
+      }
+      deps.retry();
+      return { ok: true };
+    }
+    case 'open-library': {
+      if (deps.libraryReachable === undefined || deps.openLibraryInBrowser === undefined) return { ok: false, reason: 'unavailable' };
+      if (!(await deps.libraryReachable())) return { ok: false, reason: 'library-down' };
+      await deps.openLibraryInBrowser();
+      return { ok: true };
+    }
+    case 'restart-computer': {
+      if (deps.system === undefined || deps.confirmRestart === undefined) return { ok: false, reason: 'unavailable' };
+      if (!(await deps.confirmRestart())) return { ok: false, cancelled: true };
+      const result = await deps.system.reboot();
+      return result.ok ? { ok: true } : systemFailure(result.reason);
     }
   }
 }

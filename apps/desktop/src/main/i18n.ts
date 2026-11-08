@@ -32,9 +32,25 @@ export function isDskCode(value: unknown): value is DskCode {
   return typeof value === 'string' && (ERROR_CODES as readonly string[]).includes(value);
 }
 
-/** The buttons of an error page. `open-portal` is on every page. */
-export const ERROR_ACTIONS = ['copy-command', 'logout', 'start-agent', 'open-portal', 'open-browser'] as const;
+/**
+ * The buttons of an error page. `open-portal` is on every page. `allow-user`, `rotate-token` and `restart-computer`
+ * run a fixed command (src/main/system-actions.ts); `open-library` opens kiwix-serve, which needs no agent.
+ */
+export const ERROR_ACTIONS = [
+  'copy-command',
+  'logout',
+  'start-agent',
+  'open-portal',
+  'open-browser',
+  'allow-user',
+  'rotate-token',
+  'open-library',
+  'restart-computer',
+] as const;
 export type ErrorAction = (typeof ERROR_ACTIONS)[number];
+
+/** Buttons that fix the problem themselves: the page then folds the typed command under "Use a terminal instead". */
+export const FIX_ACTIONS: readonly ErrorAction[] = ['allow-user', 'rotate-token', 'start-agent'];
 
 /** The one IPC channel the error page uses (preload/shell.ts invokes it, startup.ts handles it). */
 export const ERROR_ACTION_CHANNEL = 'localai:error-action' as const;
@@ -48,7 +64,10 @@ export interface ErrorCopy {
   fix: Bilingual;
   /** A command the user can copy (`copy-command` copies exactly this). */
   command?: string;
+  /** The buttons, in order. */
   actions: readonly ErrorAction[];
+  /** Accepted from the page but shown only after another button worked ("Log out now" after "Allow this user"). */
+  followUp?: readonly ErrorAction[];
 }
 
 export const ERROR_COPY: Readonly<Record<DskCode, ErrorCopy>> = {
@@ -57,11 +76,12 @@ export const ERROR_COPY: Readonly<Record<DskCode, ErrorCopy>> = {
     title: { en: "This user isn't allowed to control Local AI", es: 'Este usuario no puede controlar Local AI' },
     message: { en: 'This user is not allowed to control Local AI yet.', es: 'Este usuario todavía no tiene permiso para controlar Local AI.' },
     fix: {
-      en: 'Run this command in a terminal, then log out and log back in:',
-      es: 'Ejecuta este comando en una terminal; luego cierra sesión y vuelve a entrar:',
+      en: 'Press "Allow this user" and enter the administrator password. Then log out and log back in once.',
+      es: 'Presiona "Permitir este usuario" e ingresa la contraseña de administrador. Luego cierra sesión y vuelve a entrar una vez.',
     },
     command: 'sudo usermod -aG localai-operators $USER',
-    actions: ['copy-command', 'open-portal'],
+    actions: ['allow-user', 'open-portal', 'copy-command'],
+    followUp: ['logout'],
   },
   'LAI-DSK-002': {
     severity: 'warning',
@@ -84,7 +104,7 @@ export const ERROR_COPY: Readonly<Record<DskCode, ErrorCopy>> = {
       en: 'Press "Start agent". If it keeps happening, reinstall with install-node.sh (runbook 05).',
       es: 'Presiona "Iniciar agente". Si sigue pasando, reinstala con install-node.sh (manual 05).',
     },
-    actions: ['start-agent', 'open-portal'],
+    actions: ['start-agent', 'open-portal', 'open-library', 'restart-computer'],
   },
   'LAI-DSK-004': {
     severity: 'error',
@@ -97,18 +117,18 @@ export const ERROR_COPY: Readonly<Record<DskCode, ErrorCopy>> = {
       en: 'Press "Start agent" and enter the administrator password.',
       es: 'Presiona "Iniciar agente" e ingresa la contraseña de administrador.',
     },
-    actions: ['start-agent', 'open-portal'],
+    actions: ['start-agent', 'open-portal', 'open-library', 'restart-computer'],
   },
   'LAI-DSK-005': {
     severity: 'error',
     title: { en: "The agent couldn't be started", es: 'No se pudo iniciar el agente' },
     message: { en: "The Local AI agent couldn't be started from this app.", es: 'No se pudo iniciar el agente de Local AI desde esta aplicación.' },
     fix: {
-      en: 'Open a terminal, run this command and follow what it says:',
-      es: 'Abre una terminal, ejecuta este comando y sigue lo que indique:',
+      en: 'Press "Start agent" once more. If it fails again, press "Restart the computer". The details are for whoever repairs this computer.',
+      es: 'Presiona "Iniciar agente" una vez más. Si vuelve a fallar, presiona "Reiniciar la computadora". Los detalles son para quien repare esta computadora.',
     },
     command: 'sudo aictl doctor',
-    actions: ['copy-command', 'open-portal'],
+    actions: ['start-agent', 'open-library', 'restart-computer', 'open-portal', 'copy-command'],
   },
   'LAI-DSK-006': {
     severity: 'error',
@@ -132,11 +152,11 @@ export const ERROR_COPY: Readonly<Record<DskCode, ErrorCopy>> = {
       es: 'El agente de Local AI no aceptó la clave de esta aplicación. Mientras tanto puedes usar un navegador: presiona "Abrir en el navegador" y escribe el código de acceso de `aictl ui-code`.',
     },
     fix: {
-      en: 'Run this command, then restart ai-desktop:',
-      es: 'Ejecuta este comando y reinicia ai-desktop:',
+      en: 'Press "Make a new token" and enter the administrator password. ai-desktop then connects again by itself.',
+      es: 'Presiona "Crear un token nuevo" e ingresa la contraseña de administrador. Luego ai-desktop se conecta otra vez por sí solo.',
     },
     command: 'sudo aictl token rotate',
-    actions: ['copy-command', 'open-browser', 'open-portal'],
+    actions: ['rotate-token', 'open-browser', 'open-portal', 'copy-command'],
   },
   'LAI-DSK-015': {
     severity: 'critical',
@@ -205,6 +225,54 @@ export const PAGE_STRINGS = {
   },
   unitState: { en: 'Service state', es: 'Estado del servicio' },
   actionFailed: { en: 'That did not work. Read the steps above.', es: 'No funcionó. Lee los pasos de arriba.' },
+  allowUser: { en: 'Allow this user', es: 'Permitir este usuario' },
+  rotateToken: { en: 'Make a new token', es: 'Crear un token nuevo' },
+  openLibrary: { en: 'Open the library only', es: 'Abrir solo la biblioteca' },
+  restartComputer: { en: 'Restart the computer', es: 'Reiniciar la computadora' },
+  working: { en: 'Waiting for the password…', es: 'Esperando la contraseña…' },
+  passwordHint: {
+    en: 'A password window will appear. Enter the administrator password there.',
+    es: 'Aparecerá una ventana de contraseña. Ingresa allí la contraseña de administrador.',
+  },
+  allowUserDone: {
+    en: 'Done. Now log out and log back in once so the change takes effect. Save your work first.',
+    es: 'Listo. Ahora cierra sesión y vuelve a entrar una vez para que el cambio funcione. Guarda tu trabajo antes.',
+  },
+  rotateDone: { en: 'A new token was made. Connecting again…', es: 'Se creó un token nuevo. Conectando otra vez…' },
+  fixCancelled: {
+    en: 'The password window was closed, or the password was not accepted. Press the button to try again.',
+    es: 'Se cerró la ventana de contraseña, o la contraseña no fue aceptada. Presiona el botón para intentarlo otra vez.',
+  },
+  fixFailed: {
+    en: 'That did not work. Ask whoever looks after this computer to follow "Use a terminal instead".',
+    es: 'No funcionó. Pide a quien cuida esta computadora que siga "Usar una terminal en su lugar".',
+  },
+  fixUnavailable: {
+    en: 'This computer cannot show the password window. Ask whoever looks after it to follow "Use a terminal instead".',
+    es: 'Esta computadora no puede mostrar la ventana de contraseña. Pide a quien la cuida que siga "Usar una terminal en su lugar".',
+  },
+  terminalSummary: { en: 'Use a terminal instead', es: 'Usar una terminal en su lugar' },
+  terminalHint: { en: 'Type this command in a terminal and press Enter:', es: 'Escribe este comando en una terminal y presiona Enter:' },
+  detailsSummary: { en: 'Details for whoever repairs this computer', es: 'Detalles para quien repare esta computadora' },
+  libraryDown: {
+    en: 'The library program is not running either. Press "Restart the computer".',
+    es: 'El programa de la biblioteca tampoco está funcionando. Presiona "Reiniciar la computadora".',
+  },
+  libraryOpened: {
+    en: 'The library opened in the web browser. It works without the AI.',
+    es: 'La biblioteca se abrió en el navegador web. Funciona sin la IA.',
+  },
+  rebootTitle: { en: 'Restart the computer?', es: '¿Reiniciar la computadora?' },
+  rebootMessage: {
+    en: 'Everything open on this computer will close. Save your work first. Local AI starts again by itself after the restart.',
+    es: 'Todo lo que está abierto en esta computadora se cerrará. Guarda tu trabajo antes. Local AI vuelve a iniciar por sí solo después del reinicio.',
+  },
+  rebootYes: { en: 'Restart', es: 'Reiniciar' },
+  rebootNo: { en: 'Cancel', es: 'Cancelar' },
+  rebootFailed: {
+    en: 'The computer could not be restarted from here. Open the system menu (top right) and choose Restart.',
+    es: 'No se pudo reiniciar la computadora desde aquí. Abre el menú del sistema (arriba a la derecha) y elige Reiniciar.',
+  },
   unknownTitle: { en: 'Something went wrong', es: 'Algo salió mal' },
   unknownFix: { en: 'You can still use the Survival Portal.', es: 'Todavía puedes usar el Portal de Supervivencia.' },
 } as const satisfies Record<string, Bilingual>;
@@ -215,7 +283,43 @@ export const ACTION_LABEL: Readonly<Record<ErrorAction, Bilingual>> = {
   'start-agent': PAGE_STRINGS.startAgent,
   'open-portal': PAGE_STRINGS.openPortal,
   'open-browser': PAGE_STRINGS.openBrowser,
+  'allow-user': PAGE_STRINGS.allowUser,
+  'rotate-token': PAGE_STRINGS.rotateToken,
+  'open-library': PAGE_STRINGS.openLibrary,
+  'restart-computer': PAGE_STRINGS.restartComputer,
 };
+
+/** Why "Start agent" did not work (agent-supervisor.ts `StartFailure`) in plain words: what failed, and the one next thing to do. */
+export const START_FAILURE_TEXT = {
+  'not-authorized': {
+    what: { en: 'The password window was closed, or the password was not accepted.', es: 'Se cerró la ventana de contraseña, o la contraseña no fue aceptada.' },
+    next: { en: 'Press "Start agent" again and enter the administrator password.', es: 'Presiona "Iniciar agente" otra vez e ingresa la contraseña de administrador.' },
+  },
+  'pkexec-unavailable': {
+    what: { en: 'This computer cannot show the password window.', es: 'Esta computadora no puede mostrar la ventana de contraseña.' },
+    next: { en: 'Press "Restart the computer".', es: 'Presiona "Reiniciar la computadora".' },
+  },
+  'pkexec-failed': {
+    what: { en: 'The system tried to start the agent, but it stopped with an error.', es: 'El sistema intentó iniciar el agente, pero se detuvo con un error.' },
+    next: { en: 'Press "Restart the computer".', es: 'Presiona "Reiniciar la computadora".' },
+  },
+  'start-failed': {
+    what: { en: 'The system tried to start the agent, but it stopped with an error.', es: 'El sistema intentó iniciar el agente, pero se detuvo con un error.' },
+    next: { en: 'Press "Restart the computer".', es: 'Presiona "Reiniciar la computadora".' },
+  },
+  timeout: {
+    what: { en: 'The agent was started, but it did not answer within 30 seconds.', es: 'El agente se inició, pero no respondió en 30 segundos.' },
+    next: {
+      en: 'Wait one minute and press "Start agent" again. If it still fails, press "Restart the computer".',
+      es: 'Espera un minuto y presiona "Iniciar agente" otra vez. Si sigue fallando, presiona "Reiniciar la computadora".',
+    },
+  },
+} as const satisfies Record<string, { what: Bilingual; next: Bilingual }>;
+export type StartFailureReason = keyof typeof START_FAILURE_TEXT;
+
+export function isStartFailureReason(value: unknown): value is StartFailureReason {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(START_FAILURE_TEXT, value);
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Tray, native dialogs and notifications (DSK-06; docs/specs/desktop.md 4.3 and 4.4)

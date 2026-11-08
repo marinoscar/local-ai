@@ -26,6 +26,10 @@ export interface ActionResult {
   statusExcerpt?: string;
   /** "Start agent" was pressed while a start was already running: nothing was done. */
   busy?: boolean;
+  /** Why an error-page button did not work: a fixed word, never output (desktop.md 4.2). */
+  reason?: string;
+  /** "Restart the computer" was answered with Cancel. */
+  cancelled?: boolean;
 }
 
 /** Can the desktop reach its agent? `starting` covers the start-up sequence and the first event connection. */
