@@ -5,7 +5,7 @@ This repository is the **runbook and source tree for the Local AI lab and the of
 1. **Lab operation.** Run local AI on GPU nodes (coding, chat, vision, agentic work) and control all of them from `https://ai.marin.cr`.
 2. **Doomsday ark.** Every node, especially the laptops, must be able to run **fully standalone with no internet**, with models, knowledge, maps, speech and a rebuild kit already on disk. A non-expert must be able to operate it from the `ai-desktop` app.
 
-If a change makes (2) less reliable, it is wrong, even when it makes (1) nicer.
+If a change makes (2) less reliable, it is wrong, even when it makes (1) nicer. If a change makes Local AI harder for a non-expert to use, it is wrong too (rule 4, [ADR-0009](docs/decisions/0009-optimized-for-humans.md)).
 
 Start with [`docs/README.md`](docs/README.md) (map of all docs) and [`docs/architecture/overview.md`](docs/architecture/overview.md).
 
@@ -33,7 +33,16 @@ Start with [`docs/README.md`](docs/README.md) (map of all docs) and [`docs/archi
 - Anything a non-expert needs during an emergency must be reachable from the **Survival Portal** (`http://127.0.0.1:7070`), and must also be described in the printable runbook [`docs/runbooks/01-survival-mode.md`](docs/runbooks/01-survival-mode.md).
 - Destructive operations, such as deleting a model or content, need explicit confirmation. In the desktop UI they also need the admin PIN. Sync must **never** delete the last verified copy of anything.
 
-### 4. Plain language for operators
+### 4. Everything is optimized for humans
+Every CLI, installer, UI, error message and doc is judged by a person who has **never used a terminal**. Design for that person first. The full rules, the priority order and the exceptions are in [ADR-0009](docs/decisions/0009-optimized-for-humans.md). The short version:
+- **Nothing to memorize.** Every common task can be done by reading the screen and choosing an option. A CLI run with no arguments on a terminal opens a menu; an installer asks instead of requiring flags. Typed commands stay as the fast path and for scripts, never as the only path.
+- **The common path needs no choices.** Correct defaults; detect what can be detected and ask only to confirm.
+- **State first.** Every screen starts with "is it OK?", what is wrong, and the one next thing to do.
+- **Long work shows progress** and can be cancelled or resumed safely. **Destructive work** explains what is lost and asks for confirmation (rule 3).
+- **Worst case works:** offline, keyboard only, an 80×24 console, English and Spanish.
+- **Machine interfaces stay stable.** `--json`, the REST API, exit codes and file formats do not change for humans' sake. Menus and prompts appear only on an interactive terminal.
+- **Priority:** offline safety (rule 3) first, then ease for humans, then convenience for the lab or the developer. "Less code" is never a reason to make something harder for a human.
+- An operator-visible change is done only after someone follows it literally as a first-time user, and the PR records the result.
 - Runbooks are written for someone with **very little technical expertise**. Number the steps. Give the exact command or the exact button. Show "What you should see" after each step, and say "If it doesn't work…" with a link to the troubleshooting runbook.
 - Every error a user can see carries a **doctor code** (`LAI-XXX-NNN`, see [`docs/specs/doctor-codes.md`](docs/specs/doctor-codes.md)) and a one-sentence fix.
 

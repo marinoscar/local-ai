@@ -84,6 +84,7 @@ The detailed diagram, the components table and every canonical name (paths, port
 - **Offline nodes are standalone.** No LAN mesh; each node must be able to live alone ([ADR-0006](docs/decisions/0006-standalone-offline.md)).
 - **The repository is public and redacted.** Real lab values live only in a git-ignored file ([ADR-0007](docs/decisions/0007-public-repo-redaction.md)).
 - **The cloud app is built on EnterpriseAppBase** ([ADR-0008](docs/decisions/0008-cloud-on-eab.md)).
+- **Everything is optimized for humans.** A person who has never used a terminal must be able to do every common task by reading the screen and choosing an option. Typed commands are the fast path, never the only one ([ADR-0009](docs/decisions/0009-optimized-for-humans.md)).
 
 ## 3. The three modes
 

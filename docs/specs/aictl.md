@@ -14,7 +14,7 @@ Design goals:
 4. **One code path.** API-backed commands call the same agent routes as the desktop, the Portal and the cloud.
 
 ### Non-goals
-- No interactive TUI. (Progress bars on a TTY are the only dynamic output.)
+- ~~No interactive TUI.~~ Superseded by [ADR-0009](../decisions/0009-optimized-for-humans.md): `aictl` with no arguments on an interactive terminal must open a full-screen menu. Until [#425](https://github.com/marinoscar/local-ai/issues/425) ships, progress bars on a TTY are the only dynamic output. Typed commands, `--json` and non-TTY output stay as specified here.
 - No remote nodes: `aictl` talks to the agent on **this** machine only. The lab-wide view is the cloud.
 - No configuration editor: `node.yaml` changes go through specific commands (`profile set`, `cloud enroll`) or a text editor.
 

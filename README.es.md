@@ -84,6 +84,7 @@ El diagrama detallado, la tabla de componentes y todos los nombres canónicos (r
 - **Los nodos sin conexión son independientes.** No hay malla en la red local; cada nodo debe poder vivir solo ([ADR-0006](docs/decisions/0006-standalone-offline.md)).
 - **El repositorio es público y está depurado de datos reales.** Los valores reales del laboratorio viven solo en un archivo que git ignora ([ADR-0007](docs/decisions/0007-public-repo-redaction.md)).
 - **La aplicación en la nube está construida sobre EnterpriseAppBase** ([ADR-0008](docs/decisions/0008-cloud-on-eab.md)).
+- **Todo está optimizado para las personas.** Alguien que nunca ha usado una terminal debe poder hacer cada tarea común leyendo la pantalla y eligiendo una opción. Los comandos escritos son el camino rápido, nunca el único ([ADR-0009](docs/decisions/0009-optimized-for-humans.md)).
 
 ## 3. Los tres modos
 
