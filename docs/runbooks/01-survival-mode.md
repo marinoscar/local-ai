@@ -50,13 +50,14 @@ Print this page and keep it next to the computer, with the AI-ARK drive. The one
    - **What you should see:** the Survival Portal with 8 big buttons.
    - **If it doesn't work:** go to step 7.
 
-7. **The terminal way (if the browser shows nothing).** Press **Ctrl + Alt + T**. A terminal window opens. Type:
+7. **The terminal way (if the browser shows nothing).** Press **Ctrl + Alt + T**. A terminal window opens. Type `aictl` and press **Enter**. A menu opens. Press **5** (Mode), then **4** (Survival). Wait until it says `Survival mode is on`, press **Enter** to go back to the menu, then **q** to close it. Then do step 6 again.
+
+   The same thing typed in one line, if you prefer:
 
    ```
    aictl mode survival
    ```
 
-   and press **Enter**. Wait until it says `Survival mode is on`. Then do step 6 again.
    - **What you should see:** lines like `Starting the library and speech`, then `✓ Survival mode is on`.
    - **If it doesn't work:** a message with a code like `[LAI-CLI-001]` appears with a fix line under it. Do what the fix line says. Also see Part 8 below and runbook 07, section **"The app won't open"**.
 
@@ -459,13 +460,14 @@ Imprima esta página y guárdela junto a la computadora, con el disco AI-ARK. La
    - **Lo que debería ver:** el Portal de Supervivencia con 8 botones grandes.
    - **Si no funciona:** vaya al paso 7.
 
-7. **Con la terminal (si el navegador no muestra nada).** Presione **Ctrl + Alt + T**. Se abre una ventana de terminal. Escriba:
+7. **Con la terminal (si el navegador no muestra nada).** Presione **Ctrl + Alt + T**. Se abre una ventana de terminal. Escriba `aictl` y presione **Enter**. Se abre un menú. Presione **5** (Modo) y luego **4** (Supervivencia). Espere a que diga `Survival mode is on` (el modo supervivencia está activo), presione **Enter** para volver al menú y **q** para cerrarlo. Luego repita el paso 6.
+
+   Lo mismo escrito en una sola línea, si lo prefiere:
 
    ```
    aictl mode survival
    ```
 
-   y presione **Enter**. Espere a que diga `Survival mode is on` (el modo supervivencia está activo). Luego repita el paso 6.
    - **Lo que debería ver:** líneas como `Starting the library and speech`, y luego `✓ Survival mode is on`.
    - **Si no funciona:** aparece un mensaje con un código como `[LAI-CLI-001]` y debajo una línea de solución. Haga lo que dice esa línea. Vea también la Parte 8 y el manual 07, sección **"The app won't open"** (la aplicación no abre).
 

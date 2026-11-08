@@ -158,7 +158,7 @@ Offline, from the AI-ARK drive: `sudo bash /media/<user>/AI-ARK/localai/kit/inst
 
 ### `aictl`
 
-`aictl` is the command line of the node agent. Run `aictl help` for the full list, and `aictl help <command>` for one command. The ones you will use most:
+`aictl` is the command line of the node agent. **Type `aictl` and press Enter**: a menu opens, and you choose with the arrow keys (or the number) and Enter. Nothing to remember: every common task is there, and each one shows the typed command it ran, so you learn the fast path as you go ([aictl.md §3.6](docs/specs/aictl.md#36-full-screen-menu-aictl-with-no-arguments)). Scripts and pipes never see the menu. Run `aictl help` for the full list of typed commands, and `aictl help <command>` for one. The ones you will use most:
 
 | Command | What it does |
 |---|---|

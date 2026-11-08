@@ -14,7 +14,7 @@ Design goals:
 4. **One code path.** API-backed commands call the same agent routes as the desktop, the Portal and the cloud.
 
 ### Non-goals
-- ~~No interactive TUI.~~ Superseded by [ADR-0009](../decisions/0009-optimized-for-humans.md): `aictl` with no arguments on an interactive terminal must open a full-screen menu. Until [#425](https://github.com/marinoscar/local-ai/issues/425) ships, progress bars on a TTY are the only dynamic output. Typed commands, `--json` and non-TTY output stay as specified here.
+- ~~No interactive TUI.~~ Superseded by [ADR-0009](../decisions/0009-optimized-for-humans.md): `aictl` with no arguments on an interactive terminal opens the full-screen menu of §3.6. Typed commands, `--json` and non-TTY output stay as specified here.
 - No remote nodes: `aictl` talks to the agent on **this** machine only. The lab-wide view is the cloud.
 - No configuration editor: `node.yaml` changes go through specific commands (`profile set`, `cloud enroll`) or a text editor.
 
@@ -176,6 +176,36 @@ Rules: a `LAI-SEC-004` answer (PIN locked after too many wrong tries, `429`) is 
 - On failure stdout gets the error envelope `{"error":{"code","message","fix","details"}}` (the agent's, or one built by the CLI with a `LAI-CLI-*` code, whatever the severity of the code) and the exit code is set; stderr stays empty. If the command had already written its document, that document stays the only one.
 - Progress is not printed; the command waits (respecting `--timeout`) and prints the final document.
 - Streaming commands (`logs -f`) print **JSON Lines** (one object per line).
+
+### 3.6 Full-screen menu (`aictl` with no arguments)
+[ADR-0009](../decisions/0009-optimized-for-humans.md) rule 1, issue #425. Code: `agent/internal/cli/menu*.go`.
+
+**When it opens.** `aictl` with no command opens the menu only if all of these hold: stdin is a terminal (the key source of `Main`), stdout is a terminal, `TERM` is not `dumb`, `AICTL_PLAIN` is unset and `--json` is not given. Otherwise the behaviour is unchanged: the command list on stderr and exit 2 (with `--json`: the usage error envelope). Scripts, pipes and `ssh host aictl` without a TTY never see the menu. Global flags given with no command (`aictl --lang es`) apply to the menu and to every command it runs.
+
+**What it is.** A list of what a person wants to do, not of command names. Each entry runs an ordinary `aictl` command in the same process, so prompts, the PIN flow (§3.2.6), progress (§3.3.1), problems with their codes (§3.3) and exit codes are exactly those of the typed command. The menu adds no business logic and no agent route.
+
+| # | Entry | Runs |
+|---|---|---|
+| 1 | See the state of this computer | `status` |
+| 2 | Find and fix problems (health check) | `doctor` |
+| 3 | Use the AI: key and addresses › | `key show`, `key copy`, `key snippets`, `ui-code`, `key rotate` |
+| 4 | AI models: load, change, download › | `models`; pickers for `load`, `unload`, `default`, `download`, `delete` |
+| 5 | Mode: online, offline or survival › | `mode`, `mode online`, `mode offline`, `mode survival` |
+| 6 | Offline content and the AI-ARK drive › | `ark status`, `ark sync --wait`, `ark import --wait`, `ark verify --wait`, `ark drives`; picker for `ark eject` |
+| 7 | Repair with no internet (rebuild kit) › | `kit status`, `kit verify`, `rebuild-llama`, `rebuild-whisper`, `rebuild-agent` |
+| 8 | Services: AI engine, library, speech › | `services`; pickers for `services restart|start|stop`; `logs -n 60` |
+| 9 | More › | `drill --quick --wait`, `drill --wait`, `drill show`, `cloud status`, `profile show`, `profile suggest`, `version`, `help` |
+| 0 | Help in an emergency | a text screen: survival mode without a PIN, the Survival Portal address, the doctor, the printed runbook 01 |
+
+**Screen.** Every main screen starts with the state block (ADR-0009 rule 3), read from `status --json`: node name, mode and loaded model on the first line, then either "Everything is working" or the number of problems with the first one's title, code and fix. When the agent does not answer, it says so and points to entry 2. Then the title, the entries numbered 1 to 9 and 0, and one line of keys. Everything fits 80×24 in English and Spanish (pinned by `TestMenuFitsEightyByTwentyFour`). The selected entry has a `▶` marker, and is drawn in reverse video when colour is on.
+
+**Keys.** ↑/↓ or k/j move (wrapping), Home/End, Enter, → or Space choose, a digit chooses that entry directly, Esc, ← or Backspace go back one level, q, Ctrl-C or Ctrl-D quit (exit 0). The cursor stays where it was when the person comes back.
+
+**Running an entry.** The screen clears and shows the entry's name and the typed command (`Typed command: aictl load qwen3.5-9b-q4km`), so the fast path is learned by using the menu. The command then runs with the terminal in normal mode. Ctrl-C stops only that command. Afterwards one line explains the result in words: exit 0 "Done", 8 "Finished, with warnings", 9 "Finished, and found problems", 130 "Stopped", anything else "It did not finish (exit code N), the message above says why". Then "Press Enter to go back to the menu".
+
+**Pickers.** An entry that needs a value lists the choices from the command's own `--json` output (§3.5): `models` for the model entries (load: stored, loadable and not loaded; unload: loaded; default and delete: stored; download: in the profile and not stored), `ark drives` for eject (drives with a root id), and a fixed list for services. Each choice shows the display name, the id, the size and "starts with the computer" for the default. An empty list or an agent that does not answer gives one plain sentence and no command.
+
+**Implementation.** Raw key reads use `golang.org/x/term` (already vendored), with no new dependency: the menu only needs a list picker, because full screens belong to the commands it runs. The `menuHost` interface (keys, run, capture, pause, screen) keeps the menu testable without a terminal; `menu_test.go` checks that every entry and flag the menu runs exists in the registry.
 
 ## 4. Commands
 
@@ -882,6 +912,7 @@ Documented here so nobody re-invents them. They may change between versions with
 | Progress | SSE fake over the real event bus: load progress (TTY golden, non-TTY lines, `-q`, `--json`), rollback events, `Last-Event-ID` on reconnect, `gap` and `restart` resync, shutdown, agent down mid-wait (re-read finishes the wait), idle stream, deadline → exit 7, Ctrl-C → exit 130 and no cancel request sent, interrupt hook, SSE parser (multi-line data, comments, missing id, CRLF, oversized line) |
 | Model and service commands (AICTL-05) | request bodies from the flags (`load` `wait:false` and `unload_others`, `unload` `force`, `download` `roots` and `allow_offline_mode`, `delete` `keep_last` and `root`, `restart` `force`); the model id format check (exit 2 before any request) for every command; fixture bodies that are valid answers of `agent/api/openapi.yaml`; `load` with scripted events in the order the orchestrator publishes them (eviction, progress, a rollback that loads the previous model again under the same `op_id`, `model.failed` with `LAI-LLM-009`/`010`/`012`), exit 0/1/7, human `en`/`es`, `--json`, `--quiet`, `--no-wait` (no event stream), already loaded, a lost stream settled by `GET /models/{id}`, Ctrl-C (exit 130, no unload ever sent); every refusal of §4.3 to §4.7 and §4.14 (404, 409 `LAI-AGT-022`/`023`/`LAI-SYN-010`, 422, 500, 502, 503, agent down) with its exit code; `download --wait` with the item verified, failed, stopped, another run's events, a lost stream, Ctrl-C; `delete` question (name and size), No by default, `--yes`, `--json` needs `--yes`, `--allow-last-copy` typed confirmation (right, wrong, empty, `--yes` does not answer it, no terminal), the PIN flow of an operator (after the confirmation, never after a No, `--pin-stdin`, `LAI-CLI-008`); `restart` for the three services; `bench` with the real engine over a fake machine (agent, chat endpoint, GPU that follows the loaded models, `llama-bench`): the question, `--yes`, nothing loaded, `en`/`es`, `--json` equal to the result file, the node's llama environment, not root, busy, unknown model, files missing, chat failure, `llama-bench` failure, an address that is not this computer, restore failure warning, a disturbed run, Ctrl-C with the models put back, the key in no output |
 | Local commands | `pin set` writes argon2id PHC string with mode 0600; `token rotate` format `lat_` + 43 chars; `catalog restore` atomic swap and lint; `backup-config` manifest and modes; `--restore` round trip; `docs render` refuses `.git` output, fills placeholders from a fixture inventory and follows the inventory lookup order of §4.22; `catalog use --test` refuses a failing lint (exit 2), keeps `catalog.prev/` and `restore` puts it back (also after two `use --test` in a row); every local root command: not root exits 4 before any file is touched, an interrupted write (injected rename failure) keeps the old file and leaves no temp file, a second concurrent run exits 6, an audit line with `actor.kind: cli-root` for success and failure, and no secret in any output; `pin set` round trip with the agent's verifier, bad length / non-digits / mismatch exit 2, `--pin-stdin`; `--restore` refuses path traversal, absolute paths, links, unlisted paths, hash and mode tampering, and keeps `.pre-restore` copies; `catalog lint` output matches `<file>:<yaml-path>  LAI-CAT-0NN  <message>` and the `--json` shape |
+| Full-screen menu (§3.6, `menu_test.go`) | the gate (menu only with a key source, a TTY stdout, `TERM` not `dumb`, no `AICTL_PLAIN`, no `--json`; otherwise the command list and exit 2 unchanged); key parsing (ANSI and SS3 arrows, vi keys, digits, Esc, Backspace, Ctrl-C/D, end of input); navigation (wrap, Home/End, digit shortcuts, digit past the end, back, the cursor kept, quit); each model picker's filter and an empty list; agent down for a picker and for the state block; the state block with a problem (title, code, fix) and with none, `en` and `es`; the result line for exit 0, 6, 8, 9 and 130 and the typed command; every screen within 80×24 in both languages; every entry, picker source and flag exists in the registry |
 
 ### 9.2 Integration tests
 Run `aictl` against a real `aiagent serve` started by the integration harness (agent.md §9.2) with fakes behind it: `status`, `load`/`unload` with rollback, `mode survival` progress, `doctor` exit codes 0/8/9, `ark sync --scheduled` in offline mode exits 0 with "skipped"; `drill --scheduled` while busy exits 0 with "skipped"; `ark sync --wait` with one failing item exits 8.
