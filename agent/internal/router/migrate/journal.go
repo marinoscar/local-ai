@@ -197,6 +197,7 @@ func (e *Engine) loadPlan() (*Plan, error) {
 		return nil, wrap(CodeInterrupted, "", err, "serve-before.json is missing")
 	}
 	p.ServeBefore = sb
+	e.useLegacy(p.LegacyUnit)
 	return p, nil
 }
 

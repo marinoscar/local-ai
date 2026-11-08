@@ -94,7 +94,7 @@ export const DOCTOR_FIXES: Readonly<Record<string, DoctorFixRow>> = {
   'LAI-LLM-013': { severity: "error", meaning: "The default model did not start at boot", fix: "Run `aictl load <model>` or choose another default with `aictl default <model>`" },
   'LAI-LLM-014': { severity: "warning", meaning: "No default model is set or available", fix: "Run `aictl default <model>`" },
   'LAI-LLM-015': { severity: "warning", meaning: "Two models need different settings for the same option; it was left out", fix: "Report it to the catalog maintainer, or set it in `node.yaml` `llama.extra_env`" },
-  'LAI-LLM-016': { severity: "warning", meaning: "The old `llama-qwen.service` is still enabled or running", fix: "Run `sudo aiagent migrate llama-qwen`" },
+  'LAI-LLM-016': { severity: "warning", meaning: "An old llama service (`llama-qwen.service` or `llama-coder-next.service`) is still enabled or running", fix: "Run `sudo aiagent migrate llama-qwen`" },
   'LAI-LLM-017': { severity: "error", meaning: "The migration was stopped before changing anything (model not in catalog, or settings differ)", fix: "Read the details; add the model to the catalog, or re-run with `--accept-catalog-flags`" },
   'LAI-LLM-018': { severity: "error", meaning: "Building llama.cpp failed", fix: "Check the build log in the details; install the missing package named there" },
   'LAI-LLM-019': { severity: "error", meaning: "The new llama.cpp build did not work; the previous build is still in use", fix: "Report the build log; nothing else to do" },

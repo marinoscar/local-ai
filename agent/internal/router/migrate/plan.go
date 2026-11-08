@@ -40,6 +40,12 @@ type Plan struct {
 	Version   int       `json:"version"`
 	CreatedAt time.Time `json:"created_at"`
 
+	// LegacyUnit is the unit that is replaced (empty in a plan.json written before ai-n1's
+	// llama-coder-next.service was known: llama-qwen.service). OtherUnits are the other known legacy
+	// units installed beside it: M9 masks them too, and the rollback puts them back as they were.
+	LegacyUnit string      `json:"legacy_unit,omitempty"`
+	OtherUnits []OtherUnit `json:"other_units,omitempty"`
+
 	// What the legacy unit says.
 	User             string `json:"user"`
 	Group            string `json:"group"`
@@ -94,6 +100,21 @@ type Plan struct {
 	Progress Progress `json:"-"`
 }
 
+// OtherUnit is a known legacy unit that is not the one replaced, and whether it was enabled before.
+type OtherUnit struct {
+	Unit    string `json:"unit"`
+	Enabled bool   `json:"enabled"`
+}
+
+// retiredUnits are the units M9 masks: the replaced one first, then the others.
+func (p *Plan) retiredUnits() []string {
+	out := []string{orStr(p.LegacyUnit, LegacyUnitName)}
+	for _, o := range p.OtherUnits {
+		out = append(out, o.Unit)
+	}
+	return out
+}
+
 // OK is true when nothing stops the migration.
 func (p *Plan) OK() bool { return len(p.Problems) == 0 }
 
@@ -146,14 +167,27 @@ func (e *Engine) Preflight(ctx context.Context) (*Plan, error) {
 		e.add(p, CodeStopped, "new_unit_running", "%s is already running: stop it first, it would take port %d", NewUnitName, LegacyPort)
 	}
 
-	// 1. The legacy unit.
+	// 1. The legacy unit: the known one that serves, and the others beside it.
+	installed := e.installedLegacy()
+	e.useLegacy(e.chooseLegacy(ctx, installed))
+	p.LegacyUnit = e.legacy()
+	for _, u := range installed {
+		if u == p.LegacyUnit {
+			continue
+		}
+		o := OtherUnit{Unit: u}
+		if st, err := e.sd.State(ctx, u); err == nil {
+			o.Enabled = st.Enabled()
+		}
+		p.OtherUnits = append(p.OtherUnits, o)
+	}
 	if !exists(e.fs, e.paths.LegacyUnitFile()) {
-		e.add(p, CodeStopped, "unit_unreadable", "%s is not installed on this node (there is no %s), so there is nothing to migrate", LegacyUnitName, e.paths.LegacyUnitFile())
+		e.add(p, CodeStopped, "unit_unreadable", "%s is not installed on this node (there is no %s), so there is nothing to migrate", e.legacy(), e.paths.LegacyUnitFile())
 		return p, nil
 	}
 	text, err := e.catLegacy(ctx)
 	if err != nil {
-		e.add(p, CodeStopped, "unit_unreadable", "cannot read %s: %v", LegacyUnitName, err)
+		e.add(p, CodeStopped, "unit_unreadable", "cannot read %s: %v", e.legacy(), err)
 		return p, nil
 	}
 	u, perr := ParseUnit(text)
@@ -236,9 +270,9 @@ func orInt(n, d int) int {
 	return n
 }
 
-// catLegacy runs `systemctl cat llama-qwen.service`.
+// catLegacy runs `systemctl cat` on the legacy unit.
 func (e *Engine) catLegacy(ctx context.Context) (string, error) {
-	res, err := e.runNamed(ctx, "systemctl", "--no-pager", "cat", LegacyUnitName)
+	res, err := e.runNamed(ctx, "systemctl", "--no-pager", "cat", e.legacy())
 	if err != nil {
 		return "", err
 	}
@@ -368,7 +402,9 @@ func (e *Engine) matchModel(ctx context.Context, p *Plan, f *ExecFlags) {
 	p.ModelID = matched.ID
 	p.CatalogVersion = e.cat.Version
 
-	// The other files of the catalog entry (the shards of a split model) sit next to the named ones.
+	// The other files of the catalog entry (the shards of a split model) sit next to the named ones: at
+	// their catalog name, or at its base name when the catalog name has a folder the old layout lacks
+	// (a Hugging Face repo that keeps the shards in a subfolder).
 	dirs := map[string]bool{}
 	for _, pf := range p.Files {
 		dirs[path.Dir(pf.Old)] = true
@@ -379,8 +415,12 @@ func (e *Engine) matchModel(ctx context.Context, p *Plan, f *ExecFlags) {
 		}
 		found := ""
 		for _, d := range sortedKeys(dirs) {
-			if exists(e.fs, path.Join(d, cf.Name)) {
-				found = path.Join(d, cf.Name)
+			for _, cand := range []string{path.Join(d, cf.Name), path.Join(d, path.Base(cf.Name))} {
+				if found == "" && exists(e.fs, cand) {
+					found = cand
+				}
+			}
+			if found != "" {
 				break
 			}
 		}
@@ -615,10 +655,10 @@ func (e *Engine) Steps(p *Plan) []string {
 	}
 	add(M4, "write node.yaml (%s), state.models.default = %s, models.ini, localai-llama.service; daemon-reload; do not start", al, orStr(p.ModelID, "?"))
 	add(M5, "check %s can read the files and run llama-server, and that the old service owns port %d", ServiceUser, LegacyPort)
-	add(M6, "stop %s (the downtime starts)", LegacyUnitName)
+	add(M6, "stop %s (the downtime starts)", e.legacy())
 	add(M7, "start %s, wait for /health and for %s to be loaded", NewUnitName, orStr(p.ModelID, "the model"))
 	add(M8, "verify: 401 without key, 200 with key, %s answers, serve config unchanged, n_ctx %d; failure rolls back automatically", p.legacyAlias(), p.ExpectedCtx)
-	add(M9, "mask %s (unit saved in %s), enable %s, link %s to %s", LegacyUnitName, e.paths.MigDir, NewUnitName, e.paths.LegacyKey, e.paths.NewKey)
+	add(M9, "mask %s (unit saved in %s), enable %s, link %s to %s", e.legacy(), e.paths.MigDir, NewUnitName, e.paths.LegacyKey, e.paths.NewKey)
 	add(M10, "report; no client needs a change")
 	return out
 }
@@ -631,10 +671,10 @@ func (e *Engine) RollbackSteps(restoreFiles bool) []string {
 	}
 	return []string{
 		fmt.Sprintf("R1   stop and disable %s", NewUnitName),
-		fmt.Sprintf("R2   unmask %s, put its unit file (and drop-ins) back from %s if they are missing, daemon-reload", LegacyUnitName, e.paths.MigDir),
+		fmt.Sprintf("R2   unmask %s, put its unit file (and drop-ins) back from %s if they are missing, daemon-reload", e.legacy(), e.paths.MigDir),
 		fmt.Sprintf("R3   make %s a regular file again, holding the current key", e.paths.LegacyKey),
 		"R4   " + files,
-		fmt.Sprintf("R5   enable and start %s; wait for /health, 200 with the key and 401 without", LegacyUnitName),
+		fmt.Sprintf("R5   enable and start %s; wait for /health, 200 with the key and 401 without", e.legacy()),
 		"R6   record the result; Tailscale Serve is not touched",
 	}
 }

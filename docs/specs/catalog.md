@@ -108,7 +108,7 @@ models:
 |---|---|---|---|---|
 | `qwen3.5-9b-q4km` | llama | chat/reasoning/coder | small-8gb, cuda-12gb, cpu-only (slow), ark-drive-full | Running on ai-n3 today (`~/models/qwen3.5-9b-mtp/Qwen3.5-9B-Q4_K_M.gguf`, built-in MTP head) |
 | `qwen3.6-35b-a3b-q4km` | llama | chat/reasoning | cuda-12gb (partial offload), max-128gb | Running on ai-n2 today. Exact file and flags must be recorded from the node, because they are not documented yet |
-| `qwen3-coder-next-q4km` | llama | coder | max-128gb | Running on ai-n1 today (about 48.4 GB, ctx 131072) |
+| `qwen3-coder-next-q4km` | llama | coder | max-128gb, ark-drive-full | **In `models.yaml`.** Running on ai-n1 today from `llama-coder-next.service` (`Qwen/Qwen3-Coder-Next-GGUF`, 4 shards, about 48.4 GB, ctx 131072, measured 49931 MiB VRAM + GTT on Vulkan). Default model of `max-128gb` |
 | `qwen3.8-27b-q4km` (+ MTP draft) | llama | reasoning | max-128gb | Documented in [source/ms-s1-max-llamacpp-runbook.md](../source/ms-s1-max-llamacpp-runbook.md) |
 | small VLM (e.g. a Qwen-VL / Gemma-vision GGUF with mmproj that fits 8 GB) | llama | vision | all GPU profiles | Must answer "what plant / injury / part is this" from photos. Choose the best that fits 8 GB at ctx ≥ 8192 |
 | larger VLM | llama | vision | cuda-12gb, max-128gb | |

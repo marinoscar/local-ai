@@ -152,7 +152,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-LLM-013 | error | The default model did not start at boot | Run `aictl load <model>` or choose another default with `aictl default <model>` |
 | LAI-LLM-014 | warning | No default model is set or available | Run `aictl default <model>` |
 | LAI-LLM-015 | warning | Two models need different settings for the same option; it was left out | Report it to the catalog maintainer, or set it in `node.yaml` `llama.extra_env` |
-| LAI-LLM-016 | warning | The old `llama-qwen.service` is still enabled or running | Run `sudo aiagent migrate llama-qwen` |
+| LAI-LLM-016 | warning | An old llama service (`llama-qwen.service` or `llama-coder-next.service`) is still enabled or running | Run `sudo aiagent migrate llama-qwen` |
 | LAI-LLM-017 | error | The migration was stopped before changing anything (model not in catalog, or settings differ) | Read the details; add the model to the catalog, or re-run with `--accept-catalog-flags` |
 | LAI-LLM-018 | error | Building llama.cpp failed | Check the build log in the details; install the missing package named there |
 | LAI-LLM-019 | error | The new llama.cpp build did not work; the previous build is still in use | Report the build log; nothing else to do |

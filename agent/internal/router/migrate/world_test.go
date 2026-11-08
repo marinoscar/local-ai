@@ -249,7 +249,7 @@ func (s *fakeSD) called(verb, unit string) int {
 func (w *world) portOwner() string {
 	w.sd.mu.Lock()
 	defer w.sd.mu.Unlock()
-	if w.sd.unit(LegacyUnitName).active == "active" {
+	if w.sd.unit(w.legacy()).active == "active" {
 		return "legacy"
 	}
 	if w.sd.unit(NewUnitName).active == "active" && !w.newBroken {
@@ -368,7 +368,7 @@ func (x *fakeExec) Run(_ context.Context, c execx.Cmd) (execx.Result, error) {
 	case base == "ss":
 		switch w.portOwner() {
 		case "legacy":
-			pid := w.sd.unit(LegacyUnitName).mainPID
+			pid := w.sd.unit(w.legacy()).mainPID
 			if w.ssPID != 0 {
 				pid = w.ssPID
 			}
@@ -644,7 +644,8 @@ type world struct {
 	audits  []string
 	out     *lockedBuf
 
-	// What the node is.
+	// What the node is. legacyUnit is the old unit that serves ("" is LegacyUnitName).
+	legacyUnit       string
 	modelID          string
 	alias            string
 	fileName         string
@@ -823,6 +824,9 @@ func newWorld(t *testing.T, o worldOpts) *world {
 	w.agent = &fakeAgent{w: w, active: true}
 	return w
 }
+
+// legacy is the old unit that serves on this node.
+func (w *world) legacy() string { return orStr(w.legacyUnit, LegacyUnitName) }
 
 // engine builds an Engine over the world. The killer, if any, is already shared by every fake.
 func (w *world) engine(mod ...func(*Options)) *Engine {

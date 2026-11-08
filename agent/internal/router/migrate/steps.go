@@ -525,16 +525,16 @@ func (e *Engine) checkPortOwner(ctx context.Context) string {
 	if err != nil {
 		return fmt.Sprintf("cannot see who listens on port %d (%v)", LegacyPort, err)
 	}
-	st, err := e.sd.State(ctx, LegacyUnitName)
+	st, err := e.sd.State(ctx, e.legacy())
 	if err != nil {
-		return fmt.Sprintf("cannot read the state of %s", LegacyUnitName)
+		return fmt.Sprintf("cannot read the state of %s", e.legacy())
 	}
 	active := st.ActiveState == "active" || st.ActiveState == "activating"
 	switch {
 	case active && (len(pids) != 1 || st.MainPID == 0 || pids[0] != st.MainPID):
-		return fmt.Sprintf("port %d is not held by the main process of %s (pid %d); something else listens there", LegacyPort, LegacyUnitName, st.MainPID)
+		return fmt.Sprintf("port %d is not held by the main process of %s (pid %d); something else listens there", LegacyPort, e.legacy(), st.MainPID)
 	case !active && len(pids) > 0:
-		return fmt.Sprintf("%s is not running but another program (pid %d) holds port %d", LegacyUnitName, pids[0], LegacyPort)
+		return fmt.Sprintf("%s is not running but another program (pid %d) holds port %d", e.legacy(), pids[0], LegacyPort)
 	}
 	return ""
 }
@@ -552,28 +552,28 @@ func (e *Engine) m6StopOld(ctx context.Context, p *Plan) error {
 			return err
 		}
 	}
-	if err := e.sd.Stop(ctx, LegacyUnitName); err != nil {
-		return wrap(CodeInterrupted, M6, err, "cannot stop %s", LegacyUnitName)
+	if err := e.sd.Stop(ctx, e.legacy()); err != nil {
+		return wrap(CodeInterrupted, M6, err, "cannot stop %s", e.legacy())
 	}
 	timedOut, err := e.until(ctx, e.timing.StopWait, func(c context.Context) (bool, error) {
-		st, err := e.sd.State(c, LegacyUnitName)
+		st, err := e.sd.State(c, e.legacy())
 		if err != nil {
 			return false, err
 		}
 		return st.ActiveState == "inactive" || st.ActiveState == "failed", nil
 	})
 	if err != nil && !timedOut {
-		return wrap(CodeInterrupted, M6, err, "waiting for %s to stop was interrupted", LegacyUnitName)
+		return wrap(CodeInterrupted, M6, err, "waiting for %s to stop was interrupted", e.legacy())
 	}
 	if timedOut {
-		return fail(CodeInterrupted, M6, "%s did not stop within %s", LegacyUnitName, e.timing.StopWait)
+		return fail(CodeInterrupted, M6, "%s did not stop within %s", e.legacy(), e.timing.StopWait)
 	}
 	pids, err := e.portPIDs(ctx)
 	if err != nil {
 		return wrap(CodeInterrupted, M6, err, "cannot see who listens on port %d", LegacyPort)
 	}
 	if len(pids) > 0 {
-		return fail(CodeInterrupted, M6, "port %d is still held by pid %d after %s stopped", LegacyPort, pids[0], LegacyUnitName)
+		return fail(CodeInterrupted, M6, "port %d is still held by pid %d after %s stopped", LegacyPort, pids[0], e.legacy())
 	}
 	return nil
 }
@@ -702,11 +702,14 @@ func containsStr(list []string, s string) bool {
 
 // ---- M9 commit ------------------------------------------------------------------------------------
 
-// m9Commit makes the migration permanent: the old unit is saved, removed and masked, the new one is
-// enabled, the old key path becomes a link, the files copied across filesystems are replaced by links.
+// m9Commit makes the migration permanent: the old unit (and every other known legacy unit beside it) is
+// saved, removed and masked, the new one is enabled, the old key path becomes a link, the files copied
+// across filesystems are replaced by links.
 func (e *Engine) m9Commit(ctx context.Context, p *Plan) error {
-	if err := e.retireOldUnit(ctx); err != nil {
-		return err
+	for _, u := range p.retiredUnits() {
+		if err := e.retireUnit(ctx, u); err != nil {
+			return err
+		}
 	}
 	if err := e.sd.Enable(ctx, NewUnitName); err != nil {
 		return wrap(CodeInterrupted, M9, err, "cannot enable %s", NewUnitName)
@@ -723,9 +726,11 @@ func (e *Engine) m9Commit(ctx context.Context, p *Plan) error {
 		}
 	}
 	// Verify what the spec says to.
-	st, err := e.sd.State(ctx, LegacyUnitName)
-	if err != nil || !strings.HasPrefix(st.UnitFileState, "masked") {
-		return fail(CodeInterrupted, M9, "%s is not masked", LegacyUnitName)
+	for _, u := range p.retiredUnits() {
+		st, err := e.sd.State(ctx, u)
+		if err != nil || !strings.HasPrefix(st.UnitFileState, "masked") {
+			return fail(CodeInterrupted, M9, "%s is not masked", u)
+		}
 	}
 	if ns, err := e.sd.State(ctx, NewUnitName); err != nil || !ns.Enabled() {
 		return fail(CodeInterrupted, M9, "%s is not enabled", NewUnitName)
@@ -737,22 +742,22 @@ func (e *Engine) m9Commit(ctx context.Context, p *Plan) error {
 	return nil
 }
 
-// retireOldUnit copies the old unit and its drop-ins to the backup, removes them from
+// retireUnit copies a legacy unit and its drop-ins to the backup, removes them from
 // /etc/systemd/system (a unit file there makes mask fail with "File exists"), disables, masks and
 // reloads. Every part is idempotent: the backup is only refreshed while the unit is still there.
-func (e *Engine) retireOldUnit(ctx context.Context) error {
-	unit := e.paths.LegacyUnitFile()
+func (e *Engine) retireUnit(ctx context.Context, name string) error {
+	unit := e.paths.UnitFile(name)
 	if fi, err := e.fs.Lstat(unit); err == nil && fi.Mode().IsRegular() {
 		data, err := e.fs.ReadFile(unit)
 		if err != nil {
 			return wrap(CodeInterrupted, M9, err, "cannot read %s", unit)
 		}
-		if cur, err := e.fs.ReadFile(e.paths.UnitBackup()); err != nil || !bytes.Equal(cur, data) {
-			if err := e.writeJournal(e.paths.UnitBackup(), data); err != nil {
+		if cur, err := e.fs.ReadFile(e.paths.UnitBackupOf(name)); err != nil || !bytes.Equal(cur, data) {
+			if err := e.writeJournal(e.paths.UnitBackupOf(name), data); err != nil {
 				return wrap(CodeInterrupted, M9, err, "cannot save %s", unit)
 			}
 		}
-		if err := e.saveDropIns(); err != nil {
+		if err := e.saveDropIns(name); err != nil {
 			return err
 		}
 		if err := e.fs.Remove(unit); err != nil {
@@ -761,15 +766,15 @@ func (e *Engine) retireOldUnit(ctx context.Context) error {
 	} else if err == nil && !isLink(fi) {
 		return fail(CodeInterrupted, M9, "%s is not a regular file", unit)
 	}
-	if err := e.removeDropIns(); err != nil {
+	if err := e.removeDropIns(name); err != nil {
 		return err
 	}
-	if err := e.sd.Disable(ctx, LegacyUnitName); err != nil && !ignorable(err) {
-		return wrap(CodeInterrupted, M9, err, "cannot disable %s", LegacyUnitName)
+	if err := e.sd.Disable(ctx, name); err != nil && !ignorable(err) {
+		return wrap(CodeInterrupted, M9, err, "cannot disable %s", name)
 	}
-	if st, err := e.sd.State(ctx, LegacyUnitName); err != nil || !strings.HasPrefix(st.UnitFileState, "masked") {
-		if err := e.sd.Mask(ctx, LegacyUnitName); err != nil {
-			return wrap(CodeInterrupted, M9, err, "cannot mask %s", LegacyUnitName)
+	if st, err := e.sd.State(ctx, name); err != nil || !strings.HasPrefix(st.UnitFileState, "masked") {
+		if err := e.sd.Mask(ctx, name); err != nil {
+			return wrap(CodeInterrupted, M9, err, "cannot mask %s", name)
 		}
 	}
 	if err := e.sd.DaemonReload(ctx); err != nil {
@@ -778,24 +783,24 @@ func (e *Engine) retireOldUnit(ctx context.Context) error {
 	return nil
 }
 
-// saveDropIns copies the files of llama-qwen.service.d/ into the backup directory.
-func (e *Engine) saveDropIns() error {
-	entries, err := e.fs.ReadDir(e.paths.LegacyDropInDir())
+// saveDropIns copies the files of <unit>.d/ into the backup directory.
+func (e *Engine) saveDropIns(name string) error {
+	entries, err := e.fs.ReadDir(e.paths.DropInDir(name))
 	if err != nil {
 		if isNotExist(err) {
 			return nil
 		}
-		return wrap(CodeInterrupted, M9, err, "cannot read %s", e.paths.LegacyDropInDir())
+		return wrap(CodeInterrupted, M9, err, "cannot read %s", e.paths.DropInDir(name))
 	}
 	for _, ent := range entries {
 		if ent.IsDir() {
 			continue
 		}
-		data, err := e.fs.ReadFile(filepath.Join(e.paths.LegacyDropInDir(), ent.Name()))
+		data, err := e.fs.ReadFile(filepath.Join(e.paths.DropInDir(name), ent.Name()))
 		if err != nil {
 			return wrap(CodeInterrupted, M9, err, "cannot read the drop-in %s", ent.Name())
 		}
-		if err := e.writeJournal(filepath.Join(e.paths.DropInBackup(), ent.Name()), data); err != nil {
+		if err := e.writeJournal(filepath.Join(e.paths.DropInBackupOf(name), ent.Name()), data); err != nil {
 			return wrap(CodeInterrupted, M9, err, "cannot save the drop-in %s", ent.Name())
 		}
 	}
@@ -803,18 +808,18 @@ func (e *Engine) saveDropIns() error {
 }
 
 // removeDropIns removes the drop-in directory once its files are saved.
-func (e *Engine) removeDropIns() error {
-	entries, err := e.fs.ReadDir(e.paths.LegacyDropInDir())
+func (e *Engine) removeDropIns(name string) error {
+	entries, err := e.fs.ReadDir(e.paths.DropInDir(name))
 	if err != nil {
 		if isNotExist(err) {
 			return nil
 		}
-		return wrap(CodeInterrupted, M9, err, "cannot read %s", e.paths.LegacyDropInDir())
+		return wrap(CodeInterrupted, M9, err, "cannot read %s", e.paths.DropInDir(name))
 	}
 	for _, ent := range entries {
-		src := filepath.Join(e.paths.LegacyDropInDir(), ent.Name())
+		src := filepath.Join(e.paths.DropInDir(name), ent.Name())
 		if !ent.IsDir() {
-			if _, err := e.fs.ReadFile(filepath.Join(e.paths.DropInBackup(), ent.Name())); err != nil {
+			if _, err := e.fs.ReadFile(filepath.Join(e.paths.DropInBackupOf(name), ent.Name())); err != nil {
 				return fail(CodeInterrupted, M9, "the drop-in %s is not in the backup yet: it is not removed", ent.Name())
 			}
 		}
@@ -822,8 +827,8 @@ func (e *Engine) removeDropIns() error {
 			return wrap(CodeInterrupted, M9, err, "cannot remove %s", src)
 		}
 	}
-	if err := e.fs.Remove(e.paths.LegacyDropInDir()); err != nil && !isNotExist(err) {
-		return wrap(CodeInterrupted, M9, err, "cannot remove %s", e.paths.LegacyDropInDir())
+	if err := e.fs.Remove(e.paths.DropInDir(name)); err != nil && !isNotExist(err) {
+		return wrap(CodeInterrupted, M9, err, "cannot remove %s", e.paths.DropInDir(name))
 	}
 	return nil
 }

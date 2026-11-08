@@ -501,7 +501,7 @@ t "  the mask link was replaced by a real file" 0 "" test ! -L "$FR/etc/systemd/
 t "  /etc/llama-qwen/api-key is a real 0600 file with the key, after /etc/localai is gone" 0 "" bash -c '[ ! -L "$1" ] && [ -f "$1" ] && [ "$(stat -c %a "$1")" = 600 ] && grep -q KEYKEYKEY "$1" && [ ! -e "$2" ]' _ "$FR/etc/llama-qwen/api-key" "$FR/etc/localai"
 t "  unmask ran before enable" 0 "" bash -c 'u=$(grep -n "unmask llama-qwen" "$1" | head -1 | cut -d: -f1); e=$(grep -n "enable --now llama-qwen" "$1" | head -1 | cut -d: -f1); [ -n "$u" ] && [ "$u" -lt "$e" ]' _ "$CALLS"
 t "  Tailscale Serve is left alone" 0 "" calls_lacks '^tailscale'
-t "  the summary says it was restored" 0 "" grep -q "old llama-qwen service was restored" <<<"$out"
+t "  the summary says it was restored" 0 "" grep -q "old llama service llama-qwen.service was restored" <<<"$out"
 mkroot legacy
 : >"$w/answers"; printf 'y\nDELETE\n' >"$w/answers"
 t "restore-legacy start failure exits 1 with LAI-INS-080" 1 "LAI-INS-080" env FAKE_SYSTEMCTL_FAIL="enable --now llama-qwen" "$(command -v env)" PATH="$FB:$PATH" LAI_INSTALLER_DEV=1 LAI_INSTALL_ROOT="$FR" LAI_INSTALL_ANSWERS="$w/answers" LAI_INSTALL_STATE_DIR="$FR/var/lib/localai/install" LAI_INSTALL_SYSTEMD_DIR="$FR/etc/systemd/system" "$STAMPED" --log "$w/un.log" --uninstall --restore-legacy --purge-config
@@ -513,6 +513,17 @@ mkroot legacy; rm -f "$FR/etc/localai/api-key"
 t "restore-legacy with the key missing: LAI-INS-080 before any change" 1 "LAI-INS-080" un y -- --uninstall --restore-legacy
 t "  ...everything still installed" 0 "" test -e "$FR/opt/localai/bin/aiagent"
 t "restore-legacy with purge-content conflicts (exit 2)" 2 "conflict" un y -- --uninstall --restore-legacy --purge-content
+# ai-n1: the migration replaced llama-coder-next.service (plan.json says so) and masked llama-qwen.service too.
+mkroot legacy
+printf '[Service]\nExecStart=/bin/coder\n' >"$FR/var/lib/localai/migration/llama-qwen/llama-coder-next.service"
+printf '{\n  "version": 1,\n  "legacy_unit": "llama-coder-next.service"\n}\n' >"$FR/var/lib/localai/migration/llama-qwen/plan.json"
+ln -s /dev/null "$FR/etc/systemd/system/llama-coder-next.service"
+out="$(un y -- --uninstall --restore-legacy 2>&1)"; rc=$?
+t "restore-legacy after a llama-coder-next migration exits 0" 0 "" test $rc -eq 0
+t "  llama-coder-next was started" 0 "" calls_has "systemctl enable --now llama-coder-next.service"
+t "  llama-qwen was not started" 0 "" calls_lacks 'enable --now llama-qwen'
+t "  both unit files are back from the backup, unmasked" 0 "" bash -c 'grep -q /bin/coder "$1/llama-coder-next.service" && grep -q /bin/true "$1/llama-qwen.service" && [ ! -L "$1/llama-coder-next.service" ] && [ ! -L "$1/llama-qwen.service" ]' _ "$FR/etc/systemd/system"
+t "  the summary names llama-coder-next" 0 "" grep -q "old llama service llama-coder-next.service was restored" <<<"$out"
 mkroot
 sed -i "s/serve_pattern: B/serve_pattern: A/" "$FR/etc/localai/node.yaml"
 t "tailscale pattern A removes the tcp listener" 0 "" un y -- --uninstall
@@ -770,6 +781,10 @@ rm -f "$llq"; ln -s /dev/null "$llq"
 t "a masked llama-qwen (already migrated) is not migrated again" 0 "nothing to migrate" llrun 'phase_migration'
 t "--migrate forces the step even when the unit is gone" 0 "migration finished" llrun 'OPT_MIGRATE=yes; OPT_YES=1; phase_migration'
 rm -f "$llq"
+llc="$w/lsystemd/llama-coder-next.service"; echo '[Service]' >"$llc"; : >"$FAKE_LOG"
+t "only llama-coder-next.service (ai-n1): it is migrated" 0 "migrating..." llrun 'OPT_YES=1; phase_migration'
+t "--no-migrate with llama-coder-next active -> exit 1, LAI-INS-031" 1 "LAI-INS-031" llrun 'OPT_MIGRATE=no; phase_migration'
+rm -f "$llc"
 
 echo "== P4 laptop hardening (INST-03; the real work is tested in Go with fakes)"
 # A fake agent: logs its arguments, writes hardening.json like the real one, exits as told.

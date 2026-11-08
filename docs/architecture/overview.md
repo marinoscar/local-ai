@@ -166,7 +166,7 @@ Nothing listens on the LAN interface. Remote access only works in online mode, t
 | Unit | Runs as | Purpose |
 |---|---|---|
 | `localai-agent.service` | root | The agent. `Restart=always` |
-| `localai-llama.service` | localai | llama-server router. It replaces `llama-qwen.service`, which is disabled and masked after migration ([llama-router.md](../specs/llama-router.md) §4.9) |
+| `localai-llama.service` | localai | llama-server router. It replaces `llama-qwen.service` (on ai-n1: `llama-coder-next.service`, with `llama-qwen.service` beside it); every legacy llama unit is disabled and masked after migration ([llama-router.md](../specs/llama-router.md) §4.9) |
 | `localai-kiwix.service` | localai | kiwix-serve over `kiwix/library.xml` of the active content root(s) |
 | `localai-whisper.service` | localai | whisper.cpp server |
 | `localai-sync.service` + `localai-sync.timer` | root (agent-triggered) | Nightly ark sync. The service is just `aictl ark sync --scheduled --wait` (skipped run → exit 0; `SuccessExitStatus=8` for "finished with warnings"; exit codes in [aictl.md](../specs/aictl.md) §3.4) |

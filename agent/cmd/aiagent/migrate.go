@@ -23,9 +23,10 @@ const migrateUsage = `usage:
   aiagent migrate [llama-qwen] [--dry-run] [--rollback] [--accept-catalog-flags] [--restore-files] [--yes]
 
   aiagent migrate                  runs every pending migration (today: llama-qwen); exits 0 when there is nothing to do
-  aiagent migrate llama-qwen       replace llama-qwen.service with localai-llama.service in place (root only)
+  aiagent migrate llama-qwen       replace the old llama unit (llama-qwen.service, or llama-coder-next.service
+                                   when that one serves) with localai-llama.service in place (root only)
     --dry-run                      print every step and change nothing; exit 0 only if all would pass
-    --rollback                     put llama-qwen.service back (R1 to R6)
+    --rollback                     put the old llama unit back (R1 to R6)
     --accept-catalog-flags         use the catalog's settings where the old unit differs
     --restore-files                with --rollback: move the model files back to their old paths
     --yes                          do not ask for confirmation (the installer passes it)
@@ -192,7 +193,7 @@ func runRollback(ctx context.Context, f migrateFlags, m migrator, stdout, stderr
 	for _, l := range m.RollbackSteps(f.restore) {
 		fmt.Fprintln(stdout, l)
 	}
-	if code := confirmMigrate(f, "Roll the node back to llama-qwen.service?", stdout, stderr); code != 0 {
+	if code := confirmMigrate(f, "Roll the node back to the old llama service?", stdout, stderr); code != 0 {
 		return code
 	}
 	if _, err := m.Rollback(ctx); err != nil {
@@ -238,7 +239,7 @@ func reportMigrateError(stderr io.Writer, err error) int {
 		fmt.Fprintf(stderr, "aiagent migrate: %s\n", e.Error())
 		if e.RolledBack {
 			migrateRolledBack = true
-			fmt.Fprintln(stderr, "The old llama-qwen.service is running again, as before. Nothing else has to be done.")
+			fmt.Fprintln(stderr, "The old llama service is running again, as before. Nothing else has to be done.")
 		}
 	} else {
 		fmt.Fprintf(stderr, "aiagent migrate: %v\n", err)

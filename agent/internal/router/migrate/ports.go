@@ -15,7 +15,8 @@ import (
 
 // The names the migration is about.
 const (
-	// LegacyUnitName is the hand-written unit that is replaced.
+	// LegacyUnitName is the hand-written unit that is replaced when no other known one serves (the
+	// migration itself keeps the name llama-qwen for its state, its directory and its command).
 	LegacyUnitName = services.UnitLlamaQwen
 	// NewUnitName is the agent's unit that takes over.
 	NewUnitName = services.UnitLlama
@@ -29,11 +30,20 @@ const (
 	ServiceUser = "localai"
 )
 
+// LegacyUnitNames are the hand-written llama units the migration knows, in order of preference: ai-n1
+// serves Qwen3-Coder-Next from llama-coder-next.service, and keeps llama-qwen.service beside it
+// (llama-router.md section 4.9.1). The migration replaces the one that serves port 8080 and masks the
+// others, so none of them takes the port back after a reboot.
+var LegacyUnitNames = []string{services.UnitLlamaQwen, services.UnitLlamaCoderNext}
+
 // Paths are the places the migration reads and writes (llama-router.md sections 3.1 and 4.9). Tests run
 // on an in-memory filesystem with the real absolute paths, or on a temporary directory through Under.
 type Paths struct {
 	// UnitDir is /etc/systemd/system.
 	UnitDir string
+	// LegacyUnit is the legacy unit this migration replaces (one of LegacyUnitNames); "" means
+	// LegacyUnitName. Preflight chooses it and plan.json keeps it.
+	LegacyUnit string
 	// LegacyKey is /etc/llama-qwen/api-key; NewKey is /etc/localai/api-key.
 	LegacyKey, NewKey string
 	// NodeYAML is /etc/localai/node.yaml; INI is /etc/localai/models.ini.
@@ -64,11 +74,18 @@ func DefaultPaths(root string) Paths {
 	}
 }
 
-// LegacyUnitFile is /etc/systemd/system/llama-qwen.service.
-func (p Paths) LegacyUnitFile() string { return filepath.Join(p.UnitDir, LegacyUnitName) }
+// Legacy is the name of the legacy unit this migration replaces.
+func (p Paths) Legacy() string { return orStr(p.LegacyUnit, LegacyUnitName) }
 
-// LegacyDropInDir is /etc/systemd/system/llama-qwen.service.d.
-func (p Paths) LegacyDropInDir() string { return p.LegacyUnitFile() + ".d" }
+// UnitFile is /etc/systemd/system/<unit>; DropInDir is its .d directory.
+func (p Paths) UnitFile(unit string) string  { return filepath.Join(p.UnitDir, unit) }
+func (p Paths) DropInDir(unit string) string { return p.UnitFile(unit) + ".d" }
+
+// LegacyUnitFile is /etc/systemd/system/llama-qwen.service (or the chosen legacy unit).
+func (p Paths) LegacyUnitFile() string { return p.UnitFile(p.Legacy()) }
+
+// LegacyDropInDir is /etc/systemd/system/llama-qwen.service.d (or the chosen legacy unit's).
+func (p Paths) LegacyDropInDir() string { return p.DropInDir(p.Legacy()) }
 
 // NewUnitFile is /etc/systemd/system/localai-llama.service.
 func (p Paths) NewUnitFile() string { return filepath.Join(p.UnitDir, NewUnitName) }
@@ -83,8 +100,12 @@ func (p Paths) Result() string      { return filepath.Join(p.MigDir, "result.jso
 func (p Paths) ServeBefore() string { return filepath.Join(p.MigDir, "serve-before.json") }
 
 // UnitBackup is the saved legacy unit; DropInBackup the saved drop-in directory.
-func (p Paths) UnitBackup() string   { return filepath.Join(p.MigDir, LegacyUnitName) }
-func (p Paths) DropInBackup() string { return filepath.Join(p.MigDir, LegacyUnitName+".d") }
+func (p Paths) UnitBackup() string   { return p.UnitBackupOf(p.Legacy()) }
+func (p Paths) DropInBackup() string { return p.DropInBackupOf(p.Legacy()) }
+
+// UnitBackupOf and DropInBackupOf are the same for any known legacy unit (the other units are saved too).
+func (p Paths) UnitBackupOf(unit string) string   { return filepath.Join(p.MigDir, unit) }
+func (p Paths) DropInBackupOf(unit string) string { return filepath.Join(p.MigDir, unit+".d") }
 
 // Current is /opt/localai/llama.cpp/current; Builds is the directory of the builds.
 func (p Paths) Current() string { return filepath.Join(p.LlamaRoot, "current") }

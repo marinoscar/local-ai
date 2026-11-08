@@ -50,17 +50,21 @@ func Checks(src CheckSources) []doctor.Check {
 	var out []doctor.Check
 	if src.Systemd != nil {
 		out = append(out, doctor.Check{ID: CheckLegacyService, Area: "LLM", Fast: true, Run: func(ctx context.Context) []doctor.Result {
-			st, err := src.Systemd.State(ctx, LegacyUnitName)
-			if err != nil {
-				return nil // a unit the manager cannot read is not a finding of this check
+			var res []doctor.Result
+			for _, unit := range LegacyUnitNames {
+				st, err := src.Systemd.State(ctx, unit)
+				if err != nil {
+					continue // a unit the manager cannot read is not a finding of this check
+				}
+				active := st.ActiveState == services.ActiveActive || st.ActiveState == services.ActiveActivating || st.ActiveState == services.ActiveReloading
+				if !active && !st.Enabled() {
+					continue
+				}
+				res = append(res, doctor.Result{Code: CodeOldRunning, Details: map[string]any{
+					"unit": unit, "active": st.ActiveState, "enabled": st.Enabled(),
+				}})
 			}
-			active := st.ActiveState == services.ActiveActive || st.ActiveState == services.ActiveActivating || st.ActiveState == services.ActiveReloading
-			if !active && !st.Enabled() {
-				return nil
-			}
-			return []doctor.Result{{Code: CodeOldRunning, Details: map[string]any{
-				"unit": LegacyUnitName, "active": st.ActiveState, "enabled": st.Enabled(),
-			}}}
+			return res
 		}})
 	}
 	if src.State != nil {
