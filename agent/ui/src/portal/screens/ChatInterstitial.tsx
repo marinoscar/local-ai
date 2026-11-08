@@ -1,10 +1,18 @@
 import { useEffect } from "react";
 import { t } from "../i18n/i18n";
-import { navigate } from "../router";
+import { readerPath } from "../library/reader";
+import { navigate, navigatePath } from "../router";
 import type { PortalStatus } from "../status";
 
 export const CHAT_DELAY_MS = 2000;
 export const CHAT_URL = "/chat/";
+
+/**
+ * The chat opens inside the Portal's reader frame, so its header (◄ Back, ⌂ Home) and Esc always lead
+ * back to the Portal, in a browser and in the desktop app alike (issue #431, survival-portal.md 4.1.2).
+ */
+export const CHAT_READER = readerPath(CHAT_URL, "/portal");
+const openChat = () => navigatePath(CHAT_READER);
 
 const IGNORED_KEYS = new Set([
   "Escape",
@@ -15,16 +23,15 @@ const IGNORED_KEYS = new Set([
   "Meta",
 ]);
 
-/** Chat interstitial (survival-portal.md section 4.1.2): 2 s, or any key, then the WebUI. */
+/** Chat interstitial (survival-portal.md section 4.1.2): 2 s, or any key, then the WebUI in the reader frame. */
 export function ChatInterstitial({ status }: { status: PortalStatus | null }) {
   const noBrain = status !== null && status.brain.loaded.length === 0;
   useEffect(() => {
     if (noBrain) return;
-    const open = () => window.location.assign(CHAT_URL);
-    const timer = window.setTimeout(open, CHAT_DELAY_MS);
+    const timer = window.setTimeout(openChat, CHAT_DELAY_MS);
     const onKey = (e: KeyboardEvent) => {
       if (!IGNORED_KEYS.has(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey)
-        open();
+        openChat();
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -64,7 +71,7 @@ export function ChatInterstitial({ status }: { status: PortalStatus | null }) {
         <button
           type="button"
           className="btn btn-primary"
-          onClick={() => window.location.assign(CHAT_URL)}
+          onClick={openChat}
         >
           {t("chat.openNow")}
         </button>

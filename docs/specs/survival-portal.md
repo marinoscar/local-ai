@@ -187,12 +187,12 @@ Design target: **1366×768** with no scrolling on the home screen at 100 % text 
 - The battery indicator turns amber at ≤ 20 % and red with a full-width banner at ≤ 10 % on battery ("Battery very low. Plug in now or the computer will turn off.").
 
 #### 4.1.2 Chat (button 1)
-Opens the llama WebUI full-page at `/chat/` in the same tab (ai-desktop: in its main window). A thin Portal bar is not injected (we don't modify the WebUI). The Portal shows first an interstitial for 2 s, or until a key is pressed:
+Opens the llama WebUI at `/chat/` **inside the reader view** (§4.1.5): the Portal's header bar ("◄ Back", "⌂ Home", text size) above a same-origin iframe, route `/portal/read?src=%2Fchat%2F&back=%2Fportal`. So the way back is always on screen, and `Esc` goes Home, in a browser and in ai-desktop's full-screen survival Portal alike (issue #431, [ADR-0009](../decisions/0009-optimized-for-humans.md) rules 1 and 7). The WebUI itself is not modified, and `/chat/` answers `X-Frame-Options: SAMEORIGIN`, which allows this. In ai-desktop the frame stays in the Portal (`decideFrame` keeps an agent iframe in place, desktop.md §3.6); the separate Chat window remains for the dashboard's Chat button. The Portal shows first an interstitial for 2 s, or until a key is pressed:
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Opening the chat …                                                         │
-│  Tip: to come back here, press the browser Back button or go to             │
-│       127.0.0.1:7070/portal                                                 │
+│  The chat opens below a bar with ⌂ Home. Press ⌂ Home or Esc to come back   │
+│  here.                                                                       │
 │  [ Open chat now ]                         [ Back ]                          │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -255,7 +255,7 @@ Flow (§4.6). If the loaded brain has no vision: a box above the question: "The 
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 - Search: `GET /library/search?pattern=<q>&books.filter.lang=<eng|spa>&format=xml&pageLength=25` (OpenSearch RSS from kiwix-serve, parsed in the browser). The language filter defaults to the UI language with a toggle "All languages".
-- Opening a result or a book shows it inside the **reader** view: a Portal header bar ("◄ Back to results", "⌂ Home", text-size buttons) above a same-origin `<iframe src="/library/content/…">`. The iframe is same-origin through the agent proxy, so keyboard focus and the header work. The Portal route is `/portal/read?src=<path>&back=<portal route>`; `src` must start with `/library/`, `/maps/` or `/docs/` (anything else is ignored and the Portal goes Home), `back` must be a Portal route. `Esc` is handled on the Portal window and on the frame's document after each load. The RSS is parsed by a small tolerant scanner (no DOM, so it is unit-tested in Node); if kiwix answers HTML instead of XML, its results page opens in the reader.
+- Opening a result or a book shows it inside the **reader** view: a Portal header bar ("◄ Back to results", "⌂ Home", text-size buttons) above a same-origin `<iframe src="/library/content/…">`. The iframe is same-origin through the agent proxy, so keyboard focus and the header work. The Portal route is `/portal/read?src=<path>&back=<portal route>`; `src` must start with `/library/`, `/maps/`, `/docs/` or `/chat/` (anything else is ignored and the Portal goes Home), `back` must be a Portal route. `Esc` is handled on the Portal window and on the frame's document after each load. The RSS is parsed by a small tolerant scanner (no DOM, so it is unit-tested in Node); if kiwix answers HTML instead of XML, its results page opens in the reader.
 
 #### 4.1.6 Maps (button 5)
 Opens `/maps/` ([companion-services.md](companion-services.md) §4.4.3) inside the same reader frame with the Portal header, so Home is one key away. Big controls: search, **Where am I**, **Nearest: hospital · clinic · water · town**.
@@ -460,7 +460,7 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `lock.title` | To use this, start Survival mode or log in. | Para usar esto, inicie el modo supervivencia o inicie sesión. |
 | `lock.login` | Log in | Iniciar sesión |
 | `chat.opening` | Opening the chat … | Abriendo la conversación … |
-| `chat.tip` | To come back here, press the browser Back button or go to 127.0.0.1:7070/portal | Para volver aquí, presione Atrás en el navegador o vaya a 127.0.0.1:7070/portal |
+| `chat.tip` | The chat opens below a bar with ⌂ Home. Press ⌂ Home or Esc to come back here. | La conversación se abre debajo de una barra con ⌂ Inicio. Presione ⌂ Inicio o Esc para volver aquí. |
 | `chat.openNow` | Open chat now | Abrir la conversación |
 | `chat.noBrain` | No brain is running. | No hay ningún cerebro funcionando. |
 | `chat.chooseBrain` | Choose a brain | Elegir un cerebro |

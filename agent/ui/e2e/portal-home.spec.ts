@@ -375,20 +375,27 @@ test.describe("banners", () => {
   });
 });
 
-test("chat opens /chat/ after 2 s or on a key, and offers a brain when none runs", async ({
+test("chat opens /chat/ in the reader frame after 2 s or on a key, with Home always on screen, and offers a brain when none runs", async ({
   page,
 }) => {
+  const inReader = /\/portal\/read\?src=%2Fchat%2F&back=%2Fportal$/;
   await page.clock.install();
   await page.goto("/portal/chat");
   await page.clock.runFor(2100);
-  await expect(page).toHaveURL(/\/chat\/$/);
+  await expect(page).toHaveURL(inReader);
+  await expect(page.locator("iframe.reader-frame")).toHaveAttribute("src", "/chat/");
+  // Issue #431: the way back is on screen, not only the browser's Back button.
+  await page.getByRole("button", { name: "⌂ Home" }).click();
+  await expect(page).toHaveURL(/\/portal\/?$/);
 
   await page.goto("/portal/chat");
   await expect(
     page.getByRole("heading", { name: "Opening the chat …" }),
   ).toBeVisible();
   await page.keyboard.press("x");
-  await expect(page).toHaveURL(/\/chat\/$/);
+  await expect(page).toHaveURL(inReader);
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/portal\/?$/);
 
   await setStatus(page, { brain: { loaded: [], loading: null, choices: [] } });
   await page.goto("/portal/chat");

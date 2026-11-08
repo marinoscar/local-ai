@@ -41,7 +41,7 @@
   "lock.title": "Para usar esto, inicie el modo supervivencia o inicie sesión.",
   "lock.login": "Iniciar sesión",
   "chat.opening": "Abriendo la conversación …",
-  "chat.tip": "Para volver aquí, presione Atrás en el navegador o vaya a 127.0.0.1:7070/portal",
+  "chat.tip": "La conversación se abre debajo de una barra con ⌂ Inicio. Presione ⌂ Inicio o Esc para volver aquí.",
   "chat.openNow": "Abrir la conversación",
   "chat.noBrain": "No hay ningún cerebro funcionando.",
   "chat.chooseBrain": "Elegir un cerebro",
