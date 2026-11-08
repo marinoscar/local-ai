@@ -16,7 +16,7 @@ jobs:
   sign-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
       - run: scripts/tests/test-release-sign.sh
   node-release-tests:
@@ -24,8 +24,8 @@ jobs:
     # the offline build inside `unshare -n` (the runner has passwordless sudo).
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: '1.24'
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign shellcheck
@@ -37,7 +37,7 @@ jobs:
     # assets, and the lint of every workflow file (a colon-space in a step name once broke a workflow).
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign shellcheck python3-yaml
       - run: python3 -c 'import yaml; print("PyYAML", yaml.__version__)'
       - run: scripts/tests/test-desktop-release.sh

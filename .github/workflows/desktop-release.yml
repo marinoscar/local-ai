@@ -31,7 +31,7 @@ jobs:
       prerelease: ${{ steps.meta.outputs.prerelease }}
       dry_run: ${{ steps.meta.outputs.dry_run }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with: {fetch-depth: 0}
       - name: Check the tag equals desktop-v plus the package.json version, and that a tag is on main
         id: meta
@@ -58,8 +58,8 @@ jobs:
       run:
         working-directory: apps/desktop
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: '24'
           cache: npm
@@ -104,14 +104,14 @@ jobs:
         run: |
           node scripts/packaged-app.mjs test-copy --from /opt/ai-desktop --to release/test-copy
           xvfb-run -a -s "-screen 0 1920x1080x24" npx playwright test
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: failure()
         with:
           name: desktop-e2e-traces
           path: apps/desktop/test-results
           retention-days: 7
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: desktop-unsigned
           path: |
@@ -127,10 +127,10 @@ jobs:
     needs: [prepare, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Install minisign
         run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: desktop-unsigned
           path: ${{ runner.temp }}/unsigned
@@ -147,7 +147,7 @@ jobs:
           rm -f "$RUNNER_TEMP/dry.key"
           scripts/release/desktop-release-notes.sh --tag "$TAG" --dir "$RUNNER_TEMP/release" > "$RUNNER_TEMP/release/RELEASE-NOTES.md"
           echo "Dry run for $TAG: signed with a throwaway key. NOT a release; nothing was published." >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: desktop-release-dry-run
           path: ${{ runner.temp }}/release/*
@@ -165,7 +165,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Require the signing secrets and the committed public key
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
@@ -176,7 +176,7 @@ jobs:
           [ -f agent/internal/kit/keys/minisign.pub ] || { echo "::error::agent/internal/kit/keys/minisign.pub is not committed (owner action: docs/architecture/release-signing.md)"; exit 1; }
       - name: Install minisign
         run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: desktop-unsigned
           path: ${{ runner.temp }}/unsigned
