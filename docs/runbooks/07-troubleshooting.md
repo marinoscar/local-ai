@@ -377,7 +377,7 @@ The installer prints the phase and code, and the full log is `/var/log/localai-i
 | `LAI-INS-050` | Use `--serve-pattern` with the value in the inventory |
 | `LAI-INS-060` | Set the PIN: `sudo aictl pin set` |
 
-All codes: [installer.md §8](../specs/installer.md#8-doctor-codes-installer-output-is-terminal-only-english).
+All codes: [installer.md §8](../specs/installer.md#8-doctor-codes-installer-output-is-terminal-only-english-and-spanish).
 
 ---
 
@@ -400,7 +400,7 @@ Each code is `LAI-<AREA>-<NNN>`. The registry of all codes is [doctor-codes.md](
 | Cloud (001–049) | `LAI-CLD` | Alerts and checks in ai.marin.cr | [cloud-app.md §8](../specs/cloud-app.md#8-doctor-codes-lai-cld) | [10](10-lab-operations.md) |
 | Gateway | `LAI-GW` | `https://ai.marin.cr/v1` | [gateway.md §8](../specs/gateway.md#8-doctor-codes-lai-gw) | [API key doesn't work](#api-key-doesnt-work-401), [Open WebUI shows no lab models](#open-webui-shows-no-lab-models) |
 | Desktop | `LAI-DSK` | The Local AI app | [desktop.md §8](../specs/desktop.md#8-doctor-codes-lai-dsk) | [The app won't open](#the-app-wont-open) |
-| Installer | `LAI-INS` | `install-node.sh`, laptop settings | [installer.md §8](../specs/installer.md#8-doctor-codes-installer-output-is-terminal-only-english) | [Installer stopped](#installer-stopped), [Laptop sleeps](#laptop-sleeps-or-drops-off-the-network) |
+| Installer | `LAI-INS` | `install-node.sh`, laptop settings | [installer.md §8](../specs/installer.md#8-doctor-codes-installer-output-is-terminal-only-english-and-spanish) | [Installer stopped](#installer-stopped), [Laptop sleeps](#laptop-sleeps-or-drops-off-the-network) |
 | Rebuild kit | `LAI-KIT` | Offline rebuild materials and builds | [rebuild-kit.md §8](../specs/rebuild-kit.md#8-doctor-codes-shown-in-the-desktop-english-and-spanish) | [06](06-rebuild-a-node-offline.md) |
 | Drill | `LAI-DRL` | The monthly self-test | [drill.md §8](../specs/drill.md#8-doctor-codes-shown-in-the-desktop-english-and-spanish) | [08](08-scheduled-sync.md) |
 | Security / keys / PIN | `LAI-SEC` | Tokens, PIN, keys, permissions | [agent.md §8.4](../specs/agent.md#84-lai-sec--security-keys-pin) | [Forgot PIN](#forgot-pin), [API key doesn't work](#api-key-doesnt-work-401) |

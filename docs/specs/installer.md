@@ -44,14 +44,14 @@ sudo bash /media/<user>/AI-ARK/localai/kit/installers/install-node.sh --from-ark
 (The script is never piped straight into `bash` from the network: it's downloaded, checked, then run.)
 
 #### 3.1.1 Guided mode (no arguments on a terminal)
-[ADR-0009](../decisions/0009-optimized-for-humans.md) rules 1 and 2, issue #429. `sudo bash install-node.sh` with **no arguments**, when stdout is a terminal and `/dev/tty` can be read, asks the choices that matter instead of requiring flags. Any argument, no terminal, or `LAI_INSTALLER_GUIDED=1` skips it, so automation is unchanged. It runs after `--help`/`--version` and the stamp check, and before the root check (it tells a non-root user the exact `sudo` line and exits 3).
+[ADR-0009](../decisions/0009-optimized-for-humans.md) rules 1 and 2, issue #429. `sudo bash install-node.sh` with **no arguments** (or with only `--lang <en|es>`), when stdout is a terminal and `/dev/tty` can be read, asks the choices that matter instead of requiring flags. Any other argument, no terminal, or `LAI_INSTALLER_GUIDED=1` skips it, so automation is unchanged. It runs after `--help`/`--version` and the stamp check, and before the root check (it tells a non-root user the exact `sudo` line and exits 3).
 
 1. **Node name.** The id in the existing `node.yaml` is the suggestion (Enter keeps it). Otherwise there is no default. A bad answer is explained ("ai-n and a number, for example ai-n4") and asked again. Upper case is accepted. After 5 bad answers, or at the end of input, it exits 2. A name different from the existing one is warned about (`LAI-INS-020`, which P9 still enforces).
 2. **Source.** A mounted AI-ARK drive (`/media/*/AI-ARK` with `localai/`) is offered: "Install from the drive? (Y/n)" → `--from-ark`. With no drive it says everything is downloaded, and how to install offline instead.
 3. **Cloud.** "Connect now? (Y/n)" online, `(y/N)` from a drive → `--cloud-url <url> --enroll`. The credential is still asked later, hidden, by P13.
 4. **Preview.** "First show what would be done, without changing anything? (recommended) (Y/n)".
 
-Then it shows the choices and **the same choices as one typed line**. With the preview it runs itself with those flags plus `--dry-run`, then asks "Install for real now? (y/N)". Without it, it asks "Start the installation now? (y/N)". A No exits 4 with "Nothing was changed". A failing preview exits with the preview's code. A Yes runs `bash install-node.sh <flags>` again with `LAI_INSTALLER_GUIDED=1`, and from there everything is the normal path (§4.3). Yes/no answers accept y/yes/s/si and n/no; anything else is asked again, up to three times, then the default is taken. Dev hooks (with `LAI_INSTALLER_DEV=1` only): `LAI_INSTALLER_GUIDE`, `LAI_INSTALLER_GUIDE_IN`/`_OUT`, `LAI_INSTALLER_MEDIA`, `LAI_INSTALLER_GUIDE_RECORD`, `LAI_INSTALLER_GUIDE_PREVIEW_RC`. Tests: `scripts/tests/test-installer.sh`, section "guided mode".
+Then it shows the choices and **the same choices as one typed line**. With the preview it runs itself with those flags plus `--dry-run`, then asks "Install for real now? (y/N)". Without it, it asks "Start the installation now? (y/N)". A No exits 4 with "Nothing was changed". A failing preview exits with the preview's code. A Yes runs `bash install-node.sh <flags>` again with `LAI_INSTALLER_GUIDED=1`, and from there everything is the normal path (§4.3). Yes/no answers accept y/yes/s/si and n/no; anything else is asked again, up to three times, then the default is taken. Every question, hint, summary line and error of the guided mode is in English or Spanish (issue #436, §8 Language): the language is `--lang`, else the locale; the Spanish hints read `(S/n)` / `(s/N)`. The preview and the final run always get `--lang <the language in use>`, so they speak the same language as the questions. Dev hooks (with `LAI_INSTALLER_DEV=1` only): `LAI_INSTALLER_GUIDE`, `LAI_INSTALLER_GUIDE_IN`/`_OUT`, `LAI_INSTALLER_MEDIA`, `LAI_INSTALLER_GUIDE_RECORD`, `LAI_INSTALLER_GUIDE_PREVIEW_RC`. Tests: `scripts/tests/test-installer.sh`, section "guided mode".
 
 ### 3.2 Flags
 | Flag | Default | Meaning |
@@ -81,6 +81,7 @@ Then it shows the choices and **the same choices as one typed line**. With the p
 | `--uninstall` | — | §4.4 |
 | `--log <path>` | `/var/log/localai-install.log` | Log file |
 | `-v` | off | Verbose (shell trace into the log only) |
+| `--lang <en\|es>` | from the locale: the first of `LC_ALL`, `LC_MESSAGES`, `LANG` that is set; `es`, `es_*`, `es.*` → `es`, anything else → `en` | Language of the screen and log messages (§8 Language). Any other value is exit 2. `sudo` keeps `LANG` on Ubuntu, so a Spanish desktop gets Spanish without the flag |
 | `--keep-inventory` | off | Copy `--inventory` to `/etc/localai/inventory.local.yaml` (needs `--inventory` or `--from-ark`) |
 | `--purge-config`, `--purge-content`, `--revert-hardening`, `--restore-legacy` | off | Only with `--uninstall` (§4.4); otherwise exit 2 |
 | `--version`, `-h`, `--help` | — | Print the stamped version (§3.6) / the usage, exit 0 |
@@ -488,7 +489,19 @@ It never changes the node id, key, agent token, PIN, cloud credential, profile, 
 
 Log format §4.6. `aictl doctor` reads `state.json` and runs the `LAI-INS` checks. The agent's `/status` includes `install: {version, finished_at, reboot_required, hardening: {applied, verified}}`.
 
-## 8. Doctor codes (installer output is terminal-only; English)
+## 8. Doctor codes (installer output is terminal-only; English and Spanish)
+
+**Language** (issue #436; [ADR-0009](../decisions/0009-optimized-for-humans.md) rule 7). The installer is the main tool of the offline rebuild ([runbook 06](../runbooks/06-rebuild-a-node-offline.md)), so it speaks English and Spanish: `--lang en|es`, default from the locale (§3.2). In Spanish these are translated: the whole guided mode (§3.1.1), the phase titles `==> [n/15] …` and the phase result lines, the preflight verdict, the end-of-run lines, and every `LAI-INS` message. A `LAI-INS` message in Spanish is the code, its Spanish title and fix, then the English cause (it names paths and values) as `Detalle (en inglés): …`:
+```
+ERROR LAI-INS-004: Se está ejecutando otro instalador.
+  Qué hacer: Espere a que termine.
+  Detalle (en inglés): another installer is running (lock /var/lib/localai/install/lock). Wait for it to finish.
+Más información: docs/specs/doctor-codes.md (LAI-INS-004)
+```
+The English output is unchanged. Not translated yet: the `key: value` header lines, the per-check `ok` lines, the `--repair` and `--uninstall` dialogs, `--help`, and the end-of-install summary with its TO DO and VPS CHECKLIST, which `aiagent setup summary` prints (P15; a follow-up of #436).
+
+**One source for the sentences.** The title and fix of every `LAI-INS` code, in English and Spanish, come from `agent/internal/doctor/codes.go`. The installer runs before `aiagent` exists, so it carries a generated copy: the `ins_text` function between `# BEGIN GENERATED ins-codes` and `# END GENERATED ins-codes` in `install-node.sh`. `scripts/check-installer-codes.sh --write` regenerates it (a Markdown code span becomes `'…'`); without `--write` the script fails when the copy differs from `codes.go` or when the installer uses a `LAI-INS` code that has no entry there. The installer CI workflow runs the check and its test, `scripts/tests/test-installer-codes.sh`. So a change to a `LAI-INS` entry in `codes.go` is followed by `--write` in the same pull request.
+
 
 | Code | Sev | Meaning | Fix |
 |---|---|---|---|

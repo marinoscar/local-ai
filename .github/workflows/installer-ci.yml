@@ -3,10 +3,10 @@ name: installer-ci
 # is installed). Spec: docs/specs/installer.md.
 on:
   pull_request:
-    paths: ['installers/**', 'agent/internal/setup/**', 'scripts/check-no-logind-restart.sh', 'scripts/tests/test-no-logind-restart.sh', 'scripts/tests/test-installer.sh', 'scripts/release/**', '.github/workflows/installer-ci.yml']
+    paths: ['installers/**', 'agent/internal/setup/**', 'scripts/check-no-logind-restart.sh', 'scripts/tests/test-no-logind-restart.sh', 'scripts/tests/test-installer.sh', 'scripts/check-installer-codes.sh', 'scripts/tests/test-installer-codes.sh', 'agent/internal/doctor/codes.go', 'scripts/release/**', '.github/workflows/installer-ci.yml']
   push:
     branches: [main]
-    paths: ['installers/**', 'agent/internal/setup/**', 'scripts/check-no-logind-restart.sh', 'scripts/tests/test-no-logind-restart.sh', 'scripts/tests/test-installer.sh', 'scripts/release/**', '.github/workflows/installer-ci.yml']
+    paths: ['installers/**', 'agent/internal/setup/**', 'scripts/check-no-logind-restart.sh', 'scripts/tests/test-no-logind-restart.sh', 'scripts/tests/test-installer.sh', 'scripts/check-installer-codes.sh', 'scripts/tests/test-installer-codes.sh', 'agent/internal/doctor/codes.go', 'scripts/release/**', '.github/workflows/installer-ci.yml']
 permissions:
   contents: read
 jobs:
@@ -16,7 +16,9 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign shellcheck
       - name: shellcheck the installer and its test
-        run: shellcheck -S style installers/install-node.sh && shellcheck -S warning scripts/tests/test-installer.sh
+        run: shellcheck -S style installers/install-node.sh scripts/check-installer-codes.sh && shellcheck -S warning scripts/tests/test-installer.sh scripts/tests/test-installer-codes.sh
+      - name: the installer's LAI-INS sentences equal agent/internal/doctor/codes.go (issue #436)
+        run: scripts/check-installer-codes.sh && scripts/tests/test-installer-codes.sh
       - run: scripts/tests/test-installer.sh
       - name: nothing restarts, reloads or signals systemd-logind
         run: scripts/check-no-logind-restart.sh && scripts/tests/test-no-logind-restart.sh

@@ -72,6 +72,7 @@ From [rebuild-kit.md §5](../specs/rebuild-kit.md#5-limits-what-cant-be-rebuilt-
    sudo bash /media/$USER/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/$USER/AI-ARK --node-id ai-nN --dry-run
    ```
 
+   - **En español:** add `--lang es` to this command and to the one in step 10. The phase titles, the questions and every `LAI-INS` message are then in Spanish (a computer set up in Spanish gets Spanish without it). Example: `==> [1/15] comprobación previa`, `ERROR LAI-INS-016: A la unidad del arca le faltan archivos para este equipo.`
    - **What you should see:** "source: ark:/media/…/AI-ARK", the detected backend (`cuda`, `vulkan` or `cpu`), the profile, the list of packages it would install **from the kit**, the llama.cpp build, and `[dry-run] would …` lines. Nothing is changed.
    - **If it doesn't work:**
      - `LAI-INS-016` (the drive lacks files for this computer): the message lists what's missing, often the packages for this Ubuntu version (go back to step 2) or the driver packages. It can't continue; sync the drive on a node with internet first.

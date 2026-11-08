@@ -4,6 +4,7 @@
 # The stamping test also needs minisign and is skipped without it.
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 2
+unset LC_ALL LC_MESSAGES LANG   # the installer's language follows the locale (#436): English unless a test says es
 SRC="$PWD"
 INST="$SRC/installers/install-node.sh"
 pass=0; failn=0
@@ -376,6 +377,8 @@ flock "$w/lk/lock" sleep 20 & holder=$!
 sleep 0.5
 t "second run exits 1 with LAI-INS-004 (dry run)" 1 "LAI-INS-004" bash -c 'LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$2" "$1" --dry-run --log "$3"' _ "$INST" "$w/lk" "$w/lk.log"
 t "second run exits 1 with LAI-INS-004 (real)" 1 "LAI-INS-004" bash -c 'LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$2" "$1" --log "$3"' _ "$STAMPED" "$w/lk" "$w/lk.log"
+t "...in Spanish, the code's own sentence from codes.go, then the detail" 1 "ERROR LAI-INS-004: Se está ejecutando otro instalador." bash -c 'LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$2" "$1" --dry-run --lang es --log "$3"' _ "$INST" "$w/lk" "$w/lk.log"
+t "...with the fix in Spanish" 1 "Qué hacer: Espere a que termine." bash -c 'LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$2" "$1" --dry-run --lang es --log "$3"' _ "$INST" "$w/lk" "$w/lk.log"
 pkill -P "$holder" 2>/dev/null; kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
 t "after the holder exits the lock is free" 0 "" bash -c 'LAI_INSTALLER_DEV=1 LAI_INSTALL_STATE_DIR="$2" "$1" --dry-run --log "$3" >/dev/null' _ "$INST" "$w/lk" "$w/lk.log"
 
@@ -881,7 +884,7 @@ t "a foreign program on 8080 -> exit 1" 1 "port 8080 is used by nginx" dryv FAKE
 t "too little disk -> exit 1, LAI-INS-013" 1 "LAI-INS-013" dryv FAKE_AVAIL=1000000000 -- "${I2_RA[@]}"
 t "too little disk with --yes only warns" 0 "WARN LAI-INS-013" dryv FAKE_AVAIL=1000000000 -- "${I2_RA[@]}" --yes
 t "low RAM only warns (LAI-INS-012)" 0 "WARN LAI-INS-012" dryv LAI_FAKE_ROOT="$w/i2-fx-lowram" -- "${I2_RA[@]}"
-t "no internet -> exit 1, LAI-INS-015 suggests --from-ark" 1 "Connect to the internet, or use --from-ark" dryv LAI_INTERNET_URL=file:///nonexistent-lai -- "${I2_RA[@]}"
+t "no internet -> exit 1, LAI-INS-015 suggests --from-ark" 1 "Connect to the internet, or use '--from-ark <drive>'." dryv LAI_INTERNET_URL=file:///nonexistent-lai -- "${I2_RA[@]}"
 t "an ark install does not need the internet" 0 "ark drive $I2_ARK has the kit for noble/amd64" dryv LAI_INTERNET_URL=file:///nonexistent-lai -- "${I2_RA[@]}" --from-ark "$I2_ARK"
 I2_ARK2="$w/i2-ark2"; i2_mkark "$I2_ARK2"; rm -rf "$I2_ARK2/localai/kit/debs" "$I2_ARK2/localai/ROOT.json"
 t "ark missing parts -> exit 1, LAI-INS-016 lists them" 1 "missing: localai/ROOT.json, localai/kit/debs/noble-amd64/" dryv -- "${I2_RA[@]}" --from-ark "$I2_ARK2"
@@ -1045,7 +1048,7 @@ gdrec() { cat "$G/rec"; }
 t "defaults: preview then 'not now' leaves nothing changed (exit 4)" 4 "" gd 'ai-n4\n\n\n\n'
 t "...the four questions were asked" 0 "4/4  Preview" gdout
 t "...the one-line equivalent is shown" 0 "--node-id ai-n4 --cloud-url https://ai.marin.cr --enroll" gdout
-t "...the preview is a dry run of those flags" 0 "preview: --node-id ai-n4 --cloud-url https://ai.marin.cr --enroll --dry-run" gdrec
+t "...the preview is a dry run of those flags" 0 "preview: --node-id ai-n4 --cloud-url https://ai.marin.cr --enroll --lang en --dry-run" gdrec
 t "...and the real install did not run" 1 "" grep -q '^run:' "$G/rec"
 t "...it says nothing was changed" 0 "Nothing was changed" gdout
 t "no cloud, preview, then yes: runs the real install with the flags" 0 "" gd 'ai-n4\nn\ny\ny\n'
@@ -1075,6 +1078,63 @@ t "an argument means no questions" 0 "" bash -c '! env LAI_INSTALLER_DEV=1 LAI_I
 : >"$G/out3"
 t "LAI_INSTALLER_GUIDED=1 (the second run) never asks again" 0 "" bash -c 'env LAI_INSTALLER_DEV=1 LAI_INSTALLER_GUIDE=1 LAI_INSTALLER_GUIDED=1 LAI_INSTALLER_GUIDE_IN=/dev/null LAI_INSTALLER_GUIDE_OUT="$1" LAI_INSTALL_STATE_DIR="$3" timeout 60 bash "$2" >/dev/null 2>&1; ! grep -q "Node name" "$1"' _ "$G/out3" "$STAMPED" "$G/state3"
 t "without a terminal and without the dev hook, no questions (help text documents guided mode)" 0 "asks what it needs (guided mode)" bash "$STAMPED" --help
+
+echo "== guided mode in Spanish (#436): the language follows the locale or --lang, and the re-run gets the same --lang"
+# gda <answers> [VAR=value ...] -- <args...>: like gd, but with arguments for the installer (only --lang keeps the
+# questions).
+gda() {
+  local answers="$1" e=(); shift
+  while [[ $1 != -- ]]; do e+=("$1"); shift; done; shift
+  printf '%b' "$answers" >"$G/in"; : >"$G/out"; : >"$G/rec"
+  env LAI_INSTALLER_DEV=1 LAI_INSTALLER_GUIDE=1 LAI_INSTALLER_GUIDE_IN="$G/in" LAI_INSTALLER_GUIDE_OUT="$G/out" \
+    LAI_INSTALLER_GUIDE_RECORD="$G/rec" LAI_INSTALLER_MEDIA="$G/empty-media" LAI_INSTALL_NODE_YAML="$G/none.yaml" \
+    LAI_INSTALL_STATE_DIR="$G/state" "${e[@]}" bash "$STAMPED" "$@"
+}
+t "LANG=es_*: the questions are in Spanish" 0 "" gd 'ai-n4\nn\ns\ns\n' LANG=es_ES.UTF-8
+t "...the welcome" 0 "Local AI: preparar este equipo como nodo de IA" gdout
+t "...the first question" 0 "1/4  Nombre del nodo" gdout
+t "...a yes/no question with the Spanish hint" 0 "¿Conectar ahora? (S/n)" gdout
+t "...the summary" 0 "Nombre del nodo:  ai-n4" gdout
+t "...the one-line equivalent carries --lang es" 0 "--node-id ai-n4 --lang es" gdout
+t "...the preview gets --lang es" 0 "preview: --node-id ai-n4 --lang es --dry-run" gdrec
+t "...and so does the real run ('s' is yes)" 0 "run: --node-id ai-n4 --lang es" gdrec
+t "LC_ALL=es_* also means Spanish" 4 "" gd 'ai-n4\nn\nn\nn\n' LC_ALL=es_MX.UTF-8
+t "...says nothing was changed, in Spanish" 0 "No se cambió nada." gdout
+t "a wrong name is explained in Spanish" 0 "" gd 'bob\nai-n4\nn\nn\ns\n' LANG=es_ES.UTF-8
+t "...the explanation" 0 "«bob» no es un nombre de nodo. Es ai-n y un número" gdout
+t "five wrong names: exit 2, said in Spanish" 2 "" gd 'a\nb\nc\nd\ne\n' LANG=es_ES.UTF-8
+t "...the message" 0 "No se dio un nombre válido. No se cambió nada." gdout
+t "a non-answer gets the Spanish hint" 0 "" gd 'ai-n4\nquizás\nn\nn\ns\n' LANG=es_ES.UTF-8
+t "...the hint" 0 "Responda s (sí) o n (no)." gdout
+t "a failing preview is explained in Spanish" 1 "" gd 'ai-n4\nn\ns\n' LANG=es_ES.UTF-8 LAI_INSTALLER_GUIDE_PREVIEW_RC=1
+t "...the explanation" 0 "La vista previa se detuvo por un problema (salida 1)" gdout
+t "--lang es as the only argument still asks, in Spanish" 0 "" gda 'ai-n4\nn\nn\ns\n' -- --lang es
+t "...the question" 0 "1/4  Nombre del nodo" gdout
+t "...the run" 0 "run: --node-id ai-n4 --lang es" gdrec
+t "--lang en beats LANG=es_*" 0 "" gda 'ai-n4\nn\nn\ny\n' LANG=es_ES.UTF-8 -- --lang en
+t "...English questions" 0 "1/4  Node name" gdout
+t "...and the run keeps --lang en" 0 "run: --node-id ai-n4 --lang en" gdrec
+
+echo "== --lang (#436): phase titles and LAI-INS errors in Spanish; default from the locale; bad values exit 2"
+L_ES="$(dryv -- "${I2_RA[@]}" --lang es 2>&1)"
+t "--lang es dry run: Spanish phase titles" 0 "==> [1/15] comprobación previa" printf '%s\n' "$L_ES"
+t "...every one of them" 0 "==> [15/15] comprobación y resumen" printf '%s\n' "$L_ES"
+t "...the dry-run notice" 0 "[dry-run] SIMULACIÓN: no se cambiará nada salvo este registro" printf '%s\n' "$L_ES"
+t "--lang es: a preflight LAI-INS problem in Spanish (title)" 1 "FALLO LAI-INS-013: No hay suficiente espacio libre en disco." dryv FAKE_AVAIL=1000000000 -- "${I2_RA[@]}" --lang es
+t "...(fix, from codes.go)" 1 "solución: Libere espacio o use '--yes' para aceptar un presupuesto menor." dryv FAKE_AVAIL=1000000000 -- "${I2_RA[@]}" --lang es
+t "...a warning too" 0 "AVISO LAI-INS-012: Menos de 8 GB de RAM." dryv LAI_FAKE_ROOT="$w/i2-fx-lowram" -- "${I2_RA[@]}" --lang es
+t "--lang es: a phase failure (p_fail) in Spanish" 1 "ERROR LAI-INS-016: A la unidad del arca le faltan archivos para este equipo." realv FAKE_PREFLIGHT_RC=1 -- "${I2_RA[@]}" --lang es
+t "...the English cause stays as the detail, without the English fix" 1 "Detalle (en inglés): the agent's preflight failed (exit 1). Read the messages above." realv FAKE_PREFLIGHT_RC=1 -- "${I2_RA[@]}" --lang es
+t "...(the English fix is not repeated)" 1 "" grep -qF "Sync the drive" <<<"$(realv FAKE_PREFLIGHT_RC=1 -- "${I2_RA[@]}" --lang es 2>&1)"
+t "--lang es: the refusal verdict" 3 "Este equipo no es compatible. NO SE CAMBIÓ NADA." realv LAI_FAKE_ROOT="$w/i2-fx-debian" -- "${I2_RA[@]}" --lang es
+t "default from LANG=es_*" 0 "==> [1/15] comprobación previa" dryv LANG=es_ES.UTF-8 -- "${I2_RA[@]}"
+t "default from LC_ALL (it wins over LANG)" 0 "==> [1/15] preflight" dryv LC_ALL=en_US.UTF-8 LANG=es_ES.UTF-8 -- "${I2_RA[@]}"
+t "no locale: English" 0 "==> [1/15] preflight" dryv -- "${I2_RA[@]}"
+t "--lang en beats the locale" 0 "==> [1/15] preflight" dryv LANG=es_ES.UTF-8 -- "${I2_RA[@]}" --lang en
+t "unknown --lang: exit 2" 2 "--lang must be en (English) or es (español)" "$INST" --lang fr
+t "--lang without a value: exit 2" 2 "--lang needs a value" "$INST" --lang
+t "the English output is unchanged (no Spanish leaks in)" 1 "" grep -qE "FALLO|AVISO|Qué hacer|fase P" <<<"$(dryv FAKE_AVAIL=1000000000 -- "${I2_RA[@]}" 2>&1)"
+t "the help documents --lang" 0 "--lang <en|es>" "$INST" --help
 
 echo; echo "passed: $pass  failed: $failn"
 [[ $failn -eq 0 ]]
