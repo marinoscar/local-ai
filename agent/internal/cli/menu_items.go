@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/marinoscar/local-ai/agent/internal/cli/out"
+	"github.com/marinoscar/local-ai/agent/internal/doctor"
 )
 
 // menuTree is what the menu offers, ordered by how often a person needs it. Labels say what the
@@ -54,11 +55,19 @@ func menuTree() []menuItem {
 			{en: "Download and update the content (needs internet)", es: "Bajar y actualizar el contenido (necesita internet)", args: []string{"ark", "sync", "--wait"}},
 			{en: "Copy content from the AI-ARK drive (no internet)", es: "Copiar contenido desde la unidad AI-ARK (sin internet)", args: []string{"ark", "import", "--wait"}},
 			{en: "Check that the content is not damaged", es: "Comprobar que el contenido no está dañado", args: []string{"ark", "verify", "--wait"}},
-			{en: "List the connected drives", es: "Ver las unidades conectadas", args: []string{"ark", "drives"}},
-			{en: "Safely remove a drive", es: "Quitar una unidad de forma segura", args: []string{"ark", "eject"}, pick: drivePicker()},
 			{en: "How much disk the content may use", es: "Cuánto disco puede usar el contenido", args: []string{"ark", "budget"}},
 			{en: "Save a Hugging Face token (for some models)", es: "Guardar un token de Hugging Face (para algunos modelos)", args: []string{"ark", "hf-token", "set"},
 				hintEN: "(needs sudo)", hintES: "(necesita sudo)"},
+			{en: "The AI-ARK drive itself: remove, format, repair", es: "La unidad AI-ARK: quitar, formatear, reparar", sub: []menuItem{
+				{en: "List the connected drives", es: "Ver las unidades conectadas", args: []string{"ark", "drives"}},
+				{en: "Safely remove a drive", es: "Quitar una unidad de forma segura", args: []string{"ark", "eject"}, pick: drivePicker()},
+				{en: "Format a new drive as AI-ARK (erases it)", es: "Formatear una unidad nueva como AI-ARK (la borra)", args: []string{"ark", "format"},
+					hintEN: "(sudo, admin PIN)", hintES: "(sudo, PIN de admin.)"},
+				{en: "Repair a drive", es: "Reparar una unidad", args: []string{"ark", "repair"}, pick: repairPicker(),
+					hintEN: "(needs sudo)", hintES: "(necesita sudo)"},
+				{en: "Give a copied drive a new id", es: "Dar un id nuevo a una copia", args: []string{"ark", "new-id"}, pick: copyPicker(),
+					hintEN: "(needs sudo)", hintES: "(necesita sudo)"},
+			}},
 		}},
 		{en: "Repair with no internet (rebuild kit)", es: "Reparar sin internet (kit de reconstrucción)", sub: []menuItem{
 			{en: "Is the rebuild kit complete?", es: "¿Está completo el kit de reconstrucción?", args: []string{"kit", "status"}},
@@ -187,6 +196,69 @@ func drivePicker() *menuPicker {
 			return cs
 		},
 	}
+}
+
+// repairPicker lists the AI-ARK drives `ark repair` can check (an id, not a copy of another drive, usable),
+// those with filesystem errors (LAI-ARK-004) first.
+func repairPicker() *menuPicker {
+	return &menuPicker{
+		source:  []string{"ark", "drives"},
+		titleEN: "Which drive do you want to check and repair?", titleES: "¿Qué unidad quiere comprobar y reparar?",
+		emptyEN: "No AI-ARK drive is connected.", emptyES: "No hay ninguna unidad AI-ARK conectada.",
+		choices: func(raw []byte, l Lang) []menuChoice {
+			var first, rest []menuChoice
+			for _, d := range pickerDrives(raw) {
+				if d.id() == "" || d.State == "unusable" || d.State == "ejecting" || d.has(doctor.ARK006) {
+					continue
+				}
+				label := d.name()
+				if d.Mount != "" {
+					label += " (" + d.Mount + ")"
+				}
+				if d.has(doctor.ARK004) {
+					first = append(first, menuChoice{label: label + pick(l, ", has errors", ", tiene errores"), value: d.id()})
+					continue
+				}
+				rest = append(rest, menuChoice{label: label, value: d.id()})
+			}
+			return append(first, rest...)
+		},
+	}
+}
+
+// copyPicker lists the copies that share their id with another drive (LAI-ARK-006), by mount path: the
+// root id names both twins.
+func copyPicker() *menuPicker {
+	return &menuPicker{
+		source:  []string{"ark", "drives"},
+		titleEN: "Which copy should get a new id?", titleES: "¿Qué copia debe recibir un id nuevo?",
+		emptyEN: "No drive shares its id with another one. Nothing to do.", emptyES: "Ninguna unidad comparte su id con otra. No hay nada que hacer.",
+		choices: func(raw []byte, l Lang) []menuChoice {
+			var cs []menuChoice
+			for _, d := range pickerDrives(raw) {
+				if !d.has(doctor.ARK006) {
+					continue
+				}
+				value, label := d.Device, d.name()+" ("+d.Device+")"
+				if d.Mount != "" {
+					value, label = d.Mount, d.name()+" ("+d.Mount+")"
+				}
+				cs = append(cs, menuChoice{label: label, value: value})
+			}
+			return cs
+		},
+	}
+}
+
+// pickerDrives reads the drives of `aictl ark drives --json`.
+func pickerDrives(raw []byte) []wireDrive {
+	var res struct {
+		Drives []wireDrive `json:"drives"`
+	}
+	if json.Unmarshal(raw, &res) != nil {
+		return nil
+	}
+	return res.Drives
 }
 
 // servicePicker is the fixed list of services (aictl.md, services).

@@ -146,7 +146,11 @@ func (t ExecTools) ListBlock(ctx context.Context) ([]BlockDevice, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ParseLsblk(res.Stdout)
+	devs, err := ParseLsblk(res.Stdout)
+	if err != nil {
+		return nil, &ToolError{Tool: "lsblk", ExitCode: -1, Err: err}
+	}
+	return devs, nil
 }
 
 // Wipe implements Tools.

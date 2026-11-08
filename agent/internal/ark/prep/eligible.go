@@ -185,11 +185,12 @@ func CheckDrive(devs []BlockDevice, dev, ownMount string, system []string) Drive
 	if !ok {
 		return DriveUnknown
 	}
-	if d.FSType != "ext4" || d.Label != Label {
-		return DriveNotArk
-	}
+	// The system check first: the computer's own disk is refused as such, whatever its label.
 	if systemMount(disk, system) != "" || !ValidDevice(disk.Path) {
 		return DriveSystem
+	}
+	if d.FSType != "ext4" || d.Label != Label {
+		return DriveNotArk
 	}
 	for _, m := range allMounts(disk) {
 		if ownMount == "" || filepath.Clean(m) != filepath.Clean(ownMount) {

@@ -79,6 +79,19 @@ type wireDrive struct {
 	Label     string  `json:"label"`
 	SizeBytes int64   `json:"size_bytes"`
 	State     string  `json:"state"`
+	Problems  []struct {
+		Code string `json:"code"`
+	} `json:"problems"`
+}
+
+// has reports whether the drive lists the problem code.
+func (d wireDrive) has(code string) bool {
+	for _, p := range d.Problems {
+		if p.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func (d wireDrive) id() string {
