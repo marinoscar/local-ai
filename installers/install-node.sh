@@ -1826,6 +1826,8 @@ usage() {
   cat <<'USAGE'
 Usage: sudo bash install-node.sh [options]
 
+  Run it with no options on a terminal and it asks what it needs (guided mode).
+
   --node-id <ai-nN>        node id, e.g. ai-n4 (ai-n followed by 1..9999)
   --profile <id>           catalog profile id
   --backend <cuda|vulkan|cpu>
@@ -2305,7 +2307,189 @@ do_repair() {
 # end INST-08
 # ===============================================================================================================
 
+# ---------------------------------------------------------------------------------------------------------------
+# Guided mode (issue #429, ADR-0009 rules 1 and 2; installer.md section 3.1.1). Run with no arguments on a
+# terminal, the installer asks the few questions that matter in plain words, each with a suggested answer, shows
+# the same choices as one typed line, optionally previews them as a dry run, and then runs ITSELF again with those
+# flags (LAI_INSTALLER_GUIDED=1 so the second run never asks again). Everything after that is the normal path.
+# Without a terminal, or with any argument, nothing here runs.
+# Dev hooks (LAI_INSTALLER_DEV=1 only): LAI_INSTALLER_GUIDE=1 forces it; LAI_INSTALLER_GUIDE_IN / _OUT replace
+# /dev/tty; LAI_INSTALLER_MEDIA replaces /media; LAI_INSTALLER_GUIDE_RECORD=<file> records the preview and the final
+# run ("preview: <args>", "run: <args>") instead of running them.
+# ---------------------------------------------------------------------------------------------------------------
+guide_wanted() {
+  [[ -z "${LAI_INSTALLER_GUIDED:-}" ]] || return 1
+  if ((DEV)) && [[ "${LAI_INSTALLER_GUIDE:-}" == 1 ]]; then return 0; fi
+  [[ -t 1 ]] && tty_available
+}
+
+guide_say() { printf '%s\n' "$*" >&8; }
+
+# guide_ask <prompt> <default>: one answer in GUIDE_REPLY ("" at end of input); the default when Enter alone.
+guide_ask() {
+  local prompt="$1" def="$2"
+  if [[ -n "$def" ]]; then printf '%s [%s]: ' "$prompt" "$def" >&8; else printf '%s: ' "$prompt" >&8; fi
+  GUIDE_REPLY=""
+  IFS= read -r -u 7 GUIDE_REPLY || { printf '\n' >&8; GUIDE_EOF=1; }
+  GUIDE_REPLY="${GUIDE_REPLY#"${GUIDE_REPLY%%[![:space:]]*}"}"; GUIDE_REPLY="${GUIDE_REPLY%"${GUIDE_REPLY##*[![:space:]]}"}"
+  [[ -n "$GUIDE_REPLY" ]] || GUIDE_REPLY="$def"
+}
+
+# guide_yes <question> <y|n default>: 0 for yes. Anything but y/yes/n/no asks again (three times, then the default).
+guide_yes() {
+  local q="$1" def="$2" hint="y/N" i
+  [[ "$def" == y ]] && hint="Y/n"
+  for i in 1 2 3; do
+    guide_ask "$q ($hint)" ""
+    case "${GUIDE_REPLY,,}" in
+      "") [[ "$def" == y ]]; return ;;
+      y|yes|s|si|sí) return 0 ;;
+      n|no) return 1 ;;
+    esac
+    ((GUIDE_EOF)) && { [[ "$def" == y ]]; return; }
+    guide_say "  Please answer y (yes) or n (no)."
+  done
+  [[ "$def" == y ]]
+}
+
+# guide_ark_drives: the mounted AI-ARK drives (a folder with localai/ in it), one per line.
+guide_ark_drives() {
+  local media d
+  media="$(i07_dev LAI_INSTALLER_MEDIA /media)"
+  for d in "$media"/*/AI-ARK "$media"/AI-ARK; do
+    [[ -d "$d/localai" ]] && printf '%s\n' "$d"
+  done
+  return 0
+}
+
+guided_setup() {
+  local gin=/dev/tty gout=/dev/tty self
+  if ((DEV)); then gin="${LAI_INSTALLER_GUIDE_IN:-$gin}"; gout="${LAI_INSTALLER_GUIDE_OUT:-$gout}"; fi
+  exec 7<"$gin" 8>>"$gout"
+  GUIDE_EOF=0
+  self="$(readlink -f "${BASH_SOURCE[0]}")"
+
+  guide_say ""
+  guide_say "=================================================================="
+  guide_say " Local AI: set up this computer as an AI node"
+  guide_say "=================================================================="
+  guide_say "I will ask up to 4 questions. Press Enter to take the suggested"
+  guide_say "answer, shown in [brackets]. Nothing changes until you say so."
+  if ((EUID != 0 && !DEV)); then
+    guide_say ""
+    guide_say "This installer needs administrator rights. Run it again like this:"
+    guide_say "  sudo bash $self"
+    leave 3
+  fi
+
+  # 1. Node name: the one already on this computer, else ask until it is valid.
+  local NODE_YAML existing="" id="" tries=0
+  NODE_YAML="$(i07_node_yaml)"
+  existing="$(node_yaml_get node id)"
+  [[ "$existing" =~ $NODE_ID_RE ]] || existing=""
+  guide_say ""
+  guide_say "1/4  Node name"
+  if [[ -n "$existing" ]]; then
+    guide_say "     This computer is already set up as $existing. Keep that name."
+  else
+    guide_say "     The cloud's \"Add node\" page gives each computer a name like ai-n4."
+  fi
+  while :; do
+    guide_ask "     Name" "$existing"
+    id="${GUIDE_REPLY,,}"
+    if [[ "$id" =~ $NODE_ID_RE ]]; then break; fi
+    tries=$((tries + 1))
+    if ((GUIDE_EOF || tries >= 5)); then
+      guide_say "     No valid name was given. Nothing was changed."
+      leave 2
+    fi
+    if [[ -z "$id" ]]; then
+      guide_say "     A name is needed. Find it on the cloud's Add node page, or ask the lab owner."
+    else
+      guide_say "     \"$id\" is not a node name. It is ai-n and a number, for example ai-n4."
+    fi
+  done
+  if [[ -n "$existing" && "$id" != "$existing" ]]; then
+    guide_say "     Note: this computer is set up as $existing; the installer will refuse to rename it (LAI-INS-020)."
+  fi
+
+  # 2. Source: an AI-ARK drive if one is connected, else the internet.
+  local drives=() from="" d
+  while IFS= read -r d; do [[ -z "$d" ]] || drives+=("$d"); done < <(guide_ark_drives)
+  guide_say ""
+  guide_say "2/4  Where to install from"
+  if ((${#drives[@]} > 0)); then
+    guide_say "     An AI-ARK drive is connected: ${drives[0]}"
+    guide_say "     Installing from it needs no internet."
+    if guide_yes "     Install from the drive?" y; then from="${drives[0]}"; fi
+  else
+    guide_say "     No AI-ARK drive is connected, so everything is downloaded from the internet."
+    guide_say "     (To install with no internet, plug in the AI-ARK drive and start again.)"
+  fi
+
+  # 3. Cloud link: on by default online (the Add node page's command enrolls), off from the drive.
+  local enroll=0 cdef=y
+  [[ -n "$from" ]] && cdef=n
+  guide_say ""
+  guide_say "3/4  Connect to the lab's cloud ($OPT_CLOUD_URL)"
+  guide_say "     You need the node credential (it starts with nod_) from the Add node page."
+  guide_say "     It is asked for later, hidden. You can also connect later: sudo aictl cloud enroll"
+  if guide_yes "     Connect now?" "$cdef"; then enroll=1; fi
+
+  # 4. Preview first.
+  local preview=0
+  guide_say ""
+  guide_say "4/4  Preview"
+  if guide_yes "     First show what would be done, without changing anything? (recommended)" y; then preview=1; fi
+
+  local args=(--node-id "$id")
+  [[ -z "$from" ]] || args+=(--from-ark "$from")
+  ((enroll)) && args+=(--cloud-url "$OPT_CLOUD_URL" --enroll)
+  guide_say ""
+  guide_say "Ready:"
+  guide_say "  Node name:     $id"
+  guide_say "  Install from:  ${from:-the internet}"
+  if ((enroll)); then guide_say "  Cloud:         connect now (the credential is asked for, hidden)"
+  else guide_say "  Cloud:         later (sudo aictl cloud enroll)"; fi
+  guide_say "The same, typed in one line:"
+  guide_say "  sudo bash $self ${args[*]}"
+
+  if ((preview)); then
+    guide_say ""
+    guide_say "Preview (nothing is changed):"
+    local prc=0
+    if ((DEV)) && [[ -n "${LAI_INSTALLER_GUIDE_RECORD:-}" ]]; then
+      printf 'preview: %s\n' "${args[*]} --dry-run" >>"$LAI_INSTALLER_GUIDE_RECORD"
+      prc="${LAI_INSTALLER_GUIDE_PREVIEW_RC:-0}"
+    else
+      LAI_INSTALLER_GUIDED=1 bash "$self" "${args[@]}" --dry-run || prc=$?
+    fi
+    if ((prc != 0)); then
+      guide_say ""
+      guide_say "The preview stopped with a problem (exit $prc). The lines above say what and how to fix it."
+      guide_say "Nothing was changed. Fix it, then run the installer again."
+      leave "$prc"
+    fi
+    guide_say ""
+    if ! guide_yes "That was only a preview. Install for real now?" n; then
+      guide_say "Nothing was changed. Run the installer again any time."
+      leave 4
+    fi
+  elif ! guide_yes "Start the installation now?" n; then
+    guide_say "Nothing was changed. Run the installer again any time."
+    leave 4
+  fi
+  exec 7<&- 8>&-
+  if ((DEV)) && [[ -n "${LAI_INSTALLER_GUIDE_RECORD:-}" ]]; then
+    printf 'run: %s\n' "${args[*]}" >>"$LAI_INSTALLER_GUIDE_RECORD"
+    leave 0
+  fi
+  LAI_INSTALLER_GUIDED=1 exec bash "$self" "${args[@]}"
+}
+GUIDE_REPLY=""; GUIDE_EOF=0
+
 main() {
+  local argc=$#
   parse_args "$@"
   if ((OPT_HELP)); then usage; return 0; fi
   # Detect "never stamped" without the stamper rewriting this very comparison (it only sees whole tokens).
@@ -2324,6 +2508,7 @@ main() {
       leave 2
     fi
   fi
+  if ((argc == 0)) && guide_wanted; then guided_setup; fi
 
   if ((DEV)); then
     STATE_DIR="${LAI_INSTALL_STATE_DIR:-$DEFAULT_STATE_DIR}"

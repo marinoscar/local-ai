@@ -150,9 +150,10 @@ Para agregar un nodo, descargue el instalador de una versión, verifíquelo y ej
 ```bash
 curl -fsSL https://github.com/marinoscar/local-ai/releases/download/node-v<version>/install-node.sh -o install-node.sh
 sha256sum install-node.sh                        # debe coincidir con SHA256SUMS de la versión (o con el asistente Add node de la nube)
-sudo bash install-node.sh --node-id ai-n4 --dry-run
-sudo bash install-node.sh --node-id ai-n4 --cloud-url https://ai.marin.cr --enroll
+sudo bash install-node.sh                        # pregunta el nombre del nodo, el origen y el enlace con la nube; primero muestra una vista previa
 ```
+
+O lo mismo con opciones escritas: `sudo bash install-node.sh --node-id ai-n4 --cloud-url https://ai.marin.cr --enroll` (agregue `--dry-run` para la vista previa).
 
 Sin internet, desde la unidad AI-ARK: `sudo bash /media/<usuario>/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/<usuario>/AI-ARK`. El procedimiento completo está en [05 Agregar un nodo](docs/runbooks/05-add-a-node.md); cada opción está en [installer.md](docs/specs/installer.md).
 

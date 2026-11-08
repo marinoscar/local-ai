@@ -150,9 +150,10 @@ To add a node, download the installer of a release, check it and run it on the n
 ```bash
 curl -fsSL https://github.com/marinoscar/local-ai/releases/download/node-v<version>/install-node.sh -o install-node.sh
 sha256sum install-node.sh                        # must match the release's SHA256SUMS (or the cloud's Add node wizard)
-sudo bash install-node.sh --node-id ai-n4 --dry-run
-sudo bash install-node.sh --node-id ai-n4 --cloud-url https://ai.marin.cr --enroll
+sudo bash install-node.sh                        # asks the node name, the source, the cloud link; previews first
 ```
+
+Or the same with typed flags: `sudo bash install-node.sh --node-id ai-n4 --cloud-url https://ai.marin.cr --enroll` (add `--dry-run` to preview).
 
 Offline, from the AI-ARK drive: `sudo bash /media/<user>/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/<user>/AI-ARK`. The full procedure is [05 Add a node](docs/runbooks/05-add-a-node.md); every flag is in [installer.md](docs/specs/installer.md).
 
