@@ -43,6 +43,16 @@ sudo bash /media/<user>/AI-ARK/localai/kit/installers/install-node.sh --from-ark
 ```
 (The script is never piped straight into `bash` from the network: it's downloaded, checked, then run.)
 
+#### 3.1.1 Guided mode (no arguments on a terminal)
+[ADR-0009](../decisions/0009-optimized-for-humans.md) rules 1 and 2, issue #429. `sudo bash install-node.sh` with **no arguments**, when stdout is a terminal and `/dev/tty` can be read, asks the choices that matter instead of requiring flags. Any argument, no terminal, or `LAI_INSTALLER_GUIDED=1` skips it, so automation is unchanged. It runs after `--help`/`--version` and the stamp check, and before the root check (it tells a non-root user the exact `sudo` line and exits 3).
+
+1. **Node name.** The id in the existing `node.yaml` is the suggestion (Enter keeps it). Otherwise there is no default. A bad answer is explained ("ai-n and a number, for example ai-n4") and asked again. Upper case is accepted. After 5 bad answers, or at the end of input, it exits 2. A name different from the existing one is warned about (`LAI-INS-020`, which P9 still enforces).
+2. **Source.** A mounted AI-ARK drive (`/media/*/AI-ARK` with `localai/`) is offered: "Install from the drive? (Y/n)" → `--from-ark`. With no drive it says everything is downloaded, and how to install offline instead.
+3. **Cloud.** "Connect now? (Y/n)" online, `(y/N)` from a drive → `--cloud-url <url> --enroll`. The credential is still asked later, hidden, by P13.
+4. **Preview.** "First show what would be done, without changing anything? (recommended) (Y/n)".
+
+Then it shows the choices and **the same choices as one typed line**. With the preview it runs itself with those flags plus `--dry-run`, then asks "Install for real now? (y/N)". Without it, it asks "Start the installation now? (y/N)". A No exits 4 with "Nothing was changed". A failing preview exits with the preview's code. A Yes runs `bash install-node.sh <flags>` again with `LAI_INSTALLER_GUIDED=1`, and from there everything is the normal path (§4.3). Yes/no answers accept y/yes/s/si and n/no; anything else is asked again, up to three times, then the default is taken. Dev hooks (with `LAI_INSTALLER_DEV=1` only): `LAI_INSTALLER_GUIDE`, `LAI_INSTALLER_GUIDE_IN`/`_OUT`, `LAI_INSTALLER_MEDIA`, `LAI_INSTALLER_GUIDE_RECORD`, `LAI_INSTALLER_GUIDE_PREVIEW_RC`. Tests: `scripts/tests/test-installer.sh`, section "guided mode".
+
 ### 3.2 Flags
 | Flag | Default | Meaning |
 |---|---|---|
