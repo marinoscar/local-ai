@@ -94,6 +94,7 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
     It asks up to 4 questions: the node name (the one in the wizard, like `ai-n4`), whether to install from a connected AI-ARK drive, whether to connect to the cloud now, and whether to show a preview first (say yes). Press **Enter** to take the suggested answer in [brackets]. It then shows the same choices as one typed line, runs the preview, and asks **Install for real now?** Answer `y` and continue at the PIN question of step 11. Nothing changes until you answer yes.
     - **What you should see:** `1/4  Node name` … `4/4  Preview`, then `Ready:` with your choices, the preview's `[dry-run] would …` lines, and the question.
     - **If it doesn't work:** `This installer needs administrator rights`: type `sudo` in front, as shown. The preview stops with a code: see [07 → Installer stopped](07-troubleshooting.md#installer-stopped).
+    - **En español:** `sudo bash install-node.sh --lang es` asks the same questions in Spanish (`1/4  Nombre del nodo`, answer `s` for yes), and the install that follows, its phase titles and its `LAI-INS` messages are in Spanish too. A computer set up in Spanish gets Spanish without `--lang es`. Any typed command below also takes `--lang es`.
 
     The rest of this part is the same with typed flags, for when you prefer them.
 

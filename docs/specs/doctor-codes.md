@@ -466,7 +466,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-DSK-016 | warning | Couldn't check or download an update | Try later, or install the update from the rebuild kit |
 
 ### `LAI-INS` — owner: [installer.md](installer.md)
-> Copied from [installer.md](installer.md) §8 (authoritative; installer output is terminal-only, English).
+> Copied from [installer.md](installer.md) §8 (authoritative; installer output is terminal-only, English and Spanish).
 
 | Code | Sev | Meaning | Fix (plain language) |
 |---|---|---|---|
