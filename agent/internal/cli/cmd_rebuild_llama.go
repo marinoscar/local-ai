@@ -81,10 +81,15 @@ a broken build, and it works when the agent is down.
   --yes               Do not ask for confirmation.
 The source is, in this order, the tree already in /opt/localai/llama.cpp/src/<commit>/, the kit's
 tarball of the commit, the kit's git mirror and, only when the node is online, GitHub. With no internet
-(offline or survival mode, or --from-kit) and no local source the command stops with LAI-KIT-002. When
-the kit holds a ready-made build that fits this computer exactly, you are asked whether to use it
-instead of compiling. The new build is exported to the kit when it is switched on. Ctrl-C asks whether
-to stop the build; stopping leaves the build in use untouched. Run it with sudo.
+(offline or survival mode, or --from-kit) and no local source the command stops with LAI-KIT-002.
+With none of --backend, --cuda-arch, --jobs, --source and --prebuilt it picks its own fallbacks: the
+ready-made build in the kit that fits this computer, then building for the node's backend, then for
+Vulkan, then for the processor only. Before each next option it asks "Try ...? [Y/n]" (Enter is yes;
+--yes or no terminal goes on by itself), and a compile that runs out of memory is tried once more
+with fewer jobs. With those flags it does only what they say. The compile shows its step, percentage
+and time left. The new build is exported to the kit when it is switched on. Ctrl-C asks whether to
+stop the build; stopping leaves the build in use untouched, and running the same command again
+carries on where it stopped. Run it with sudo.
 Specification: docs/specs/aictl.md section 4.23, docs/specs/llama-router.md section 4.10, docs/specs/rebuild-kit.md section 4.3`,
 		Marks:   MarkLocal | MarkRoot,
 		Timeout: rebuildLlamaTimeout,
@@ -171,6 +176,9 @@ func rebuildLlama(c *Call) error {
 	if req.DryRun {
 		return llamaDryRun(c, eng, req)
 	}
+	if llamaAutoMode(req) {
+		return llamaAuto(c, eng, host, env, req, pr, mode) // cmd_rebuild_llama_auto.go
+	}
 
 	in, err := eng.Resolve(c.Ctx, req)
 	if err != nil {
@@ -209,15 +217,7 @@ func rebuildLlama(c *Call) error {
 // llamaBuild runs the engine under the Ctrl-C question and the heartbeat, and maps its error. A build
 // the person stopped is exit 130 with the build in use untouched.
 func llamaBuild(c *Call, eng llamaEngine, req build.Request, pr *llamaPrinter, env local.Env) (build.Result, error) {
-	hb := pr.startHeartbeat(llamaBuildsDir(kitHostFn()))
-	var res build.Result
-	stopped, err := c.guardInterrupt(pr, func(ctx context.Context) error {
-		var berr error
-		res, berr = eng.Build(ctx, req)
-		return berr
-	})
-	hb()
-	pr.endCompile()
+	res, stopped, err := llamaBuildRaw(c, eng, req, pr)
 	if stopped && err != nil {
 		return res, llamaStopped(c)
 	}
