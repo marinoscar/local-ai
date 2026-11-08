@@ -19,7 +19,7 @@ Use this when a computer is new, wiped or broken, **there is no internet**, and 
 From [rebuild-kit.md §5](../specs/rebuild-kit.md#5-limits-what-cant-be-rebuilt-offline):
 - **A kernel update without a matching NVIDIA module:** boot the previous kernel (Part 6, step 26). This is the most common case.
 - **A different Ubuntu version than the kit's:** install the same version the kit was made for (step 2).
-- **A GPU newer than the kit's CUDA tools:** rebuild with `--backend vulkan` or `--backend cpu`.
+- **A GPU newer than the kit's CUDA tools:** `sudo aictl rebuild-llama` tries Vulkan and then the processor by itself (step 20).
 - **A model that needs a newer llama.cpp than any in the kit:** not possible offline. Use another model.
 - **Secure Boot with self-built driver modules:** needs one extra screen at boot (MOK, step 14).
 - **Dead disk, dead GPU, firmware problems:** hardware. Use another computer.
@@ -31,13 +31,16 @@ From [rebuild-kit.md §5](../specs/rebuild-kit.md#5-limits-what-cant-be-rebuilt-
 
 1. **Plug the AI-ARK drive into any Linux computer** (or wait until step 8 if you have none) and open **START-HERE.html** on it.
    - **What you should see:** the drive's colour, "survival capable", the last sync date and catalog version, and links to these manuals.
-2. **Find which Ubuntu version the kit is for.** In the **Files** app open `AI-ARK → localai → kit → debs`, or in a terminal:
+2. **Find which Ubuntu version the kit is for.** In the **Files** app open `AI-ARK → localai → kit → debs`. The name of the folder inside says it:
 
-   ```
-   ls /media/$USER/AI-ARK/localai/kit/debs/
-   ```
+   | Folder name | Install this Ubuntu |
+   |---|---|
+   | `resolute-amd64` | Ubuntu **26.04**, normal PC (Intel or AMD processor) |
+   | `noble-amd64` | Ubuntu **24.04**, normal PC (Intel or AMD processor) |
+   | a name ending in `-arm64` | the same version, for an ARM computer |
 
-   - **What you should see:** folders like `resolute-amd64` (Ubuntu 26.04, normal PC) or `noble-amd64` (Ubuntu 24.04). **Install that Ubuntu version** in Part 2. NVIDIA driver packages are in `kit/nvidia/<codename>-<arch>-<branch>/`.
+   - **What you should see:** one folder, for example `resolute-amd64`: then you need **Ubuntu 26.04**. **Install that Ubuntu version** in Part 2. (In a terminal, `ls /media/$USER/AI-ARK/localai/kit/debs/` shows the same names.)
+   - **To see which Ubuntu a computer already has:** open **Settings → About** and read the line **OS Name** (for example `Ubuntu 26.04 LTS`), or in a terminal type `lsb_release -d` (it shows `Description: Ubuntu 26.04 LTS`). Only the first two numbers matter: `26.04.1` is still 26.04.
    - **If it doesn't work:** no `debs` folder: the drive never got its kit. It can't rebuild a node; find another drive, or wait for internet ([05](05-add-a-node.md)).
 3. **If you don't have an Ubuntu USB stick:** a full AI-ARK drive has the installer image in `localai/kit/iso/`. Check it isn't damaged:
 
@@ -88,15 +91,16 @@ From [rebuild-kit.md §5](../specs/rebuild-kit.md#5-limits-what-cant-be-rebuilt-
     - **NVIDIA computer without a working driver:** it offers the driver packages from the kit (`LAI-INS-010`). Say **yes**. When it says a reboot is needed, reboot (step 13) and **run the same command again**; it continues where it stopped.
     - **What you should see:** `==> [n/15] …` lines, then `Local AI node ai-nN is installed.`, the brain, `Local UI: http://127.0.0.1:7070`, `Content: import running`, and a **TO DO** list.
     - **If it doesn't work:** the message names the phase and the code. Fix what it says and run the same command again. Common ones: `LAI-INS-021` (the agent program failed its signature check: **don't** continue; use another drive), `LAI-INS-030` (a package couldn't be installed), `LAI-INS-032` (the llama.cpp build failed; Part 5). See [07 → Installer stopped](07-troubleshooting.md#installer-stopped).
-11. **Optional: put back the old node's settings** (keeps the same API key, PIN and cloud link). The backup was made with `sudo aictl backup-config --to-ark` and is in the folder `localai/kit/config/<node-id>/` on the drive. List the backups of this node and pick the newest one (the date is in the name, `YYYYMMDDTHHMMSSZ`):
+11. **Optional: put back the old node's settings** (keeps the same API key, PIN and cloud link). The backup was made with `sudo aictl backup-config --to-ark` and is on the drive, in `localai/kit/config/<node-id>/`. With the drive plugged in, run:
 
     ```
-    sudo ls /media/$USER/AI-ARK/localai/kit/config/ai-nN/
-    sudo aictl backup-config --restore /media/$USER/AI-ARK/localai/kit/config/ai-nN/localai-config-ai-nN-<date>.tar.gz
+    sudo aictl backup-config --restore latest
     ```
 
-    - **What you should see:** file names like `localai-config-ai-nN-20261102T150405Z.tar.gz`; then a list of files it will replace, a confirmation question, then the agent restarts.
-    - **If it doesn't work:** no folder for this node id: no backup was ever made for it; skip this step (you will enroll again in Part 8). `LAI-CLI-012`: the file can't be read; try an older backup.
+    It finds the newest backup of this node by itself (on the drive, or on this computer).
+    - **What you should see:** `i Using the newest backup of ai-nN, made <date>: <file>`, then a list of the files it will replace and a question: type `y` and press **Enter**. Then `✓ Restored … files` and the agent restarts.
+    - **To choose another backup** (an older one, or a backup of another node id): run `sudo aictl backup-config --restore` with nothing after it. It shows a numbered list, newest first; type the number and press **Enter** (just **Enter** takes number 1).
+    - **If it doesn't work:** `LAI-KIT-050` (no backup of this node was found): check the drive is plugged in; if the message names other nodes' backups, the node id may be different (use the list above); with no backup at all, skip this step (you will enroll again in Part 8). `LAI-CLI-012`: the file can't be read; choose an older backup from the list.
 12. **Log out and back in** (your user was added to the `localai-operators` group).
 13. **Reboot** (laptop settings and a new NVIDIA driver only apply after a reboot):
 
@@ -164,31 +168,32 @@ From [rebuild-kit.md §5](../specs/rebuild-kit.md#5-limits-what-cant-be-rebuilt-
 
 The installer already built llama.cpp. Use this later when: the AI service doesn't start after a system update (`LAI-LLM-002`, `LAI-LLM-022`), the build failed during install (`LAI-INS-032`), or you want the commit recorded in `node.yaml` (`llama.commit`). Offline it uses the source in the kit. Spec: [aictl.md §4.23](../specs/aictl.md#423-aictl-rebuild-llama--local-root--3-h).
 
-20. **Check first** (changes nothing; it lists every check with ✓ or ✗ and, if a package is missing, the exact command that installs it from the kit):
+20. **Rebuild: run it with no options and answer Y.**
 
     ```
-    sudo aictl rebuild-llama --from-kit --dry-run
+    sudo aictl rebuild-llama
     ```
 
-    - **What you should see:** only ✓ lines. Fix any ✗ line as it says, then run it again.
-    - `--from-kit` makes it take the source code from the kit, so it never tries the internet.
-
-21. **Rebuild and switch:**
-
-    ```
-    sudo aictl rebuild-llama --from-kit
-    ```
-
-    - **What you should see:** `… Building llama.cpp <commit> for cuda (sm 75), 5 parallel jobs`, then `✓ Build … passed its test (CUDA0: …)` and `✓ Switched to the new build. <model> is loaded again.`
+    It chooses by itself, in this order, and stops at the first that works: the **ready-made build** in the kit made for exactly this computer (it takes a minute), then **building** from the kit's source for this computer's graphics chip, then for **Vulkan**, then for the **processor only** (slow answers, but it always works). Offline it uses only the source on this computer and in the kit.
+    - **Answer every question with `y` (or just press Enter where it shows `[Y/n]`).** If one way does not work it says so and asks, for example `That did not work (LAI-LLM-018). Try building for Vulkan (works with most graphics chips) instead? [Y/n]`: press **Enter**.
+    - **What you should see:** `… Building llama.cpp <commit> for cuda (sm 75), 5 parallel jobs`, then one line that keeps changing, like `Compiling fattn.cu  ████░░░░░░  42%  5/12  about 18 min left`. Building can take from a few minutes to a few hours; leave it running. At the end: `✓ Build … passed its test (CUDA0: …)` and `✓ Switched to the new build. <model> is loaded again.`
+    - If it says the compiler **ran out of memory**, it tries again by itself with fewer parallel jobs; nothing to do.
+    - **To stop it:** press **Ctrl + C** and answer `y`. Nothing changes. Run the same command again later: it **carries on where it stopped** (`… Carrying on with the build that was stopped before`).
     - The new build is tested before it is used. If the AI doesn't come back with it, the previous build is restored by itself.
-    - **If it doesn't work:**
-      - `LAI-KIT-002` (the kit doesn't have the needed llama.cpp version): choose a commit the kit has. `ls /media/$USER/AI-ARK/localai/kit/src/` shows `llama.cpp-<commit>.tar.gz` files; run `sudo aictl rebuild-llama --from-kit --commit <commit>`. `LAI-KIT-001` (the source in the kit is damaged): `aictl kit verify --full`, or use another drive.
-      - `LAI-KIT-010` (build tools missing) or `LAI-LLM-018` (the build failed; the message names a missing package): install it from the kit with `sudo aictl kit install-debs --packages <package>` (step 29), then run step 21 again.
-      - **Faster, if this computer exported its own build before:** `ls /media/$USER/AI-ARK/localai/kit/prebuilt/` shows `llama.cpp-<commit>-<backend>-….tar.gz`; restore it with `sudo aictl rebuild-llama --prebuilt <that file>`. It works only with the same Ubuntu version, processor, backend and graphics chip: otherwise it stops with `LAI-KIT-048`, says what is different and names the files the kit has, and changes nothing. `sudo aictl rebuild-whisper` offers a file that fits exactly by itself.
-      - Build fails on an NVIDIA computer (CUDA tools missing or not matching the driver): build for Vulkan or the processor instead: `sudo aictl rebuild-llama --from-kit --backend vulkan` (or `--backend cpu`, slow but always works).
-      - `LAI-HW-019` (GPU type not detected): give it, for example `--cuda-arch 75` for an RTX 20xx, `86` for RTX 30xx, `89` for RTX 40xx.
-      - Runs out of memory while building: `--jobs 2`.
-      - `LAI-LLM-019` (or `LAI-KIT-021` for the speech-to-text build): the new build didn't work; the previous one is still in use. Nothing broke.
+
+21. **If it still doesn't work** (it ends with a red `✗` and a code):
+    - **Check what is missing** (changes nothing; it lists every check with ✓ or ✗ and, if a package is missing, the exact command that installs it from the kit):
+
+      ```
+      sudo aictl rebuild-llama --from-kit --dry-run
+      ```
+
+      Fix any ✗ line as it says, then run step 20 again. `--from-kit` makes it take the source code only from the kit, so it never tries the internet.
+    - `LAI-KIT-002` (the kit doesn't have the needed llama.cpp version): choose a commit the kit has. `ls /media/$USER/AI-ARK/localai/kit/src/` shows `llama.cpp-<commit>.tar.gz` files; run `sudo aictl rebuild-llama --from-kit --commit <commit>`. `LAI-KIT-001` (the source in the kit is damaged): `aictl kit verify --full`, or use another drive.
+    - `LAI-KIT-010` (build tools missing) or `LAI-LLM-018` naming a missing package: install it from the kit with `sudo aictl kit install-debs --packages <package>` (step 29), then run step 20 again.
+    - `LAI-KIT-048` (the ready-made build doesn't fit this computer): it says what is different and names the files the kit has; step 20 then builds from source by itself.
+    - `LAI-LLM-019` (or `LAI-KIT-021` for the speech-to-text build): the new build didn't work; the previous one is still in use. Nothing broke.
+    - **Only for experts** (each of these turns off the automatic choice and does exactly what it says): `--backend vulkan` or `--backend cpu` (build for that backend only), `--cuda-arch 75` (the GPU type when `LAI-HW-019` says it can't be detected: `75` for an RTX 20xx, `86` for RTX 30xx, `89` for RTX 40xx), `--jobs 2` (fewer parallel jobs), `--prebuilt <file>` (restore one ready-made file from `ls /media/$USER/AI-ARK/localai/kit/prebuilt/`; `sudo aictl rebuild-whisper` offers a file that fits exactly by itself).
 22. **Build without switching** (to test first): `sudo aictl rebuild-llama --from-kit --no-activate`. It builds and tests the new version but keeps the running one. Old builds are kept too (2 by default; `--keep <n>` changes it).
 23. **Speech-to-text has its own build:** `sudo aictl rebuild-whisper --from-kit` (same idea and flags, including `--prebuilt <file>`; `LAI-SVC-012` asks for it).
 24. **Save the working builds into the kit** (so the next rebuild of this computer can skip compiling): `sudo aictl kit export-build`. It also happens by itself after each successful build.
@@ -200,7 +205,7 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
 25. **Check the driver:** NVIDIA: `nvidia-smi`. AMD/Intel: `vulkaninfo --summary`.
     - **What you should see:** the GPU name and memory. For Vulkan, a device that is **not** `llvmpipe` (`LAI-HW-018` means only the software renderer was found).
 26. **NVIDIA stopped working after a kernel update** (`LAI-HW-002`): restart, and in the boot menu choose **Advanced options for Ubuntu**, then the **previous** kernel (the second line, without "recovery mode"). If the menu doesn't show, hold **Shift** (or tap **Esc**) right after the maker's logo. The kit's driver modules match the older kernel.
-    - **What you should see:** `nvidia-smi` works again. Run `sudo aictl rebuild-llama --from-kit` if the AI still fails.
+    - **What you should see:** `nvidia-smi` works again. Run `sudo aictl rebuild-llama` (step 20) if the AI still fails.
 27. **Still no GPU:** the computer works on the processor with the small models. `aictl models --loadable` lists what fits.
 
 ---
