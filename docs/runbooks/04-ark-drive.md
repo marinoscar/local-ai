@@ -4,7 +4,7 @@ Use this when you buy, format, fill, plug in, eject, store or refresh the portab
 
 > **Before you start**
 > - You need: a node with internet (for the first fill), a USB 3 SSD, and a terminal (**Ctrl + Alt + T**).
-> - Formatting **erases the whole drive**. Unplug every other USB disk first.
+> - Formatting **erases the whole drive**. Unplug every other USB disk first. Formatting, repairing and fixing a copied drive are in the menu (`sudo aictl`, entry 6, then *The AI-ARK drive itself*); the raw commands are only a last resort (Appendices A and B).
 > - **Time:** formatting 10 minutes. First fill: many hours (leave it overnight, plugged into power). Later refreshes: minutes to an hour.
 
 > 🛠 Verify when implemented (Epic E3 ark sync and drive; E8 for the desktop buttons).
@@ -28,86 +28,51 @@ Use this when you buy, format, fill, plug in, eject, store or refresh the portab
 
 ## Part 2. Format a new drive as AI-ARK
 
-> ## ⚠️ WARNING: THESE COMMANDS ERASE THE WHOLE DRIVE
-> **Choosing the wrong device erases the wrong disk, including this computer's own disk.**
-> - **Unplug every other USB disk and memory stick first.**
-> - **Read the device name twice** before every command that contains it.
-> - Never pick the disk that has `/` or `/boot` under MOUNTPOINTS.
-> - Don't use exFAT, NTFS or FAT32: they can't keep Linux permissions, so the rebuild kit wouldn't work.
+> ## ⚠️ FORMATTING ERASES THE WHOLE DRIVE
+> - **Unplug every other USB disk and memory stick first**, so the only disk on offer is the new one.
+> - The menu never offers this computer's own disk, a disk with swap or Local AI data, or a disk that is open. It asks for the admin PIN and for the word `ERASE` before it erases anything.
+> - Don't use exFAT, NTFS or FAT32: they can't keep Linux permissions, so the rebuild kit wouldn't work. The menu always uses ext4.
 
-The exact procedure is [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting-a-new-ai-ark-drive). It's repeated here with explanations.
+How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting-a-new-ai-ark-drive). If the menu cannot run at all, use [Appendix A](#appendix-a-format-a-drive-by-hand-last-resort).
 
-5. **Plug in only the new drive.** List the disks:
+5. **Plug in only the new drive.** If a window opens for it, or it appears in **Files**, eject it there first: press the ⏏ next to its name.
+   - **What you should see:** the window closes. The drive stays plugged in.
+   - **If it doesn't work:** nothing happens when you plug it in: that is fine, go on.
 
-   ```
-   lsblk -o NAME,SIZE,MODEL,TRAN,MOUNTPOINTS,FSTYPE,LABEL
-   ```
+6. **Open the menu as administrator.** Press **Ctrl + Alt + T**, type `sudo aictl` and press **Enter**. Type your login password if it asks (nothing shows while you type). Choose **6** (*Offline content and the AI-ARK drive*), then **The AI-ARK drive itself**, then **Format a new drive as AI-ARK (erases it)**.
+   - The typed command is `sudo aictl ark format`; it does exactly the same.
+   - **What you should see:** `Disks that can be erased and made an AI-ARK drive:` with your drive on a numbered line (its name, size and `usb`), and under `Not offered:` the other disks with the reason, for example `this computer's own disk (it holds /)`.
+   - **If it doesn't work:** `Run it with sudo` (`LAI-CLI-006`): you typed `aictl` without `sudo`. Your drive is under `Not offered`: `open at …` means the desktop opened it, eject it (step 5) and try again; `a disk inside this computer` means it is not a USB disk. No disk at all (`LAI-ARK-016`): try another USB port or cable, wait 10 seconds, try again.
 
-   - **What you should see:** one disk with `TRAN` = `usb` and the size of your new drive, for example `sdb  1.8T  Portable SSD  usb`. The computer's own disk is usually `nvme0n1` or `sda`, with mount points like `/`. **Never pick that one.**
-   - **Write down the name** of the USB disk, for example `sdb`. In every command below, replace `sdX` with it. Partition 1 of it is `sdX1` (for example `sdb1`).
-   - **If it doesn't work:** no `usb` line: try another port or cable, wait 10 seconds, run it again.
+7. **Type the number of your drive** and press **Enter**. Check that the name and the size are those of the drive you bought.
+   - **What you should see:** `Erasing a disk needs the admin PIN.` and `Admin PIN:`.
+   - **If it doesn't work:** a number that is not in the list, or only **Enter**, stops with `Nothing was changed.` Start again at step 6.
 
-6. **Unmount anything the desktop opened from it:**
+8. **Type the admin PIN** and press **Enter** (nothing shows while you type).
+   - **If it doesn't work:** a wrong PIN shows how many tries are left. After three wrong PINs nothing was changed; ask the person who set the PIN up. No PIN set yet (`LAI-SEC-005`): set one first with `sudo aictl pin set`.
 
-   ```
-   sudo umount /dev/sdX?* 2>/dev/null; true
-   ```
+9. **Read the disk once more and type `ERASE`** in capital letters, then press **Enter**.
+   - **What you should see:** `Everything on this disk will be erased:` with the disk's name and size, then the question.
+   - **If it doesn't work:** anything other than `ERASE` (also `erase`) stops with `Nothing was changed.` That is the safe way out if you are not sure.
 
-   - **What you should see:** nothing, or a password prompt (type your login password).
+10. **Wait, and don't unplug the drive.** Each step prints a line: erasing, creating the partition, formatting (several minutes on a big drive), mounting, setting it up.
+    - **What you should see:** `✓ The new AI-ARK drive is ready (ark-3f9c0a12, mounted at /media/root/AI-ARK).` The `ark-…` value is the drive's **root id**. Write it on the drive's label.
+    - **If it doesn't work:** `LAI-ARK-017` (a disk tool failed): the message says what was left. Unplug the drive, plug it in again and repeat from step 6. If it fails again, use [Appendix A](#appendix-a-format-a-drive-by-hand-last-resort). Pressing **Ctrl + C** here does not stop it: it finishes so the drive is not left half done.
 
-7. **Erase old partition tables.** ⚠️ Check `sdX` is the USB disk from step 5.
+11. **Press Enter** to go back to the menu, then choose **The AI-ARK drive itself**, then **List the connected drives**.
+    - **What you should see:** `AI-ARK  ark-3f9c0a12  /media/root/AI-ARK  ext4  … free  ✓ ready`.
 
-   ```
-   sudo wipefs --all /dev/sdX
-   ```
-
-   - **What you should see:** lines like `/dev/sdX: 8 bytes were erased at offset …`, or nothing if the drive was blank.
-
-8. **Create one partition that fills the drive.** ⚠️ Same check.
-
-   ```
-   sudo parted --script /dev/sdX mklabel gpt mkpart AI-ARK ext4 1MiB 100%
-   ```
-
-   - **What you should see:** nothing (no output means success).
-
-9. **Format it as ext4 with the label AI-ARK.** ⚠️ Note the `1` at the end: the partition, not the whole disk.
-
-   ```
-   sudo mkfs.ext4 -L AI-ARK -m 0 -E lazy_itable_init=0,lazy_journal_init=0 /dev/sdX1
-   ```
-
-   (`-m 0` gives back the 5 % normally reserved for the system; `lazy_…=0` makes the first fill faster.)
-   - **What you should see:** `Creating filesystem with … blocks` and, after a minute or two, `Writing superblocks and filesystem accounting information: done`.
-
-10. **Check it:**
-
-    ```
-    sudo blkid /dev/sdX1
-    ```
-
-    - **What you should see:** `LABEL="AI-ARK"` and `TYPE="ext4"`.
-    - **If it doesn't work:** `TYPE="exfat"` or `"ntfs"`: step 9 ran on the wrong partition. Start again from step 5.
-
-11. **Mount it.** Unplug it and plug it back in (the desktop mounts it at `/media/<you>/AI-ARK`), or:
-
-    ```
-    udisksctl mount -b /dev/sdX1
-    ```
-
-    - **What you should see:** `Mounted /dev/sdX1 at /media/<you>/AI-ARK`.
-
-12. **Set it up for Local AI:**
+12. **Set it up** (only for a drive that shows `uninitialized`, `LAI-ARK-010`: one formatted by hand or with another tool; the menu of step 6 already did this):
 
     ```
     aictl ark drives
     aictl ark init /media/<you>/AI-ARK
     ```
 
-    Replace `<you>` with your user name (the path printed in step 11). The desktop app does the same with the **Set up this drive** button.
+    Use the mount path `aictl ark drives` shows. The desktop app does the same with the **Set up this drive** button.
     - **What it does:** it makes a folder called `localai` on the drive, with the empty sub-folders the drive needs, and one small file inside it called `ROOT.json` (the drive's name card). Then the computer writes `START-HERE.html` at the top of the drive (Part 9). It never erases, formats or deletes anything, and it only works on a drive that is still empty (`uninitialized`).
-    - **What you should see:** `aictl ark drives` first shows the drive as `uninitialized` (`LAI-ARK-010`). `init` asks you to type the drive's id (the `ark-…` value it shows) to confirm; anything else changes nothing, and `--yes` does not answer it. After `init`, run `aictl ark drives` again: `AI-ARK  ark-3f9c0a12  /media/<you>/AI-ARK  ext4  … free  ✓ ready`. The `ark-…` value is the drive's **root id**. Write it on the drive's label.
-    - **If it doesn't work:** `unusable` with `LAI-ARK-002`: it isn't ext4, repeat from step 5. `LAI-ARK-006`: two drives have the same id (a cloned drive); see [07 → The ark drive is not found](07-troubleshooting.md#the-ark-drive-is-not-found). The command refuses (and changes nothing) if the drive is already `ready` or the `localai` folder already has files in it: that drive was set up before, so use it as it is (Part 4). `LAI-ARK-003` (the drive is read-only), `LAI-ARK-014` (a read/write error) or `LAI-SYN-040` (no space): fix that first (Part 8), then press **Set up this drive** again; it is safe to repeat.
+    - **What you should see:** `init` asks you to type the drive's id (the `ark-…` value it shows) to confirm; anything else changes nothing, and `--yes` does not answer it. After `init`, `aictl ark drives` shows the drive `✓ ready`.
+    - **If it doesn't work:** `unusable` with `LAI-ARK-002`: it isn't ext4; format it (step 6). `LAI-ARK-006`: two drives have the same id (a cloned drive); see Part 8, step 29. The command refuses (and changes nothing) if the drive is already `ready` or the `localai` folder already has files in it: that drive was set up before, so use it as it is (Part 4). `LAI-ARK-003` (the drive is read-only), `LAI-ARK-014` (a read/write error) or `LAI-SYN-040` (no space): fix that first (Part 8), then press **Set up this drive** again; it is safe to repeat.
 
 ---
 
@@ -245,28 +210,15 @@ The exact procedure is [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting-
 
 ## Part 8. Repairs
 
-28. **Filesystem errors** (`unclean`, `LAI-ARK-004`). Eject it (Part 5), unplug it, and plug it back in. Find its partition name (the line with label `AI-ARK`, for example `sdb1`):
-
-    ```
-    lsblk -o NAME,SIZE,TRAN,MOUNTPOINTS,LABEL
-    ```
-
-    The repair needs the drive **unmounted**. Unmount it, then repair it (⚠️ use the AI-ARK partition from the list):
-
-    ```
-    sudo umount /dev/sdX1 2>/dev/null; true
-    sudo fsck.ext4 -f /dev/sdX1
-    ```
-
-    - **What you should see:** five "Pass" lines; answer `y` if it asks to fix something. It can take many minutes on a big drive.
-    - Then unplug it, plug it in again, and run `aictl ark verify --root <root-id> --wait`.
-29. **Cloned drive** (two drives, same id, `LAI-ARK-006`): unplug the original. With only the copy plugged in and **not mounted**, give it a new id (⚠️ check the device):
-
-    ```
-    sudo tune2fs -U random /dev/sdX1
-    ```
-
-    Plug it in again; it gets a new `ark-…` root id. Run `aictl ark init` again if it shows `uninitialized`.
+28. **Filesystem errors** (`unclean`, `LAI-ARK-004`). Leave the drive plugged in. Press **Ctrl + Alt + T**, type `sudo aictl`, press **Enter**, choose **6** (*Offline content and the AI-ARK drive*), then **The AI-ARK drive itself**, then **Repair a drive**, and pick the drive marked `has errors`. Answer `y`.
+    - The typed command is `sudo aictl ark repair <root-id>` (the root id is in `aictl ark drives`).
+    - **What you should see:** `Ejecting the drive (it stays plugged in)`, then lines like `Checking step 2 of 5 (folders): 40%`. It can take from minutes to over an hour on a big drive; don't unplug it. At the end: `✓ No errors were found.` or `✓ Errors were found and fixed.`, and the drive is mounted again.
+    - Then run `aictl ark verify --root <root-id> --wait` (Part 13).
+    - **If it doesn't work:** `LAI-ARK-009` (files in use): close the programs it names, or switch brain, and repeat. `LAI-ARK-018` (some errors are left): the drive may be failing; prepare a new drive (Part 2), fill it, and stop using this one. `LAI-ARK-017` (the check could not run): unplug the drive, plug it in again and repeat; last resort: [Appendix B](#appendix-b-repair-or-give-a-new-id-by-hand-last-resort).
+29. **Cloned drive** (two drives, same id, `LAI-ARK-006`). Plug in **both** drives. In `sudo aictl`, choose **6**, then **The AI-ARK drive itself**, then **Give a copied drive a new id**, pick the copy it offers, and answer `y`.
+    - The typed command is `sudo aictl ark new-id <root-id>` (the id that `aictl ark drives` shows twice).
+    - **What you should see:** `✓ The copy now has its own id, ark-…, and is mounted at …. Both drives can be used.` Nothing on the drive is deleted. `aictl ark drives` lists two different ids.
+    - **If it doesn't work:** `This drive does not share its id with another drive`: only one copy is plugged in; plug in both. `LAI-ARK-017`: unplug the copy, plug it in again and repeat; last resort: [Appendix B](#appendix-b-repair-or-give-a-new-id-by-hand-last-resort).
 30. **Inventory conflict** (`LAI-ARK-012`): the lab inventory changed both on the drive and on this node. Both copies are kept (the node's as `inventory.local.yaml.<node-id>.<time>.conflict` on the drive). Compare them, keep the right one, delete the other. The exact steps are in [Part 9](#part-9-start-herehtml-and-the-lab-inventory-copy).
 
 ---
@@ -579,3 +531,109 @@ Disks wear out silently: a file can change one bit and still look fine. The comp
 
     - **What you should see:** `✓ Sync finished` (or `Import finished`) and the item back to `verified`.
     - **If it doesn't work:** if files keep failing again and again, **the disk may be dying**. Copy everything to another drive now (step 35), and replace the old one (Part 1).
+
+---
+
+## Appendix A. Format a drive by hand (last resort)
+
+Use this only when `sudo aictl ark format` cannot run (for example on a computer without Local AI). Part 2 is safer: it never offers the wrong disk.
+
+> ## ⚠️ WARNING: THESE COMMANDS ERASE THE WHOLE DRIVE
+> **Choosing the wrong device erases the wrong disk, including this computer's own disk.**
+> - **Unplug every other USB disk and memory stick first.**
+> - **Read the device name twice** before every command that contains it.
+> - Never pick the disk that has `/` or `/boot` under MOUNTPOINTS.
+
+A1. **Plug in only the new drive.** List the disks:
+
+   ```
+   lsblk -o NAME,SIZE,MODEL,TRAN,MOUNTPOINTS,FSTYPE,LABEL
+   ```
+
+   - **What you should see:** one disk with `TRAN` = `usb` and the size of your new drive, for example `sdb  1.8T  Portable SSD  usb`. The computer's own disk is usually `nvme0n1` or `sda`, with mount points like `/`. **Never pick that one.**
+   - **Write down the name** of the USB disk, for example `sdb`. In every command below, replace `sdX` with it. Partition 1 of it is `sdX1` (for example `sdb1`).
+   - **If it doesn't work:** no `usb` line: try another port or cable, wait 10 seconds, run it again.
+
+A2. **Unmount anything the desktop opened from it:**
+
+   ```
+   sudo umount /dev/sdX?* 2>/dev/null; true
+   ```
+
+   - **What you should see:** nothing, or a password prompt (type your login password).
+
+A3. **Erase old partition tables.** ⚠️ Check `sdX` is the USB disk from A1.
+
+   ```
+   sudo wipefs --all /dev/sdX
+   ```
+
+   - **What you should see:** lines like `/dev/sdX: 8 bytes were erased at offset …`, or nothing if the drive was blank.
+
+A4. **Create one partition that fills the drive.** ⚠️ Same check.
+
+   ```
+   sudo parted --script /dev/sdX mklabel gpt mkpart AI-ARK ext4 1MiB 100%
+   ```
+
+   - **What you should see:** nothing (no output means success).
+
+A5. **Format it as ext4 with the label AI-ARK.** ⚠️ Note the `1` at the end: the partition, not the whole disk.
+
+   ```
+   sudo mkfs.ext4 -L AI-ARK -m 0 -E lazy_itable_init=0,lazy_journal_init=0 /dev/sdX1
+   ```
+
+   (`-m 0` gives back the 5 % normally reserved for the system; `lazy_…=0` makes the first fill faster.)
+   - **What you should see:** `Creating filesystem with … blocks` and, after a minute or two, `Writing superblocks and filesystem accounting information: done`.
+
+A6. **Check it:**
+
+   ```
+   sudo blkid /dev/sdX1
+   ```
+
+   - **What you should see:** `LABEL="AI-ARK"` and `TYPE="ext4"`.
+   - **If it doesn't work:** `TYPE="exfat"` or `"ntfs"`: A5 ran on the wrong partition. Start again from A1.
+
+A7. **Mount it.** Unplug it and plug it back in (the desktop mounts it at `/media/<you>/AI-ARK`), or:
+
+   ```
+   udisksctl mount -b /dev/sdX1
+   ```
+
+   - **What you should see:** `Mounted /dev/sdX1 at /media/<you>/AI-ARK`.
+
+A8. **Set it up for Local AI:** Part 2, step 12.
+
+---
+
+## Appendix B. Repair or give a new id by hand (last resort)
+
+Use this only when `sudo aictl ark repair` or `new-id` (Part 8) cannot run.
+
+B1. **Repair** (`LAI-ARK-004`). Find the drive's partition (the line with label `AI-ARK`, for example `sdb1`) and where it is mounted:
+
+    ```
+    lsblk -o NAME,SIZE,TRAN,MOUNTPOINTS,LABEL
+    ```
+
+    Close what uses the drive (switch brain if one runs from it). The repair needs the drive **unmounted**. Unmount it, then repair it (⚠️ use the AI-ARK partition from the list):
+
+    ```
+    sudo umount /dev/sdX1 2>/dev/null; true
+    sudo fsck.ext4 -f /dev/sdX1
+    ```
+
+    - **What you should see:** five "Pass" lines; answer `y` if it asks to fix something. It can take many minutes on a big drive.
+    - Then unplug it, plug it in again, and run `aictl ark verify --root <root-id> --wait`.
+
+B2. **New id** (`LAI-ARK-006`). With both copies plugged in, `aictl ark drives` marks the copy with `LAI-ARK-006`; note its device (for example `/dev/sdc1`). Unmount it, check it, and give it a new id (⚠️ check the device):
+
+    ```
+    sudo umount /dev/sdX1
+    sudo fsck.ext4 -f /dev/sdX1
+    sudo tune2fs -U random /dev/sdX1
+    ```
+
+    Unplug it and plug it in again; it gets a new `ark-…` root id. Run `aictl ark init` (Part 2, step 12) if it shows `uninitialized`.

@@ -263,10 +263,11 @@ The admin PIN protects deletes, key rotation and leaving Survival mode. Starting
    - Not listed at all: try another USB port or cable; `lsblk -o NAME,SIZE,TRAN,LABEL` should show a `usb` disk with label `AI-ARK`. No label: it isn't formatted as AI-ARK ([04 Part 2](04-ark-drive.md)).
    - `LAI-ARK-005` (plugged in, not mounted): press **Mount** in the app, open it in **Files**, or `aictl ark mount <root-id>`.
    - `LAI-ARK-010` (new drive needs setting up): **Set up this drive**, or `aictl ark init /media/<you>/AI-ARK`.
-   - `LAI-ARK-002` (labelled AI-ARK but not ext4): it must be reformatted, which erases it ([04 Part 2](04-ark-drive.md)).
+   - `LAI-ARK-002` (labelled AI-ARK but not ext4): it must be reformatted, which erases it: `sudo aictl ark format` ([04 Part 2](04-ark-drive.md#part-2-format-a-new-drive-as-ai-ark)).
    - `LAI-ARK-003` (read-only): eject, plug in again.
-   - `LAI-ARK-004` (filesystem errors): [04 Part 8](04-ark-drive.md), `fsck`.
-   - `LAI-ARK-006` (two drives with the same id): [04 Part 8](04-ark-drive.md), `tune2fs -U random`.
+   - `LAI-ARK-004` (filesystem errors): `sudo aictl`, entry 6, *The AI-ARK drive itself*, **Repair a drive**, or `sudo aictl ark repair <root-id>` ([04 Part 8](04-ark-drive.md#part-8-repairs)).
+   - `LAI-ARK-006` (two drives with the same id): plug in both, then `sudo aictl`, entry 6, *The AI-ARK drive itself*, **Give a copied drive a new id**, or `sudo aictl ark new-id <root-id>` ([04 Part 8](04-ark-drive.md#part-8-repairs)).
+   - `LAI-ARK-016`, `LAI-ARK-017`, `LAI-ARK-018` (formatting or repairing a drive): [04 Part 2](04-ark-drive.md#part-2-format-a-new-drive-as-ai-ark) and [Part 8](04-ark-drive.md#part-8-repairs).
    - `LAI-ARK-014` (read/write errors): eject, try another port and cable; if it repeats, replace the drive.
    - `LAI-ARK-009` (can't eject, files in use): switch brain or close the listed programs.
 

@@ -346,9 +346,9 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-ARK-001 | error | No writable content root (no drive and internal read-only) | Plug in an AI-ARK drive, or run `aictl doctor`. |
 | LAI-ARK-002 | error | A drive labelled AI-ARK is not ext4 | Reformat it as ext4 (see "Formatting a new AI-ARK drive"). This erases it. |
 | LAI-ARK-003 | warning | The ark drive is read-only | It can be read but not updated. Unplug it safely and plug it in again. |
-| LAI-ARK-004 | error | The ark drive's filesystem has errors | Eject it, then run `sudo fsck.ext4 -f /dev/<device>` and plug it in again. |
+| LAI-ARK-004 | error | The ark drive's filesystem has errors | Run `sudo aictl ark repair <root-id>` (or `sudo aictl`, menu 6, Repair a drive). Last resort: eject it and run `sudo fsck.ext4 -f /dev/<device>`. |
 | LAI-ARK-005 | warning | An AI-ARK drive is plugged in but not mounted | Press **Mount** in the app, or open it in the file manager. |
-| LAI-ARK-006 | error | Two drives have the same ID (a cloned drive) | Unplug one. Give it a new ID with `sudo tune2fs -U random /dev/<device>`. |
+| LAI-ARK-006 | error | Two drives have the same ID (a cloned drive) | Run `sudo aictl ark new-id <root-id>` (or `sudo aictl`, menu 6, Give a copied drive a new id). Last resort: unmount the copy and run `sudo tune2fs -U random /dev/<device>`. |
 | LAI-ARK-007 | warning | The ark drive was unplugged without ejecting | Next time press **Eject** first. Plug it in again to let sync check it. |
 | LAI-ARK-008 | warning (error after 90 days) | The ark drive hasn't been updated for more than 30 days (red after 90) | Plug it into a computer with internet overnight. |
 | LAI-ARK-009 | warning | The drive can't be ejected: files are in use | Close the listed programs or switch brain, then eject again. |
@@ -357,6 +357,9 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-ARK-012 | warning | The lab inventory on the drive and on this computer both changed | Compare the two files and keep the right one. The other is saved as `.conflict`. |
 | LAI-ARK-014 | error | The drive reported read/write errors | Eject it and try another USB port or cable. If it repeats, replace the drive. |
 | LAI-ARK-015 | warning | Several ark drives are connected; choose one | Run `aictl ark import` in a terminal and choose the drive from the list it shows. |
+| LAI-ARK-016 | error | No disk can be formatted as an AI-ARK drive | Plug in only the new drive. If the desktop opened it, eject it in the file manager, then run `sudo aictl ark format` again. |
+| LAI-ARK-017 | error | A disk tool failed while formatting, repairing or giving a drive a new id | Unplug the drive, plug it in again and run the same command again. If it fails again, follow the last-resort steps of runbook 04. |
+| LAI-ARK-018 | error | The repair could not fix every error on the drive | The drive may be failing. Prepare a new drive (`sudo aictl ark format`), fill it (`aictl ark sync`) and stop using this one. |
 | LAI-ARK-020 | warning | The internal content folder was missing and was recreated empty | Run `aictl ark sync`, or `aictl ark import` from a drive. |
 | LAI-ARK-021 | warning | The content folder is on a network disk; it is used read-only | Move `/srv/localai` to a local disk. |
 

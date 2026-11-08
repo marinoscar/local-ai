@@ -212,7 +212,8 @@ func TestDrivesProblemTextsFollowTheLanguageAndNameTheDevice(t *testing.T) {
 			t.Errorf("%s title = %v", lang, p["title"])
 		}
 		fix, _ := p["fix"].(string)
-		if !strings.Contains(fix, "fsck.ext4 -f /dev/sde1") || strings.Contains(fix, "<device>") || strings.Contains(fix, "<dispositivo>") {
+		if !strings.Contains(fix, "fsck.ext4 -f /dev/sde1") || strings.Contains(fix, "<device>") || strings.Contains(fix, "<dispositivo>") ||
+			!strings.Contains(fix, "sudo aictl ark repair ark-0a0a0a0a") || strings.Contains(fix, "<root-id>") || strings.Contains(fix, "<id-de-raíz>") {
 			t.Errorf("%s fix = %q", lang, fix)
 		}
 		if det, _ := p["details"].(map[string]any); det["errors_count"] != float64(3) {

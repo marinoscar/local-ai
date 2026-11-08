@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -67,6 +68,27 @@ func TestEjectRunsTheStepsInOrder(t *testing.T) {
 	}
 	if a.alerts.isActive() {
 		t.Error("a clean eject must not raise LAI-ARK-007")
+	}
+}
+
+// KeepPowered (aictl ark repair and new-id) runs every step but the power-off: the filesystem is checked or
+// given a new id right after, so the disk must stay.
+func TestEjectKeepPoweredSkipsThePowerOff(t *testing.T) {
+	a := newActRig(t)
+	a.ready()
+	err := a.acts.EjectWith(context.Background(), rid, ark.EjectOptions{KeepPowered: true})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if werr := a.acts.Wait(ctx); werr != nil || err != nil {
+		t.Fatalf("eject %v, wait %v", err, werr)
+	}
+	for _, step := range a.tr.list() {
+		if strings.Contains(step, "power-off") {
+			t.Fatalf("powered off: %q", a.tr.list())
+		}
+	}
+	if a.unmountedEvents() != 1 {
+		t.Errorf("drive.unmounted events = %d", a.unmountedEvents())
 	}
 }
 

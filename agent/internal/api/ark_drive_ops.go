@@ -41,6 +41,8 @@ type ArkDriveRequest struct {
 type ArkEjectRequest struct {
 	ArkDriveRequest
 	Force bool
+	// KeepPowered leaves the disk powered after the unmount (`aictl ark repair` and `new-id`).
+	KeepPowered bool
 }
 
 // ArkProfileRequest is PUT /ark/drives/{root_id}/profile as the route decoded it.
@@ -129,7 +131,8 @@ func (d ArkDriveDeps) request(w http.ResponseWriter, r *http.Request) (ArkDriveR
 
 // ejectBody is the optional body of the eject route.
 type ejectBody struct {
-	Force bool `json:"force"`
+	Force       bool `json:"force"`
+	KeepPowered bool `json:"keep_powered"`
 }
 
 // arkEjecting is the 202 body of the eject route.
@@ -148,7 +151,10 @@ func (d ArkDriveDeps) eject(w http.ResponseWriter, r *http.Request) error {
 	}
 	info := InfoFrom(r.Context())
 	target := map[string]string{"root_id": req.RootID, "op_id": req.OpID, "force": strconv.FormatBool(body.Force)}
-	if err := d.Ops.Eject(r.Context(), ArkEjectRequest{ArkDriveRequest: req, Force: body.Force}); err != nil {
+	if body.KeepPowered {
+		target["keep_powered"] = "true"
+	}
+	if err := d.Ops.Eject(r.Context(), ArkEjectRequest{ArkDriveRequest: req, Force: body.Force, KeepPowered: body.KeepPowered}); err != nil {
 		d.audit(info, audit.ActionArkEject, audit.ResultFail, errorCode(err), target)
 		return err
 	}

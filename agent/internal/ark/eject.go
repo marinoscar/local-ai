@@ -23,7 +23,7 @@ import (
 //     package does not import them);
 //  6. the /proc walk (FindBlockers) lists the programs that still hold the drive open;
 //  7. syncfs(2), then umount(2), retried on EBUSY;
-//  8. udisksctl power-off, best effort;
+//  8. udisksctl power-off, best effort (skipped with EjectOptions.KeepPowered);
 //  9. drive.unmounted {safe_to_unplug: true}, published by Ejector.FinishEject.
 //
 // Steps 1 to 6 run before Eject returns, so a refusal (LAI-ARK-009 with the blockers) is the answer of the
@@ -75,6 +75,8 @@ type ejection struct {
 	drive  Drive
 	mount  string
 	force  bool
+	// keepPowered skips step 8: `aictl ark repair` and `new-id` need the disk after the unmount.
+	keepPowered bool
 	// active: the drive was in the active set, so BeginEject ran and FinishEject will announce it.
 	active bool
 	// released are the users whose Release has run, for Restore on a cancel.
@@ -91,6 +93,21 @@ type ejection struct {
 // ejected too, so a new drive can be set aside without setting it up: nothing uses it, so only the /proc
 // walk applies, and the drive.unmounted event is published here.
 func (a *DriveActions) Eject(ctx context.Context, rootID string, force bool) error {
+	return a.EjectWith(ctx, rootID, EjectOptions{Force: force})
+}
+
+// EjectOptions are the choices of one eject.
+type EjectOptions struct {
+	// Force is "eject anyway": a model with no other copy is unloaded instead of refusing.
+	Force bool
+	// KeepPowered leaves the disk powered after the unmount (no step 8), for a repair or a new id
+	// that runs on the unmounted filesystem right after (ark-sync.md section 4.17).
+	KeepPowered bool
+}
+
+// EjectWith is Eject with every option.
+func (a *DriveActions) EjectWith(ctx context.Context, rootID string, o EjectOptions) error {
+	force := o.Force
 	unlock, err := a.lock(rootID, "eject")
 	if err != nil {
 		return err
@@ -109,7 +126,7 @@ func (a *DriveActions) Eject(ctx context.Context, rootID string, force bool) err
 		unlock()
 		return fmt.Errorf("ark: refusing to eject %q: not a drive mount point", d.Mount)
 	}
-	e := &ejection{rootID: rootID, drive: d, mount: mount, force: force, unlock: unlock}
+	e := &ejection{rootID: rootID, drive: d, mount: mount, force: force, keepPowered: o.KeepPowered, unlock: unlock}
 
 	// Step 1.
 	if d.Active() {
@@ -132,7 +149,7 @@ func (a *DriveActions) Eject(ctx context.Context, rootID string, force bool) err
 		unlock()
 		return err
 	}
-	a.log.Info("eject accepted", "root", rootID, "mount", mount, "force", force)
+	a.log.Info("eject accepted", "root", rootID, "mount", mount, "force", force, "keep_powered", o.KeepPowered)
 	a.wg.Add(1)
 	go a.finishEject(ctx, e)
 	return nil
@@ -246,7 +263,9 @@ func (a *DriveActions) finishEject(base context.Context, e *ejection) {
 		a.failEject(ctx, e, err)
 		return
 	}
-	a.powerOff(ctx, e.drive.Device)
+	if !e.keepPowered {
+		a.powerOff(ctx, e.drive.Device)
+	}
 
 	// Step 9. For an active drive the detector announces it (and runs the OnRemoved hooks).
 	if e.active {

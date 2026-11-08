@@ -21,8 +21,9 @@ import (
 // EventPublisher, AlertSink), so the tests run it on fakes and never touch a device.
 //
 // The actions never format a drive and never delete content: init creates a directory tree and one JSON
-// file on a filesystem that has none, and eject unmounts. Formatting is a human procedure
-// (ark-sync.md section 4.17).
+// file on a filesystem that has none, and eject unmounts. Formatting, checking and re-identifying a disk
+// are `sudo aictl ark format|repair|new-id` (internal/ark/prep), never the agent's (ark-sync.md section
+// 4.17.1).
 
 // Defaults of DriveActionsOptions.
 const (

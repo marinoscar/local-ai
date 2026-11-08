@@ -108,7 +108,7 @@ func (v DrivesView) view(d Drive, lang string) DriveView {
 	for _, p := range d.Problems {
 		pv := ProblemView{Code: p.Code, Severity: p.Severity, Details: p.Details}
 		if title, fix, ok := doctor.Text(p.Code, lang); ok {
-			pv.Title, pv.Fix = title, fixFor(fix, d.Device)
+			pv.Title, pv.Fix = title, fixFor(fix, d.Device, d.RootID)
 		} else {
 			pv.Title = p.Code
 		}
@@ -117,10 +117,18 @@ func (v DrivesView) view(d Drive, lang string) DriveView {
 	return out
 }
 
-// fixFor puts the drive's device into a fix that names "/dev/<device>" (or "/dev/<dispositivo>").
-func fixFor(fix, device string) string {
-	if device == "" {
+// fixFor puts the drive's device into a fix that names "/dev/<device>" (or "/dev/<dispositivo>"), and its
+// root id into one that names "<root-id>" (or "<id-de-raíz>"): `sudo aictl ark repair ark-3f9c0a12`.
+func fixFor(fix, device, rootID string) string {
+	var pairs []string
+	if device != "" {
+		pairs = append(pairs, "/dev/<device>", device, "/dev/<dispositivo>", device)
+	}
+	if rootID != "" {
+		pairs = append(pairs, "<root-id>", rootID, "<id-de-raíz>", rootID)
+	}
+	if len(pairs) == 0 {
 		return fix
 	}
-	return strings.NewReplacer("/dev/<device>", device, "/dev/<dispositivo>", device).Replace(fix)
+	return strings.NewReplacer(pairs...).Replace(fix)
 }
