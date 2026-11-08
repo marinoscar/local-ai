@@ -527,6 +527,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-KIT-047 | error | Installing from the kit failed | Nothing was replaced. Read the message, then run `aictl kit verify --full` and try again. |
 | LAI-KIT-048 | error | The ready-made build doesn't fit this computer | Nothing was changed. Build from the kit source instead: `sudo aictl rebuild-llama --from-kit` (or `rebuild-whisper`). |
 | LAI-KIT-049 | error | A build could not be exported to the kit | The kit's other files are untouched. Free some space on the drive, then run `sudo aictl kit export-build` again. |
+| LAI-KIT-050 | error | No configuration backup of this node was found | Plug in the AI-ARK drive that holds it, or give the file: `sudo aictl backup-config --restore <file>`. With no backup, skip this step. |
 
 ### `LAI-DRL` — owner: [drill.md](drill.md)
 > Copied from [drill.md](drill.md) §8 (authoritative; Spanish fixes are there).

@@ -413,6 +413,7 @@ Plain list, also printed in the rebuild runbook:
 | Ready-made build the kit's list does not record, or whose size changed | refuse; nothing changed | `LAI-KIT-001` |
 | New agent not healthy within 60 s | `aiagent.prev` put back and the agent restarted | `LAI-KIT-021` |
 | A build cannot be exported (no writable root, disk full, not the program `BUILD.json` describes) | the build stays in use; a warning after a rebuild | `LAI-KIT-049` |
+| `aictl backup-config --restore latest` (or the list of `--restore` with no file) finds no backup of this node in any `kit/config/` | nothing changed; exit 5 | `LAI-KIT-050` |
 | Agent source not fully vendored | fails with GOPROXY=off | `LAI-KIT-030` |
 | Kit incomplete for this node / for the lab | READY red / yellow | `LAI-KIT-040` / `041` |
 | Kit debs for another codename | red (error) | `LAI-KIT-042` |
@@ -452,6 +453,7 @@ Plain list, also printed in the rebuild runbook:
 | LAI-KIT-047 | error | Installing from the kit failed | Nothing was replaced. Read the message, then run `aictl kit verify --full` and try again. | No se reemplazó nada. Lea el mensaje, ejecute `aictl kit verify --full` e intente otra vez. |
 | LAI-KIT-048 | error | The ready-made build doesn't fit this computer | Nothing was changed. Build from the kit source instead: `sudo aictl rebuild-llama --from-kit` (or `rebuild-whisper`). | No se cambió nada. Compile desde el código fuente del kit: `sudo aictl rebuild-llama --from-kit` (o `rebuild-whisper`). |
 | LAI-KIT-049 | error | A build could not be exported to the kit | The kit's other files are untouched. Free some space on the drive, then run `sudo aictl kit export-build` again. | Los demás archivos del kit no se tocaron. Libere espacio en el disco y ejecute `sudo aictl kit export-build` otra vez. |
+| LAI-KIT-050 | error | No configuration backup of this node was found | Plug in the AI-ARK drive that holds it, or give the file: `sudo aictl backup-config --restore <file>`. With no backup, skip this step. | Conecte el disco AI-ARK que la tiene, o indique el archivo: `sudo aictl backup-config --restore <archivo>`. Sin copia, omita este paso. |
 
 ## 9. Test plan
 
