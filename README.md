@@ -128,11 +128,34 @@ Each item is a runbook written for someone who has never used a terminal. The ru
 - **What runs on a schedule** → [08 Scheduled sync](docs/runbooks/08-scheduled-sync.md)
 - **A laptop must stay on with the lid closed** → [09 Laptop as server](docs/runbooks/09-laptop-as-server.md)
 - **I run the lab** → [10 Lab operations](docs/runbooks/10-lab-operations.md)
+- **I want to deploy or update the cloud app on the VPS** → [laictl README](apps/cloud/apps/cli/README.md), then [10 Lab operations, Part 9](docs/runbooks/10-lab-operations.md#part-9-deploying-and-updating-the-cloud)
+  1. Install `laictl` with the one-line installer.
+  2. `laictl deploy install`, later `laictl deploy update`.
 - **I want to load-test the gateway** → [11 Gateway load test](docs/runbooks/11-gateway-load-test.md)
 
 New and unsure? Start at [00 Start here](docs/runbooks/00-START-HERE.md). All runbooks: [runbooks index](docs/runbooks/README.md).
 
 ## 6. The command line
+
+There are two command lines. They do different jobs and are installed differently:
+
+| CLI | Runs on | What it does | How to install it |
+|---|---|---|---|
+| `aictl` | every node | Operates one node: models, modes, keys, ark, doctor | Comes with the node. `install-node.sh` from a `node-v*` release installs it ([05 Add a node, Part 3](docs/runbooks/05-add-a-node.md#part-3-run-the-installer)) |
+| `laictl` | the VPS, or your own computer | Installs, updates and checks the cloud app (`laictl deploy doctor\|install\|update`); runs the VPS stack-agent; calls the cloud API | `curl -fsSL https://raw.githubusercontent.com/marinoscar/local-ai/deploy/cloud/install.sh \| bash` ([laictl README](apps/cloud/apps/cli/README.md)) |
+
+To add a node, download the installer of a release, check it and run it on the new Ubuntu machine:
+
+```bash
+curl -fsSL https://github.com/marinoscar/local-ai/releases/download/node-v<version>/install-node.sh -o install-node.sh
+sha256sum install-node.sh                        # must match the release's SHA256SUMS (or the cloud's Add node wizard)
+sudo bash install-node.sh --node-id ai-n4 --dry-run
+sudo bash install-node.sh --node-id ai-n4 --cloud-url https://ai.marin.cr --enroll
+```
+
+Offline, from the AI-ARK drive: `sudo bash /media/<user>/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/<user>/AI-ARK`. The full procedure is [05 Add a node](docs/runbooks/05-add-a-node.md); every flag is in [installer.md](docs/specs/installer.md).
+
+### `aictl`
 
 `aictl` is the command line of the node agent. Run `aictl help` for the full list, and `aictl help <command>` for one command. The ones you will use most:
 

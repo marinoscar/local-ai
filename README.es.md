@@ -128,11 +128,34 @@ Cada punto es un manual escrito para alguien que nunca ha usado una terminal. Lo
 - **Qué se ejecuta de forma programada** → [08 Sincronización programada](docs/runbooks/08-scheduled-sync.md)
 - **Una laptop debe seguir encendida con la tapa cerrada** → [09 Laptop como servidor](docs/runbooks/09-laptop-as-server.md)
 - **Administro el laboratorio** → [10 Operación del laboratorio](docs/runbooks/10-lab-operations.md)
+- **Quiero desplegar o actualizar la aplicación de la nube en el VPS** → [README de laictl](apps/cloud/apps/cli/README.md), luego [10 Operación del laboratorio, parte 9](docs/runbooks/10-lab-operations.md#part-9-deploying-and-updating-the-cloud)
+  1. Instale `laictl` con el instalador de una línea.
+  2. `laictl deploy install`, y más adelante `laictl deploy update`.
 - **Quiero hacer una prueba de carga a la puerta de enlace** → [11 Prueba de carga de la puerta de enlace](docs/runbooks/11-gateway-load-test.md)
 
 ¿Es nuevo y no sabe por dónde empezar? Comience en [00 Empiece aquí](docs/runbooks/00-START-HERE.md). Todos los manuales: [índice de manuales](docs/runbooks/README.md).
 
 ## 6. La línea de comandos
+
+Hay dos líneas de comandos. Hacen trabajos distintos y se instalan de forma distinta:
+
+| CLI | Dónde se ejecuta | Qué hace | Cómo se instala |
+|---|---|---|---|
+| `aictl` | en cada nodo | Opera un nodo: modelos, modos, claves, arca, diagnóstico | Viene con el nodo. Lo instala `install-node.sh` de una versión `node-v*` ([05 Agregar un nodo, parte 3](docs/runbooks/05-add-a-node.md#part-3-run-the-installer)) |
+| `laictl` | en el VPS, o en su propia computadora | Instala, actualiza y revisa la aplicación de la nube (`laictl deploy doctor\|install\|update`); ejecuta el stack-agent del VPS; llama a la API de la nube | `curl -fsSL https://raw.githubusercontent.com/marinoscar/local-ai/deploy/cloud/install.sh \| bash` ([README de laictl](apps/cloud/apps/cli/README.md)) |
+
+Para agregar un nodo, descargue el instalador de una versión, verifíquelo y ejecútelo en la nueva máquina Ubuntu:
+
+```bash
+curl -fsSL https://github.com/marinoscar/local-ai/releases/download/node-v<version>/install-node.sh -o install-node.sh
+sha256sum install-node.sh                        # debe coincidir con SHA256SUMS de la versión (o con el asistente Add node de la nube)
+sudo bash install-node.sh --node-id ai-n4 --dry-run
+sudo bash install-node.sh --node-id ai-n4 --cloud-url https://ai.marin.cr --enroll
+```
+
+Sin internet, desde la unidad AI-ARK: `sudo bash /media/<usuario>/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/<usuario>/AI-ARK`. El procedimiento completo está en [05 Agregar un nodo](docs/runbooks/05-add-a-node.md); cada opción está en [installer.md](docs/specs/installer.md).
+
+### `aictl`
 
 `aictl` es la línea de comandos del agente del nodo. Ejecute `aictl help` para ver la lista completa, y `aictl help <comando>` para un solo comando. Los que más usará:
 
