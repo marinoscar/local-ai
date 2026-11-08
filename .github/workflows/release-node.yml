@@ -11,8 +11,10 @@ name: release-node
 #
 # workflow_dispatch is a DRY RUN by default: the same build and offline proof, then the assets are assembled and signed
 # with a throwaway key generated inside the job and uploaded as a workflow artifact. No release, no tag, no real key.
-# workflow_dispatch with `release: true` (on main only) is a REAL release of the current main HEAD as node-v<version>:
-# the tag is created by the release itself, so starting one needs no tag push (issue #441).
+# workflow_dispatch with `release: true` (on main only) is a REAL release of the current main HEAD as node-v<version>
+# without a tag push (issues #441, #444): the `handoff` job tags main HEAD through the API and starts this workflow again
+# on that tag (`gh workflow run --ref node-v<version>`), because the `release` environment allows only node-v* tag refs.
+# A dispatch on a node-v* tag ref is handled exactly like a tag push.
 # Every real release publishes itself once SHA256SUMS verifies with the committed key, then downloads what GitHub serves
 # and verifies it again; a failure moves it back to a draft (release-signing.md section 2).
 on:
@@ -42,7 +44,7 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       prerelease: ${{ steps.meta.outputs.prerelease }}
       dry_run: ${{ steps.meta.outputs.dry_run }}
-      create_tag: ${{ steps.meta.outputs.create_tag }}
+      handoff: ${{ steps.meta.outputs.handoff }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: {fetch-depth: 0}
@@ -54,32 +56,56 @@ jobs:
         run: |
           set -euo pipefail
           semver='^([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$'
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+          handoff=false
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$GITHUB_REF" != refs/tags/node-v* ]]; then
             [[ "$INPUT_VERSION" =~ $semver ]] || { echo "::error::version '$INPUT_VERSION' is not a semver"; exit 1; }
-            version="${BASH_REMATCH[1]}"; pre="${BASH_REMATCH[2]}"; tag="node-v$version"; dry=true; create=false
+            version="${BASH_REMATCH[1]}"; pre="${BASH_REMATCH[2]}"; tag="node-v$version"; dry=true
             if [[ "$INPUT_RELEASE" == "true" ]]; then
               [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "::error::a real release is started from main only (this run is on $GITHUB_REF)"; exit 1; }
               [[ "$version" != 0.0.0-dryrun* ]] || { echo "::error::give the real version (for example 0.1.0-rc.3), not the dry-run default"; exit 1; }
               if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
                 echo "::error::$tag already exists: a pushed tag is never moved. Choose the next version."; exit 1
               fi
-              dry=false; create=true
+              # Nothing is built here: the handoff job tags main HEAD and starts the real release on the tag.
+              dry=false; handoff=true
             fi
           else
+            # A tag push, or a dispatch on a node-v* tag ref (the handoff's second run): the same real release.
             tag="$GITHUB_REF_NAME"
             [[ "$tag" == node-v* && "${tag#node-v}" =~ $semver ]] || { echo "::error::tag '$tag' is not node-v<semver>"; exit 1; }
-            version="${BASH_REMATCH[1]}"; pre="${BASH_REMATCH[2]}"; dry=false; create=false
+            version="${BASH_REMATCH[1]}"; pre="${BASH_REMATCH[2]}"; dry=false
             git fetch --no-tags origin main
             git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
               || { echo "::error::$tag does not point at a commit on main"; exit 1; }
           fi
           # pre is the semver pre-release part (e.g. -rc.1): such a release is marked as a pre-release
           if [[ -n "$pre" ]]; then prerelease=--prerelease; else prerelease=""; fi
-          { echo "tag=$tag"; echo "version=$version"; echo "prerelease=$prerelease"; echo "dry_run=$dry"; echo "create_tag=$create"; } >> "$GITHUB_OUTPUT"
-          echo "release $tag (version $version, dry run: $dry, tag created by the release: $create)"
+          { echo "tag=$tag"; echo "version=$version"; echo "prerelease=$prerelease"; echo "dry_run=$dry"; echo "handoff=$handoff"; } >> "$GITHUB_OUTPUT"
+          echo "release $tag (version $version, dry run: $dry, handoff to the tag: $handoff)"
 
+  handoff:
+    # `release: true` on main (issue #444): tag main HEAD through the API, then start this workflow on the tag. A tag
+    # created with GITHUB_TOKEN starts no workflow by itself, but a workflow_dispatch sent with it does.
+    needs: prepare
+    if: needs.prepare.outputs.handoff == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Tag main HEAD and start the release on the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" --jq '"tagged " + .ref'
+          gh workflow run release-node.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+          echo "started the release of $TAG on commit $GITHUB_SHA: see the next release-node run"
   build:
     needs: prepare
+    # A `release: true` dispatch on main builds nothing itself: the run it starts on the tag does.
+    if: needs.prepare.outputs.handoff != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -239,15 +265,11 @@ jobs:
           TAG: ${{ needs.prepare.outputs.tag }}
           VERSION: ${{ needs.prepare.outputs.version }}
           PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
-          CREATE_TAG: ${{ needs.prepare.outputs.create_tag }}
         run: |
           set -euo pipefail
-          # A tag push: the tag must exist. A `release: true` dispatch: the tag is created on this run's commit (main HEAD)
-          # when the release is published, so the tag and the built commit are the same.
-          if [[ "$CREATE_TAG" == "true" ]]; then where=(--target "$GITHUB_SHA"); else where=(--verify-tag); fi
           # PRERELEASE is empty or the single flag --prerelease
           # shellcheck disable=SC2086
-          gh release create "$TAG" --draft "${where[@]}" --generate-notes $PRERELEASE \
+          gh release create "$TAG" --draft --verify-tag --generate-notes $PRERELEASE \
             --title "Agent $VERSION" \
             "$REL/aiagent-linux-amd64" "$REL/aiagent-linux-arm64" "$REL/SHA256SUMS" "$REL/SHA256SUMS.minisig" \
             "$REL/install-node.sh" "$REL/local-ai-$TAG-src.tar.gz"
