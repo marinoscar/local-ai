@@ -42,6 +42,8 @@ func newScopeRig(t *testing.T) *scopeRig {
 	for _, x := range []rt{
 		{"POST", "/models/{id}/load", portalToo}, {"POST", "/speech/stt", portalToo}, {"POST", "/speech/tts", portalToo},
 		{"GET", "/speech/voices", portalToo}, {"GET", "/events", portalToo},
+		{"POST", "/ark/import", portalToo}, {"POST", "/services/kiwix/restart", portalToo}, {"POST", "/services/whisper/restart", portalToo},
+		{"POST", "/services/{name}/{action}", op}, {"POST", "/ark/sync", op},
 		{"GET", "/status", op}, {"GET", "/services", op}, {"POST", "/mode", []api.Level{api.AuthAdminStar}}, {"GET", "/key", []api.Level{api.AuthAdmin}},
 		{"DELETE", "/models/{id}", []api.Level{api.AuthAdmin}}, {"POST", "/models/{id}/unload", op}, {"POST", "/cloud/enroll", []api.Level{api.AuthAdmin}},
 		{"POST", "/mode/survival", []api.Level{api.AuthNone}}, {"GET", "/portal/status", []api.Level{api.AuthNone}},
@@ -124,6 +126,10 @@ func TestScopeMatrix(t *testing.T) {
 		{"POST", "/speech/tts", 200, ""},
 		{"GET", "/speech/voices", 200, ""},
 		{"GET", "/events", 200, ""},
+		// The buttons of a fix (doctor-codes.md section 1.7): the import and two restarts only.
+		{"POST", "/ark/import", 200, ""},
+		{"POST", "/services/kiwix/restart", 200, ""},
+		{"POST", "/services/whisper/restart", 200, ""},
 		// Level none: open to everyone, a cookie changes nothing.
 		{"GET", "/portal/status", 200, ""},
 		{"POST", "/mode/survival", 200, ""},
@@ -135,6 +141,11 @@ func TestScopeMatrix(t *testing.T) {
 		{"DELETE", "/models/model-alpha-9b-q4", 401, doctor.SVC110},
 		{"POST", "/models/model-alpha-9b-q4/unload", 401, doctor.SVC110},
 		{"POST", "/cloud/enroll", 401, doctor.SVC110},
+		// Never llama, never a stop or a start, never sync: the generic route stays operator-only.
+		{"POST", "/services/llama/restart", 401, doctor.SVC110},
+		{"POST", "/services/kiwix/stop", 401, doctor.SVC110},
+		{"POST", "/services/whisper/start", 401, doctor.SVC110},
+		{"POST", "/ark/sync", 401, doctor.SVC110},
 	}
 	for _, c := range cases {
 		t.Run(c.method+" "+c.target, func(t *testing.T) {
@@ -189,6 +200,8 @@ func TestRateLimits(t *testing.T) {
 		{"model loads 6 per hour", "/models/model-alpha-9b-q4/load", 6, time.Hour, doctor.SVC114},
 		{"STT 30 per minute", "/speech/stt", 30, time.Minute, doctor.SVC015},
 		{"TTS 120 per minute", "/speech/tts", 120, time.Minute, doctor.SVC015},
+		{"imports 3 per hour", "/ark/import", 3, time.Hour, doctor.SVC117},
+		{"restarts 6 per hour", "/services/kiwix/restart", 6, time.Hour, doctor.SVC117},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -241,6 +254,22 @@ func TestRateLimitIsPerBucket(t *testing.T) {
 	}
 	if rec := r.do(call{method: "GET", target: "/speech/voices", cookie: r.cookie}); rec.Code != 200 {
 		t.Errorf("voices = %d", rec.Code)
+	}
+}
+
+// The two restarts share one budget: a person pressing both buttons gets 6 restarts an hour in all.
+func TestRestartsShareOneBucket(t *testing.T) {
+	r := newScopeRig(t)
+	for i := 0; i < 3; i++ {
+		r.post("/services/kiwix/restart", withOrigin)
+		r.post("/services/whisper/restart", withOrigin)
+	}
+	rec := r.post("/services/whisper/restart", withOrigin)
+	if rec.Code != http.StatusTooManyRequests || errorCode(t, rec) != doctor.SVC117 {
+		t.Errorf("7th restart = %d %q, want 429 %s", rec.Code, errorCode(t, rec), doctor.SVC117)
+	}
+	if rec := r.post("/ark/import", withOrigin); rec.Code != 200 {
+		t.Errorf("an import after a full restart bucket = %d", rec.Code)
 	}
 }
 
@@ -302,6 +331,11 @@ func TestBucketOf(t *testing.T) {
 		{"GET", "/speech/voices", ""},
 		{"GET", "/models/{id}/load", ""},
 		{"POST", "/models/{id}/unload", ""},
+		{"POST", "/ark/import", portal.BucketImport},
+		{"POST", "/services/kiwix/restart", portal.BucketRestart},
+		{"POST", "/services/whisper/restart", portal.BucketRestart},
+		{"POST", "/services/{name}/{action}", ""},
+		{"POST", "/ark/sync", ""},
 	}
 	for _, c := range cases {
 		if got := portal.BucketOf(c.method, c.pattern); got != c.want {

@@ -334,6 +334,9 @@ func (b *StatusBuilder) alerts(lang string, forCloud bool) []AlertRow {
 		if !forCloud && len(a.Details) > 0 {
 			row.Details = a.Details
 		}
+		if !forCloud {
+			row.Action = string(doctor.ActionOf(a.Code))
+		}
 		rows = append(rows, row)
 	}
 	return rows

@@ -172,7 +172,7 @@ func (b *Builder) Build(ctx context.Context, req Request) (Status, error) {
 		SchemaVersion: SchemaVersion, GeneratedAt: req.Now.UTC().Format(time.RFC3339),
 		NodeID: cfg.Node.ID, Mode: b.mode(), Language: lang, EmergencyNumber: settings.EmergencyNumber,
 		Session: session, Power: power, ClockOK: clockOK(req.Now, s.BuildTime, ark),
-		Brain: brain, Capabilities: ComputeCapabilities(in), FirstAid: b.firstAid(cat, recs["kiwix"], lang),
+		Brain: brain, Capabilities: WithActions(ComputeCapabilities(in)), FirstAid: b.firstAid(cat, recs["kiwix"], lang),
 		Ark:    Ark{Overall: orUnknown(ark.Overall), SurvivalCapable: ark.SurvivalCapable, DriveConnected: ark.DriveConnected},
 		Alerts: b.alerts(lang, power, snap, cfg.Llama.Backend),
 	}, nil
@@ -429,7 +429,7 @@ func (b *Builder) alerts(lang string, p Power, snap hardware.Snapshot, backend s
 		for _, a := range b.src.Alerts.Active() {
 			a = a.In(lang)
 			have[a.Code] = true
-			out = append(out, Alert{Code: a.Code, Severity: string(a.Severity), Title: a.Title, Fix: a.Fix})
+			out = append(out, Alert{Code: a.Code, Severity: string(a.Severity), Title: a.Title, Fix: a.Fix, Action: string(doctor.ActionOf(a.Code))})
 		}
 	}
 	add := func(code string) {
@@ -441,7 +441,7 @@ func (b *Builder) alerts(lang string, p Power, snap hardware.Snapshot, backend s
 			return
 		}
 		title, fix, _ := doctor.Text(code, lang)
-		out = append(out, Alert{Code: code, Severity: string(c.Severity), Title: title, Fix: fix})
+		out = append(out, Alert{Code: code, Severity: string(c.Severity), Title: title, Fix: fix, Action: string(c.Action)})
 	}
 	switch {
 	case p.Critical:

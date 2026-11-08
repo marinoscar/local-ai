@@ -310,6 +310,9 @@ const (
 	SVC113 = "LAI-SVC-113"
 	SVC114 = "LAI-SVC-114"
 	SVC115 = "LAI-SVC-115"
+	SVC116 = "LAI-SVC-116"
+	SVC117 = "LAI-SVC-117"
+	SVC118 = "LAI-SVC-118"
 
 	// LAI-GW
 	GW001 = "LAI-GW-001"
@@ -2055,6 +2058,24 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "That chat page isn't available from the Portal", ES: "Esa página del chat no está disponible desde el Portal"},
 		Fix:      Msg{EN: "Use the chat normally; settings and downloads are done by an operator in the Local AI app.", ES: "Use el chat con normalidad; los ajustes y las descargas los hace un operador en la aplicación Local AI."},
+	},
+	{
+		ID:       SVC116,
+		Severity: Warning,
+		Title:    Msg{EN: "The Portal lost contact with the AI service", ES: "La pantalla perdió contacto con el servicio de IA"},
+		Fix:      Msg{EN: "Wait a minute: it tries again by itself. If it stays, restart the computer; the printed survival card has the steps.", ES: "Espere un minuto: lo intenta otra vez solo. Si sigue así, reinicie la computadora; la tarjeta de supervivencia impresa tiene los pasos."},
+	},
+	{
+		ID:       SVC117,
+		Severity: Warning,
+		Title:    Msg{EN: "Too many repair attempts from the Portal; wait a few minutes", ES: "Demasiados intentos de reparación desde el Portal; espere unos minutos"},
+		Fix:      Msg{EN: "Wait a few minutes, then press the button again.", ES: "Espere unos minutos y vuelva a presionar el botón."},
+	},
+	{
+		ID:       SVC118,
+		Severity: Warning,
+		Title:    Msg{EN: "No usable AI-ARK drive is connected to copy from", ES: "No hay una unidad AI-ARK utilizable conectada para copiar"},
+		Fix:      Msg{EN: "Plug in the AI-ARK drive, wait a minute, then press **Copy from the AI-ARK drive** again.", ES: "Conecte la unidad AI-ARK, espere un minuto y presione otra vez **Copiar desde la unidad AI-ARK**."},
 	},
 	{
 		ID:       GW001,

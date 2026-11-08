@@ -407,6 +407,9 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-SVC-113 | info | No graphics card in use; answers are slow | Nothing to do. Short questions work best. |
 | LAI-SVC-114 | warning | Too many brain switches; wait a few minutes | Wait a few minutes, then switch again. |
 | LAI-SVC-115 | warning | That chat page isn't available from the Portal | Use the chat normally; settings and downloads are done by an operator in the Local AI app. |
+| LAI-SVC-116 | warning | The Portal lost contact with the AI service | Wait a minute: it tries again by itself. If it stays, restart the computer; the printed survival card has the steps. |
+| LAI-SVC-117 | warning | Too many repair attempts from the Portal; wait a few minutes | Wait a few minutes, then press the button again. |
+| LAI-SVC-118 | warning | No usable AI-ARK drive is connected to copy from | Plug in the AI-ARK drive, wait a minute, then press **Copy from the AI-ARK drive** again. |
 
 ### `LAI-GW` — owner: [gateway.md](gateway.md)
 > Copied from [gateway.md](gateway.md) §8 (authoritative).

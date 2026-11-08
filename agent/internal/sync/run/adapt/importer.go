@@ -43,7 +43,18 @@ func (i Importer) DryRunImport(ctx context.Context, req api.ArkImportRequest) (a
 
 // StartImport implements api.ArkImporter.
 func (i Importer) StartImport(ctx context.Context, req api.ArkImportRequest) (api.ArkSyncStarted, error) {
-	drive, err := i.Planner.Source(req.FromRoot)
+	var drive ark.Root
+	var err error
+	if req.FirstDrive && req.FromRoot == "" {
+		// The Portal's safe default (survival-portal.md section 3.3): the first drive that can be
+		// read, never "choose one"; none is LAI-SVC-118, a code with a plain next step.
+		drive, err = i.Planner.FirstSource()
+		if errors.Is(err, importer.ErrNoDrive) {
+			return api.ArkSyncStarted{}, api.NewError(doctor.SVC118, http.StatusConflict, map[string]any{"reason": "no_drive"})
+		}
+	} else {
+		drive, err = i.Planner.Source(req.FromRoot)
+	}
 	if err != nil {
 		return api.ArkSyncStarted{}, importError(err)
 	}

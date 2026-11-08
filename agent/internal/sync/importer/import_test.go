@@ -245,6 +245,27 @@ func TestSourceIsTheNamedDriveOrTheOnlyOne(t *testing.T) {
 	})
 }
 
+// The Portal's default source (survival-portal.md section 3.3): the first drive that can be read,
+// several drives are never a question, an unclean one is skipped, none is ErrNoDrive.
+func TestFirstSourceIsTheFirstReadableDrive(t *testing.T) {
+	r := newRig(t)
+	if d, err := r.p.FirstSource(); err != nil || d.ID != driveA {
+		t.Fatalf("one drive: %v, %v", d.ID, err)
+	}
+	r.g.roots = append(r.g.roots, ark.Root{ID: driveB, Kind: ark.KindArkDrive, Path: filepath.Join(r.dir, "b", "localai"), State: ark.StateReady, MountID: 9})
+	if d, err := r.p.FirstSource(); err != nil || d.ID != driveA {
+		t.Fatalf("two drives: %v, %v", d.ID, err)
+	}
+	r.g.roots[1].State = ark.StateUnclean
+	if d, err := r.p.FirstSource(); err != nil || d.ID != driveB {
+		t.Fatalf("first unclean: %v, %v", d.ID, err)
+	}
+	r.g.roots = r.g.roots[:2]
+	if _, err := r.p.FirstSource(); !errors.Is(err, ErrNoDrive) {
+		t.Fatalf("only an unclean drive: %v", err)
+	}
+}
+
 func isType[T error](err error) bool {
 	var t T
 	return errors.As(err, &t)

@@ -97,6 +97,31 @@ func ServicesRoutes(d ServicesDeps) []Route {
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/services", Auth: []Level{AuthOp}, Timeout: 5 * time.Second, Handler: HandlerFunc(d.list)},
 		{Method: http.MethodPost, Pattern: "/services/{name}/{action}", Auth: []Level{AuthOp}, Timeout: 120 * time.Second, Handler: HandlerFunc(d.act)},
+		// The two restarts a Portal session may ask for (survival-portal.md section 3.3): literal
+		// paths, more specific than the pattern above, so the generic route stays operator-only and
+		// llama or a stop can never be reached with a Portal session.
+		{Method: http.MethodPost, Pattern: "/services/kiwix/restart", Auth: []Level{AuthOp, AuthPortal}, Timeout: 120 * time.Second, Handler: HandlerFunc(d.restartFixed("kiwix"))},
+		{Method: http.MethodPost, Pattern: "/services/whisper/restart", Auth: []Level{AuthOp, AuthPortal}, Timeout: 120 * time.Second, Handler: HandlerFunc(d.restartFixed("whisper"))},
+	}
+}
+
+// restartFixed is POST /services/{kiwix|whisper}/restart: the same restart as the generic route,
+// for any caller of the route. The body is ignored (a restart has no option).
+func (d ServicesDeps) restartFixed(name string) func(http.ResponseWriter, *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		svc, ok := services.ByName(name)
+		if !ok {
+			return NewError(CodeNotFound, http.StatusNotFound, map[string]any{"name": name, "kind": "service"})
+		}
+		info := InfoFrom(r.Context())
+		opID := d.opID()
+		SetOpID(w, opID)
+		res, err := d.run(r.Context(), svc, services.ActionRestart, false, opID, serviceActor(info), info.ID)
+		if err != nil {
+			return err
+		}
+		WriteJSON(w, r, http.StatusOK, serviceActionResponse(res))
+		return nil
 	}
 }
 

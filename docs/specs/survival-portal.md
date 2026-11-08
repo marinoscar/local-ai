@@ -51,6 +51,8 @@ Non-goals:
 | `POST /api/v1/speech/stt`, `POST /api/v1/speech/tts`, `GET /api/v1/speech/voices` | full session, or Portal session | |
 | `POST /api/v1/models/{id}/load` | full session, or Portal session (restricted, §3.3) | |
 | `GET /api/v1/events?types=…` | full session, or Portal session (restricted types) | |
+| `POST /api/v1/ark/import` | full session, or Portal session (restricted, §3.3) | The **Copy from the AI-ARK drive** button |
+| `POST /api/v1/services/kiwix/restart`, `POST /api/v1/services/whisper/restart` | full session, or Portal session (restricted, §3.3) | The **Restart the library** and **Restart speech** buttons |
 
 `/` (the Dashboard) redirects to `/portal` when the mode is `survival` (modes.md §1, "Local UI home page").
 
@@ -69,9 +71,12 @@ Issued by `GET /portal` when `state.mode == survival` and the request passes the
   | `POST /api/v1/speech/stt`, `POST /api/v1/speech/tts`, `GET /api/v1/speech/voices` | none |
   | `POST /api/v1/models/{id}/load` | `id` must be `loadable: true`; the client body is ignored and replaced by `{"wait": false, "unload_others": U}` where `U = !CanKeepOthers(id, loaded)` from the fit API ([llama-router.md](llama-router.md) §4.3): other models stay loaded only when the fit rules say the target fits next to all of them |
   | `GET /api/v1/events` | `types` limited to `mode.*`, `model.*`, `service.state`, `drive.*`, `alert.*` (other requested patterns are silently dropped, not refused) |
+  | `POST /api/v1/ark/import` | the client body is ignored and replaced by the **safe default**: a real import (never a dry run) of the profile's items from the **first** connected AI-ARK drive that can be read (mount order; `ready` or `read_only`, an `unclean` drive is skipped, so several drives are never `LAI-ARK-015`), with no catalog install and no `add_to_profile` (no `node.yaml` change). An import only copies verified items in; it never deletes anything (ark-sync.md §4.14). No usable drive → `409 LAI-SVC-118`; another run active → `409 LAI-SYN-005` |
+  | `POST /api/v1/services/kiwix/restart`, `POST /api/v1/services/whisper/restart` | restart only, through these two literal routes; the generic `/services/{name}/{action}` stays operator-only, so a Portal session can never restart `llama` or stop anything. The body is ignored |
 - Every state-changing request (`POST`, `PUT`, `DELETE`) made with a Portal session also needs `Origin` equal to `http://127.0.0.1:7070`, `http://localhost:7070` or `localai://app` (CSRF defence). `Sec-Fetch-Site: same-origin` alone is **not** enough for Portal sessions (stricter than the operator-session rule of [agent.md](agent.md) §3.9.1 step 8, which accepts either). A missing or other `Origin` → `403`.
 - `/chat/` in survival mode is anonymous (auth `none`, [agent.md](agent.md) §3.9.3/§3.11.1): no Portal cookie is needed, so the WebUI works even if cookies are blocked. Outside survival `/chat/*` needs a full session or a Portal session.
-- Rate limits per Portal session: model loads 6/hour; STT 30/min; TTS 120/min. Over the limit → `429`: speech routes with `LAI-SVC-015`, model loads with `LAI-SVC-114`.
+- Rate limits per Portal session: model loads 6/hour; STT 30/min; TTS 120/min; imports 3/hour; service restarts 6/hour (kiwix and whisper together). Over the limit → `429` with `Retry-After`: speech routes with `LAI-SVC-015`, model loads with `LAI-SVC-114`, imports and restarts with `LAI-SVC-117`.
+- Why the import and the restarts are in the scope (decided in #430, the safest option): they are the buttons of the most common survival fixes (an empty library, a stopped library or speech service), a non-expert cannot type the command, and each is bounded: the import has one run slot and copies only, the restarts touch only the two companion services. A hostile page would still need the Portal cookie (HttpOnly, SameSite=Strict) and a same-origin `Origin`.
 
 This extends the "survival exception" of security-model.md §3; agent.md must implement the scope (see §11).
 
@@ -135,11 +140,13 @@ Returns only what a stranger at the keyboard needs. **Never** included: tokens, 
   ],
   "ark": {"overall": "yellow", "survival_capable": true, "drive_connected": true},
   "alerts": [
-    {"code": "LAI-SVC-013", "severity": "info", "title": "El reconocimiento de voz usa el procesador.", "fix": "Nada que hacer."}
+    {"code": "LAI-SVC-013", "severity": "info", "title": "El reconocimiento de voz usa el procesador.", "fix": "Nada que hacer."},
+    {"code": "LAI-SVC-005", "severity": "warning", "title": "No se pudo reconstruir la lista de la biblioteca; se usa la anterior", "fix": "Ejecute `aictl services restart kiwix`. Si se repite, ejecute `aictl doctor`.", "action": "service.restart:kiwix"}
   ]
 }
 ```
 - `clock_ok` is `false` when the system clock is earlier than the agent binary's build time, or earlier than the newest `verified_at` in any mounted root's READY.json (a clock cannot go backwards past a time it has already seen); otherwise `true`.
+- `capabilities.<x>.action` and `alerts[].action` are present when the code has a button ([doctor-codes.md](doctor-codes.md) §1.7: `ark.import`, `service.restart:kiwix`, `service.restart:whisper`, `portal.brain`); the SPA shows it as the primary button of the problem (§4.2, §4.1.8).
 - `capabilities.<x>.code` is present only when the state is caused by a problem. `needs_switch` is not a problem, so it carries no `code`. `LAI-SVC-106` ("No brain is running") is mapped here by the Portal status builder when no brain is loaded or loadable.
 - `capabilities.<x>.reason` is a stable word (`loading`, `starting`, `llama_degraded`, `not_loaded`, `no_brain`, `needs_switch`, `no_vision_model`, `disabled`, `service_degraded`, `no_voice_for_language`, `no_voice`, `no_books`, `no_map`, `no_assets`, `no_search`, `no_inventory`, `no_docs`); the SPA maps it to copy. Extra fields: `photo.vision_model`, `talk.stt` and `talk.tts_languages` (language codes of the installed voices), `library.books`, `maps.search` and `maps.gps` (`gps` is `false` until a position source exists), `manuals.items`. When the llama service is down, `chat` and `photo` are `unavailable` with `LAI-SVC-102`; `maps` with the supervisor in `down` is `LAI-SVC-034`; a voice missing for the UI language only is `LAI-SVC-021`.
 - `power.low` is on battery and at most 20 %; `power.critical` is on battery and at most 10 %. The status also derives `LAI-SVC-111` / `112` (from those flags) and `LAI-SVC-113` (`llama.backend: cpu`) as alerts when the alert manager does not already list them.
@@ -653,6 +660,8 @@ Content (both columns):
 | Browser can't record | message | `LAI-SVC-104` |
 | Path forbidden by the chat proxy | `403` page | `LAI-SVC-115` |
 | Portal rate limit hit (model loads / speech) | `429`, message "wait a few minutes" | `LAI-SVC-114` / `LAI-SVC-015` |
+| Portal rate limit hit (import / restart buttons) | `429`; the button shows the code and "wait a few minutes" | `LAI-SVC-117` |
+| **Copy from the AI-ARK drive** pressed with no usable drive | `409`; the button says to plug the drive in and press again | `LAI-SVC-118` |
 | Audio can't be decoded in the browser | message, try again | `LAI-SVC-105` |
 | Brain switch fails or takes > 300 s | previous default reloaded | `LAI-SVC-107` |
 | Photo too big or unreadable | message | `LAI-SVC-108` |
@@ -668,7 +677,7 @@ Content (both columns):
 ## 6. Security considerations
 
 - The Portal itself is read-only and unauthenticated by design (security-model.md §3). `/portal/status` exposes no secrets or network details (§3.5); a unit test asserts the JSON never contains strings matching the redaction patterns or file paths.
-- The Portal session can only do what a person at the keyboard in an emergency needs (§3.3). It can't read the key, change mode out of survival, delete, rotate or reconfigure.
+- The Portal session can only do what a person at the keyboard in an emergency needs (§3.3). It can't read the key, change mode out of survival, delete, rotate or reconfigure. Its two repair powers, the import (safe default, copies only) and the restart of kiwix or whisper (never llama, never a stop), are rate-limited per session (§3.3).
 - The `/chat/` proxy never exposes the key to the browser, strips cookies, enforces same-origin for writes, and blocks router admin paths (downloads, deletes) and model loads that bypass the fit rules.
 - DNS rebinding is blocked by the agent's Host check (security-model.md §2), which applies to `/portal`, `/chat/`, `/library/` and `/maps/` too.
 - Photos are re-encoded in the browser (EXIF and GPS removed) and are never stored on disk by the agent. Transcripts and chat text are not logged.
@@ -702,6 +711,9 @@ Content (both columns):
 | LAI-SVC-113 | info | No graphics card in use; answers are slow | Nothing to do. Short questions work best. | Nada que hacer. Las preguntas cortas funcionan mejor. |
 | LAI-SVC-114 | warning | Too many brain switches; wait a few minutes | Wait a few minutes, then switch again. | Espere unos minutos y vuelva a cambiar. |
 | LAI-SVC-115 | warning | That chat page isn't available from the Portal | Use the chat normally; settings and downloads are done by an operator in the Local AI app. | Use el chat normalmente; la configuración y las descargas las hace un operador en la aplicación IA Local. |
+| LAI-SVC-116 | warning | The Portal lost contact with the AI service | Wait a minute: it tries again by itself. If it stays, restart the computer; the printed survival card has the steps. | Espere un minuto: lo intenta otra vez solo. Si sigue así, reinicie la computadora; la tarjeta de supervivencia impresa tiene los pasos. |
+| LAI-SVC-117 | warning | Too many repair attempts from the Portal; wait a few minutes | Wait a few minutes, then press the button again. | Espere unos minutos y vuelva a presionar el botón. |
+| LAI-SVC-118 | warning | No usable AI-ARK drive is connected to copy from | Plug in the AI-ARK drive, wait a minute, then press **Copy from the AI-ARK drive** again. | Conecte la unidad AI-ARK, espere un minuto y presione otra vez **Copiar desde la unidad AI-ARK**. |
 
 ## 9. Test plan
 

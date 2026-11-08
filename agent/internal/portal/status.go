@@ -133,12 +133,14 @@ type Ark struct {
 }
 
 // Alert is an active alert in the language of the request. It has no details: they can carry paths
-// and device names.
+// and device names. Action is the button of the fix, when the code has one (doctor-codes.md section
+// 1.7).
 type Alert struct {
 	Code     string `json:"code"`
 	Severity string `json:"severity"`
 	Title    string `json:"title"`
 	Fix      string `json:"fix"`
+	Action   string `json:"action,omitempty"`
 }
 
 // Battery thresholds of the Portal's status line (hardware.md thresholds: 20 % and 10 %).

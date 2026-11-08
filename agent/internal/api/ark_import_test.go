@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -64,7 +65,7 @@ func TestArkImportRouteMetadata(t *testing.T) {
 		t.Fatalf("routes = %d", len(routes))
 	}
 	rt := routes[0]
-	if rt.Method != http.MethodPost || rt.Pattern != "/ark/import" || len(rt.Auth) != 1 || rt.Auth[0] != AuthOp || rt.Timeout != 10*time.Second {
+	if rt.Method != http.MethodPost || rt.Pattern != "/ark/import" || !reflect.DeepEqual(rt.Auth, []Level{AuthOp, AuthPortal}) || rt.Timeout != 10*time.Second {
 		t.Errorf("route = %+v", rt)
 	}
 	if err := RegisterArkImport(NewRegistry(), ArkImportDeps{}); err == nil {
@@ -102,6 +103,36 @@ func TestArkImportWithoutASourceLeavesTheChoiceToTheAgent(t *testing.T) {
 	}
 	if got := r.imp.started[0]; got.FromRoot != "" || len(got.Items) != 0 || got.AddToProfile || got.Catalog {
 		t.Errorf("request = %+v", got)
+	}
+}
+
+// A Portal session (the "Copy from the AI-ARK drive" button, survival-portal.md section 3.3) gets the
+// safe default whatever it sends: a real import from the first usable drive, no items, no catalog, no
+// node.yaml change, never a dry run.
+func TestArkImportFromThePortalIgnoresTheBody(t *testing.T) {
+	r := newArkImportRig(t)
+	h := jsonHeaders(map[string]string{"X-Test-Principal": "portal", "Origin": "http://127.0.0.1:7070"})
+	body := `{"from_root": "ark-3f9c0a12", "items": ["whisper-small"], "add_to_profile": true, "catalog": true, "dry_run": true, "unknown": 1}`
+	rec := recordOK(t, do(r.h, req{method: "POST", target: "/api/v1/ark/import", body: body, header: h}))
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	if len(r.imp.started) != 1 || len(r.imp.dry) != 0 {
+		t.Fatalf("started %d, dry %d", len(r.imp.started), len(r.imp.dry))
+	}
+	got := r.imp.started[0]
+	if !got.FirstDrive || got.FromRoot != "" || len(got.Items) != 0 || got.AddToProfile || got.Catalog || got.DryRun {
+		t.Errorf("request = %+v", got)
+	}
+	evs := r.audit.events()
+	if len(evs) != 1 || evs[0].Result != audit.ResultOK || evs[0].Target["first_drive"] != "true" {
+		t.Fatalf("audit = %+v", evs)
+	}
+	// No drive: the importer's LAI-SVC-118 passes through.
+	r.imp.err = NewError(doctor.SVC118, http.StatusConflict, map[string]any{"reason": "no_drive"})
+	rec = do(r.h, req{method: "POST", target: "/api/v1/ark/import", body: `{}`, header: h})
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), doctor.SVC118) {
+		t.Errorf("no drive: %d %s", rec.Code, rec.Body)
 	}
 }
 

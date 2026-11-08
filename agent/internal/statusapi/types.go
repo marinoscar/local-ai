@@ -203,12 +203,14 @@ type TailscaleBlock struct {
 	BackendState *string `json:"backend_state"`
 }
 
-// AlertRow is one active alert (schema Alert). Details is dropped from the state pushed to the cloud.
+// AlertRow is one active alert (schema Alert). Details and Action are dropped from the state pushed
+// to the cloud: Action is a button of the local UIs (doctor-codes.md section 1.7).
 type AlertRow struct {
 	Code     string         `json:"code"`
 	Severity string         `json:"severity"`
 	Title    string         `json:"title"`
 	Fix      string         `json:"fix"`
+	Action   string         `json:"action,omitempty"`
 	Since    *string        `json:"since,omitempty"`
 	Details  map[string]any `json:"details,omitempty"`
 }

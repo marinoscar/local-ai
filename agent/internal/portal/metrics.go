@@ -33,7 +33,7 @@ func (m *Metrics) StatusRequest(session string) {
 	m.mu.Unlock()
 }
 
-// RateLimited counts one 429 by bucket (stt, tts, load).
+// RateLimited counts one 429 by bucket (stt, tts, load, import, restart).
 func (m *Metrics) RateLimited(bucket string) {
 	if m == nil {
 		return

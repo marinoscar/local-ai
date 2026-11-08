@@ -32,8 +32,12 @@ type ArkImportRequest struct {
 	// Catalog installs the drive's catalog first when it is newer and valid.
 	Catalog bool
 	DryRun  bool
-	OpID    string
-	Actor   audit.Actor
+	// FirstDrive takes the first connected drive that can be read when FromRoot is empty, instead of
+	// refusing several drives (409 LAI-ARK-015); with none the answer is 409 LAI-SVC-118. Only the
+	// Portal's request sets it (survival-portal.md section 3.3).
+	FirstDrive bool
+	OpID       string
+	Actor      audit.Actor
 }
 
 // ArkImporter plans and starts imports. Its errors are *Error values with the documented status and
@@ -60,10 +64,11 @@ type ArkImportDeps struct {
 	Logger *slog.Logger
 }
 
-// ArkImportRoutes returns POST /ark/import (op, 10 s; add_to_profile needs admin*).
+// ArkImportRoutes returns POST /ark/import (op, or portal restricted; 10 s; add_to_profile needs
+// admin*).
 func ArkImportRoutes(d ArkImportDeps) []Route {
 	return []Route{
-		{Method: http.MethodPost, Pattern: "/ark/import", Auth: []Level{AuthOp}, Timeout: arkSyncTimeout, Handler: HandlerFunc(d.post)},
+		{Method: http.MethodPost, Pattern: "/ark/import", Auth: []Level{AuthOp, AuthPortal}, Timeout: arkSyncTimeout, Handler: HandlerFunc(d.post)},
 	}
 }
 
@@ -103,6 +108,10 @@ type arkImportBody struct {
 }
 
 func (d ArkImportDeps) post(w http.ResponseWriter, r *http.Request) error {
+	info := InfoFrom(r.Context())
+	if info.Principal.Kind == KindPortal {
+		return d.portalImport(w, r, info)
+	}
 	var body arkImportBody
 	if err := DecodeJSON(w, r, &body); err != nil {
 		return err
@@ -115,7 +124,6 @@ func (d ArkImportDeps) post(w http.ResponseWriter, r *http.Request) error {
 		// "Add everything on the drive to the profile" is never what a person means.
 		return NewError(CodeInvalidRequest, http.StatusBadRequest, map[string]any{"field": "items", "reason": "required_with_add_to_profile"})
 	}
-	info := InfoFrom(r.Context())
 	// Changing node.yaml needs admin*: an operator on the socket, or the PIN. A dry run changes nothing.
 	if body.AddToProfile && !body.DryRun && !info.Principal.Satisfies([]Level{AuthAdminStar}) {
 		return NewError(CodeAdminRequired, http.StatusForbidden, map[string]any{"pin_required": true, "reason": "add_to_profile"})
@@ -145,6 +153,24 @@ func (d ArkImportDeps) post(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// portalImport is POST /ark/import for a Portal session (survival-portal.md section 3.3): the client
+// body is ignored and replaced by the safe default, a real import of the profile's items from the
+// first connected drive that can be read, with no catalog install, no node.yaml change and no dry
+// run. An import only copies verified items in; it never deletes anything.
+func (d ArkImportDeps) portalImport(w http.ResponseWriter, r *http.Request, info *RequestInfo) error {
+	opID := d.opID()
+	SetOpID(w, opID)
+	req := ArkImportRequest{FirstDrive: true, OpID: opID, Actor: AuditActor(info)}
+	started, err := d.Importer.StartImport(r.Context(), req)
+	if err != nil {
+		d.audit(info, audit.ResultFail, errorCode(err), req, "")
+		return err
+	}
+	d.audit(info, audit.ResultOK, "", req, started.RunID)
+	WriteJSON(w, r, http.StatusAccepted, arkRunAccepted(started))
+	return nil
+}
+
 func (d ArkImportDeps) audit(info *RequestInfo, result audit.Result, code string, req ArkImportRequest, runID string) {
 	if d.Audit == nil {
 		return
@@ -158,6 +184,9 @@ func (d ArkImportDeps) audit(info *RequestInfo, result audit.Result, code string
 	}
 	if runID != "" {
 		target["run_id"] = runID
+	}
+	if req.FirstDrive {
+		target["first_drive"] = "true"
 	}
 	ev := audit.Event{Action: audit.ActionArkImport, Result: result, Code: code, Actor: AuditActor(info), Target: target, ReqID: info.ID}
 	if err := d.Audit.Write(ev); err != nil {
