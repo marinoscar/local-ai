@@ -301,7 +301,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	// The model views, the status builder, the counters.
 	merger := &statusapi.ModelMerger{
 		Config: cfg, Catalog: c.Catalog, State: c.State, Mode: mv, Hardware: c.Hardware, Router: c.RouterWatcher,
-		Roots: d.roots, Presence: router.ManifestPresence{FS: fs},
+		Roots: d.roots, Presence: router.ManifestPresence{FS: fs}, WhisperReserveMiB: d.whisperReserveMiB,
 	}
 	svcView := health.Combine(c.Watcher, sup)
 	gauge := &gauges{}
@@ -781,7 +781,7 @@ func (d *Daemon) routerInputs() router.Inputs {
 	}
 	return router.Inputs{
 		NodeID: cfg.Node.ID, Catalog: cs.Catalog, Profile: prof, Overrides: cfg.ProfileOverrides, Llama: cfg.Llama,
-		Roots: d.roots(), Fit: router.NewEnv(d.c.Hardware.Snapshot(), cfg.Llama.Backend, rcfg, 0),
+		Roots: d.roots(), Fit: router.NewEnv(d.c.Hardware.Snapshot(), cfg.Llama.Backend, rcfg, d.whisperReserveMiB()),
 		StateDefault: def, Survival: st.Mode == state.ModeSurvival,
 	}
 }
