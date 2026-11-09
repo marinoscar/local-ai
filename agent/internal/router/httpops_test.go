@@ -164,6 +164,36 @@ func TestHTTPLoadWaitFalse(t *testing.T) {
 	}
 }
 
+// A tight fit still loads, and the warning is on the 202 itself (#232): the planner knows it before the answer, so a
+// client that does not wait (aictl, the Portal, the cloud) can show it. The rig checks the body against openapi.yaml.
+func TestHTTPLoadWaitFalseCarriesTheMemoryWarning(t *testing.T) {
+	t.Run("graphics memory held by other programs: LAI-HW-005 on the 202", func(t *testing.T) {
+		r := newHTTPRig(t, func(c *orCfg) { c.env.GOthersMiB = 7900 })
+		rec := r.call("POST", "/models/m-a/load", `{"wait":false}`, nil)
+		if rec.Code != 202 {
+			t.Fatalf("%d %s", rec.Code, rec.Body)
+		}
+		w, _ := bodyMap(t, rec)["warning"].(map[string]any)
+		if w["code"] != doctor.HW005 || w["message"] == "" || len(w) != 2 {
+			t.Errorf("warning: %v", w)
+		}
+		if err := r.o.Wait(bg); err != nil {
+			t.Fatal(err)
+		}
+		eqStrings(t, "loaded", r.loadedNow(), []string{"m-a"})
+	})
+	t.Run("a load that fits has no warning on the 202", func(t *testing.T) {
+		r := newHTTPRig(t)
+		rec := r.call("POST", "/models/m-a/load", `{"wait":false}`, nil)
+		if _, has := bodyMap(t, rec)["warning"]; rec.Code != 202 || has {
+			t.Errorf("%d %s", rec.Code, rec.Body)
+		}
+		if err := r.o.Wait(bg); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
 func TestHTTPLoadAsAPortalSession(t *testing.T) {
 	r := newHTTPRig(t, orSurvival())
 	r.load("m-a")

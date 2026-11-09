@@ -1758,6 +1758,11 @@ export interface components {
             /** @enum {string} */
             status: "loading";
             op_id: string;
+            /** @description Present when the plan already knows the load will go ahead although other programs hold much of the memory (LAI-HW-005, LAI-HW-006). The same notice as in ModelLoaded, so a client that does not wait can show it. */
+            warning?: {
+                code: string;
+                message: string;
+            };
         };
         UnloadRequest: {
             /**

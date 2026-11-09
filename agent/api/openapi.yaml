@@ -3072,6 +3072,14 @@ components:
         id: {type: string}
         status: {type: string, enum: [loading]}
         op_id: {type: string}
+        warning:
+          type: object
+          description: "Present when the plan already knows the load will go ahead although other programs hold much of the memory (LAI-HW-005, LAI-HW-006). The same notice as in ModelLoaded, so a client that does not wait can show it."
+          required: [code, message]
+          additionalProperties: false
+          properties:
+            code: {type: string}
+            message: {type: string}
 
     UnloadRequest:
       type: object
