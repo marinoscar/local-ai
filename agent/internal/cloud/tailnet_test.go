@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -12,23 +13,13 @@ import (
 
 // fakeTailnet is a TailnetSource the test edits. The address is built at run time so none sits in the source.
 type fakeTailnet struct {
-	mu        sync.Mutex
-	ip, name  string
-	reads     int
-	lastReadC chan struct{}
+	mu       sync.Mutex
+	ip, name string
+	reads    int
 }
 
-func tailnetAddr(last int) string { return strings.Join([]string{"100", "64", "10", itoa(last)}, ".") }
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for ; n > 0; n /= 10 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-	}
-	return string(b)
+func tailnetAddr(last int) string {
+	return strings.Join([]string{"100", "64", "10", strconv.Itoa(last)}, ".")
 }
 
 func (f *fakeTailnet) SelfAddress(context.Context) (string, string) {
