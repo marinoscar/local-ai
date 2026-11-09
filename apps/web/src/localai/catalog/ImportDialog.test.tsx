@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 
 import { ApiError } from '@marinoscar/platform-web/core';
 
@@ -55,6 +55,6 @@ describe('ImportDialog', () => {
     const { rerender } = render(<ImportDialog client={fake.api} open={false} onClose={() => undefined} onQueued={() => undefined} />);
     expect(screen.queryByRole('dialog')).toBeNull();
     rerender(<ImportDialog client={fake.api} open onClose={() => undefined} onQueued={() => undefined} />);
-    expect((await axe.run(screen.getByRole('dialog'))).violations).toEqual([]);
+    expect((await runAxe(screen.getByRole('dialog'))).violations).toEqual([]);
   });
 });

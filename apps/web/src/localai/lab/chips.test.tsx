@@ -1,11 +1,11 @@
 // The status chips: colour + word + icon on every state (colour is never the only signal), and the axe checks.
 import { ArkChip, HealthChip, ModeChip, VramBar, healthWord, type ArkColour, type LabHealth, type LabMode } from '@localai/ui';
 import { render, screen, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 
 async function violations(container: HTMLElement) {
   // jsdom has no layout or rendered colours: the contrast rule needs both, so it is left to the real-browser check.
-  const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+  const result = await runAxe(container);
   return result.violations.map((violation) => `${violation.id}: ${violation.help}`);
 }
 

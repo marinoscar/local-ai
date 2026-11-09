@@ -1,7 +1,7 @@
 // The editor: it loads the base files, saves a NEW draft, follows that draft's lint (polled every 2 s until a verdict),
 // jumps from a lint problem to its file and line, and enables Approve only for a saved, valid, unedited draft.
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 
 import { ApiError } from '@marinoscar/platform-web/core';
 
@@ -238,7 +238,7 @@ describe('CatalogEditor', () => {
     const fake = fakeCatalog();
     const { container } = render(<CatalogEditor client={fake.api as CatalogApi} source={{ kind: 'new', baseVersion: '2026.11.02-1' }} versions={wireframeVersions()} today={CAT_NOW} onSaved={() => undefined} onApprove={() => undefined} onClose={() => undefined} />);
     await screen.findByRole('textbox', { name: 'Contents of models.yaml' });
-    expect((await axe.run(container)).violations).toEqual([]);
+    expect((await runAxe(container)).violations).toEqual([]);
     expect(GOOD_REVISION).toHaveLength(40);
   });
 });

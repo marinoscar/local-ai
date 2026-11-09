@@ -2,10 +2,20 @@
 // a migrated database, a `nod_` credential minted by the platform's own `NodeCredentialService`, bound to a Local AI
 // node, the agent's `POST /api/nodes/register`, and the handshake. The guard's conditional writes (the enrollment
 // that must happen once however many first calls race) only prove themselves on a real `UPDATE ... WHERE`.
+//
+// Teardown (#454): nothing in this file may still touch the database after `app.close()` resolves. The app's own job
+// worker is the one background reader that could (it claims whatever is queued in the shared test database, for
+// example a `localai.commands.sweep` another suite enqueued, and `stop()` only waits a bounded grace for a running
+// job); this suite never needs a job, so the worker is switched off BEFORE the app is built, like `audit.db.spec.ts`.
+// The enrollment notifications are detached by design, so `afterAll` flushes them before it closes the app.
+process.env.JOBS_WORKER_MODE = 'off';
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { JobWorker } from '@marinoscar/platform-api/jobs';
 import { NodeCredentialService } from '@marinoscar/platform-api/nodes';
+import { NotificationsService } from '@marinoscar/platform-api/notifications';
 
 import { createApp } from '../../src/main';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -88,10 +98,17 @@ afterAll(async () => {
     await prisma.workerNode.deleteMany({ where: { createdById: ownerId } });
     await prisma.nodeCredential.deleteMany({ where: { id: { in: mintedCredentialIds } } });
   }
+  // The enrollment notifications are fire-and-forget; let every dispatch finish while the pool is still open, so none
+  // can run a query on a connection opened after the test environment is gone.
+  await app?.get(NotificationsService).flush();
   await app?.close();
 });
 
 describe('the cloud link on real SQL', () => {
+  it('runs without the job worker, so no background job can outlive the suite (#454)', () => {
+    expect(app.get(JobWorker).mode()).toBe('off');
+  });
+
   it('mint, bind, register, handshake: 200 with the fixture shape, and the node is enrolled', async () => {
     const { nodeId, token } = await enrollable(1);
     const workerId = await register(token, nodeId);
@@ -183,5 +200,32 @@ describe('the cloud link on real SQL', () => {
     const asSession = await app.inject({ method: 'GET', url: `/api/nodes/${stranger}/localai/config`, headers: { authorization: `Bearer ${sessionToken}` } });
     expect(asSession.statusCode).toBe(403);
     expect((asSession.json() as { details: unknown }).details).toEqual({ code: 'LAI-CLD-004', reason: 'node_credential_required' });
+  });
+
+  it('the node reports its own tailnet address and name (#437): stored once, repeated for free, never shown back', async () => {
+    const { nodeId, token } = await enrollable(9);
+    const workerId = await register(token, nodeId);
+    const post = (payload: unknown) =>
+      app.inject({ method: 'POST', url: `/api/nodes/${workerId}/localai/tailnet`, headers: { authorization: `Bearer ${token}` }, payload: payload as never });
+    const ip = ['100', '64', '20', '30'].join('.');
+
+    expect((await config(workerId, token)).json<{ data: { features: string[] } }>().data.features).toContain('tailnet.v1');
+
+    const first = await post({ ip, machine: 'host-nine.example.ts.net' });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ data: { stored: true } });
+    expect(first.body).not.toContain(ip);
+    expect(await prisma.localaiNode.findUniqueOrThrow({ where: { nodeId } })).toMatchObject({ tailnetIp: ip, tailnetMachine: 'host-nine.example.ts.net' });
+
+    const again = await post({ ip, machine: 'host-nine.example.ts.net' });
+    expect(again.json()).toMatchObject({ data: { stored: false } });
+    const updates = await auditRows('localai.node.updated', nodeId);
+    expect(updates).toHaveLength(1);
+    expect(JSON.stringify(updates[0].meta)).not.toContain(ip);
+    expect(updates[0].meta).toMatchObject({ tailnetIp: '<set>', source: 'node' });
+
+    const refused = await post({ ip: '192.0.2.5' });
+    expect(refused.statusCode).toBe(400);
+    expect(refused.body).not.toContain('192.0.2.5');
   });
 });

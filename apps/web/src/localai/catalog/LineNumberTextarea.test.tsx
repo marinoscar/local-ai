@@ -1,7 +1,7 @@
 // The gutter must sit beside the text: same font, size, line height and vertical padding, one number per line, and the
 // gutter follows the textarea's scroll. (jsdom has no layout, so alignment is proven by the shared metrics.)
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 import { createRef } from 'react';
 
 import { gutterText, lineCount, LineNumberTextarea, TEXT_METRICS, type LineNumberTextareaHandle } from './LineNumberTextarea';
@@ -82,7 +82,7 @@ describe('LineNumberTextarea', () => {
 
   it('has no axe violations', async () => {
     const { container } = render(<LineNumberTextarea label="Contents of models.yaml" value={'a\nb'} onChange={() => undefined} />);
-    const result = await axe.run(container);
+    const result = await runAxe(container);
     expect(result.violations).toEqual([]);
   });
 });

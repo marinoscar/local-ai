@@ -1,7 +1,7 @@
 // The Catalog page over the wireframe's three versions and the 3-node lab: header, table, permissions (a viewer sees
 // no write control), the diff, import, approve, push to nodes, and the empty, loading and failure states.
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 import { MemoryRouter } from 'react-router-dom';
 
 import { ApiError } from '@marinoscar/platform-web/core';
@@ -280,7 +280,7 @@ describe('CatalogPage', () => {
     await ready();
     fireEvent.click(screen.getByRole('button', { name: 'New draft' }));
     await screen.findByRole('textbox', { name: 'Contents of models.yaml' });
-    expect((await axe.run(admin.container)).violations).toEqual([]);
+    expect((await runAxe(admin.container)).violations).toEqual([]);
     admin.unmount();
 
     permissions = ['lab:read'];
@@ -288,11 +288,11 @@ describe('CatalogPage', () => {
     await ready();
     fireEvent.click(screen.getByRole('button', { name: 'Diff 2026.11.03-1 against approved' }));
     await screen.findByTestId('diff-view');
-    expect((await axe.run(viewer.container)).violations).toEqual([]);
+    expect((await runAxe(viewer.container)).violations).toEqual([]);
     viewer.unmount();
 
     const empty = renderPage(fakeCatalog([]));
     await screen.findByTestId('catalog-empty');
-    expect((await axe.run(empty.container)).violations).toEqual([]);
+    expect((await runAxe(empty.container)).violations).toEqual([]);
   }, 15000);
 });
