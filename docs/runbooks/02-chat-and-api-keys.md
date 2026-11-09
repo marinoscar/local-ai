@@ -14,7 +14,7 @@ Use this when you want to chat with a node's AI, or connect a program (OpenCode,
 - **API:** the way programs talk to the AI. Ours is "OpenAI-compatible", so any tool that works with OpenAI can be pointed at it.
 - **Base URL:** the address a program sends its questions to, ending in `/v1`.
 - **API key:** a secret password a program sends with every question. Without it the node answers `401` (not allowed).
-- **Service key:** a lab key (`lai_…`) made for a program instead of a person, such as Open WebUI. Only a gateway administrator can create one. It does not have to expire.
+- **Service key:** a lab key (`lai_…`) made for a program instead of a person, such as Open WebUI. Only a gateway administrator (permission `gateway:admin`) can create one. It does not have to expire.
 
 ## Which address and which key?
 

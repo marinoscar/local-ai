@@ -13,6 +13,8 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
 
 ## Part 1. Dashboard tour
 
+<!-- runbook-lint: no-expect-section (a tour of the screens: reading, nothing to type) -->
+
 1. **Sign in.** Open `https://ai.marin.cr`, press **Sign in with Google**.
    - **If it doesn't work:** "not allowed": the lab owner must add your exact email to the allowlist (**Admin → Settings → Users & Allowlist → Allowlist**; Part 8).
 2. **Lab** (`/lab`): one card per node.
@@ -33,7 +35,7 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
    |---|---|---|
    | `LAI-CLD-020` | Node stopped reporting | Check it's on and connected ([07 → Cloud shows node offline](07-troubleshooting.md#cloud-shows-node-offline)) |
    | `LAI-CLD-021` | Offline more than a day | Turn it on, or retire it |
-   | `LAI-CLD-022` | Ark drive not synced for 30+ days | Plug the drive into that node overnight, or **Sync now** ([04](04-ark-drive.md)) |
+   | `LAI-CLD-022` | Ark drive not synced for 30+ days (a **warning**, shown in the browser only; **critical** after 90 days, and then emailed) | Plug the drive into that node overnight, or **Sync now** ([04](04-ark-drive.md)) |
    | `LAI-CLD-023` | Last sync failed | Node → **Ark** tab → read the code → fix → **Sync now** |
    | `LAI-CLD-024` | Monthly drill failed | Node page, or `aictl drill show` on it ([08 Part 5](08-scheduled-sync.md)) |
    | `LAI-CLD-025` | Essential content missing | **Sync now**, or import from the drive |
@@ -42,6 +44,7 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
    | `LAI-CLD-028` | Node on an old catalog | **Refresh catalog** on the node |
    | `LAI-CLD-029` | Newer agent available | Part 4 |
    | `LAI-CLD-031` | Node added but never connected | Finish the install, or retire it |
+   | `LAI-CLD-032` | The cloud can't read its stored keys | Restore `SECRETS_ENCRYPTION_KEY` from the backup and restart the cloud, then ask all nodes to re-send their keys (lab owner, permission `lab:admin`: `POST /api/localai/nodes/resend-keys` in the API reference at `https://ai.marin.cr/api/docs`; there is no button for it) |
 
    Full list: [cloud-app.md §8](../specs/cloud-app.md#8-doctor-codes-lai-cld).
 5. **Catalog** (`/lab/catalog`): the approved version, how many nodes use it, drafts and old versions. Part 3.
@@ -53,6 +56,8 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
 ## Part 2. Operator checklists
 
 ### Weekly (10 minutes)
+
+<!-- runbook-lint: no-expect-section (checklist) -->
 8. [ ] **Lab** page: every node Healthy or grey on purpose. No red cards.
 9. [ ] **Alerts:** none active, or each one understood and acknowledged.
 10. [ ] Every **Ark** chip green or amber; no red. Drives: none older than 21 days.
@@ -61,6 +66,8 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
 13. [ ] Laptop nodes: plugged in (no `LAI-HW-012` on their cards).
 
 ### Monthly (30 to 60 minutes)
+
+<!-- runbook-lint: no-expect-section (checklist) -->
 14. [ ] After the first Sunday: every node shows **Drill ✔**. Investigate any warning ([08 Part 5](08-scheduled-sync.md)).
 15. [ ] Plug each **AI-ARK drive** into an online node overnight; next day its age is 0 days and its colour green ([04 Part 6](04-ark-drive.md)).
 16. [ ] **Catalog:** every node on the approved version (no ▲). Approve pending drafts that passed lint (Part 3).
@@ -71,6 +78,8 @@ Use this when you operate the whole lab from `https://ai.marin.cr`: checking nod
 21. [ ] Update [architecture/lab-inventory.md](../architecture/lab-inventory.md) if anything changed (placeholders only).
 
 ### Every 3 months
+
+<!-- runbook-lint: no-expect-section (checklist) -->
 22. [ ] Run the "pull the plug" drill on at least one laptop node ([08 Part 6](08-scheduled-sync.md)), and update the battery table in its printed [01](01-survival-mode.md).
 23. [ ] Re-check every file on each drive: `aictl ark verify --root <root-id> --full --wait` ([04](04-ark-drive.md)).
 24. [ ] Re-print the Survival card and [01](01-survival-mode.md) if anything changed (from a copy of the repository: `cd ~/git/local-ai && sudo aictl docs render`, then print from `/srv/localai/docs`).
@@ -135,13 +144,13 @@ The gateway is `https://ai.marin.cr/v1`: one address for every program, with a `
 35. **Create a key** for a person or program: **API keys → Create key**: name, models (empty = all), expiry. Copy the `lai_…` key shown once ([02 Part 3](02-chat-and-api-keys.md)).
    - **What you should see:** the key box with **Copy**, and a new row in the table with `lai_` and the first six characters.
    - **If it doesn't work:** no **API keys** entry: that account lacks the `gateway:use` permission.
-36. **Service keys** (owner) for systems like Open WebUI: **Create key** → **Service key (a program such as Open WebUI)**. A service key may have no expiry (leave **Expires in (days)** empty) and takes the higher service limits from the gateway settings (`gateway.defaults.service`: 600 requests a minute, 16 at the same time, no daily token budget). Name it for the program (`open-webui`), one key per program, so **Usage** can tell them apart.
+36. **Service keys** (the lab owner; permission `gateway:admin`) for systems like Open WebUI: **Create key** → **Service key (a program such as Open WebUI)**. A service key may have no expiry (leave **Expires in (days)** empty) and takes the higher service limits from the gateway settings (`gateway.defaults.service`: 600 requests a minute, 16 at the same time, no daily token budget). Name it for the program (`open-webui`), one key per program, so **Usage** can tell them apart.
    - **Create it with the account that will stay.** A key stops working (`LAI-GW-013`) if its owner's account is deactivated or loses the gateway permission.
    - **What you should see:** the row shows `(service)` next to the name and `never` under **Expires**.
 37. **Revoke** a key: **Revoke** on its row, then **Revoke** in the window that asks. It stops working on the next request.
    - **Revoking `open-webui` makes every chat in Open WebUI fail** with `LAI-GW-010`. To **replace** it without a gap: create the new key, paste it in Open WebUI (Connections, edit the gateway connection) and in `apps/openwebui/.env`, test a chat, and only then revoke the old one ([02 step 17 and step 20](02-chat-and-api-keys.md#part-5-connect-open-webui)).
 38. **Usage:** requests and tokens per day, model or node. Only metadata is stored, never prompts or answers. Use the **Key** filter to see one key (`open-webui`), **Range** for 7 or 30 days, **Group by** for day, model or node (model and node cover 7 days). Gateway administrators can tick **Show every user's keys**. Requests appear a few seconds after they finish.
-39. **Models (owner):** per model, enable or disable it on the gateway, add aliases, allow **on-demand** loading (the gateway may load it on a node that has it, waiting up to the set time), and set preferred nodes.
+39. **Models (the lab owner; permission `gateway:admin`, as for the gateway settings):** per model, enable or disable it on the gateway, add aliases, allow **on-demand** loading (the gateway may load it on a node that has it, waiting up to the set time), and set preferred nodes.
 40. **A node shouldn't receive gateway traffic** (maintenance, a laptop on the road): node page → **Settings** → turn **gateway enabled** off. Or put it in offline mode.
 
 ### Checklist: move Open WebUI to the one lab connection (once)
@@ -354,7 +363,7 @@ Use this when the cloud app at `https://ai.marin.cr` is installed for the first 
 
 ### 9.2 Updating
 
-An update is two parts: the code lands on `main` (a pull request, with `cloud-ci` green), then the workflow **cloud-deploy-branch** copies it to `deploy/cloud`, then you update the VPS.
+An update is two parts: the code lands on `main` (a pull request, with `cloud-ci` green), then the workflow **cloud-deploy-branch** copies it to `deploy/cloud` by itself (it starts when `cloud-ci` has finished green on `main`), then you update the VPS.
 
 69. **Wait for the branch.** After the pull request is merged, open **Actions → cloud-deploy-branch** and wait for the green run (a few minutes). Check that the newest commit of `deploy/cloud` mentions the seven-character code of your merge (the first seven characters of its commit id on GitHub).
     - **What you should see:** `deploy: apps/cloud @ <that code>`.
