@@ -433,8 +433,12 @@ func (d *Daemon) build(ctx context.Context) error {
 	if d.ark != nil {
 		arkActivity = d.ark.engine
 	}
+	drillChecks := drill.NewRegistry()
+	if err := d.registerContentDrillChecks(drillChecks); err != nil {
+		return fmt.Errorf("drill content checks: %w", err)
+	}
 	c.Drill, err = drill.New(drill.Deps{
-		Registry: drill.NewRegistry(), Results: results, Observer: reporter, Ark: arkActivity,
+		Registry: drillChecks, Results: results, Observer: reporter, Ark: arkActivity,
 		State: c.State, Publisher: c.Bus, Mode: mv, Llama: llamaActivity{lock: c.OpLock, view: c.RouterWatcher},
 		Power: powerSource{h: c.Hardware}, Metrics: gauge, NodeID: node, AgentVersion: env.Version,
 		CatalogVersion: func() string { return c.Catalog.Get().Catalog.Version }, Clock: clock, Logger: log,
