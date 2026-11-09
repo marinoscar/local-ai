@@ -439,8 +439,12 @@ func (d *Daemon) build(ctx context.Context) error {
 	if err := d.registerContentDrillChecks(drillChecks); err != nil {
 		return fmt.Errorf("drill content checks: %w", err)
 	}
+	drillRestorer, err := d.drillRestorer()
+	if err != nil {
+		return err
+	}
 	c.Drill, err = drill.New(drill.Deps{
-		Registry: drillChecks, Results: results, Observer: reporter, Ark: arkActivity,
+		Registry: drillChecks, Restorer: drillRestorer, Results: results, Observer: reporter, Ark: arkActivity,
 		State: c.State, Publisher: c.Bus, Mode: mv, Llama: llamaActivity{lock: c.OpLock, view: c.RouterWatcher},
 		Power: powerSource{h: c.Hardware}, Metrics: gauge, NodeID: node, AgentVersion: env.Version,
 		CatalogVersion: func() string { return c.Catalog.Get().Catalog.Version }, Clock: clock, Logger: log,
@@ -450,6 +454,9 @@ func (d *Daemon) build(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("drill engine: %w", err)
+	}
+	if err := d.registerDrillModelChecks(drillChecks); err != nil {
+		return err
 	}
 	// The routes and the server.
 	if err := d.buildServer(); err != nil {

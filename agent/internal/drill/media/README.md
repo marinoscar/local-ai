@@ -1,5 +1,26 @@
 # Drill test media
 
+Files the drill embeds (`go:embed`) so that it needs no network (drill.md section 3.2). The speech
+recordings are embedded by `../media.go`; `seven.png` by `media.go` in this directory.
+
+| File | Used by | What it is |
+|---|---|---|
+| `seven.png` | check 6 `drl.vlm.photo.<id>` | 512 x 512 PNG: white background, a large black digit **7**, a red circle in the top-left corner |
+| `en.wav`, `es.wav` (and `en.txt`, `es.txt`) | checks 10 to 12 (speech) | two short recordings and the text they say |
+
+## seven.png
+
+Self-made and released under **CC0 1.0** (public domain dedication). It is drawn by `gen_seven.go`
+(standard library only: polygons and a circle), so no third-party artwork, font or photograph is in it.
+Regenerate it from this directory with:
+
+    go run gen_seven.go
+
+`media_test.go` checks the size, the white background, the black digit and the red circle, so a change
+to the generator that breaks the description fails `go test`.
+
+## The speech recordings
+
 Two short recordings of speech, embedded in the agent (`go:embed`, see `../media.go`) and played by the
 speech checks of the monthly drill (`drl.stt.en`, `drl.stt.es`, `drl.speech.roundtrip`; drill.md
 sections 3.2 and 4.2). The expected text sits next to each recording and is what the normalised word
