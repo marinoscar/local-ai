@@ -88,6 +88,10 @@ jobs:
           dpkg-deb -c "$deb" | grep apparmor
           dpkg-deb -c "$deb" | grep -E ' \./opt/ai-desktop/(ai-desktop|resources/apparmor-profile)$'
           dpkg-deb -c "$deb" | grep -E ' \./usr/share/applications/ai-desktop\.desktop$'
+      - name: apt can install the deb on every Ubuntu a node runs (24.04 and 26.04), not only on this runner
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: ../../scripts/release/check-deb-installs.sh "release/ai-desktop_${VERSION}_amd64.deb"
       - name: Install the deb, as a node would, and verify the installed app
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
