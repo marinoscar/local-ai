@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/drill"
 	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
@@ -84,7 +86,24 @@ func TestDaemonRunsTheFenceChecks(t *testing.T) {
 	eng := d.Components().Drill
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	res, err := eng.Start(ctx, drill.StartRequest{Only: []string{"drl.fence", "drl.config.offline_lint"}, Trigger: drill.TriggerManual})
+	// A manual start is refused while the AI is busy (LAI-DRL-004), and the daemon is still restoring
+	// its models just after it starts: ask again until it is not.
+	var (
+		res drill.StartResult
+		err error
+	)
+	for {
+		res, err = eng.Start(ctx, drill.StartRequest{Only: []string{"drl.fence", "drl.config.offline_lint"}, Trigger: drill.TriggerManual})
+		var refused *drill.RefusedError
+		if !errors.As(err, &refused) || refused.Code != doctor.DRL004 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("the drill stayed refused: %v", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

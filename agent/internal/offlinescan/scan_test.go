@@ -1,13 +1,16 @@
 package offlinescan
 
 import (
+	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/execx"
 )
 
 func messages(name, text string) []string {
@@ -144,29 +147,55 @@ func TestMatchesTheScriptOnItsFixtures(t *testing.T) {
 	}
 }
 
-// With node installed the script itself is the oracle: run it on the same trees and compare. (CI's go
-// job has no node; the golden files above carry the comparison there.)
+// findNode searches PATH for node (only internal/execx may import os/exec, so the lookup is done by hand).
+func findNode() (string, bool) {
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		p := filepath.Join(dir, "node")
+		if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0 {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// With node installed the script itself is the oracle: run it on the same trees and compare. (A machine
+// without node skips this; the golden files above carry the comparison there.)
 func TestMatchesTheScriptLive(t *testing.T) {
-	node, err := exec.LookPath("node")
-	if err != nil {
+	node, ok := findNode()
+	if !ok {
 		t.Skip("node is not installed; the golden files cover the comparison")
 	}
-	script := filepath.Join("..", "..", "..", "scripts", "check-offline-assets.mjs")
+	script, err := filepath.Abs(filepath.Join("..", "..", "..", "scripts", "check-offline-assets.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, dir := range []string{filepath.Join("..", "..", "..", "scripts", "testdata", "offline-assets", "bad"), filepath.Join("testdata", "tree")} {
-		cmd := exec.Command(node, script, dir)
-		out, _ := cmd.CombinedOutput() // exit 1 when there are findings
-		var want []string
-		for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			if l != "" && !strings.HasPrefix(l, "✗") && !strings.HasPrefix(l, "✓") {
-				want = append(want, l)
-			}
-		}
-		res, err := ScanFS(os.DirFS(dir))
+		abs, err := filepath.Abs(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := lines(res); !reflect.DeepEqual(got, want) {
-			t.Errorf("%s:\n go   %q\n node %q", dir, got, want)
+		res, err := execx.Exec{}.Run(context.Background(), execx.Cmd{
+			Path: node, Args: []string{script, abs}, Timeout: 30 * time.Second, MaxOut: 1 << 20,
+			Env: []string{"PATH=" + filepath.Dir(node) + ":" + execx.FixedPath},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var want []string
+		for _, l := range strings.Split(strings.TrimSpace(string(res.Stderr)), "\n") {
+			if l != "" && !strings.HasPrefix(l, "\u2717") && !strings.HasPrefix(l, "\u2713") {
+				want = append(want, l)
+			}
+		}
+		got, err := ScanFS(os.DirFS(dir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if g := lines(got); !reflect.DeepEqual(g, want) {
+			t.Errorf("%s:\n go   %q\n node %q", dir, g, want)
 		}
 	}
 }
