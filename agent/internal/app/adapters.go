@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/drill"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 	"github.com/marinoscar/local-ai/agent/internal/router"
 	"github.com/marinoscar/local-ai/agent/internal/services"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
@@ -347,7 +347,8 @@ func (d *Daemon) healthOverTransport(ctx context.Context) error {
 		client = &http.Client{Transport: unixTransport(path), Timeout: 5 * time.Second}
 		url = "http://agent" + api.BasePath + "/health"
 	case tcp == nil && srv.TCPAddr() != nil:
-		client = &http.Client{Timeout: 5 * time.Second}
+		client = netx.Client("app.health")
+		client.Timeout = 5 * time.Second
 		url = "http://" + srv.TCPAddr().String() + api.BasePath + "/health"
 	default:
 		return errors.New("no listener is up")
@@ -369,11 +370,7 @@ func (d *Daemon) healthOverTransport(ctx context.Context) error {
 
 // unixTransport dials the unix socket at path for every request, whatever the URL says.
 func unixTransport(path string) *http.Transport {
-	return &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var dl net.Dialer
-			return dl.DialContext(ctx, "unix", path)
-		},
-		DisableKeepAlives: true,
-	}
+	tr := netx.UnixTransport(path)
+	tr.DisableKeepAlives = true
+	return tr
 }

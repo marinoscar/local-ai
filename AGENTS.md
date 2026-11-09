@@ -103,7 +103,7 @@ deliberately fake leaks live in `scripts/tests/redaction/`, which `check-redacti
 while the marker file `scripts/tests/redaction/.redaction-fixtures` exists there.
 
 ## Tech stack (decided, see ADRs)
-- **Agent + CLI:** Go (latest stable), one static binary (`CGO_ENABLED=0`), built for linux/amd64 and linux/arm64. It uses the standard library `net/http`, `log/slog` for structured JSON logs, and `gopkg.in/yaml.v3`. Keep dependencies minimal and vendored (`go mod vendor`) so the kit can rebuild the agent offline. See ADR-0001.
+- **Agent + CLI:** Go (latest stable), one static binary (`CGO_ENABLED=0`), built for linux/amd64 and linux/arm64. It uses the standard library `net/http`, `log/slog` for structured JSON logs, and `gopkg.in/yaml.v3`. Every outbound HTTP client and dial of the agent goes through `agent/internal/netx` (the drill's network fence refuses what does not; `agent/internal/netx/guard_test.go` enforces it). Keep dependencies minimal and vendored (`go mod vendor`) so the kit can rebuild the agent offline. See ADR-0001.
 - **Local UI / Survival Portal:** React + Vite, built to static files and embedded with `go:embed`. It must not load any network assets.
 - **Cloud:** EnterpriseAppBase packages (NestJS 11/Fastify, Prisma 7, Postgres 16, React 19 + MUI). See ADR-0008.
 - **Desktop:** Electron + electron-builder, following the kvox-desktop pattern, as a thin shell. See ADR-0004.

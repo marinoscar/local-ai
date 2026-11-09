@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 )
 
@@ -77,7 +78,7 @@ func (f HTTPFetcher) Get(ctx context.Context, url string) ([]byte, error) {
 	if c == nil {
 		c = &http.Client{
 			Timeout:       3 * time.Second,
-			Transport:     &http.Transport{Proxy: nil},
+			Transport:     netx.Via(netx.Shared(), "svc.kiwix"),
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		}
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/events"
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 )
 
@@ -54,7 +55,8 @@ func (p HTTPProber) Exists(ctx context.Context, path string) (bool, error) {
 	}
 	c := p.Client
 	if c == nil {
-		c = &http.Client{Timeout: probeTimeout}
+		c = netx.Client("portal.firstaid")
+		c.Timeout = probeTimeout
 	}
 	for _, method := range []string{http.MethodHead, http.MethodGet} {
 		req, err := http.NewRequestWithContext(ctx, method, base+path, nil)

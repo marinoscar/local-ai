@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
 
 // ProxyOptions tunes StartProxyWith. The zero value is what StartProxy uses.
@@ -61,8 +63,7 @@ func StartProxyWith(ctx context.Context, b Bucket, allowHosts []string, opts Pro
 		opts.Logger = slog.Default()
 	}
 	if opts.Dial == nil {
-		d := &net.Dialer{Timeout: opts.DialTimeout}
-		opts.Dial = d.DialContext
+		opts.Dial = netx.DialFor("sync.throttle", opts.DialTimeout)
 	}
 	allow := map[string]bool{}
 	for _, h := range allowHosts {

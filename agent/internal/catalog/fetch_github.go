@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
 
 // The GitHub source of the catalog fetcher (catalog.md section 1, priority 2: not enrolled, online).
@@ -382,7 +384,9 @@ func (g *GitHub) client() *http.Client {
 	if g.Client != nil {
 		c = *g.Client
 	} else {
-		c.Transport = &http.Transport{Proxy: nil, TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 20 * time.Second}
+		tr := netx.NewTransport("catalog.github", nil)
+		tr.ResponseHeaderTimeout = 20 * time.Second
+		c.Transport = tr
 	}
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 3 {

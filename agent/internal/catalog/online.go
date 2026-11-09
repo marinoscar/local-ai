@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
 
 // The --online checks (catalog.md section 6): HEAD every URL and Hugging Face file, compare
@@ -49,7 +51,8 @@ func checkOnline(cat *Catalog, opts LintOptions) []Problem {
 	}
 	client := opts.Client
 	if client == nil {
-		client = &http.Client{Timeout: onlineTimeout}
+		client = netx.Client("catalog.online")
+		client.Timeout = onlineTimeout
 	}
 	hfBase := strings.TrimRight(orDefault(opts.HFEndpoint, DefaultHFEndpoint), "/")
 	ghBase := strings.TrimRight(orDefault(opts.GitHubEndpoint, DefaultGitHubEndpoint), "/")
