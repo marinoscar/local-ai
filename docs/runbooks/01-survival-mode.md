@@ -36,7 +36,7 @@ Print this page and keep it next to the computer, with the AI-ARK drive. The one
    - **What you should see:** a window called **Local AI**.
    - **If it doesn't work:** go to step 6 (the browser way).
 
-5. **Press Survival mode.** Use the **Survival mode** item in the app's tray menu (the small Local AI icon at the top of the screen), or the **Start survival mode** button in the window. Confirm with **Yes**.
+5. **Press Survival mode.** Click the small Local AI icon at the top of the screen (the tray menu), choose **Mode**, then **⚠ Survival mode**, and confirm with **Switch to Survival mode**. Or, in the window, press the **Start survival mode** button (it needs no confirmation).
    - **What you should see:** within about 2 minutes the Survival Portal fills the screen. The top line says **Ready**, or **Ready, with problems**, with a short list.
    - **If it doesn't work:** go to step 6.
 
@@ -117,7 +117,7 @@ When the computer is in Survival mode, the **Local AI** app fills the whole scre
    - **If it doesn't work:** "No offline map is installed" (`LAI-SVC-030`): plug in the AI-ARK drive. No names on the map (`LAI-SVC-031`): the map works, only the labels are missing.
 
 ### Button 6: Manuals
-20. Press **6**. Choose a manual: **Survival mode** (this page), **Rebuild this computer without internet**, **Troubleshooting (error codes)**. **Print the Survival card** gives a one-page summary to print.
+20. Press **6**. Choose a manual: **01. Survival mode: the emergency guide** (this page), **06. Rebuild a node with no internet**, **07. Troubleshooting**. **Print the Survival card** gives a one-page summary to print (a PDF; on a computer without a PDF maker it is a web page, and you print it from the browser: `LAI-CLI-014`, information only). The card never shows a password, key or address; if `sudo aictl docs render` refuses to make it, it says `LAI-CLI-016`.
 
 ### Button 7: Status and battery
 21. Press **7**.
@@ -133,6 +133,8 @@ When the computer is in Survival mode, the **Local AI** app fills the whole scre
 ---
 
 ## Part 4. Saving battery
+
+<!-- runbook-lint: no-expect-section (advice) -->
 
 When there is no charger, the battery is your fuel. The AI uses a lot of power **while it is answering**, and very little while it waits.
 
@@ -158,6 +160,8 @@ Computer: __________  Measured on (date): __________
 ---
 
 ## Part 5. Charging from solar or a car (general advice)
+
+<!-- runbook-lint: no-expect-section (advice) -->
 
 These are general safety rules. They are not a full electrical guide.
 
@@ -201,7 +205,8 @@ The **AI-ARK drive** is the portable copy of everything. It is **not encrypted**
    - Store it in a padded case, dry, cool, out of the sun, away from magnets.
    - Never pull it out while the computer is writing to it. If you did, plug it back in once so it can check itself (`LAI-ARK-007`).
    - If there are two drives, keep them in **different places**.
-   - Plug it into a computer with internet at least once a month (overnight) so it stays up to date.Yellow after 30 days, red after 90 (`LAI-ARK-008`).   - Don't store personal secrets on it.
+   - Plug it into a computer with internet at least once a month (overnight) so it stays up to date. Yellow after 30 days, red after 90 (`LAI-ARK-008`).
+   - Don't store personal secrets on it.
 
 ---
 
@@ -270,7 +275,7 @@ The drive holds everything. Pick the first option that fits:
 
    Then open `http://127.0.0.1:8888` in the browser. Leave the terminal open while you read.
 45. **A computer with Windows or macOS:** they can't read the drive by themselves (it is formatted for Linux). If you have the Ubuntu USB stick, start that computer from it and choose **Try Ubuntu**, then do step 44.
-46. **To make a new AI computer from scratch, with no internet:** follow runbook 06 (Rebuild a node offline). It's also on the drive: `localai/docs/runbooks/06-rebuild-a-node-offline.html`.
+46. **To make a new AI computer from scratch, with no internet:** follow runbook 06 (Rebuild a node offline). It's also on the drive: `localai/docs/06-rebuild-a-node-offline.html`.
 
 **Every 3 months:** test all of this for real with the "pull the plug" checklist in the [Appendix, Part B](#appendix-monthly-and-quarterly-checks) at the end of this page. The result is stored on the computer with `sudo aictl drill record-manual`; use the paper log below only when that is not possible.
 
@@ -375,7 +380,7 @@ B10. **Maps:** press **5**, search for your town, press **Nearest: hospital**.
    - **What you should see:** a map with streets and names, and the nearest hospital marked.
    - **If it doesn't work:** `LAI-SVC-030`: plug in the AI-ARK drive. See [07, Maps don't work](07-troubleshooting.md).
 
-B11. **Manuals:** press **6** and open "Survival mode". Print the Survival card, or check that the printed one is current (it names this computer and matches what button 6 shows today).
+B11. **Manuals:** press **6** and open "01. Survival mode: the emergency guide". Print the Survival card, or check that the printed one is current (it names this computer and matches what button 6 shows today).
    - **What you should see:** the manual opens; the card prints on one page.
    - **If it doesn't work:** no printer: check the printed card instead. A card that is out of date: print a new one and throw the old one away.
 
@@ -451,7 +456,7 @@ Imprima esta página y guárdela junto a la computadora, con el disco AI-ARK. La
    - **Lo que debería ver:** una ventana llamada **Local AI**.
    - **Si no funciona:** vaya al paso 6 (con el navegador).
 
-5. **Presione Modo supervivencia.** Use la opción **Survival mode / Modo supervivencia** del menú del ícono de Local AI (arriba en la pantalla), o el botón **Iniciar modo supervivencia** en la ventana. Confirme con **Sí**.
+5. **Presione Modo supervivencia.** Haga clic en el ícono pequeño de Local AI arriba en la pantalla (el menú de la bandeja), elija **Modo**, luego **⚠ Modo supervivencia**, y confirme con **Cambiar a modo supervivencia**. O, en la ventana, presione el botón **Iniciar modo supervivencia** (no pide confirmación).
    - **Lo que debería ver:** en unos 2 minutos el Portal de Supervivencia ocupa la pantalla. La línea de arriba dice **Listo**, o **Listo, con problemas**, con una lista corta.
    - **Si no funciona:** vaya al paso 6.
 
@@ -532,7 +537,7 @@ Cuando la computadora está en modo supervivencia, la app **Local AI** llena tod
    - **Si no funciona:** "No hay un mapa sin internet instalado" (`LAI-SVC-030`): conecte el disco AI-ARK. El mapa no tiene nombres (`LAI-SVC-031`): el mapa funciona, solo faltan las etiquetas.
 
 ### Botón 6: Manuales
-20. Presione **6**. Elija un manual: **Survival mode** (esta página), **Reconstruir esta computadora sin internet**, **Solución de problemas (códigos de error)**. **Imprimir la tarjeta de supervivencia** da un resumen de una página para imprimir.
+20. Presione **6**. Elija un manual: **01. Survival mode: the emergency guide** (esta página), **06. Rebuild a node with no internet**, **07. Troubleshooting** (los títulos de los manuales aparecen en inglés). **Imprimir la tarjeta de supervivencia** da un resumen de una página para imprimir (un PDF; en una computadora sin creador de PDF es una página web y se imprime desde el navegador: `LAI-CLI-014`, solo informativo). La tarjeta nunca muestra una contraseña, clave o dirección; si `sudo aictl docs render` se niega a hacerla, dice `LAI-CLI-016`.
 
 ### Botón 7: Estado y batería
 21. Presione **7**.
@@ -548,6 +553,8 @@ Cuando la computadora está en modo supervivencia, la app **Local AI** llena tod
 ---
 
 ## Parte 4. Ahorrar batería
+
+<!-- runbook-lint: no-expect-section (consejos) -->
 
 Sin cargador, la batería es su combustible. La IA gasta mucha energía **mientras responde** y muy poca mientras espera.
 
@@ -573,6 +580,8 @@ Computadora: __________  Medido el (fecha): __________
 ---
 
 ## Parte 5. Cargar con energía solar o con un carro (consejos generales)
+
+<!-- runbook-lint: no-expect-section (consejos) -->
 
 Estas son reglas generales de seguridad. No son una guía eléctrica completa.
 
@@ -616,7 +625,8 @@ El **disco AI-ARK** es la copia portátil de todo. **No está cifrado**, así qu
    - Guárdelo en un estuche acolchado, seco, fresco, lejos del sol y de imanes.
    - Nunca lo desconecte mientras la computadora está escribiendo en él. Si pasó, conéctelo otra vez una vez para que se revise (`LAI-ARK-007`).
    - Si hay dos discos, guárdelos en **lugares distintos**.
-   - Conéctelo a una computadora con internet por lo menos una vez al mes (durante la noche) para que se mantenga al día.Amarillo después de 30 días, rojo después de 90 (`LAI-ARK-008`).   - No guarde secretos personales en él.
+   - Conéctelo a una computadora con internet por lo menos una vez al mes (durante la noche) para que se mantenga al día. Amarillo después de 30 días, rojo después de 90 (`LAI-ARK-008`).
+   - No guarde secretos personales en él.
 
 ---
 
@@ -685,7 +695,7 @@ El disco tiene todo. Elija la primera opción que le sirva:
 
    Luego abra `http://127.0.0.1:8888` en el navegador. Deje la terminal abierta mientras lee.
 45. **Una computadora con Windows o macOS:** no pueden leer el disco por sí solas (está formateado para Linux). Si tiene la memoria USB de Ubuntu, inicie esa computadora desde ella, elija **Probar Ubuntu** y haga el paso 44.
-46. **Para hacer una computadora de IA nueva desde cero, sin internet:** siga el manual 06 (Rebuild a node offline, reconstruir sin internet). También está en el disco: `localai/docs/runbooks/06-rebuild-a-node-offline.html`.
+46. **Para hacer una computadora de IA nueva desde cero, sin internet:** siga el manual 06 (Rebuild a node offline, reconstruir sin internet). También está en el disco: `localai/docs/06-rebuild-a-node-offline.html`.
 
 **Cada 3 meses:** pruebe todo esto de verdad con la lista "desconectar todo" del [Apéndice, Parte B](#apéndice-revisiones-mensuales-y-trimestrales) al final de esta página. El resultado se guarda en la computadora con `sudo aictl drill record-manual`; use el registro en papel de abajo solo cuando eso no sea posible.
 
@@ -790,7 +800,7 @@ B10. **Mapas:** presione **5**, busque su pueblo y presione **Lo más cercano: h
    - **Lo que debería ver:** un mapa con calles y nombres, y el hospital más cercano marcado.
    - **Si no funciona:** `LAI-SVC-030`: conecte el disco AI-ARK. Vea [07, Maps don't work](07-troubleshooting.md).
 
-B11. **Manuales:** presione **6** y abra "Modo supervivencia". Imprima la tarjeta de supervivencia, o compruebe que la impresa esté al día (nombra esta computadora y coincide con lo que muestra hoy el botón 6).
+B11. **Manuales:** presione **6** y abra "01. Survival mode: the emergency guide". Imprima la tarjeta de supervivencia, o compruebe que la impresa esté al día (nombra esta computadora y coincide con lo que muestra hoy el botón 6).
    - **Lo que debería ver:** el manual se abre; la tarjeta se imprime en una página.
    - **Si no funciona:** sin impresora: revise la tarjeta impresa. Una tarjeta desactualizada: imprima una nueva y tire la vieja.
 
