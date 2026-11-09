@@ -366,6 +366,22 @@ func TestRebuildDryRunWithoutWhisperChecksOnlyLlama(t *testing.T) {
 	}
 }
 
+func TestRebuildDryRunSkipsWhisperWhenSpeechIsSwitchedOff(t *testing.T) {
+	asked := false
+	d := BuildDeps{
+		Llama: func(context.Context) build.Report { return report(okCheck(build.CheckTools)) },
+		Whisper: func(context.Context) build.Report {
+			asked = true
+			return report(build.Check{ID: build.CheckTools, Code: doctor.KIT010})
+		},
+		WhisperEnabled: func() bool { return false },
+	}
+	out := KitRebuildDryRun(d).Run(context.Background(), &drill.Env{})
+	if out.Result != drill.ResultPass || asked || out.Details["whisper_skipped"] == nil {
+		t.Fatalf("outcome = %+v (whisper asked: %v)", out, asked)
+	}
+}
+
 func TestRebuildDryRunDetailsStayShort(t *testing.T) {
 	long := strings.Repeat("x", 2000)
 	d := BuildDeps{Llama: func(context.Context) build.Report {

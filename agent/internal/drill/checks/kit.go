@@ -215,10 +215,12 @@ func worseColour(a, b string) string {
 type Preflight func(ctx context.Context) build.Report
 
 // BuildDeps are the two preflights of check 18. Whisper may be nil on a node without the speech
-// service: it is then not part of the check.
+// service, and WhisperEnabled (when set) says whether the speech service is switched on in node.yaml:
+// without it whisper.cpp is not part of the check.
 type BuildDeps struct {
-	Llama   Preflight
-	Whisper Preflight
+	Llama          Preflight
+	Whisper        Preflight
+	WhisperEnabled func() bool
 }
 
 // KitRebuildDryRunTimeout bounds check 18: every preflight check runs a read-only program
@@ -246,6 +248,10 @@ func (d BuildDeps) rebuildDryRun(ctx context.Context) drill.Outcome {
 	}{{"llama", d.Llama}, {"whisper", d.Whisper}} {
 		if p.run == nil {
 			details[p.name+"_skipped"] = "not configured on this computer"
+			continue
+		}
+		if p.name == "whisper" && d.WhisperEnabled != nil && !d.WhisperEnabled() {
+			details[p.name+"_skipped"] = "speech is switched off in node.yaml"
 			continue
 		}
 		rep := p.run(ctx)
