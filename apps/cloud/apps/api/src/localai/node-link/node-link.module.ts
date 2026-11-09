@@ -10,6 +10,8 @@ import { NotificationsNodeNotifier } from './node-enrolled.notifier';
 import { LOCALAI_NODE_NOTIFIER } from './node-link.notifier';
 import { LOCALAI_ALERT_REEVALUATOR } from './state.hooks';
 import { StateService } from './state.service';
+import { NodeTailnetController } from './tailnet.controller';
+import { NodeTailnetService } from './tailnet.service';
 
 /**
  * The node-facing routes and their guard. `PrismaService` and the platform's `AUDIT_SINK` are global.
@@ -18,13 +20,14 @@ import { StateService } from './state.service';
  */
 @Module({
   imports: [NodeKeysModule],
-  controllers: [NodeLinkController, NodeKeyController],
+  controllers: [NodeLinkController, NodeKeyController, NodeTailnetController],
   providers: [
     LocalaiNodeBindingGuard,
     LabAudience,
     { provide: LOCALAI_NODE_NOTIFIER, useClass: NotificationsNodeNotifier },
     { provide: LOCALAI_ALERT_REEVALUATOR, useClass: JobsAlertReevaluator },
     StateService,
+    NodeTailnetService,
   ],
   exports: [LocalaiNodeBindingGuard, LOCALAI_NODE_NOTIFIER, LOCALAI_ALERT_REEVALUATOR, StateService],
 })

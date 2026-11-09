@@ -2,7 +2,7 @@
 // commands and the script's checksum. Pure: the checksum and the settings come in as arguments.
 //
 // The script is always the one of a tagged agent release (`node-v<version>`), never `main`, and it is never piped into
-// `bash`: it is downloaded, compared with the checksum shown here, then run. The credential is not in any command: the
+// `bash`: it is downloaded, checked against the checksum shown here (the command prints OK or FAILED), then run. The credential is not in any command: the
 // installer's `--enroll` asks for it on the terminal with hidden input (installer.md section 3.1).
 
 export interface InstallInfo {
@@ -44,9 +44,15 @@ export function buildInstall(input: InstallInput): InstallInfo {
   }
   const base = `https://github.com/${repo}/releases/download/${releaseTag(version)}`;
   const url = `${base}/${SCRIPT_NAME}`;
+  // With the checksum known the command compares it itself and prints `install-node.sh: OK` or `... FAILED`: nobody
+  // compares 64 characters by eye (issue #437). Without it only the sum is printed, to compare with the release page.
+  const check =
+    input.sha256 === null
+      ? `sha256sum ${SCRIPT_NAME}          # compare with the checksum on the release page`
+      : `echo "${input.sha256}  ${SCRIPT_NAME}" | sha256sum -c          # must print: ${SCRIPT_NAME}: OK`;
   const oneLiner = [
     `curl -fsSLO ${url}`,
-    `sha256sum ${SCRIPT_NAME}          # compare with the checksum shown here`,
+    check,
     `sudo bash ${SCRIPT_NAME} --node-id ${input.nodeId} --cloud-url ${input.cloudUrl} --enroll`,
   ].join('\n');
   return {

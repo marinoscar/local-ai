@@ -184,4 +184,31 @@ describe('the cloud link on real SQL', () => {
     expect(asSession.statusCode).toBe(403);
     expect((asSession.json() as { details: unknown }).details).toEqual({ code: 'LAI-CLD-004', reason: 'node_credential_required' });
   });
+
+  it('the node reports its own tailnet address and name (#437): stored once, repeated for free, never shown back', async () => {
+    const { nodeId, token } = await enrollable(9);
+    const workerId = await register(token, nodeId);
+    const post = (payload: unknown) =>
+      app.inject({ method: 'POST', url: `/api/nodes/${workerId}/localai/tailnet`, headers: { authorization: `Bearer ${token}` }, payload: payload as never });
+    const ip = ['100', '64', '20', '30'].join('.');
+
+    expect((await config(workerId, token)).json<{ data: { features: string[] } }>().data.features).toContain('tailnet.v1');
+
+    const first = await post({ ip, machine: 'host-nine.example.ts.net' });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ data: { stored: true } });
+    expect(first.body).not.toContain(ip);
+    expect(await prisma.localaiNode.findUniqueOrThrow({ where: { nodeId } })).toMatchObject({ tailnetIp: ip, tailnetMachine: 'host-nine.example.ts.net' });
+
+    const again = await post({ ip, machine: 'host-nine.example.ts.net' });
+    expect(again.json()).toMatchObject({ data: { stored: false } });
+    const updates = await auditRows('localai.node.updated', nodeId);
+    expect(updates).toHaveLength(1);
+    expect(JSON.stringify(updates[0].meta)).not.toContain(ip);
+    expect(updates[0].meta).toMatchObject({ tailnetIp: '<set>', source: 'node' });
+
+    const refused = await post({ ip: '192.0.2.5' });
+    expect(refused.statusCode).toBe(400);
+    expect(refused.body).not.toContain('192.0.2.5');
+  });
 });
