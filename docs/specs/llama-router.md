@@ -453,7 +453,7 @@ Steps:
    - `status.value == "unloaded"` with `failed: true` (or the child exited) → failure (`exit_code` into `details`);
    - deadline `T = llama.load_timeout_seconds` (default 300 s; ×2 when the weights are on an ark drive) → failure (timeout).
    While waiting, `/models/sse` progress (`progress.value`) is forwarded as `model.loading {progress}` at most once per second.
-   With `wait: false`, steps 5–8 run in a goroutine after answering `202`.
+   With `wait: false`, steps 5–8 run in a goroutine after answering `202`. The `202` carries the planner's `warning` (`LAI-HW-005`/`LAI-HW-006`, step 4) when there is one, exactly as the `200` does: the plan is made before the answer, so nothing has to wait for the load to show the memory notice (#232).
 7. **Success:** `last_used[id] = now`; `state.models.desired_loaded = loaded set` (order = most recent first); `last_load.result = ok, load_ms`; emit `model.loaded`; trigger state push; release lock; `200`.
 8. **Failure → cleanup → rollback:**
    1. `POST /models/unload {model: id}` (ignore errors) and wait ≤ 30 s.

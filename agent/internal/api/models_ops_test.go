@@ -174,6 +174,24 @@ func TestLoadRoute(t *testing.T) {
 			t.Errorf("flags were not passed on: %+v", got)
 		}
 	})
+	t.Run("a tight fit adds the warning to the 202, a normal load does not (#232)", func(t *testing.T) {
+		r := newOpsRig(t)
+		r.ops.loadRes = ModelLoadResult{ID: "m", Accepted: true, OpID: "op_7k2m9q4r8t1c", Warning: &ModelWarning{Code: doctor.HW006, Message: "Other programs are using most of the graphics memory."}}
+		rec := recordOK(t, r.do("POST", "/models/m/load", `{"wait":false}`, nil))
+		if rec.Code != 202 {
+			t.Fatalf("%d %s", rec.Code, rec.Body)
+		}
+		w, _ := decodeMap(t, rec)["warning"].(map[string]any)
+		if w["code"] != doctor.HW006 || w["message"] != "Other programs are using most of the graphics memory." || len(w) != 2 {
+			t.Errorf("warning on the 202: %v", w)
+		}
+
+		r.ops.loadRes.Warning = nil
+		rec = recordOK(t, r.do("POST", "/models/m/load", `{"wait":false}`, nil))
+		if _, has := decodeMap(t, rec)["warning"]; rec.Code != 202 || has {
+			t.Errorf("a normal load must carry no warning: %d %s", rec.Code, rec.Body)
+		}
+	})
 	t.Run("only unload_others given keeps wait true", func(t *testing.T) {
 		r := newOpsRig(t)
 		recordOK(t, r.do("POST", "/models/m/load", `{"unload_others":false}`, nil))
