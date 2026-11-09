@@ -72,7 +72,8 @@ func TestTransportIgnoresProxyEnvironment(t *testing.T) {
 }
 
 func TestSharedIsOneTransportAndUsesTheDefaultFence(t *testing.T) {
-	if Shared() != Shared() {
+	first, second := Shared(), Shared()
+	if first != second {
 		t.Fatal("Shared must return one transport")
 	}
 	l := Default.Acquire()
