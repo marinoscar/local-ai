@@ -29,6 +29,12 @@ These pages are for **people**, not programmers. Each one tells you exactly what
 - Values in angle brackets, like `<VPS_PUBLIC_IP>` or `<root-id>`, are **placeholders**. Replace them, including the `<` and `>`, with the real value. Real lab values are in `inventory.local.yaml` on the ark drive. Printed copies made with `aictl docs render` already have them filled in.
 - `> 🛠 Verify when implemented (Epic E<n>).` marks a part that describes software that isn't finished yet. The steps follow the design; check them on a real node when that epic ships and fix the page if anything differs.
 
+## How these pages are kept true
+`scripts/check-runbooks.sh` runs in CI (job `runbooks` of `docs-guard`) and before you push. It builds `aictl` from `agent/` and fails when a page shows an `aictl` or `aiagent` command or flag that the real program does not have, a `LAI-…` code that is not in [specs/doctor-codes.md](../specs/doctor-codes.md) (or a leftover placeholder code), steps that are not numbered 1, 2, 3 …, an installed path that is not in [architecture/overview.md §3](../architecture/overview.md#3-canonical-names-single-source-of-truth), a rendered manual below a sub-folder (they are flat: `<root>/docs/01-survival-mode.html`), a sentence glued to the next one, or a numbered step without **What you should see** and **If it doesn't work**.
+- A step list that has nothing to show (buying a disk, a checklist) says so with a hidden line, `<!-- runbook-lint: no-expect-section (why) -->` under its heading, or `<!-- runbook-lint: no-expect -->` inside one step.
+- Step lists written before the check existed are in `scripts/check-runbooks.baseline`. A new step list must have its answers; an entry goes away (the check insists) as soon as its step list has them. Writing them while following the page literally on a node is what the verification issues (#166 to #176) ask for.
+- This check proves that the page and the program agree. It does **not** prove the page works on a real computer: only following it on a node does, and then the `🛠 Verify when implemented` marker goes and the `> Verified on <node-id>, <date>, agent <version>` line is added.
+
 ## Where the technical details live
 These pages show commands; they don't define them. If a page and a spec disagree, the spec wins and the page must be fixed:
 - Commands: [specs/aictl.md](../specs/aictl.md)
