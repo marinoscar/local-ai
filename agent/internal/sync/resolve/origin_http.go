@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 	"github.com/marinoscar/local-ai/agent/internal/sync/download"
 )
 
@@ -40,20 +40,14 @@ func (h *readOnlyHTTP) client() *http.Client {
 		return h.Client
 	}
 	h.once.Do(func() {
-		h.dflt = &http.Client{
-			Transport: &http.Transport{
-				Proxy:                 nil,
-				DialContext:           (&net.Dialer{Timeout: download.DialTimeout, KeepAlive: 30 * time.Second}).DialContext,
-				TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
-				TLSHandshakeTimeout:   download.TLSHandshakeTimeout,
-				ResponseHeaderTimeout: download.ResponseHeaderTimeout,
-				ForceAttemptHTTP2:     true,
-				DisableCompression:    true,
-				MaxIdleConns:          4,
-				IdleConnTimeout:       90 * time.Second,
-			},
-			CheckRedirect: originCheckRedirect,
-		}
+		tr := netx.NewTransport("sync.origin", netx.Default.Dialer(download.DialTimeout))
+		tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		tr.TLSHandshakeTimeout = download.TLSHandshakeTimeout
+		tr.ResponseHeaderTimeout = download.ResponseHeaderTimeout
+		tr.DisableCompression = true
+		tr.MaxIdleConns = 4
+		tr.IdleConnTimeout = 90 * time.Second
+		h.dflt = &http.Client{Transport: tr, CheckRedirect: originCheckRedirect}
 	})
 	return h.dflt
 }

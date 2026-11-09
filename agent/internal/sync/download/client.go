@@ -29,6 +29,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
 
 // The HTTP client rules of ark-sync.md section 4.6.
@@ -111,20 +113,17 @@ func NewHTTPClient(cfg ClientConfig) *HTTPClient {
 	}
 	dial := cfg.DialContext
 	if dial == nil {
-		d := &net.Dialer{Timeout: DialTimeout, KeepAlive: 30 * time.Second}
-		dial = d.DialContext
+		dial = netx.Default.Dialer(DialTimeout)
 	}
-	tr := &http.Transport{
-		Proxy:                 nil,
-		DialContext:           dial,
-		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: cfg.RootCAs},
-		TLSHandshakeTimeout:   TLSHandshakeTimeout,
-		ResponseHeaderTimeout: ResponseHeaderTimeout,
-		ForceAttemptHTTP2:     true,
-		DisableCompression:    true,
-		MaxIdleConns:          8,
-		IdleConnTimeout:       90 * time.Second,
-	}
+	// Every dial goes through the network fence (netx): a sync never runs during a drill, and if one
+	// did, the drill would see it.
+	tr := netx.NewTransport("sync.download", dial)
+	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: cfg.RootCAs}
+	tr.TLSHandshakeTimeout = TLSHandshakeTimeout
+	tr.ResponseHeaderTimeout = ResponseHeaderTimeout
+	tr.DisableCompression = true
+	tr.MaxIdleConns = 8
+	tr.IdleConnTimeout = 90 * time.Second
 	h := &HTTPClient{ua: UserAgent(cfg.Version), auth: map[string]bool{}, token: cfg.Token}
 	hosts := cfg.AuthHosts
 	if len(hosts) == 0 {

@@ -8,6 +8,8 @@ import (
 	"math"
 	"net"
 	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
 
 // GPSDAddr is where gpsd listens (overview.md section 3.4). It is loopback only.
@@ -53,9 +55,7 @@ type Dialer func(ctx context.Context, addr string) (net.Conn, error)
 
 // NetDialer is the real dialer.
 func NetDialer(ctx context.Context, addr string) (net.Conn, error) {
-	var d net.Dialer
-	d.Timeout = 3 * time.Second
-	return d.DialContext(ctx, "tcp", addr)
+	return netx.DialFor("maps.gps", 3*time.Second)(ctx, "tcp", addr)
 }
 
 // Backoff of the reconnection to gpsd and of the serial reopening (companion-services.md section

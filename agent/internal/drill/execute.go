@@ -226,7 +226,7 @@ func (e *Engine) finalize(rs *runState) {
 	}
 	rs.doc.NetworkFence = NetworkFence{Enabled: rs.fenceOn, BlockedDials: report.BlockedDials}
 
-	recs := ar.records()
+	recs := annotateFence(ar.records(), report)
 	rs.doc.Checks = checkResults(recs)
 	overall, ready, counts := aggregate(recs)
 	rs.doc.Counts = counts
