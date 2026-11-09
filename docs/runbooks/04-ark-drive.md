@@ -17,6 +17,8 @@ Use this when you buy, format, fill, plug in, eject, store or refresh the portab
 
 ## Part 1. Buying and choosing a drive
 
+<!-- runbook-lint: no-expect-section (buying advice) -->
+
 1. **Buy a USB 3 SSD** (solid-state, not a spinning hard disk), **2 TB** recommended, **1 TB** minimum. A USB-C drive with both a USB-C and a USB-A cable or adapter fits every computer in the lab.
 2. **Buy two** if you can. Keep one at home and one somewhere else.
 3. Avoid: spinning hard disks (slow and break when dropped), cheap no-name flash sticks (slow, wear out), and "secure" drives that need Windows software to unlock.
@@ -69,7 +71,7 @@ How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting
     aictl ark init /media/<you>/AI-ARK
     ```
 
-    Use the mount path `aictl ark drives` shows. The desktop app does the same with the **Set up this drive** button.
+    Use the mount path `aictl ark drives` shows (its device name, such as `/dev/sdb1`, or its `ark-…` id work too). The desktop app does the same with the **Set up this drive** button.
     - **What it does:** it makes a folder called `localai` on the drive, with the empty sub-folders the drive needs, and one small file inside it called `ROOT.json` (the drive's name card). Then the computer writes `START-HERE.html` at the top of the drive (Part 9). It never erases, formats or deletes anything, and it only works on a drive that is still empty (`uninitialized`).
     - **What you should see:** `init` asks you to type the drive's id (the `ark-…` value it shows) to confirm; anything else changes nothing, and `--yes` does not answer it. After `init`, `aictl ark drives` shows the drive `✓ ready`.
     - **If it doesn't work:** `unusable` with `LAI-ARK-002`: it isn't ext4; format it (step 6). `LAI-ARK-006`: two drives have the same id (a cloned drive); see Part 8, step 29. The command refuses (and changes nothing) if the drive is already `ready` or the `localai` folder already has files in it: that drive was set up before, so use it as it is (Part 4). `LAI-ARK-003` (the drive is read-only), `LAI-ARK-014` (a read/write error) or `LAI-SYN-040` (no space): fix that first (Part 8), then press **Set up this drive** again; it is safe to repeat.
@@ -139,8 +141,8 @@ How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting
 | Colour | Means | What to do |
 |---|---|---|
 | **Green** | Everything is here, verified and up to date | Nothing |
-| **Yellow** | Everything essential is here; something is old, a less important item is missing, orthe drive hasn't been synced for more than 30 days (`LAI-ARK-008`) | Sync it overnight on a node with internet |
-| **Red** | Something essential (tier 1, a survival model, the kit or the manuals) is missing or damaged, the drive has errors, orit hasn't been synced for more than 90 days | Read the problem codes in `aictl ark status`; fix them before an emergency |
+| **Yellow** | Everything essential is here; something is old, a less important item is missing, or the drive hasn't been synced for more than 30 days (`LAI-ARK-008`) | Sync it overnight on a node with internet |
+| **Red** | Something essential (tier 1, a survival model, the kit or the manuals) is missing or damaged, the drive has errors, or it hasn't been synced for more than 90 days | Read the problem codes in `aictl ark status`; fix them before an emergency |
 
 "Survival capable: yes" means: the survival brains, speech in English and Spanish, at least one essential library book and the map (with its styles) are all verified. An item that is out of date does not count until it has been updated. If the date columns show "clock wrong", the computer's clock is behind a date it has already seen: set the right date and time (`LAI-AGT-012`); until then the colours ignore age. Colour rules in detail: [ark-sync.md §4.12.2](../specs/ark-sync.md#4122-colour-rules). The cloud is stricter about drive age (amber from 21 days, alert at 30), see [08](08-scheduled-sync.md).
 
@@ -175,6 +177,8 @@ How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting
 ---
 
 ## Part 6. Storage and refresh schedule
+
+<!-- runbook-lint: no-expect-section (storage advice) -->
 
 | How often | What | How |
 |---|---|---|
@@ -285,8 +289,6 @@ Every time a sync finishes on a plugged-in AI-ARK drive, the node rewrites two t
     - **What you should see:** `aictl doctor` no longer lists `LAI-ARK-012`.
     - **If it doesn't work:** `LAI-ARK-012` is still listed: the two files still differ (run the `diff` again; it must print nothing), or another drive has its own conflict (look in each drive). Unplugging the drive also clears the warning until the next sync of that drive.
 
-30. **Inventory conflict** (`LAI-ARK-012`): the lab inventory changed both on the drive and on this node. Both copies are kept (the node's as `inventory.local.yaml.<node-id>.<time>.conflict` on the drive). Compare them, keep the right one, delete the other.
-
 ---
 
 ## Part 10. Freeing space (orphans and old versions)
@@ -295,13 +297,13 @@ Use this when a content folder (the internal disk or the drive) is getting full,
 
 > **Before you start**
 > - You need: a terminal, and either `sudo` or the admin PIN.
-> - **Safe by design:** the commands below **never delete the last good copy of anything**. If an item exists only in one place, it is kept and you are told so. There is no option to override that. To free that space, first copy the item to another drive (step 35).
-> - Deleting is **permanent**. Look at the list first (step 32); nothing is deleted until you type `DELETE`.
+> - **Safe by design:** the commands below **never delete the last good copy of anything**. If an item exists only in one place, it is kept and you are told so. There is no option to override that. To free that space, first copy the item to another drive (step 39).
+> - Deleting is **permanent**. Look at the list first (step 36); nothing is deleted until you type `DELETE`.
 > - Don't run it while a sync is running (`LAI-SYN-005`).
 
 > 🛠 Verify when implemented (E3 prune and the sync engine; E8 for the desktop button, which asks for the admin PIN).
 
-31. **See how full it is, and what sync calls an orphan:**
+35. **See how full it is, and what sync calls an orphan:**
 
     ```
     aictl ark status
@@ -311,7 +313,7 @@ Use this when a content folder (the internal disk or the drive) is getting full,
     - **What you should see:** the used and free space of each content folder, and in the sync list rows ending in `orphan`.
     - **If it doesn't work:** `LAI-SYN-010` or `LAI-SYN-011` only stop a real sync, not the list. If the list is empty or the command can't run, see [07 → Disk full](07-troubleshooting.md#disk-full).
 
-32. **Ask what would be deleted. This changes nothing:**
+36. **Ask what would be deleted. This changes nothing:**
 
     ```
     aictl ark prune --orphans --trash --dry-run
@@ -321,9 +323,9 @@ Use this when a content folder (the internal disk or the drive) is getting full,
 
     - **What you should see:** `Would delete 2 item(s) (14.3 GB):`, a table of item, version, where it is, size and why (`not in the profile` or `old version`), and last `Nothing was changed (dry run).`
     - A line such as `This is the only copy of gutenberg-en on this computer; it was kept.` is the safety rule working. That item is not in the list of things that will go.
-    - **If it doesn't work:** it asks for the PIN: type it (nothing shows on the screen), or run the command with `sudo`. `Nothing to delete.` means there is nothing to free this way; go to step 35 or [07 → Disk full](07-troubleshooting.md#disk-full). `LAI-CAT-001`: the catalog is damaged, so nothing can be called an orphan; run `aictl catalog restore`, then try again (`--trash` alone still works).
+    - **If it doesn't work:** it asks for the PIN: type it (nothing shows on the screen), or run the command with `sudo`. `Nothing to delete.` means there is nothing to free this way; go to step 39 or [07 → Disk full](07-troubleshooting.md#disk-full). `LAI-CAT-001`: the catalog is damaged, so nothing can be called an orphan; run `aictl catalog restore`, then try again (`--trash` alone still works).
 
-33. **Delete them.** Read the list again, then run the same command without `--dry-run`:
+37. **Delete them.** Read the list again, then run the same command without `--dry-run`:
 
     ```
     aictl ark prune --orphans --trash
@@ -331,9 +333,9 @@ Use this when a content folder (the internal disk or the drive) is getting full,
 
     - **What you should see:** the same list, then `Delete 2 item(s) (14.3 GB) from this computer? This cannot be undone. Type DELETE to confirm:`. Type `DELETE` (capital letters) and press Enter. Then one `✓ Deleted … (… freed).` line per item and `Freed 14.3 GB.`
     - Anything else you type, including `delete` or `y`, deletes nothing: `Nothing was deleted.`
-    - **If it doesn't work:** `LAI-SYN-005`: a sync is running; wait for it (`aictl ark status`) or stop it with `aictl ark sync --cancel`, then try again. `LAI-CLI-007`: there is no terminal to type in (for example inside a script); add `--yes` only if you have already read the list from step 32.
+    - **If it doesn't work:** `LAI-SYN-005`: a sync is running; wait for it (`aictl ark status`) or stop it with `aictl ark sync --cancel`, then try again. `LAI-CLI-007`: there is no terminal to type in (for example inside a script); add `--yes` only if you have already read the list from step 36.
 
-34. **Only the old versions** (nothing the profile still wants is touched):
+38. **Only the old versions** (nothing the profile still wants is touched):
 
     ```
     aictl ark prune --trash
@@ -341,7 +343,7 @@ Use this when a content folder (the internal disk or the drive) is getting full,
 
     Sync already does this for you: old versions are removed after 14 days, and files that failed their checksum (kept in quarantine) after 7 days. When a download needs room, sync removes quarantine first and then the oldest old versions that are safe to remove, and tells you with `LAI-SYN-043` (information only). An old version is kept while its replacement has not been checked yet.
 
-35. **When it says "only copy" and you still need the space.** Copy the item to another place first, then prune again:
+39. **When it says "only copy" and you still need the space.** Copy the item to another place first, then prune again:
 
     1. Plug in an AI-ARK drive that has room (Part 4) and fill it from this node:
 
@@ -373,7 +375,7 @@ Use this when the app shows **Mount**, **Set up this drive** or **Eject** next t
 
 > 🛠 Verify when implemented (E3 for the agent; the `aictl ark mount|init|eject` commands arrive with the CLI work; E8 for the desktop buttons).
 
-36. **See what state the drive is in:**
+40. **See what state the drive is in:**
 
     ```
     aictl ark drives
@@ -382,7 +384,7 @@ Use this when the app shows **Mount**, **Set up this drive** or **Eject** next t
     - **What you should see:** one line per drive with its root id (`ark-…`) and its state: `ready`, `uninitialized`, `not_mounted`, `read_only`, `unclean`, `unusable` or `ejecting`.
     - **If it doesn't work:** no drive listed although it is plugged in: wait 30 seconds and look again, try another USB port, then see [07 → The ark drive is not found](07-troubleshooting.md#the-ark-drive-is-not-found).
 
-37. **Mount it** (only if the state is `not_mounted`, `LAI-ARK-005`):
+41. **Mount it** (only if the state is `not_mounted`, `LAI-ARK-005`):
 
     ```
     aictl ark mount <root-id>
@@ -391,13 +393,13 @@ Use this when the app shows **Mount**, **Set up this drive** or **Eject** next t
     - **What you should see:** a moment later the drive is listed with a folder (for example `/media/root/AI-ARK`) and the state `ready`, or `uninitialized` if it is a new drive. Any folder is fine.
     - **If it doesn't work:** if the drive is already `ready`, `read_only` or anything other than `not_mounted`, the command refuses and tells you its state: it does not need mounting. If it says it could not mount the drive (`LAI-ARK-005`) and gives a reason: `wrong fs type` means the drive is not ext4 (go back to Part 2); a message about errors or `fsck` means Part 8. Otherwise unplug the drive, wait 10 seconds, plug it in again, or open it once in the **Files** app.
 
-38. **Set it up** (only if the state is `uninitialized`): follow Part 2, step 12 (`aictl ark init <root-id>`, or the **Set up this drive** button).
+42. **Set it up** (only if the state is `uninitialized`): follow Part 2, step 12 (`aictl ark init <root-id>`, or the **Set up this drive** button).
 
     - **What you should see:** the state changes to `ready` and a file `START-HERE.html` appears at the top of the drive.
 
-39. **Eject it** before you unplug it: Part 5, step 20.
+43. **Eject it** before you unplug it: Part 5, step 20.
 
-40. **Change the plan the drive follows** (admin PIN). The default is `ark-drive-full`, which wants everything in the catalog:
+44. **Change the plan the drive follows** (admin PIN). The default is `ark-drive-full`, which wants everything in the catalog:
 
     ```
     aictl ark drives set-profile <root-id> <profile>
@@ -422,7 +424,7 @@ Use this when a computer has **no internet** (or you are in offline or survival 
 
 > 🛠 Verify when implemented (Epic E3 import; the desktop button is E8).
 
-41. **See which drive and what is on it.**
+45. **See which drive and what is on it.**
 
     ```
     aictl ark drives
@@ -431,7 +433,7 @@ Use this when a computer has **no internet** (or you are in offline or survival 
     - **What you should see:** a line like `AI-ARK  ark-3f9c0a12  /media/<user>/AI-ARK  ext4  800 GB free of 2.0 TB  ✓ ready`. Note the `ark-…` word: it is the drive's **root id**.
     - **If it doesn't work:** `No ark drive found.` means the drive is not plugged in or not mounted: unplug it, plug it in again and wait 30 seconds; if it says `not mounted`, see Part 4. A drive marked `not shut down cleanly` cannot be imported from: its files may be damaged, so repair it first (Part 8) or use another drive.
 
-42. **Look at the plan first. This changes nothing:**
+46. **Look at the plan first. This changes nothing:**
 
     ```
     aictl ark import --dry-run
@@ -441,7 +443,7 @@ Use this when a computer has **no internet** (or you are in offline or survival 
     - Two drives plugged in? It stops with `LAI-ARK-015` and lists them. Run it again with the one you want: `aictl ark import --from ark-3f9c0a12 --dry-run`.
     - **If it doesn't work:** `LAI-ARK-001`: the computer has nowhere to store the content; run `aictl doctor`. `LAI-CAT-003`: the computer's profile name is not in its catalog; see [07-troubleshooting.md](07-troubleshooting.md).
 
-43. **Copy everything the computer wants and the drive has:**
+47. **Copy everything the computer wants and the drive has:**
 
     ```
     aictl ark import --wait
@@ -450,9 +452,9 @@ Use this when a computer has **no internet** (or you are in offline or survival 
     - **What you should see:** a line per item (`… Copying qwen3.5-9b-q4km  ████░░░░  41%  2.4/5.9 GB  380 MB/s`), then `✓ Import finished: 3 copied, 5 already here, 0 failed. Internal disk is ready.`
     - Items the drive does not hold are left alone. Items the computer already has in the same or a newer version are not copied again: an older version on the drive never replaces a newer one on the computer.
     - Each file is checked while it is copied. If the drive's copy has gone bad you see `LAI-SYN-070` for that item: **that copy is damaged**. The item is not installed, the drive is not touched, and the rest of the import carries on.
-    - **If it doesn't work:** `LAI-SYN-070`: sync that drive on a computer with internet (`aictl ark sync --root <root-id>`), or use another drive. `LAI-SYN-040` or `Import finished: … 1 skipped`: not enough free space; import fewer items (step 44) or free space first (Part 10). `LAI-SYN-005`: another sync, check or import is running; wait for it (`aictl ark status`) or stop it with `aictl ark sync --cancel`. If you stop the import with **Ctrl + C**, run the same command again: it carries on where it stopped.
+    - **If it doesn't work:** `LAI-SYN-070`: sync that drive on a computer with internet (`aictl ark sync --root <root-id>`), or use another drive. `LAI-SYN-040` or `Import finished: … 1 skipped`: not enough free space; import fewer items (step 48) or free space first (Part 10). `LAI-SYN-005`: another sync, check or import is running; wait for it (`aictl ark status`) or stop it with `aictl ark sync --cancel`. If you stop the import with **Ctrl + C**, run the same command again: it carries on where it stopped.
 
-44. **Copy only one item** (for example the small speech-to-text model):
+48. **Copy only one item** (for example the small speech-to-text model):
 
     ```
     aictl ark import --item whisper-small --dry-run
@@ -468,7 +470,7 @@ Use this when a computer has **no internet** (or you are in offline or survival 
 
       This writes the item into the computer's settings file `/etc/localai/node.yaml` (under `profile_overrides`, and saves the old file as `node.yaml.bak`), so sync keeps it from now on. It needs the administrator: at the terminal on the computer it just works for people in the `localai-operators` group; from another machine it asks for the PIN (nothing shows while you type). `--add-to-profile` always needs `--item`.
 
-45. **The drive carries a newer catalog** (the list of what exists and how big it is). If the computer was offline for months, install the drive's catalog first, in the same command:
+49. **The drive carries a newer catalog** (the list of what exists and how big it is). If the computer was offline for months, install the drive's catalog first, in the same command:
 
     ```
     aictl ark import --catalog --dry-run
@@ -478,14 +480,14 @@ Use this when a computer has **no internet** (or you are in offline or survival 
     - **What you should see:** nothing extra when the drive's catalog is not newer. When it is newer and valid, it is installed first and the plan uses it.
     - **If it doesn't work:** `LAI-CAT-002` in the warnings: the catalog on the drive is not valid. The import goes on with the catalog the computer already has; nothing is lost. Tell the maintainer.
 
-46. **Check the result:**
+50. **Check the result:**
 
     ```
     aictl ark status
     ```
 
     - **What you should see:** the internal disk with a higher **ready** percentage, and nothing under `missing:` for what you imported. Models you copied can be loaded at once (`aictl models`).
-    - **If it doesn't work:** an item you expected is still `missing`: look at the import's last lines for its code (step 43), or run `aictl ark import --item <id> --dry-run` to see why it was skipped.
+    - **If it doesn't work:** an item you expected is still `missing`: look at the import's last lines for its code (step 47), or run `aictl ark import --item <id> --dry-run` to see why it was skipped.
 
 The desktop app will offer the same import with a button (Epic E8); until then, use the terminal as above.
 
@@ -502,16 +504,16 @@ Disks wear out silently: a file can change one bit and still look fine. The comp
 
 > 🛠 Verify when implemented (Epic E3 re-verification).
 
-47. **Check one item:**
+51. **Check one item:**
 
     ```
     aictl ark verify --item whisper-small --wait
     ```
 
     - **What you should see:** `✓ Check finished: 1 verified, 0 with problems.`
-    - **If it doesn't work:** `LAI-SYN-025`: the stored file no longer matches its checksum. What happened is told on screen: the damaged copy was **set aside** (moved to the `quarantine` folder, not deleted) or, if an older good version was kept, **put back**. Go to step 49.
+    - **If it doesn't work:** `LAI-SYN-025`: the stored file no longer matches its checksum. What happened is told on screen: the damaged copy was **set aside** (moved to the `quarantine` folder, not deleted) or, if an older good version was kept, **put back**. Go to step 53.
 
-48. **Check everything now** (ignores how recently each item was checked):
+52. **Check everything now** (ignores how recently each item was checked):
 
     ```
     aictl ark verify --full --wait
@@ -523,14 +525,14 @@ Disks wear out silently: a file can change one bit and still look fine. The comp
     - Without `--full` the check looks only at items not checked for `sync.reverify_days` (30) and stops after `sync.reverify_budget_minutes` (90). If it says some items were left for time, run it again, or use `--full`.
     - **If it doesn't work:** the check is interrupted if you press **Ctrl + C**; nothing is damaged, and the item being read keeps its old "last checked" date. Run it again.
 
-49. **A file failed: fix it.**
+53. **A file failed: fix it.**
 
     1. Look at what the computer says: `aictl ark status`. The item is `missing` (or `stale` if an older version was put back) and the root is yellow or red.
     2. With internet, fetch it again: `aictl ark sync --item <id> --wait`. Without internet, import it from a good drive: `aictl ark import --item <id> --wait` (Part 12).
     3. A drive that is **read-only or not shut down cleanly** is never written to. The damaged item is only hidden from the computer until you unplug the drive; use another copy (the computer's own, or another drive).
 
     - **What you should see:** `✓ Sync finished` (or `Import finished`) and the item back to `verified`.
-    - **If it doesn't work:** if files keep failing again and again, **the disk may be dying**. Copy everything to another drive now (step 35), and replace the old one (Part 1).
+    - **If it doesn't work:** if files keep failing again and again, **the disk may be dying**. Copy everything to another drive now (step 39), and replace the old one (Part 1).
 
 ---
 
