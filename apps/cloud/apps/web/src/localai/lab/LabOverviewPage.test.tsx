@@ -1,7 +1,7 @@
 // The Lab page over the 3-node fixture: header counts, the gateway figure, one card per node, the Add node button for
 // lab:admin only, the empty and failure states, and the axe checks. The transport and the permissions are stubbed.
 import { render, screen, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 import { MemoryRouter } from 'react-router-dom';
 
 import { LAB_NOW, labFixture } from './fixture';
@@ -111,7 +111,7 @@ describe('LabOverviewPage', () => {
       permissions = held;
       const { container, unmount } = renderPage(async () => labFixture());
       await screen.findByTestId('lab-summary');
-      const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+      const result = await runAxe(container);
       expect(result.violations.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
       unmount();
     }

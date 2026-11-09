@@ -3,7 +3,7 @@
 // only while queued), the refusal texts of an Offline node, the one-time credential, the tailnet reveal, retire, and axe.
 import { ApiError } from '@marinoscar/platform-web/core';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { cancelCommand, getCommand, listCommands, sendCommand } from '../api/commands';
@@ -674,7 +674,7 @@ describe('accessibility (axe)', () => {
       for (const tab of tabs) {
         await openTab(tab);
         await screen.findByRole('tabpanel');
-        const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+        const result = await runAxe(container);
         expect(result.violations.map((violation) => `${tab}: ${violation.id}: ${violation.help}`)).toEqual([]);
       }
     }, 60_000);
@@ -686,11 +686,11 @@ describe('accessibility (axe)', () => {
     const { container } = renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Refresh status' }));
     await screen.findByTestId('command-line');
-    let result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+    let result = await runAxe(container);
     expect(result.violations.map((violation) => violation.id)).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: 'Go offline…' }));
     const dialog = await screen.findByRole('dialog');
-    result = await axe.run(dialog, { rules: { 'color-contrast': { enabled: false } } });
+    result = await runAxe(dialog);
     expect(result.violations.map((violation) => violation.id)).toEqual([]);
   }, 30_000);
 });

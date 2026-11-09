@@ -128,6 +128,12 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/__tests__/setup.ts'],
+    // Per-test and per-hook limits (#377). The default 5 s is about 1.5x the slowest test on an idle machine (the
+    // node page's axe pass over every tab, 3.5 s): on a CI runner that also compiles the files in parallel, the same
+    // tests took up to 9.5 s and 21 of them timed out on a machine with every core busy. A test that really hangs
+    // still fails, only after 30 s (the API's Jest tier uses the same figure).
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     // The shared package is TypeScript source behind a node_modules link: transform it like the app's own code.
     server: { deps: { inline: ['@localai/ui'] } },
   },

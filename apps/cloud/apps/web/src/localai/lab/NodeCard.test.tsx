@@ -1,7 +1,7 @@
 // NodeCard over the 3-node fixture: every piece of information of the wireframe, per node.
 import { NodeCard } from '@localai/ui';
 import { render, screen, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 
 import { LAB_NOW, cardOf } from './fixture';
 
@@ -137,7 +137,7 @@ describe('NodeCard: other states', () => {
 describe('NodeCard accessibility (axe)', () => {
   it.each(['ai-n1', 'ai-n2', 'ai-n3'])('%s has no violations', async (nodeId) => {
     const { container } = renderCard(nodeId);
-    const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+    const result = await runAxe(container);
     expect(result.violations.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
   });
 });

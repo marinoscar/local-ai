@@ -2,7 +2,7 @@
 // for lab:operate only (hidden for a viewer) and what happens when it succeeds or fails; the empty and failure states;
 // and the axe checks. The transports and the permissions are stubbed.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 import { MemoryRouter } from 'react-router-dom';
 
 import { ALERTS_NOW, alertsFixture, resolvedFixture } from './fixture';
@@ -163,7 +163,7 @@ describe('AlertsPage', () => {
         permissions = granted;
         const { container, unmount } = renderPage();
         await loaded();
-        const results = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+        const results = await runAxe(container);
         expect(results.violations.map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.html).join(' | ')}`)).toEqual([]);
         unmount();
       }
@@ -172,7 +172,7 @@ describe('AlertsPage', () => {
     it('has no axe violations when empty', async () => {
       const { container } = renderPage({ fetchAlerts: vi.fn(async () => ({ alerts: [] })) });
       await screen.findByTestId('alerts-empty');
-      const results = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+      const results = await runAxe(container);
       expect(results.violations).toEqual([]);
     });
   });

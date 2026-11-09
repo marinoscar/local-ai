@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 
 import { PROBLEM } from './fixture';
 import { CHECKER_FAILED_CODE, LintPanel, problemLabel } from './LintPanel';
@@ -56,7 +56,7 @@ describe('LintPanel', () => {
     ];
     for (const state of states) {
       const { container, unmount } = render(state);
-      expect((await axe.run(container)).violations).toEqual([]);
+      expect((await runAxe(container)).violations).toEqual([]);
       unmount();
     }
   });
