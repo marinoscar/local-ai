@@ -371,7 +371,7 @@ The installer prints the phase and code, and the full log is `/var/log/localai-i
 | `LAI-INS-017` | Set the date and time |
 | `LAI-INS-020` | This computer already has another node id: keep the old id |
 | `LAI-INS-021` | Signature check failed: **don't install**; download again or use another drive, and report it |
-| `LAI-INS-030` | Read the apt messages above it, fix, run again |
+| `LAI-INS-030` | Disk full: free some space. A package from the kit is damaged: copy the kit again from the AI-ARK drive. Then run the installer again |
 | `LAI-INS-032` | Build failed: read the build log it names; then `--repair`, or [06 Part 5](06-rebuild-a-node-offline.md) |
 | `LAI-INS-033` | Migration failed and was rolled back: the old service runs; read the log and report it |
 | `LAI-INS-034` | The agent didn't start: `journalctl -u localai-agent -n 50`, then `--repair` |

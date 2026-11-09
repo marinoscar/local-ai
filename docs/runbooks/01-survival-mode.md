@@ -225,13 +225,13 @@ The **AI-ARK drive** is the portable copy of everything. It is **not encrypted**
 
 ## Part 8. When something fails
 
-39. **First, always run the doctor.** Press **Ctrl + Alt + T** and type:
+39. **First, always look at what is wrong.** Press **7 Status and battery** in the Portal (or in the Local AI app): each problem has a code and a plain fix, often with a button. Or press **Ctrl + Alt + T**, type `aictl`, press **Enter**, then press **2** (*Find and fix problems*). The typed command, which does the same:
 
    ```
    aictl doctor
    ```
 
-   It prints each problem with a code in brackets and a line starting **→ Fix:**. Do what the fix line says, then run `aictl doctor` again.
+   It prints each problem with a code in brackets and a line starting **→ Fix:**. Do what the fix line says, then look again.
 
 40. **Plain fixes for common codes:**
    - `LAI-SVC-106` or `LAI-SVC-102` (no brain / the AI isn't answering): press **8 Switch brain** and choose one. Still broken: restart the computer and wait 2 minutes.
@@ -645,13 +645,13 @@ El **disco AI-ARK** es la copia portátil de todo. **No está cifrado**, así qu
 
 ## Parte 8. Cuando algo falla
 
-39. **Primero, siempre ejecute el doctor.** Presione **Ctrl + Alt + T** y escriba:
+39. **Primero, siempre mire qué está mal.** Presione **7 Estado y batería** en el Portal (o en la app Local AI): cada problema trae un código y una solución sencilla, muchas veces con un botón. O presione **Ctrl + Alt + T**, escriba `aictl`, presione **Enter** y luego **2** (*Encontrar y arreglar problemas*). El comando escrito, que hace lo mismo:
 
    ```
    aictl doctor
    ```
 
-   Muestra cada problema con un código entre corchetes y una línea que empieza con **→ Fix:** (solución). Haga lo que dice esa línea y ejecute `aictl doctor` otra vez. Para verlo en español: `aictl --lang es doctor`.
+   Muestra cada problema con un código entre corchetes y una línea que empieza con **→ Fix:** (solución). Haga lo que dice esa línea y vuelva a mirar. Para verlo en español: `aictl --lang es doctor`.
 
 40. **Soluciones sencillas para los códigos más comunes:**
    - `LAI-SVC-106` o `LAI-SVC-102` (no hay cerebro / la IA no responde): presione **8 Cambiar cerebro** y elija uno. Si sigue mal: reinicie la computadora y espere 2 minutos.

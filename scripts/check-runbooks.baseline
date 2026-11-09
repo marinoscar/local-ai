@@ -54,7 +54,6 @@ docs/runbooks/05-add-a-node.md|Part 10. Migrating an existing node (ai-n1, ai-n2
 docs/runbooks/05-add-a-node.md|Part 10. Migrating an existing node (ai-n1, ai-n2, ai-n3) from `llama-qwen.service`|41
 docs/runbooks/05-add-a-node.md|Part 10. Migrating an existing node (ai-n1, ai-n2, ai-n3) from `llama-qwen.service`|42
 docs/runbooks/05-add-a-node.md|Part 2. Create the node in the cloud (Add node wizard)|8
-docs/runbooks/05-add-a-node.md|Part 3. Run the installer|9
 docs/runbooks/05-add-a-node.md|Part 4. Laptop hardening (automatic)|14
 docs/runbooks/05-add-a-node.md|Part 5. Join the tailnet|15
 docs/runbooks/05-add-a-node.md|Part 5. Join the tailnet|16
