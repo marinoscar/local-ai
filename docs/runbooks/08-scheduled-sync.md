@@ -22,7 +22,7 @@ Use this when you want to know what the node does by itself at night, check whet
 | **Nightly sync** (`localai-sync.timer` → `localai-sync.service`) | Every night at **03:15**, plus a random delay of up to 45 minutes. If the computer was off, it runs soon after it starts | Refreshes the catalog, plans each content root (internal disk and any plugged-in AI-ARK drive), downloads with resume, verifies, swaps in, spends up to 90 minutes re-checking old files for disk damage, writes the readiness report, tells the cloud | The node is in offline or survival mode (`LAI-SYN-002`), there is no internet (`LAI-SYN-001`), it is on battery (`LAI-SYN-003`), sync is disabled, there is no place to store content, or another sync is already running. Skipped is **not** failed: the unit succeeds and `journalctl -u localai-sync` says `i Sync skipped: <why>.` |
 | **Monthly drill** (`localai-drill.timer` → `localai-drill.service`) | **First Sunday of the month at 04:30**, plus up to 30 minutes | A self-test that proves everything works with no internet: files, each survival brain, photo question, library search, speech both ways, maps, Portal, manuals, rebuild kit | Survival mode (`LAI-DRL-003`), a sync is running (`LAI-DRL-002`, tries again daily for a week), someone is chatting (`LAI-DRL-004`, waits up to 48 h), battery below 50 % (`LAI-DRL-005`) |
 
-When the timer's drill is skipped (one of the reasons above), it prints `i Drill skipped: <reason>` and the timer does not count it as a failure. The drill never disconnects the network and never changes the mode. While it runs, the agent blocks every connection that isn't to the computer itself, so a feature that secretly needs the internet fails the test.
+When the timer's drill is skipped (one of the reasons above), it prints `i Drill skipped: <reason>.` and ends with exit code 0, so the timer does not count it as a failure. The same holds for the nightly sync (`i Sync skipped: <reason>.`). Both units treat exit code 8 (finished with warnings) as success; exit code 9 (errors) or 3 (the agent is not running) makes the unit show as failed in `systemctl --failed`. The drill never disconnects the network and never changes the mode. While it runs, the agent blocks every connection that isn't to the computer itself, so a feature that secretly needs the internet fails the test.
 
 1. **See the timers:**
 
@@ -83,11 +83,11 @@ When the timer's drill is skipped (one of the reasons above), it prints `i Drill
 |---|---|---|
 | **Green** | Everything the profile wants is here, verified, and recent | Nothing |
 | **Yellow** | Everything **essential** is here, but something is behind: a newer version couldn't be downloaded (the old one still works), a less important item is missing, files weren't re-checked in time, space is low, the internal disk had no successful sync for 14 days while online (`LAI-SYN-004`), oran ark drive wasn't synced for more than 30 days (`LAI-ARK-008`) | Fix it this week: plug in, connect to the internet, let it sync overnight |
-| **Red** | Something **essential** is missing or damaged: a tier-1 item, a survival model, the rebuild kit, the manuals; or the drive has filesystem errors (`LAI-ARK-004`); ora drive wasn't synced for more than 90 days | Fix it now. Read the codes in `aictl ark status` and [07 → Sync red](07-troubleshooting.md#sync-red) |
+| **Red** | Something **essential** is missing or damaged: a tier-1 item, a survival model, the rebuild kit, the manuals; or the drive has filesystem errors (`LAI-ARK-004`); or a drive wasn't synced for more than 90 days | Fix it now. Read the codes in `aictl ark status` and [07 → Sync red](07-troubleshooting.md#sync-red) |
 
 - **Age limits** before an item turns yellow: models and library books 180 days, maps 365 days, Ubuntu and driver packages in the kit 60 days, other kit parts 90 days. Models never turn red just from age.
 - **"Survival capable"** is a separate yes/no: the survival brains, at least one speech model and voice per Portal language, an essential library book and the map are all verified, on this computer plus any plugged-in drive.
-- **The cloud is stricter about ark drives:** it shows a drive amber from 21 days and raises a **critical** alert (`LAI-CLD-022`) at 30 days, so drives get plugged in before they turn yellow locally.
+- **The cloud watches the same limits:** an ark drive that was not synced for more than 30 days raises a **warning** (`LAI-CLD-022`, shown in the browser only), and after 90 days it turns **critical** (and an email goes out), the same as the red on the drive itself.
 - Exact rules: [ark-sync.md §4.12.2](../specs/ark-sync.md#4122-colour-rules).
 
 ---
@@ -173,7 +173,8 @@ When the timer's drill is skipped (one of the reasons above), it prints `i Drill
     - **What you should see:** the date and result of the last run, and one line per check that didn't pass, with its code and fix. An older run: `aictl drill show <run-id>`.
 
 12. **How to read it:**
-    - **Pass:** every check passed.Exit code 0.    - **Pass with warnings** (exit 8): everything essential works, something is slow or second-best (for example `LAI-DRL-021` a brain slower than expected, `LAI-DRL-031` speech less accurate, `LAI-DRL-033` a language uses another language's voice). Fix when convenient.
+    - **Pass:** every check passed. Exit code 0.
+    - **Pass with warnings** (exit 8): everything essential works, something is slow or second-best (for example `LAI-DRL-021` a brain slower than expected, `LAI-DRL-031` speech less accurate, `LAI-DRL-033` a language uses another language's voice). Fix when convenient.
     - **Fail** (exit 9): a check failed. Each failed check has a code and a fix. The most important ones: `LAI-DRL-011` essential content missing, `LAI-DRL-012` stored files damaged, `LAI-DRL-020` a survival brain couldn't start, `LAI-DRL-023` the photo brain failed the test image, `LAI-DRL-030` library search broken, `LAI-DRL-050` Portal or chat broken, `LAI-DRL-060` manuals missing, `LAI-DRL-071` llama.cpp couldn't be rebuilt offline, `LAI-DRL-090` the normal brain wasn't put back (press **Switch brain** and choose it).
     - **"Survival mode is ready on this node."** means every critical check passed or only warned. That's the one that matters in an emergency.
     - `LAI-DRL-091` (something tried to use the internet during the drill): an offline feature may be broken. Run `aictl drill show` to see which one, and test it with the network unplugged.

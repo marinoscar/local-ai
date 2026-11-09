@@ -1,0 +1,158 @@
+# Step lists that predate check-runbooks.sh rule 5 (see the header of scripts/check-runbooks.sh).
+# Format: <runbook>|<section heading>|<first step number>. Remove a line when its steps have a
+# "What you should see" and an "If it doesn't work" (writing them is part of the node dry run, issues #166 to #176).
+docs/runbooks/01-survival-mode.md|Botón 6: Manuales|20
+docs/runbooks/01-survival-mode.md|Botón 7: Estado y batería|21
+docs/runbooks/01-survival-mode.md|Button 6: Manuals|20
+docs/runbooks/01-survival-mode.md|Button 7: Status and battery|21
+docs/runbooks/01-survival-mode.md|Part 6. The AI-ARK drive: plug in, eject, keep safe|37
+docs/runbooks/01-survival-mode.md|Part 8. When something fails|39
+docs/runbooks/01-survival-mode.md|Part 8. When something fails|40
+docs/runbooks/01-survival-mode.md|Part 8. When something fails|41
+docs/runbooks/01-survival-mode.md|Part 9. If this computer dies: use the AI-ARK drive somewhere else|43
+docs/runbooks/01-survival-mode.md|Part 9. If this computer dies: use the AI-ARK drive somewhere else|45
+docs/runbooks/01-survival-mode.md|Parte 6. El disco AI-ARK: conectar, expulsar, cuidar|37
+docs/runbooks/01-survival-mode.md|Parte 8. Cuando algo falla|39
+docs/runbooks/01-survival-mode.md|Parte 8. Cuando algo falla|40
+docs/runbooks/01-survival-mode.md|Parte 8. Cuando algo falla|41
+docs/runbooks/01-survival-mode.md|Parte 9. Si esta computadora se daña: use el disco AI-ARK en otra|43
+docs/runbooks/01-survival-mode.md|Parte 9. Si esta computadora se daña: use el disco AI-ARK en otra|45
+docs/runbooks/02-chat-and-api-keys.md|Part 1. Chat in the browser|4
+docs/runbooks/02-chat-and-api-keys.md|Part 2. Get the node key|9
+docs/runbooks/02-chat-and-api-keys.md|Part 3. Get a lab key (`lai_…`) for `https://ai.marin.cr/v1`|12
+docs/runbooks/02-chat-and-api-keys.md|Part 5. Connect Open WebUI|16
+docs/runbooks/02-chat-and-api-keys.md|Part 5. Connect Open WebUI|20
+docs/runbooks/02-chat-and-api-keys.md|Part 5. Connect Open WebUI|23
+docs/runbooks/02-chat-and-api-keys.md|Part 5. Connect Open WebUI|24
+docs/runbooks/02-chat-and-api-keys.md|Part 7. Rotating keys, and what breaks|30
+docs/runbooks/03-swap-a-model.md|Part 1. From the cloud (ai.marin.cr)|3
+docs/runbooks/03-swap-a-model.md|Part 3. From the terminal|10
+docs/runbooks/03-swap-a-model.md|Part 3. From the terminal|11
+docs/runbooks/03-swap-a-model.md|Part 3. From the terminal|7
+docs/runbooks/03-swap-a-model.md|Part 4. Picking a model that fits|12
+docs/runbooks/03-swap-a-model.md|Part 4. Picking a model that fits|14
+docs/runbooks/03-swap-a-model.md|Part 5. Add a new model to the catalog|16
+docs/runbooks/03-swap-a-model.md|Part 5. Add a new model to the catalog|22
+docs/runbooks/04-ark-drive.md|Part 10. Freeing space (orphans and old versions)|38
+docs/runbooks/04-ark-drive.md|Part 11. Mount a drive, set it up, eject it and change its profile|42
+docs/runbooks/04-ark-drive.md|Part 2. Format a new drive as AI-ARK|11
+docs/runbooks/04-ark-drive.md|Part 2. Format a new drive as AI-ARK|8
+docs/runbooks/04-ark-drive.md|Part 3. First fill|13
+docs/runbooks/04-ark-drive.md|Part 3. First fill|14
+docs/runbooks/04-ark-drive.md|Part 4. Plugging in and reading the colours|18
+docs/runbooks/04-ark-drive.md|Part 5. Safe eject|21
+docs/runbooks/04-ark-drive.md|Part 7. Using the drive to serve or import on any node|27
+docs/runbooks/04-ark-drive.md|Part 8. Repairs|30
+docs/runbooks/05-add-a-node.md|Part 1. Install Ubuntu|1
+docs/runbooks/05-add-a-node.md|Part 1. Install Ubuntu|2
+docs/runbooks/05-add-a-node.md|Part 1. Install Ubuntu|3
+docs/runbooks/05-add-a-node.md|Part 1. Install Ubuntu|4
+docs/runbooks/05-add-a-node.md|Part 1. Install Ubuntu|6
+docs/runbooks/05-add-a-node.md|Part 10. Migrating an existing node (ai-n1, ai-n2, ai-n3) from `llama-qwen.service`|37
+docs/runbooks/05-add-a-node.md|Part 10. Migrating an existing node (ai-n1, ai-n2, ai-n3) from `llama-qwen.service`|38
+docs/runbooks/05-add-a-node.md|Part 10. Migrating an existing node (ai-n1, ai-n2, ai-n3) from `llama-qwen.service`|40
+docs/runbooks/05-add-a-node.md|Part 10. Migrating an existing node (ai-n1, ai-n2, ai-n3) from `llama-qwen.service`|41
+docs/runbooks/05-add-a-node.md|Part 10. Migrating an existing node (ai-n1, ai-n2, ai-n3) from `llama-qwen.service`|42
+docs/runbooks/05-add-a-node.md|Part 2. Create the node in the cloud (Add node wizard)|8
+docs/runbooks/05-add-a-node.md|Part 3. Run the installer|9
+docs/runbooks/05-add-a-node.md|Part 4. Laptop hardening (automatic)|14
+docs/runbooks/05-add-a-node.md|Part 5. Join the tailnet|15
+docs/runbooks/05-add-a-node.md|Part 5. Join the tailnet|16
+docs/runbooks/05-add-a-node.md|Part 6. Enroll in the cloud|19
+docs/runbooks/05-add-a-node.md|Part 6. Enroll in the cloud|20
+docs/runbooks/05-add-a-node.md|Part 7. Publish the node on the VPS|21
+docs/runbooks/05-add-a-node.md|Part 7. Publish the node on the VPS|22
+docs/runbooks/05-add-a-node.md|Part 7. Publish the node on the VPS|24
+docs/runbooks/05-add-a-node.md|Part 7. Publish the node on the VPS|25
+docs/runbooks/05-add-a-node.md|Part 7. Publish the node on the VPS|26
+docs/runbooks/05-add-a-node.md|Part 7. Publish the node on the VPS|28
+docs/runbooks/05-add-a-node.md|Part 8. Add it to the gateway|29
+docs/runbooks/05-add-a-node.md|Part 8. Add it to the gateway|32
+docs/runbooks/05-add-a-node.md|Part 9. Update the lab inventory|33
+docs/runbooks/05-add-a-node.md|Part 9. Update the lab inventory|35
+docs/runbooks/05-add-a-node.md|Rolling back a migration|43
+docs/runbooks/05-add-a-node.md|Rolling back a migration|44
+docs/runbooks/06-rebuild-a-node-offline.md|Part 1. Check the drive and get the Ubuntu installer|1
+docs/runbooks/06-rebuild-a-node-offline.md|Part 2. Install Ubuntu (offline)|4
+docs/runbooks/06-rebuild-a-node-offline.md|Part 2. Install Ubuntu (offline)|7
+docs/runbooks/06-rebuild-a-node-offline.md|Part 3. Install Local AI from the drive|12
+docs/runbooks/06-rebuild-a-node-offline.md|Part 4. Check that it works offline|18
+docs/runbooks/06-rebuild-a-node-offline.md|Part 5. Rebuild llama.cpp (`aictl rebuild-llama`)|20
+docs/runbooks/06-rebuild-a-node-offline.md|Part 5. Rebuild llama.cpp (`aictl rebuild-llama`)|21
+docs/runbooks/06-rebuild-a-node-offline.md|Part 5. Rebuild llama.cpp (`aictl rebuild-llama`)|22
+docs/runbooks/06-rebuild-a-node-offline.md|Part 6. GPU problems after a rebuild or an update|25
+docs/runbooks/06-rebuild-a-node-offline.md|Part 6. GPU problems after a rebuild or an update|26
+docs/runbooks/06-rebuild-a-node-offline.md|Part 6. GPU problems after a rebuild or an update|27
+docs/runbooks/06-rebuild-a-node-offline.md|Part 7. Other offline repairs|31
+docs/runbooks/06-rebuild-a-node-offline.md|Part 8. When the internet comes back|32
+docs/runbooks/07-troubleshooting.md|A model won't load|1
+docs/runbooks/07-troubleshooting.md|A model won't load|3
+docs/runbooks/07-troubleshooting.md|API key doesn't work (401)|1
+docs/runbooks/07-troubleshooting.md|Battery|1
+docs/runbooks/07-troubleshooting.md|Battery|2
+docs/runbooks/07-troubleshooting.md|Chat says error|1
+docs/runbooks/07-troubleshooting.md|Chat says error|2
+docs/runbooks/07-troubleshooting.md|Chat says error|3
+docs/runbooks/07-troubleshooting.md|Cloud shows node offline|1
+docs/runbooks/07-troubleshooting.md|Cloud shows node offline|3
+docs/runbooks/07-troubleshooting.md|Cloud shows node offline|4
+docs/runbooks/07-troubleshooting.md|Disk full|1
+docs/runbooks/07-troubleshooting.md|Disk full|3
+docs/runbooks/07-troubleshooting.md|Forgot PIN|3
+docs/runbooks/07-troubleshooting.md|GPU not detected after update|1
+docs/runbooks/07-troubleshooting.md|GPU not detected after update|3
+docs/runbooks/07-troubleshooting.md|Laptop sleeps or drops off the network|1
+docs/runbooks/07-troubleshooting.md|No library|1
+docs/runbooks/07-troubleshooting.md|No library|3
+docs/runbooks/07-troubleshooting.md|Open WebUI shows no lab models|1
+docs/runbooks/07-troubleshooting.md|Open WebUI shows no lab models|2
+docs/runbooks/07-troubleshooting.md|Step zero: run the doctor|1
+docs/runbooks/07-troubleshooting.md|Step zero: run the doctor|2
+docs/runbooks/07-troubleshooting.md|Step zero: run the doctor|4
+docs/runbooks/07-troubleshooting.md|Sync red|1
+docs/runbooks/07-troubleshooting.md|Sync red|3
+docs/runbooks/07-troubleshooting.md|Talk or photo doesn't work|1
+docs/runbooks/07-troubleshooting.md|Talk or photo doesn't work|3
+docs/runbooks/07-troubleshooting.md|The app won't open|1
+docs/runbooks/07-troubleshooting.md|The app won't open|3
+docs/runbooks/07-troubleshooting.md|The app won't open|4
+docs/runbooks/07-troubleshooting.md|The ark drive is not found|1
+docs/runbooks/08-scheduled-sync.md|Part 2. See the results|2
+docs/runbooks/08-scheduled-sync.md|Part 2. See the results|4
+docs/runbooks/08-scheduled-sync.md|Part 4. Run a sync now, and limit bandwidth|7
+docs/runbooks/08-scheduled-sync.md|Part 5. The monthly drill: run it and read it|11
+docs/runbooks/08-scheduled-sync.md|Part 5. The monthly drill: run it and read it|12
+docs/runbooks/09-laptop-as-server.md|Part 1. Verify (after the installer, and after any big update)|2
+docs/runbooks/09-laptop-as-server.md|Part 2. Apply a setting by hand|3
+docs/runbooks/09-laptop-as-server.md|Part 2. Apply a setting by hand|4
+docs/runbooks/09-laptop-as-server.md|Part 2. Apply a setting by hand|5
+docs/runbooks/09-laptop-as-server.md|Part 2. Apply a setting by hand|7
+docs/runbooks/09-laptop-as-server.md|Part 2. Apply a setting by hand|8
+docs/runbooks/09-laptop-as-server.md|Part 2. Apply a setting by hand|9
+docs/runbooks/09-laptop-as-server.md|Part 4. Test it|16
+docs/runbooks/09-laptop-as-server.md|Part 4. Test it|18
+docs/runbooks/09-laptop-as-server.md|Undo (laptop back to normal)|19
+docs/runbooks/10-lab-operations.md|Part 10. Installing the VPS stack-agent|80
+docs/runbooks/10-lab-operations.md|Part 10. Installing the VPS stack-agent|82
+docs/runbooks/10-lab-operations.md|Part 3. Approving a catalog|26
+docs/runbooks/10-lab-operations.md|Part 3. Approving a catalog|27
+docs/runbooks/10-lab-operations.md|Part 3. Approving a catalog|28
+docs/runbooks/10-lab-operations.md|Part 3. Approving a catalog|29
+docs/runbooks/10-lab-operations.md|Part 4. Updating agents|30
+docs/runbooks/10-lab-operations.md|Part 4. Updating agents|34
+docs/runbooks/10-lab-operations.md|Part 5. Gateway keys and usage|36
+docs/runbooks/10-lab-operations.md|Part 5. Gateway keys and usage|37
+docs/runbooks/10-lab-operations.md|Part 5. Gateway keys and usage|38
+docs/runbooks/10-lab-operations.md|Part 6. Updating llama.cpp across the lab|44
+docs/runbooks/10-lab-operations.md|Part 6. Updating llama.cpp across the lab|46
+docs/runbooks/10-lab-operations.md|Part 7. Retiring a node|47
+docs/runbooks/10-lab-operations.md|Part 8. Give someone access|55
+docs/runbooks/10-lab-operations.md|Part 8. Give someone access|56
+docs/runbooks/11-gateway-load-test.md|Part 1. The fake test (no GPU, no real node)|1
+docs/runbooks/11-gateway-load-test.md|Part 1. The fake test (no GPU, no real node)|2
+docs/runbooks/11-gateway-load-test.md|Part 1. The fake test (no GPU, no real node)|3
+docs/runbooks/11-gateway-load-test.md|Part 1. The fake test (no GPU, no real node)|4
+docs/runbooks/11-gateway-load-test.md|Part 1. The fake test (no GPU, no real node)|5
+docs/runbooks/11-gateway-load-test.md|Part 1. The fake test (no GPU, no real node)|6
+docs/runbooks/11-gateway-load-test.md|Part 2. The real-lab test (owner only, outside working hours)|1
+docs/runbooks/11-gateway-load-test.md|Part 2. The real-lab test (owner only, outside working hours)|4

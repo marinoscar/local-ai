@@ -177,6 +177,7 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
     It chooses by itself, in this order, and stops at the first that works: the **ready-made build** in the kit made for exactly this computer (it takes a minute), then **building** from the kit's source for this computer's graphics chip, then for **Vulkan**, then for the **processor only** (slow answers, but it always works). Offline it uses only the source on this computer and in the kit.
     - **Answer every question with `y` (or just press Enter where it shows `[Y/n]`).** If one way does not work it says so and asks, for example `That did not work (LAI-LLM-018). Try building for Vulkan (works with most graphics chips) instead? [Y/n]`: press **Enter**.
     - **What you should see:** `… Building llama.cpp <commit> for cuda (sm 75), 5 parallel jobs`, then one line that keeps changing, like `Compiling fattn.cu  ████░░░░░░  42%  5/12  about 18 min left`. Building can take from a few minutes to a few hours; leave it running. At the end: `✓ Build … passed its test (CUDA0: …)` and `✓ Switched to the new build. <model> is loaded again.`
+    - The source is unpacked in `/opt/localai/llama.cpp/src/<commit>/` (from the kit's `llama.cpp-<commit>.tar.gz`) and each finished build goes in `/opt/localai/llama.cpp/builds/`. A full build can take up to 3 hours.
     - If it says the compiler **ran out of memory**, it tries again by itself with fewer parallel jobs; nothing to do.
     - **To stop it:** press **Ctrl + C** and answer `y`. Nothing changes. Run the same command again later: it **carries on where it stopped** (`… Carrying on with the build that was stopped before`).
     - The new build is tested before it is used. If the AI doesn't come back with it, the previous build is restored by itself.
@@ -189,7 +190,7 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
       ```
 
       Fix any ✗ line as it says, then run step 20 again. `--from-kit` makes it take the source code only from the kit, so it never tries the internet.
-    - `LAI-KIT-002` (the kit doesn't have the needed llama.cpp version): choose a commit the kit has. `ls /media/$USER/AI-ARK/localai/kit/src/` shows `llama.cpp-<commit>.tar.gz` files; run `sudo aictl rebuild-llama --from-kit --commit <commit>`. `LAI-KIT-001` (the source in the kit is damaged): `aictl kit verify --full`, or use another drive.
+    - `LAI-KIT-002` (the kit doesn't have the needed llama.cpp version; the command ends with exit code 1): choose a commit the kit has. `ls /media/$USER/AI-ARK/localai/kit/src/` shows `llama.cpp-<commit>.tar.gz` files; run `sudo aictl rebuild-llama --from-kit --commit <commit>`. `LAI-KIT-001` (the source in the kit is damaged): `aictl kit verify --full`, or use another drive.
     - `LAI-KIT-010` (build tools missing) or `LAI-LLM-018` naming a missing package: install it from the kit with `sudo aictl kit install-debs --packages <package>` (step 29), then run step 20 again.
     - `LAI-KIT-048` (the ready-made build doesn't fit this computer): it says what is different and names the files the kit has; step 20 then builds from source by itself.
     - `LAI-LLM-019` (or `LAI-KIT-021` for the speech-to-text build): the new build didn't work; the previous one is still in use. Nothing broke.
@@ -238,7 +239,7 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
     - **What you should see:** `✓ Signature OK (Local AI release key). … files checked: all match.`, then the agent restarts. (The check reads the release's signed list from `kit/bin/release/`; it does not need the agent's source code file, which is in `kit/src/`.)
     - **If it doesn't work:** `LAI-KIT-044` (the kit's agent files failed their signature check): **don't** install them; use another drive. To build it from source instead: `sudo aictl rebuild-agent --from-kit --dry-run` (checks), then `sudo aictl rebuild-agent --from-kit` (`LAI-KIT-030`: the source in the kit is incomplete).
 
-31. **Something in Local AI's own files is broken** (doctor fixes say "install-node.sh --repair"): re-run the installer in repair mode. It never changes the node id, key, PIN, profile or content.
+31. **Something in Local AI's own files is broken** (doctor fixes say "install-node.sh --repair"): re-run the installer in repair mode. It never changes the node id, key, PIN, profile or content. On a node where Local AI is installed, just type `sudo install-node.sh --repair`. The command with the drive's path below is for a computer where that command is not found.
 
     ```
     sudo bash /media/$USER/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/$USER/AI-ARK --repair
@@ -265,6 +266,8 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
 35. Let the nightly sync bring everything up to date, or run `aictl ark sync --wait` ([08](08-scheduled-sync.md)).
 
 ## Part 9. Rotate a vendor apt keyring (maintainer task, needs internet)
+
+<!-- runbook-lint: no-expect-section (maintainer reference, done on a developer computer) -->
 
 The rebuild kit holds the Tailscale and NVIDIA CUDA package repositories. The agent carries their public signing keys and a written-down fingerprint for each one. If a vendor changes its key, the kit build stops with `LAI-SYN-060` ("does not match the fingerprint pinned") until the agent is updated. That is on purpose: the agent never accepts a key it was not told about. Do this on a normal computer with the repo, never on a node in an emergency.
 
