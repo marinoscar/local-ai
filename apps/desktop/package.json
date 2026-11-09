@@ -2,7 +2,7 @@
   "name": "ai-desktop",
   "productName": "ai-desktop",
   "desktopName": "ai-desktop.desktop",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "private": true,
   "description": "Desktop app for the Local AI node agent. Works fully offline.",
   "homepage": "https://github.com/marinoscar/local-ai",
