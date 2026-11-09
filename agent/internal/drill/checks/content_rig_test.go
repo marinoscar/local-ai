@@ -163,7 +163,6 @@ type itemSpec struct {
 	tier     int
 	survival bool
 	catalog  string // the catalog version recorded in the manifest
-	source   map[string]string
 }
 
 // install puts a verified copy of the item on a root, lists it in that root's report as verified, and
