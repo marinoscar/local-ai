@@ -126,9 +126,8 @@ func TestLoad(t *testing.T) {
 		r.publish = loadsWell
 		checkRun(t, r.run(mgArgs("-q", "load", qwenID)), 0, "", "")
 	})
-	// The 202 of ModelLoading does not carry `warning` today (agent.md section 3.8.8 only says the
-	// response "may add" it, and the handler adds it to the 200 of a waiting load); aictl shows it when
-	// the agent sends it, so the notice appears as soon as the 202 grows the field.
+	// The 202 of ModelLoading carries `warning` since #232 (the planner knows it before the answer), and
+	// aictl shows it with its fix, with or without --no-wait.
 	t.Run("a memory warning of the agent is shown when it comes", func(t *testing.T) {
 		r := newLoadRig(t)
 		r.publish = loadsWell
@@ -153,6 +152,16 @@ func TestLoad(t *testing.T) {
 		checkRun(t, got, 0, "i Loading Qwen 3.5 9B has started. Check it with `aictl models`.\n", "")
 		if n := len(r.events().Connections()); n != 0 {
 			t.Errorf("events connections = %d, want none", n)
+		}
+		checkRun(t, r.run(mgArgs("--json", "load", qwenID, "--no-wait")), 0, r.body+"\n", "")
+	})
+	t.Run("--no-wait still shows the memory warning of the 202, with its fix", func(t *testing.T) {
+		r := newLoadRig(t)
+		r.publish = loadsWell
+		r.body = `{"id":"` + qwenID + `","status":"loading","op_id":"` + loadOpID + `","warning":{"code":"LAI-HW-005","message":"Other programs use much of the graphics memory."}}`
+		got := r.run(mgArgs("load", qwenID, "--no-wait"))
+		if got.code != 0 || !strings.Contains(got.errOut, "[LAI-HW-005]") || !strings.Contains(got.errOut, "Fix: Close games or other GPU programs") || !strings.Contains(got.out, "Loading Qwen 3.5 9B has started") {
+			t.Fatalf("%+v", got)
 		}
 		checkRun(t, r.run(mgArgs("--json", "load", qwenID, "--no-wait")), 0, r.body+"\n", "")
 	})

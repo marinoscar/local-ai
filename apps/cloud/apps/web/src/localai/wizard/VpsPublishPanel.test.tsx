@@ -1,7 +1,7 @@
 // "Publish automatically": what blocks it, the enqueue, the journal of a finished run, the live states, Unpublish with its
 // confirmation, and the axe checks. The transport is stubbed; nothing here touches a network.
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 
 import { fakeClient, NODE_ID, vpsStatus } from './fixture';
 import { VpsPublishPanel } from './VpsPublishPanel';
@@ -164,7 +164,7 @@ describe('Unpublish', () => {
 
 describe('accessibility and secrets', () => {
   async function noViolations(container: HTMLElement) {
-    const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+    const result = await runAxe(container);
     expect(result.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
   }
 

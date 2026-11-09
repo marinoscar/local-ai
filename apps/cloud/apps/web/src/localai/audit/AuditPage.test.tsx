@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 import { MemoryRouter } from 'react-router-dom';
 
 import { AuditPage, filtersFromParams, paramsFromFilters } from './AuditPage';
@@ -211,7 +211,7 @@ describe('AuditPage', () => {
 
   // axe walks the whole table; under a loaded CI machine that can pass the 5 s default, so these three get more room.
   const AXE_TIMEOUT = 30_000;
-  const axeViolations = async (container: HTMLElement) => (await axe.run(container, { rules: { 'color-contrast': { enabled: false } } })).violations.map((violation) => `${violation.id}: ${violation.help}`);
+  const axeViolations = async (container: HTMLElement) => (await runAxe(container)).violations.map((violation) => `${violation.id}: ${violation.help}`);
 
   it('has no axe violations when loaded', async () => {
     const loaded = renderPage();

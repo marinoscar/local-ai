@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 
 import { ConfirmDialog, TypedConfirmDialog } from './ConfirmDialog';
 
@@ -45,7 +45,7 @@ describe('TypedConfirmDialog', () => {
 
   it('is accessible', async () => {
     setup();
-    const result = await axe.run(screen.getByRole('dialog'), { rules: { 'color-contrast': { enabled: false } } });
+    const result = await runAxe(screen.getByRole('dialog'));
     expect(result.violations.map((violation) => violation.id)).toEqual([]);
   });
 });

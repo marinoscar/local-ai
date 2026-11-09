@@ -1,7 +1,7 @@
 // The Models page: the wireframe's rows, read-only for a user and editable for a gateway administrator, the policy dialog
 // (validation, the API's refusals, the PUT body), the narrow layout, and the axe checks. Transports and permissions are stubbed.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 import { MemoryRouter } from 'react-router-dom';
 
 import { modelsFixture } from './modelsFixture';
@@ -25,7 +25,7 @@ function renderPage(overrides: ModelsPageProps = {}) {
 }
 
 const table = () => screen.findByRole('table', { name: 'Models' });
-const runAxe = async () => (await axe.run(document.body, { rules: { 'color-contrast': { enabled: false } } })).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`);
+const axeViolations = async () => (await runAxe(document.body)).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`);
 
 function stubNarrowScreen(narrow: boolean): void {
   window.matchMedia = ((query: string) => ({
@@ -186,22 +186,22 @@ describe('ModelsPage', () => {
       permissions = ['gateway:use', 'gateway:admin'];
       const wide = renderPage();
       await table();
-      expect(await runAxe()).toEqual([]);
+      expect(await axeViolations()).toEqual([]);
       fireEvent.click(screen.getByRole('button', { name: 'Edit the policy of Qwen3 Coder Next' }));
       await screen.findByRole('dialog');
-      expect(await runAxe()).toEqual([]);
+      expect(await axeViolations()).toEqual([]);
       wide.unmount();
 
       stubNarrowScreen(true);
       const narrow = renderPage();
       await screen.findByRole('list', { name: 'Models' });
-      expect(await runAxe()).toEqual([]);
+      expect(await axeViolations()).toEqual([]);
       narrow.unmount();
       stubNarrowScreen(false);
 
       renderPage({ listModels: vi.fn(async () => []) });
       await screen.findByTestId('models-empty');
-      expect(await runAxe()).toEqual([]);
+      expect(await axeViolations()).toEqual([]);
     });
   });
 });

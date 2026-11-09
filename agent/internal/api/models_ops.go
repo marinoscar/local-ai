@@ -158,6 +158,8 @@ type modelLoadingJSON struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
 	OpID   string `json:"op_id"`
+	// Warning is the planner's LAI-HW-005 / LAI-HW-006 notice, known before the 202 is sent.
+	Warning *warningJSON `json:"warning,omitempty"`
 }
 
 func (d ModelOpsDeps) load(w http.ResponseWriter, r *http.Request) error {
@@ -194,7 +196,11 @@ func (d ModelOpsDeps) load(w http.ResponseWriter, r *http.Request) error {
 		SetOpID(w, res.OpID)
 	}
 	if res.Accepted {
-		WriteJSON(w, r, http.StatusAccepted, modelLoadingJSON{ID: res.ID, Status: "loading", OpID: res.OpID})
+		accepted := modelLoadingJSON{ID: res.ID, Status: "loading", OpID: res.OpID}
+		if res.Warning != nil {
+			accepted.Warning = &warningJSON{Code: res.Warning.Code, Message: res.Warning.Message}
+		}
+		WriteJSON(w, r, http.StatusAccepted, accepted)
 		return nil
 	}
 	out := modelLoadedJSON{

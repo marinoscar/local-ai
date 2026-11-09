@@ -6,6 +6,11 @@
 // 13 drl.maps.tile, 14 drl.maps.search, 15 drl.portal, 16 drl.docs and 19 drl.services. The other
 // checks live in files of their own issues (the model checks, the kit and power checks).
 //
+// DRILL-03 adds the model checks: 5 drl.llm.answer.<id>, 6 drl.vlm.photo.<id>, 7 drl.llm.fit (llm.go,
+// vlm.go, fit.go) and 22 drl.restore (restorecheck.go), registered by Register (models.go). They see
+// only small interfaces (the model layer drill.ModelOps, the chat endpoint, the node's facts), never the
+// router, systemd or the network, so every pass, warn and fail path runs against fakes.
+//
 // DRILL-02 adds check 1 drl.fence with the network fence adapter NetFence (fence.go) and check 2
 // drl.config.offline_lint (offline_lint.go); internal/app/drill_checks_fence.go builds them with the
 // paths and the embedded files of the node. Their dependencies are fields, so every path is tested with

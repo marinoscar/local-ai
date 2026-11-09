@@ -80,10 +80,12 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
    ```
    cd ~
    curl -fsSL https://github.com/marinoscar/local-ai/releases/download/node-v<version>/install-node.sh -o install-node.sh
-   sha256sum install-node.sh
+   echo "<checksum from the wizard>  install-node.sh" | sha256sum -c
    ```
 
-   - **What you should see:** a 64-character value. It must equal the checksum in the wizard. If it doesn't, **stop** and don't run it. If the wizard says "Checksum unknown, check the release page", compare with the `install-node.sh` line of `SHA256SUMS` on the release page it links.
+   The wizard shows this whole `echo ... | sha256sum -c` line with the checksum already filled in: press **Copy** on it and paste it. You never compare 64 characters by eye.
+   - **What you should see:** `install-node.sh: OK`.
+   - **If it doesn't work:** `install-node.sh: FAILED` means the file is not the one that was released: **stop** and don't run it; download it again. If the wizard says "Checksum unknown, check the release page", download `SHA256SUMS` from the release page it links (same folder, same `node-v<version>`) and run `sha256sum -c --ignore-missing SHA256SUMS`, which must print `install-node.sh: OK`.
 10. **The easy way: run it and answer the questions.**
 
     ```
@@ -125,7 +127,7 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
     sudo reboot
     ```
 
-13. **Log in again** and check:
+13. **Log in again** and check. Easiest: open the **Local AI** app (or `http://127.0.0.1:7070`) and press **7 Status and battery**: it says whether everything works and lists each problem with its fix. Or open a terminal, type `aictl`, press **Enter**, and press **1** (*See the state of this computer*), then **2** (*Find and fix problems*). The typed commands, which do the same:
 
     ```
     aictl status
@@ -450,6 +452,7 @@ Today's nodes run a hand-made `llama-qwen.service`. The migration swaps it for `
     - **What you should see:** the migration report: downtime (for example 14 s), model id and old alias, the key fingerprint, serve listeners **unchanged**, and **clients to update: none**.
     - **If it doesn't work:**
       - `LAI-LLM-017` "settings differ": the old unit's flags differ from the catalog. Read the diff. If the catalog's values are right, re-run the migration with `sudo aiagent migrate llama-qwen --accept-catalog-flags`; otherwise fix the catalog first. This is expected on **ai-n2**, whose flags were never written down.
+      - `LAI-LLM-017` "the old service's user cannot read ...": the folders above the model are closed to the user of `llama-qwen.service`, so the old service could not start again after a rollback. The migration opens them itself (only the right to walk through, never to read or list); if it still stops here, run `sudo chmod o+x /srv/localai /srv/localai/models` and run it again. Nothing was stopped: the old service is still serving.
       - If anything fails after the switch, the migration **rolls back by itself**: `llama-qwen.service` runs again as before and the installer stops with `LAI-INS-033`.
       - `LAI-LLM-029` (interrupted): run `sudo aiagent migrate llama-qwen` again; it continues.
 40. **Check the result:**

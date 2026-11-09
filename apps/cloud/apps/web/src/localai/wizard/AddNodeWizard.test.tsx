@@ -2,7 +2,7 @@
 // continues, never in storage, the URL or history), the live Enrolled / Key received indicators, the publish checklist,
 // permission gating and the axe checks. The transport and the permissions are stubbed; nothing here touches a network.
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 import { MemoryRouter } from 'react-router-dom';
 
 import { AddNodeWizard } from './AddNodeWizard';
@@ -28,7 +28,7 @@ async function createOnStepOne(token = makeToken(), client = fakeClient({ create
 }
 
 const noViolations = async (container: HTMLElement) => {
-  const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+  const result = await runAxe(container);
   expect(result.violations.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
 };
 

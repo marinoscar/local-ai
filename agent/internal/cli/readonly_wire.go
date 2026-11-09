@@ -76,6 +76,8 @@ type wireService struct {
 	Healthy  bool   `json:"healthy"`
 	State    string `json:"state"`
 	Enabled  *bool  `json:"enabled"`
+	// Device is where a companion runs its work, "cpu" or "gpu" (whisper, companion-services.md section 4.6).
+	Device   string `json:"device"`
 	LastExit *struct {
 		Code *int   `json:"code"`
 		At   string `json:"at"`

@@ -186,6 +186,9 @@ func (e *Engine) m3Models(ctx context.Context, p *Plan) error {
 	if err := e.fs.MkdirAll(dir, 0o755); err != nil {
 		return wrap(CodeInterrupted, M3, err, "cannot create %s", dir)
 	}
+	if err := e.allowTraverse(); err != nil {
+		return err
+	}
 	if err := e.fs.Chown(dir, uid, gid); err != nil {
 		return wrap(CodeInterrupted, M3, err, "cannot give %s to %s", dir, ServiceUser)
 	}
@@ -198,6 +201,25 @@ func (e *Engine) m3Models(ctx context.Context, p *Plan) error {
 		}
 	}
 	return e.writeManifest(p, uid, gid)
+}
+
+// allowTraverse lets any user walk through the directories above the model directory (mode o+x, never
+// o+r: nobody can list them). The legacy unit runs as another user and keeps reading its model through the
+// link it left at the old path; a /srv/localai that is 0750 localai made that link dead, so the first real
+// migration (#158) could not roll back to a service that starts (#150). The directories are the installer's;
+// only the missing bit is added, and anything already open is left alone.
+func (e *Engine) allowTraverse() error {
+	for _, d := range []string{path.Join(e.paths.InternalRoot, "models"), e.paths.InternalRoot} {
+		fi, err := e.fs.Stat(d)
+		if err != nil || fi.Mode().Perm()&0o001 != 0 {
+			continue
+		}
+		e.say("     letting other users pass through %s (the old service follows its link to the model)", d)
+		if err := e.fs.Chmod(d, fi.Mode().Perm()|0o001); err != nil {
+			return wrap(CodeInterrupted, M3, err, "cannot let other users pass through %s", d)
+		}
+	}
+	return nil
 }
 
 // moveFile brings one file to its new place, whatever state an earlier run left it in.
@@ -464,6 +486,13 @@ func (e *Engine) m5Checks(ctx context.Context, p *Plan) error {
 			bad = append(bad, fmt.Sprintf("%s cannot read %s", ServiceUser, f.New))
 		}
 	}
+	if user := e.legacyUserToCheck(p); user != "" {
+		for _, f := range p.Files {
+			if !e.canRead(ctx, user, f.New) {
+				bad = append(bad, fmt.Sprintf("%s (the user of the old service) cannot read %s, so the old service could not start again after a rollback: give the folders above it the permission to be entered (chmod o+x)", user, f.New))
+			}
+		}
+	}
 	bin := path.Join(e.paths.Current(), "bin", "llama-server")
 	if res, err := e.runNamed(ctx, "runuser", "-u", ServiceUser, "--", bin, "--version"); err != nil || res.ExitCode != 0 {
 		bad = append(bad, fmt.Sprintf("%s cannot run %s", ServiceUser, bin))
@@ -477,6 +506,20 @@ func (e *Engine) m5Checks(ctx context.Context, p *Plan) error {
 			Details: map[string]any{"checks": bad}}
 	}
 	return nil
+}
+
+// legacyUserToCheck is the user of the old service when it is not the service user itself.
+func (e *Engine) legacyUserToCheck(p *Plan) string {
+	if p.User == "" || p.User == ServiceUser {
+		return ""
+	}
+	return p.User
+}
+
+// canRead asks the system whether user can read the file (through any link): `runuser -u user -- test -r`.
+func (e *Engine) canRead(ctx context.Context, user, file string) bool {
+	res, err := e.runNamed(ctx, "runuser", "-u", user, "--", "test", "-r", file)
+	return err == nil && res.ExitCode == 0
 }
 
 var routerFlagRe = regexp.MustCompile(`--models-[a-z-]+`)

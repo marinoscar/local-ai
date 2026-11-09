@@ -2439,7 +2439,7 @@ var table = []Code{
 		ID:       INS030,
 		Severity: Error,
 		Title:    Msg{EN: "Package installation failed", ES: "Falló la instalación de paquetes"},
-		Fix:      Msg{EN: "Read the apt messages above, fix, and re-run.", ES: "Lea los mensajes de apt de más arriba, corrija y vuelva a ejecutar."},
+		Fix:      Msg{EN: "If the disk is full, free some space; if a package from the kit is broken, copy the kit again from the AI-ARK drive; then run the installer again.", ES: "Si el disco está lleno, libere espacio; si un paquete del kit está dañado, copie de nuevo el kit desde el disco AI-ARK; luego vuelva a ejecutar el instalador."},
 	},
 	{
 		ID:       INS031,
