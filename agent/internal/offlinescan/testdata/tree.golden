@@ -1,0 +1,11 @@
+assets-x/a.js:1: https://unpkg.com/x.js
+assets-x/a.js:4: https://example.org/after-nbsp
+assets-x/a.js:1: forbidden name "unpkg"
+assets-x/a.js:2: forbidden name "cdn"
+assets-x/a.js:3: forbidden name "fonts.GOOGLEAPIS"
+assets-x/sw.js:1: service worker registration
+assets/z.js:5: https://example.org/not-a-licence.js
+assets/z.js:7: HTTPS://EXAMPLE.ORG/Upper.js
+assets/z.js:6: forbidden name "Cdn"
+notes-license.txt:1: https://example.org/license-in-name.txt
+viewer/maps-abc123.js:1: https://tile.example.org/{z}/{x}/{y}.png

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
 
 // Defaults of the GitHub client (agent.md section 4.10 step 1).
@@ -137,7 +138,7 @@ func (s Source) allowHost(h string) bool {
 func (s Source) client() *http.Client {
 	base := s.Client
 	if base == nil {
-		base = http.DefaultClient
+		base = netx.Client("update.github")
 	}
 	c := *base
 	c.Timeout = 0

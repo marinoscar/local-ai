@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/execx"
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 	"github.com/marinoscar/local-ai/agent/internal/sync/download"
 	"github.com/marinoscar/local-ai/agent/internal/sync/item"
 	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
@@ -241,18 +241,14 @@ var (
 )
 
 func defaultMetaTransport() http.RoundTripper {
-	d := &net.Dialer{Timeout: download.DialTimeout, KeepAlive: 30 * time.Second}
-	return &http.Transport{
-		Proxy:                 nil,
-		DialContext:           d.DialContext,
-		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
-		TLSHandshakeTimeout:   download.TLSHandshakeTimeout,
-		ResponseHeaderTimeout: download.ResponseHeaderTimeout,
-		ForceAttemptHTTP2:     true,
-		DisableCompression:    true,
-		MaxIdleConns:          4,
-		IdleConnTimeout:       30 * time.Second,
-	}
+	tr := netx.NewTransport("sync.resolver", netx.Default.Dialer(download.DialTimeout))
+	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	tr.TLSHandshakeTimeout = download.TLSHandshakeTimeout
+	tr.ResponseHeaderTimeout = download.ResponseHeaderTimeout
+	tr.DisableCompression = true
+	tr.MaxIdleConns = 4
+	tr.IdleConnTimeout = 30 * time.Second
+	return tr
 }
 
 // reqOpts is how one metadata request is made.

@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
 
 // Defaults of a mount that does not set its own (agent.md section 3.11).
@@ -224,25 +225,23 @@ func New(opts Options) http.Handler {
 		p.stripReq = append(p.stripReq, http.CanonicalHeaderKey(h))
 	}
 
-	dialer := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}
+	dial := netx.DialFor("api.proxy", 5*time.Second)
 	pinned := p.host
+	tr := netx.NewTransport("api.proxy", func(ctx context.Context, _, _ string) (net.Conn, error) {
+		// Whatever the request says, the connection goes to the pinned address.
+		return dial(ctx, "tcp4", pinned)
+	})
+	tr.DisableCompression = true // pass the client's Accept-Encoding and the answer through
+	tr.MaxIdleConnsPerHost = 8
+	tr.IdleConnTimeout = 90 * time.Second
+	tr.ExpectContinueTimeout = time.Second
 	p.rp = &httputil.ReverseProxy{
 		Rewrite:        p.rewrite,
 		FlushInterval:  -1,
 		ModifyResponse: p.modifyResponse,
 		ErrorHandler:   p.errorHandler,
 		ErrorLog:       slog.NewLogLogger(p.log.Handler(), slog.LevelWarn),
-		Transport: &http.Transport{
-			Proxy: nil, // never HTTP_PROXY: the upstream is on this machine
-			// Whatever the request says, the connection goes to the pinned address.
-			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
-				return dialer.DialContext(ctx, "tcp4", pinned)
-			},
-			DisableCompression:    true, // pass the client's Accept-Encoding and the answer through
-			MaxIdleConnsPerHost:   8,
-			IdleConnTimeout:       90 * time.Second,
-			ExpectContinueTimeout: time.Second,
-		},
+		Transport:      tr, // no proxy environment: the upstream is on this machine
 	}
 	return p
 }
