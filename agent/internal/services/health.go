@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
 
 // Ports are the loopback ports of the three services (node.yaml ports.llama, ports.kiwix and
@@ -57,9 +59,11 @@ type HTTPProber struct {
 // the first answer), never reuses a connection (a probe must not ride on a dead socket of the service
 // it just restarted), and uses no proxy.
 func NewHTTPProber() *HTTPProber {
+	tr := netx.NewTransport("services.health", nil)
+	tr.DisableKeepAlives = true
 	return &HTTPProber{Client: &http.Client{
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		Transport:     &http.Transport{DisableKeepAlives: true, Proxy: nil},
+		Transport:     tr,
 	}}
 }
 
