@@ -1,7 +1,7 @@
 // The Route53 key page: write-only (the fields are empty, the key is never read back or kept in the page after saving),
 // the hint, replace and remove with a confirmation, errors, and the axe check. The transport is stubbed.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 
 import { Route53KeyPage } from './Route53KeyPage';
 import type { Route53Client, Route53KeyStatus } from './route53Api';
@@ -105,10 +105,10 @@ describe('Route53KeyPage', () => {
   it('has no axe violations (empty, stored)', async () => {
     const empty = render(<Route53KeyPage client={client()} />);
     await screen.findByText('No key stored');
-    expect((await axe.run(empty.container, { rules: { 'color-contrast': { enabled: false } } })).violations.map((v) => v.id)).toEqual([]);
+    expect((await runAxe(empty.container)).violations.map((v) => v.id)).toEqual([]);
     empty.unmount();
     const stored = render(<Route53KeyPage client={client(STORED)} />);
     await screen.findByText('Key stored');
-    expect((await axe.run(stored.container, { rules: { 'color-contrast': { enabled: false } } })).violations.map((v) => v.id)).toEqual([]);
+    expect((await runAxe(stored.container)).violations.map((v) => v.id)).toEqual([]);
   });
 });

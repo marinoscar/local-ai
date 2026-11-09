@@ -1,7 +1,7 @@
 // The Usage page: the rows of the wireframe (day, bar, requests, tokens, node shares), the group-by and range controls,
 // the admin scope, empty and error states, and the axe checks. The transports and the permissions are stubbed.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 import { MemoryRouter } from 'react-router-dom';
 
 import { keysFixture } from './fixture';
@@ -26,7 +26,7 @@ function renderPage(overrides: UsagePageProps = {}) {
 }
 
 const table = (name: string) => screen.findByRole('table', { name });
-const axeRun = async () => (await axe.run(document.body, { rules: { 'color-contrast': { enabled: false } } })).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`);
+const axeRun = async () => (await runAxe(document.body)).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`);
 
 describe('UsagePage', () => {
   beforeEach(() => {

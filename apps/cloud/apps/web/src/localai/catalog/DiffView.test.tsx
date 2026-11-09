@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 
 import { diffCatalogFiles, summarizeDiff } from './catalogDiff';
 import { DiffPanel, DiffView } from './DiffView';
@@ -40,7 +40,7 @@ describe('DiffView', () => {
 
   it('has no axe violations', async () => {
     const { container } = render(<DiffView files={files} summary={summary} />);
-    expect((await axe.run(container)).violations).toEqual([]);
+    expect((await runAxe(container)).violations).toEqual([]);
   });
 });
 

@@ -1,7 +1,7 @@
 // The API keys page: the table over the wireframe's rows, Create -> the show-once panel with Copy and three snippets,
 // the Revoke confirmation, the admin view, and the axe checks. The transports and the permissions are stubbed.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 import { MemoryRouter } from 'react-router-dom';
 
 import { createdFixture, FIXTURE_TOKEN, KEYS_NOW, keyFixture, keysFixture } from './fixture';
@@ -285,7 +285,7 @@ describe('KeysPage', () => {
 
   describe('accessibility', () => {
     it('has no axe violations with keys, in the Create dialog, in the show-once panel and in the Revoke dialog', async () => {
-      const run = async () => (await axe.run(document.body, { rules: { 'color-contrast': { enabled: false } } })).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`);
+      const run = async () => (await runAxe(document.body)).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`);
       renderPage();
       await table();
       expect(await run()).toEqual([]);
@@ -308,7 +308,7 @@ describe('KeysPage', () => {
     it('has no axe violations when empty', async () => {
       renderPage({ listKeys: vi.fn(async () => []) });
       await screen.findByTestId('keys-empty');
-      const results = await axe.run(document.body, { rules: { 'color-contrast': { enabled: false } } });
+      const results = await runAxe(document.body);
       expect(results.violations).toEqual([]);
     });
   });

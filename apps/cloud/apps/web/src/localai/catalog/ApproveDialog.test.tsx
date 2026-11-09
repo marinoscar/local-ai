@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import axe from 'axe-core';
+import { runAxe } from '../../__tests__/axe';
 
 import { ApiError } from '@marinoscar/platform-web/core';
 
@@ -90,6 +90,6 @@ describe('ApproveDialog', () => {
     const fake = validDraft();
     render(<ApproveDialog client={fake.api} version="2026.11.03-1" onClose={() => undefined} onApproved={() => undefined} />);
     await screen.findByText('Changes since 2026.11.02-1');
-    expect((await axe.run(screen.getByRole('dialog'))).violations).toEqual([]);
+    expect((await runAxe(screen.getByRole('dialog'))).violations).toEqual([]);
   });
 });
