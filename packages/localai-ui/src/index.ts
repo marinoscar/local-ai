@@ -2,3 +2,4 @@
 // Props are plain data and nothing in here fetches, so each host decides where the data comes from.
 // The generated agent API types are a separate import: `@localai/ui/src/api/agent.gen`.
 export * from './lab';
+export { LangProvider, pick, useLang, type Lang } from './lang';

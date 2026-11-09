@@ -5,6 +5,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import { Button } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 
+import { useT } from '../../i18n/LanguageProvider';
 import { copyText } from './clipboard';
 
 export interface CopyButtonProps {
@@ -15,7 +16,9 @@ export interface CopyButtonProps {
   size?: 'small' | 'medium';
 }
 
-export function CopyButton({ text, label = 'Copy', context, size = 'small' }: CopyButtonProps) {
+export function CopyButton({ text, label, context, size = 'small' }: CopyButtonProps) {
+  const t = useT();
+  const shown = label ?? t('Copy', 'Copiar');
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
@@ -34,13 +37,13 @@ export function CopyButton({ text, label = 'Copy', context, size = 'small' }: Co
         variant="outlined"
         onClick={onClick}
         startIcon={state === 'copied' ? <CheckIcon /> : <ContentCopyIcon />}
-        aria-label={context ? `${label} ${context}` : undefined}
+        aria-label={context ? `${shown} ${context}` : undefined}
       >
-        {state === 'copied' ? 'Copied' : label}
+        {state === 'copied' ? t('Copied', 'Copiado') : shown}
       </Button>
       {/* Announced to screen readers; empty while idle. */}
       <span role="status" aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-        {state === 'copied' ? 'Copied to the clipboard' : state === 'failed' ? 'Could not copy. Select the text and copy it by hand.' : ''}
+        {state === 'copied' ? t('Copied to the clipboard', 'Copiado al portapapeles') : state === 'failed' ? t('Could not copy. Select the text and copy it by hand.', 'No se pudo copiar. Seleccione el texto y cópielo a mano.') : ''}
       </span>
     </>
   );

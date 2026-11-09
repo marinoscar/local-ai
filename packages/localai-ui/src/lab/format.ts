@@ -13,20 +13,21 @@ export function vramPercent(usedMib: number, totalMib: number): number {
   return Math.min(100, Math.max(0, Math.round((usedMib / totalMib) * 100)));
 }
 
-/** "just now", "42 s ago", "5 min ago", "3 h ago", "6 days ago"; null for no instant or an unreadable one. */
-export function formatAgo(iso: string | null, now: Date): string | null {
+/** "just now", "42 s ago", "5 min ago", "3 h ago", "6 days ago" (Spanish: "ahora mismo", "hace 42 s", "hace 5 min", "hace 3 h", "hace 6 días"); null for no instant or an unreadable one. */
+export function formatAgo(iso: string | null, now: Date, lang: 'en' | 'es' = 'en'): string | null {
   if (iso === null) return null;
   const at = new Date(iso).getTime();
   if (Number.isNaN(at)) return null;
+  const es = lang === 'es';
   const seconds = Math.max(0, Math.floor((now.getTime() - at) / 1000));
-  if (seconds < 10) return 'just now';
-  if (seconds < 60) return `${seconds} s ago`;
+  if (seconds < 10) return es ? 'ahora mismo' : 'just now';
+  if (seconds < 60) return es ? `hace ${seconds} s` : `${seconds} s ago`;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 60) return es ? `hace ${minutes} min` : `${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `${hours} h ago`;
+  if (hours < 48) return es ? `hace ${hours} h` : `${hours} h ago`;
   const days = Math.floor(hours / 24);
-  return `${days} days ago`;
+  return es ? `hace ${days} días` : `${days} days ago`;
 }
 
 /** "02:14" in the given IANA time zone (the viewer's own when omitted); null for no instant. */

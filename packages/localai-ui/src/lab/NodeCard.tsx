@@ -7,6 +7,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { Box, Card, CardActions, CardContent, Chip, Typography } from '@mui/material';
 import type { ReactElement, ReactNode } from 'react';
 
+import { pick, useLang, type Lang } from '../lang';
 import { ArkChip } from './ArkChip';
 import { backendLabel, formatAgo, formatClock, shortCatalog } from './format';
 import { HealthChip } from './HealthChip';
@@ -32,10 +33,10 @@ const SYNC: Record<'ok' | 'partial' | 'failed' | 'skipped', { icon: ReactElement
   skipped: { icon: <BlockIcon fontSize="inherit" />, color: 'default' },
 };
 
-const DRILL: Record<'pass' | 'warn' | 'fail', { icon: ReactElement; color: 'success' | 'warning' | 'error'; word: string }> = {
-  pass: { icon: <CheckCircleIcon fontSize="inherit" />, color: 'success', word: 'passed' },
-  warn: { icon: <WarningAmberIcon fontSize="inherit" />, color: 'warning', word: 'warning' },
-  fail: { icon: <ErrorIcon fontSize="inherit" />, color: 'error', word: 'failed' },
+const DRILL: Record<'pass' | 'warn' | 'fail', { icon: ReactElement; color: 'success' | 'warning' | 'error'; word: string; wordEs: string }> = {
+  pass: { icon: <CheckCircleIcon fontSize="inherit" />, color: 'success', word: 'passed', wordEs: 'superada' },
+  warn: { icon: <WarningAmberIcon fontSize="inherit" />, color: 'warning', word: 'warning', wordEs: 'con avisos' },
+  fail: { icon: <ErrorIcon fontSize="inherit" />, color: 'error', word: 'failed', wordEs: 'fallida' },
 };
 
 /** A status phrase with an icon, coloured by the theme (never colour alone: the word is always there). */
@@ -50,15 +51,20 @@ function Status({ color, icon, children }: { color: 'success' | 'warning' | 'err
   );
 }
 
-function syncText(node: NodeCardDto, timeZone: string | undefined): string {
+const SYNC_WORD_ES = { ok: 'correcta', partial: 'parcial', failed: 'fallida', skipped: 'omitida' } as const;
+
+function syncText(node: NodeCardDto, timeZone: string | undefined, lang: Lang): string {
+  const es = lang === 'es';
   const { result, finishedAt, skipReason } = node.sync;
-  if (result === null) return 'never run';
+  if (result === null) return es ? 'nunca ejecutada' : 'never run';
   const time = formatClock(finishedAt, timeZone);
-  if (result === 'skipped') return `skipped${skipReason ? ` (${skipReason})` : ''}`;
-  return time ? `${result} ${time}` : result;
+  const word = es ? SYNC_WORD_ES[result] : result;
+  if (result === 'skipped') return `${word}${skipReason ? ` (${skipReason})` : ''}`;
+  return time ? `${word} ${time}` : word;
 }
 
 function ArkLine({ title, subject, roots }: { title: string; subject: string; roots: readonly ArkRoot[] }) {
+  const es = useLang() === 'es';
   return (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
       <Typography variant="body2" component="span" sx={{ minWidth: '7.5em', pt: 0.25 }}>
@@ -67,7 +73,7 @@ function ArkLine({ title, subject, roots }: { title: string; subject: string; ro
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0, alignItems: 'flex-start' }}>
         {roots.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            — none
+            {es ? '— ninguno' : '— none'}
           </Typography>
         ) : (
           roots.map((root) => <ArkChip key={root.rootId} colour={root.colour} label={root.label} subject={subject} />)
@@ -83,8 +89,10 @@ function ArkLine({ title, subject, roots }: { title: string; subject: string; ro
  * nothing fetches. The same card renders in the cloud Lab page and the desktop Lab view.
  */
 export function NodeCard({ node, now = new Date(), timeZone, actions }: NodeCardProps) {
+  const lang = useLang();
+  const es = lang === 'es';
   const serving = node.health === 'healthy' || node.health === 'degraded';
-  const lastSeen = formatAgo(node.lastStateAt, now);
+  const lastSeen = formatAgo(node.lastStateAt, now, lang);
   const hardware = [node.backend ? backendLabel(node.backend) : null, node.hardware].filter((part): part is string => part !== null && part !== '').join(' · ');
   const internalRoots = node.ark.filter((root) => root.kind === 'internal');
   const driveRoots = node.ark.filter((root) => root.kind === 'ark_drive');
@@ -120,45 +128,45 @@ export function NodeCard({ node, now = new Date(), timeZone, actions }: NodeCard
         ) : (
           <>
             <Typography variant="body2" color="text.secondary">
-              {lastSeen ? `Last seen ${lastSeen}` : 'Never seen'}
+              {lastSeen ? (es ? `Visto ${lastSeen}` : `Last seen ${lastSeen}`) : es ? 'Nunca visto' : 'Never seen'}
             </Typography>
             {node.lastDefault !== null ? <ModelList models={[]} lastDefault={node.lastDefault} /> : null}
           </>
         )}
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          <ArkLine title="Ark: internal" subject="internal" roots={internalRoots} />
-          <ArkLine title="drive" subject="drive" roots={driveRoots} />
+          <ArkLine title={es ? 'Arca: interna' : 'Ark: internal'} subject={es ? 'interna' : 'internal'} roots={internalRoots} />
+          <ArkLine title={es ? 'unidad' : 'drive'} subject={es ? 'unidad' : 'drive'} roots={driveRoots} />
         </Box>
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
           <Typography variant="body2" component="span">
-            Sync:
+            {es ? 'Sincronización:' : 'Sync:'}
           </Typography>
           <Status color={sync.color} icon={sync.icon}>
-            {syncText(node, timeZone)}
+            {syncText(node, timeZone, lang)}
           </Status>
           <Typography variant="body2" component="span">
-            Drill:
+            {es ? 'Simulacro:' : 'Drill:'}
           </Typography>
           {drill ? (
             <Status color={drill.color} icon={drill.icon}>
-              {drill.word}
+              {es ? drill.wordEs : drill.word}
             </Status>
           ) : (
             <Typography variant="body2" color="text.secondary" component="span">
-              not run
+              {es ? 'sin ejecutar' : 'not run'}
             </Typography>
           )}
         </Box>
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }} data-testid="versions">
           <Typography variant="body2" component="span">
-            {node.agentVersion ? `agent ${node.agentVersion}` : 'agent unknown'}
+            {node.agentVersion ? `${es ? 'agente' : 'agent'} ${node.agentVersion}` : es ? 'agente desconocido' : 'agent unknown'}
           </Typography>
           {node.agentBehind ? <Behind what="agent" /> : null}
           <Typography variant="body2" component="span">
-            {node.catalogVersion ? `cat ${shortCatalog(node.catalogVersion)}` : 'cat unknown'}
+            {node.catalogVersion ? `${es ? 'cat.' : 'cat'} ${shortCatalog(node.catalogVersion)}` : es ? 'cat. desconocido' : 'cat unknown'}
           </Typography>
           {node.catalogBehind ? <Behind what="catalog" /> : null}
         </Box>
@@ -172,7 +180,7 @@ export function NodeCard({ node, now = new Date(), timeZone, actions }: NodeCard
               size="small"
               color={node.alerts.critical > 0 ? 'error' : 'warning'}
               icon={<NotificationsActiveIcon />}
-              label={`${node.alerts.active} ${node.alerts.active === 1 ? 'alert' : 'alerts'}${node.alerts.critical > 0 ? `, ${node.alerts.critical} critical` : ''}`}
+              label={`${node.alerts.active} ${pick(lang, node.alerts.active === 1 ? 'alert' : 'alerts', node.alerts.active === 1 ? 'alerta' : 'alertas')}${node.alerts.critical > 0 ? `, ${node.alerts.critical} ${pick(lang, 'critical', node.alerts.critical === 1 ? 'crítica' : 'críticas')}` : ''}`}
               data-testid="alert-chip"
             />
           ) : null}
@@ -184,9 +192,10 @@ export function NodeCard({ node, now = new Date(), timeZone, actions }: NodeCard
 
 /** The "▲ update available" mark: an icon with a text alternative. */
 function Behind({ what }: { what: 'agent' | 'catalog' }) {
+  const es = useLang() === 'es';
   return (
     <Status color="warning" icon={<ArrowCircleUpIcon fontSize="inherit" />}>
-      {what === 'agent' ? 'update available' : 'catalog behind'}
+      {what === 'agent' ? (es ? 'hay una actualización' : 'update available') : es ? 'catálogo atrasado' : 'catalog behind'}
     </Status>
   );
 }

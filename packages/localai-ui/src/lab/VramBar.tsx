@@ -1,5 +1,6 @@
 import { Box, LinearProgress, Typography } from '@mui/material';
 
+import { useLang } from '../lang';
 import { formatGiB, vramPercent } from './format';
 
 export interface VramBarProps {
@@ -9,6 +10,7 @@ export interface VramBarProps {
 
 /** "VRAM [bar] 61 GB / 96 GB". Turns amber from 90% and red from 98%; the numbers are always printed. */
 export function VramBar({ usedMib, totalMib }: VramBarProps) {
+  const es = useLang() === 'es';
   const percent = vramPercent(usedMib, totalMib);
   const color = percent >= 98 ? 'error' : percent >= 90 ? 'warning' : 'primary';
   const text = `${formatGiB(usedMib)} GB / ${formatGiB(totalMib)} GB`;
@@ -21,7 +23,7 @@ export function VramBar({ usedMib, totalMib }: VramBarProps) {
         variant="determinate"
         value={percent}
         color={color}
-        aria-label={`VRAM in use: ${text}`}
+        aria-label={es ? `VRAM en uso: ${text}` : `VRAM in use: ${text}`}
         sx={{ flex: 1, height: 8, borderRadius: 4 }}
       />
       <Typography variant="caption" component="span" sx={{ whiteSpace: 'nowrap' }}>
