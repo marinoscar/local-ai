@@ -3,18 +3,22 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { Chip } from '@mui/material';
 
+import { useLang } from '@localai/ui';
+
 import type { AlertSeverity } from './types';
 
 /** The word beside the icon: colour is never the only signal. */
 export const SEVERITY_WORD: Record<AlertSeverity, string> = { critical: 'critical', warning: 'warning', info: 'info' };
+export const SEVERITY_WORD_ES: Record<AlertSeverity, string> = { critical: 'crítica', warning: 'aviso', info: 'info' };
 
 /** Severity as icon + word + colour (red / amber / blue). */
 export function SeverityChip({ severity }: { severity: AlertSeverity }) {
+  const words = useLang() === 'es' ? SEVERITY_WORD_ES : SEVERITY_WORD;
   const props = {
     critical: { color: 'error', icon: <ErrorIcon /> },
     warning: { color: 'warning', icon: <WarningAmberIcon /> },
     info: { color: 'info', icon: <InfoOutlinedIcon /> },
   } as const;
   const { color, icon } = props[severity];
-  return <Chip size="small" color={color} icon={icon} label={SEVERITY_WORD[severity]} data-testid="severity-chip" data-severity={severity} sx={{ flexShrink: 0 }} />;
+  return <Chip size="small" color={color} icon={icon} label={words[severity]} data-testid="severity-chip" data-severity={severity} sx={{ flexShrink: 0 }} />;
 }

@@ -1,6 +1,7 @@
 import StarIcon from '@mui/icons-material/Star';
 import { Box, Typography } from '@mui/material';
 
+import { useLang } from '../lang';
 import type { LoadedModel } from './types';
 
 export interface ModelListProps {
@@ -11,12 +12,14 @@ export interface ModelListProps {
    * `models` is then ignored.
    */
   lastDefault?: string | null;
-  /** The title above the list. Default "Loaded:". */
+  /** The title above the list. Default "Loaded:" ("Cargados:"). */
   title?: string;
 }
 
 /** The loaded models, one per line, `★` after the default one (the star has a text alternative). */
-export function ModelList({ models, lastDefault, title = 'Loaded:' }: ModelListProps) {
+export function ModelList({ models, lastDefault, title }: ModelListProps) {
+  const es = useLang() === 'es';
+  const heading = title ?? (es ? 'Cargados:' : 'Loaded:');
   const showLast = lastDefault !== undefined;
   const rows: Array<{ id: string; isDefault: boolean; last: boolean }> = showLast
     ? lastDefault === null
@@ -26,11 +29,11 @@ export function ModelList({ models, lastDefault, title = 'Loaded:' }: ModelListP
   return (
     <Box data-testid="model-list">
       <Typography variant="caption" color="text.secondary" component="div">
-        {showLast ? 'Last default:' : title}
+        {showLast ? (es ? 'Último predeterminado:' : 'Last default:') : heading}
       </Typography>
       {rows.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          No model loaded
+          {es ? 'Ningún modelo cargado' : 'No model loaded'}
         </Typography>
       ) : (
         <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -42,10 +45,10 @@ export function ModelList({ models, lastDefault, title = 'Loaded:' }: ModelListP
               <Typography variant="body2" component="span" sx={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>
                 {row.id}
               </Typography>
-              {row.isDefault ? <StarIcon fontSize="inherit" titleAccess="default model" color="warning" /> : null}
+              {row.isDefault ? <StarIcon fontSize="inherit" titleAccess={es ? 'modelo predeterminado' : 'default model'} color="warning" /> : null}
               {row.last ? (
                 <Typography variant="caption" color="text.secondary" component="span">
-                  (last)
+                  {es ? '(último)' : '(last)'}
                 </Typography>
               ) : null}
             </Box>

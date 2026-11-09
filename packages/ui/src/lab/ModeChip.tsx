@@ -4,6 +4,7 @@ import PowerIcon from '@mui/icons-material/Power';
 import PowerOffIcon from '@mui/icons-material/PowerOff';
 import { Chip } from '@mui/material';
 
+import { useLang } from '../lang';
 import type { LabMode } from './types';
 
 export interface ModeChipProps {
@@ -16,14 +17,15 @@ export interface ModeChipProps {
  * word "Survival", unknown = grey. Colour + word + icon.
  */
 export function ModeChip({ mode, size = 'small' }: ModeChipProps) {
+  const es = useLang() === 'es';
   switch (mode) {
     case 'online':
-      return <Chip size={size} color="success" variant="outlined" icon={<PowerIcon />} label="Online" data-testid="mode-chip" data-mode="online" />;
+      return <Chip size={size} color="success" variant="outlined" icon={<PowerIcon />} label={es ? 'En línea' : 'Online'} data-testid="mode-chip" data-mode="online" />;
     case 'offline':
-      return <Chip size={size} color="warning" variant="outlined" icon={<PowerOffIcon />} label="Offline" data-testid="mode-chip" data-mode="offline" />;
+      return <Chip size={size} color="warning" variant="outlined" icon={<PowerOffIcon />} label={es ? 'Sin conexión' : 'Offline'} data-testid="mode-chip" data-mode="offline" />;
     case 'survival':
-      return <Chip size={size} color="secondary" variant="filled" icon={<HealthAndSafetyIcon />} label="Survival" data-testid="mode-chip" data-mode="survival" />;
+      return <Chip size={size} color="secondary" variant="filled" icon={<HealthAndSafetyIcon />} label={es ? 'Supervivencia' : 'Survival'} data-testid="mode-chip" data-mode="survival" />;
     default:
-      return <Chip size={size} variant="outlined" icon={<QuestionMarkIcon />} label="Unknown" data-testid="mode-chip" data-mode="unknown" />;
+      return <Chip size={size} variant="outlined" icon={<QuestionMarkIcon />} label={es ? 'Desconocido' : 'Unknown'} data-testid="mode-chip" data-mode="unknown" />;
   }
 }

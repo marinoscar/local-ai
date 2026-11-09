@@ -36,6 +36,8 @@ import { LabOverviewPage } from './localai/lab/LabOverviewPage';
 import { Route53KeyPage } from './localai/vps/Route53KeyPage';
 import { AddNodeWizard } from './localai/wizard/AddNodeWizard';
 import { NodeDetailPage } from './localai/node/NodeDetailPage';
+import { LanguageProvider } from './i18n/LanguageProvider';
+import { LanguageSwitch } from './i18n/LanguageSwitch';
 import { AppPlatformHost } from './platformHost';
 import {
   beforeLogout,
@@ -102,7 +104,12 @@ function AppShell() {
         <ShellAppBar
           navigation={NAVIGATION}
           brand={APP_NAME}
-          actions={<Slot components={sliceAppBarActions} />}
+          actions={
+            <>
+              <LanguageSwitch />
+              <Slot components={sliceAppBarActions} />
+            </>
+          }
           userMenu={
             <ShellUserMenu
               navigation={NAVIGATION}
@@ -229,7 +236,9 @@ export default function App() {
       {/* Every packaged time renders in the signed-in user's profile time zone (cleared on sign-out). */}
       <UserTimeZoneSync api={platformApi} />
       <IdentityWebAdaptersProvider adapters={{ appName: APP_NAME }}>
-        <AppRoutes />
+        <LanguageProvider>
+          <AppRoutes />
+        </LanguageProvider>
       </IdentityWebAdaptersProvider>
     </AuthProvider>
   );
