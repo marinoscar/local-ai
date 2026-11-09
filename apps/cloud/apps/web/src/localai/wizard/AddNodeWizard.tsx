@@ -18,10 +18,12 @@ import { StepInstall } from './StepInstall';
 import { StepPublish } from './StepPublish';
 import { defaultWizardClient, type WizardClient } from './wizardApi';
 import type { CreateNodeResult, NodeStatus } from './wizardTypes';
+import { useT } from '../../i18n/LanguageProvider';
 import { usePolled } from './usePolled';
 
 export const STATUS_POLL_MS = 3000;
 const STEP_LABELS = ['Describe the node', 'Install on the node', 'Publish it (VPS)'] as const;
+const STEP_LABELS_ES = ['Describa el nodo', 'Instale en el nodo', 'Publíquelo (VPS)'] as const;
 const NODE_PARAM = /^ai-n[1-9][0-9]{0,3}$/;
 
 export interface AddNodeWizardProps {
@@ -33,6 +35,8 @@ export interface AddNodeWizardProps {
 type Created = Omit<CreateNodeResult, 'credential'> & { prefix: string };
 
 export function AddNodeWizard({ client = defaultWizardClient }: AddNodeWizardProps) {
+  const t = useT();
+  const labels = t('en', 'es') === 'es' ? STEP_LABELS_ES : STEP_LABELS;
   const { hasPermission } = usePermissions();
   const [params] = useSearchParams();
   const resumeId = params.get('node');
@@ -78,7 +82,7 @@ export function AddNodeWizard({ client = defaultWizardClient }: AddNodeWizardPro
   if (!hasPermission('lab:admin')) {
     return (
       <Alert severity="warning" data-testid="not-allowed">
-        Only administrators can add a node.
+        {t('Only administrators can add a node.', 'Solo los administradores pueden agregar un nodo.')}
       </Alert>
     );
   }
@@ -87,22 +91,22 @@ export function AddNodeWizard({ client = defaultWizardClient }: AddNodeWizardPro
     <Box component="section" aria-labelledby="wizard-title" sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, justifyContent: 'space-between' }}>
         <Typography id="wizard-title" variant="h4" component="h1">
-          Add node
+          {t('Add node', 'Agregar nodo')}
         </Typography>
         <Button component={RouterLink} to="/lab" variant="text">
-          {step === 2 ? 'Back to the lab' : 'Cancel'}
+          {step === 2 ? t('Back to the lab', 'Volver al laboratorio') : t('Cancel', 'Cancelar')}
         </Button>
       </Box>
 
-      <Stepper activeStep={step} alternativeLabel aria-label="Progress" sx={{ '& .MuiStepLabel-label': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}>
-        {STEP_LABELS.map((label, index) => (
+      <Stepper activeStep={step} alternativeLabel aria-label={t('Progress', 'Progreso')} sx={{ '& .MuiStepLabel-label': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}>
+        {labels.map((label, index) => (
           <Step key={label} completed={index < step}>
             <StepLabel>{label}</StepLabel>
           </Step>
         ))}
       </Stepper>
       <Typography variant="overline" color="text.secondary" aria-live="polite">
-        Step {step + 1} of 3 &middot; {STEP_LABELS[step]}
+        {t('Step', 'Paso')} {step + 1} {t('of', 'de')} 3 &middot; {labels[step]}
       </Typography>
 
       {step === 0 ? <StepDescribe client={client} onCreated={onCreated} /> : null}
