@@ -81,10 +81,12 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
    ```
    cd ~
    curl -fsSL https://github.com/marinoscar/local-ai/releases/download/node-v<version>/install-node.sh -o install-node.sh
-   sha256sum install-node.sh
+   echo "<checksum from the wizard>  install-node.sh" | sha256sum -c
    ```
 
-   - **What you should see:** a 64-character value. It must equal the checksum in the wizard. If it doesn't, **stop** and don't run it. If the wizard says "Checksum unknown, check the release page", compare with the `install-node.sh` line of `SHA256SUMS` on the release page it links.
+   The wizard shows this whole `echo ... | sha256sum -c` line with the checksum already filled in: press **Copy** on it and paste it. You never compare 64 characters by eye.
+   - **What you should see:** `install-node.sh: OK`.
+   - **If it doesn't work:** `install-node.sh: FAILED` means the file is not the one that was released: **stop** and don't run it; download it again. If the wizard says "Checksum unknown, check the release page", download `SHA256SUMS` from the release page it links (same folder, same `node-v<version>`) and run `sha256sum -c --ignore-missing SHA256SUMS`, which must print `install-node.sh: OK`.
 10. **The easy way: run it and answer the questions.**
 
     ```
@@ -126,7 +128,7 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
     sudo reboot
     ```
 
-13. **Log in again** and check:
+13. **Log in again** and check. Easiest: open the **Local AI** app (or `http://127.0.0.1:7070`) and press **7 Status and battery**: it says whether everything works and lists each problem with its fix. Or open a terminal, type `aictl`, press **Enter**, and press **1** (*See the state of this computer*), then **2** (*Find and fix problems*). The typed commands, which do the same:
 
     ```
     aictl status

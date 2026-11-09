@@ -96,7 +96,7 @@ How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting
 
     - **What you should see:** a list of items with sizes and a total, for example "Will download 900 GB".
 
-15. **Start the fill.** The node must be in **online** mode, on internet, plugged into power. Leave it overnight.
+15. **Start the fill.** The node must be in **online** mode, on internet, plugged into power. Leave it overnight. Open a terminal (**Ctrl + Alt + T**), type `aictl` and press **Enter**; in the menu press **6** (*Offline content and the AI-ARK drive*) and choose **Download and update the content (needs internet)** (it fills every connected drive). The typed command, which can also name one drive:
 
     ```
     aictl ark sync --root <root-id> --wait
@@ -115,7 +115,7 @@ How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting
     - **What you should see:** `✓ Saved …/localai/kit/config/<node-id>/localai-config-<node-id>-<date>.tar.gz (… files, includes secrets — keep it private).` The drive keeps the last 5 backups of each computer in `localai/kit/config/<node-id>/`. [06](06-rebuild-a-node-offline.md) step 11 restores it.
     - **If it doesn't work:** `LAI-CLI-006`: you forgot `sudo`. `LAI-CLI-012`: the drive is full or read-only (the message names the file).
 
-17. **Check the rebuild kit on the drive** (the part that rebuilds a computer with no internet):
+17. **Check the rebuild kit on the drive** (the part that rebuilds a computer with no internet). In the `aictl` menu press **7** (*Repair with no internet*) and choose **Is the rebuild kit complete?**. The typed command:
 
     ```
     aictl kit status --root <root-id>
@@ -129,7 +129,7 @@ How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting
 ## Part 4. Plugging in and reading the colours
 
 18. **Plug it into any node.** Wait about 10 seconds. The node finds it by itself; it never formats or erases a drive.
-19. **Check it:**
+19. **Check it.** Easiest: the Portal's **7 Status** screen or the desktop app show the drive and its colour. In the `aictl` menu, press **6** and choose **How complete is the offline content?**, then **The AI-ARK drive itself** and **List the connected drives**. The typed commands:
 
     ```
     aictl ark drives
@@ -158,7 +158,7 @@ How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting
 
 ## Part 5. Safe eject
 
-20. **Desktop:** press **Eject**. **Terminal:**
+20. **Desktop or Portal:** press **Eject**. **Menu:** `aictl`, then **6**, **The AI-ARK drive itself**, **Safely remove a drive**, and pick the drive. **Typed command:**
 
     ```
     aictl ark eject <root-id>
@@ -196,7 +196,7 @@ How it works in detail: [ark-sync.md §4.17](../specs/ark-sync.md#417-formatting
 ## Part 7. Using the drive to serve or import on any node
 
 25. **Serve directly from the drive.** Just plug it in. Models on it become loadable (they start more slowly from a USB drive; the node waits twice as long before giving up), its books join the library, and its maps appear. Nothing is copied.
-26. **Copy content into the computer** (faster and survives losing the drive). Works in every mode, with no internet:
+26. **Copy content into the computer** (faster and survives losing the drive). Works in every mode, with no internet. Press **Copy from the AI-ARK drive** in the Portal or the desktop app, or in the `aictl` menu press **6** and choose **Copy content from the AI-ARK drive (no internet)**. The typed commands:
 
     ```
     aictl ark import --dry-run
@@ -480,7 +480,7 @@ Use this when a computer has **no internet** (or you are in offline or survival 
     - **What you should see:** nothing extra when the drive's catalog is not newer. When it is newer and valid, it is installed first and the plan uses it.
     - **If it doesn't work:** `LAI-CAT-002` in the warnings: the catalog on the drive is not valid. The import goes on with the catalog the computer already has; nothing is lost. Tell the maintainer.
 
-50. **Check the result:**
+50. **Check the result.** The Portal's **7 Status** screen shows the same percentages; in the `aictl` menu press **6** and choose **How complete is the offline content?**. The typed command:
 
     ```
     aictl ark status
@@ -504,7 +504,7 @@ Disks wear out silently: a file can change one bit and still look fine. The comp
 
 > 🛠 Verify when implemented (Epic E3 re-verification).
 
-51. **Check one item:**
+51. **Check one item.** (The `aictl` menu, **6**, **Check that the content is not damaged**, checks everything; to check a single item, type:)
 
     ```
     aictl ark verify --item whisper-small --wait
@@ -513,7 +513,7 @@ Disks wear out silently: a file can change one bit and still look fine. The comp
     - **What you should see:** `✓ Check finished: 1 verified, 0 with problems.`
     - **If it doesn't work:** `LAI-SYN-025`: the stored file no longer matches its checksum. What happened is told on screen: the damaged copy was **set aside** (moved to the `quarantine` folder, not deleted) or, if an older good version was kept, **put back**. Go to step 53.
 
-52. **Check everything now** (ignores how recently each item was checked):
+52. **Check everything now** (ignores how recently each item was checked). In the `aictl` menu press **6** and choose **Check that the content is not damaged**, or type:
 
     ```
     aictl ark verify --full --wait
