@@ -1,0 +1,3 @@
+[model-gamma]
+model = @MODEL@
+chat-template-file = http://templates.example.test/gamma.jinja

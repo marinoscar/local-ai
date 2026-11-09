@@ -1,0 +1,9 @@
+version = 1
+
+[*]
+stop-timeout = 10
+
+[model-alpha-9b-q4]
+model = @MODEL@
+hf-repo = org-alpha/model-alpha-9b-GGUF
+c = 32768

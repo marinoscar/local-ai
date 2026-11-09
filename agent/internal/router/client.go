@@ -13,10 +13,10 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/logx"
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
 
 // Defaults of the client (llama-router.md section 3.6).
@@ -210,24 +210,13 @@ func loopbackHost(h string) bool {
 
 // newTransport is the hardened default: no proxy, loopback dials only, no compression.
 func newTransport() *http.Transport {
-	d := &net.Dialer{
-		Timeout: 3 * time.Second,
-		// Refuse to connect anywhere but loopback, whatever the name resolved to.
-		Control: func(_, address string, _ syscall.RawConn) error {
-			host, _, err := net.SplitHostPort(address)
-			if err != nil || !loopbackHost(host) {
-				return errors.New("router: refusing to dial a non-loopback address")
-			}
-			return nil
-		},
-	}
-	return &http.Transport{
-		Proxy:              nil,
-		DialContext:        d.DialContext,
-		MaxIdleConns:       2,
-		IdleConnTimeout:    30 * time.Second,
-		DisableCompression: true,
-	}
+	// Refuse to connect anywhere but loopback, whatever the name resolved to; and, like every client of the
+	// agent, dial through the network fence (netx).
+	tr := netx.NewTransport("router", netx.LoopbackDial(3*time.Second))
+	tr.MaxIdleConns = 2
+	tr.IdleConnTimeout = 30 * time.Second
+	tr.DisableCompression = true
+	return tr
 }
 
 // route is one entry of the allow list: the only calls the client can make.

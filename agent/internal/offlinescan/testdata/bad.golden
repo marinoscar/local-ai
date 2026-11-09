@@ -1,0 +1,5 @@
+app.js:2: https://unpkg.com/x.js
+app.js:2: forbidden name "unpkg"
+portal.html:2: https://example.org/ads.js
+style.css:1: https://fonts.googleapis.com/css2?family=Inter
+style.css:1: forbidden name "fonts.googleapis"
