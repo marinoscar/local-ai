@@ -140,7 +140,7 @@ func (n *node) deps() ModelDeps {
 }
 
 // run executes a check against a fresh env.
-func run(t *testing.T, c drill.Check, env *drill.Env) drill.Outcome {
+func runChk(t *testing.T, c drill.Check, env *drill.Env) drill.Outcome {
 	t.Helper()
 	if env == nil {
 		env = &drill.Env{RunID: "drl-test"}

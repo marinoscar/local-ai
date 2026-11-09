@@ -11,7 +11,7 @@ import (
 
 func fitOutcome(t *testing.T, n *node) drill.Outcome {
 	t.Helper()
-	return run(t, FitCheck(n.deps()), nil)
+	return runChk(t, FitCheck(n.deps()), nil)
 }
 
 func TestFitAllModelsFit(t *testing.T) {

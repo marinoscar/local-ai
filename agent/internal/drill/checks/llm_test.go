@@ -30,7 +30,7 @@ func TestLLMAnswerPass(t *testing.T) {
 	n := oneModelNode(t, "cuda")
 	n.models.loadInfo = drill.LoadInfo{LoadMS: 4200}
 	n.chat.seq = []answer{{text: "READY", tps: 31.44}}
-	out := run(t, answerCheck(t, n, "text-a"), nil)
+	out := runChk(t, answerCheck(t, n, "text-a"), nil)
 	if out.Result != drill.ResultPass || out.Code != "" {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -50,7 +50,7 @@ func TestLLMAnswerIsCaseInsensitive(t *testing.T) {
 	for _, text := range []string{"READY", "ready", "Ready.", "  rEaDy\n", "I am ready"} {
 		n := oneModelNode(t, "cuda")
 		n.chat.seq = []answer{{text: text, tps: 20}}
-		if out := run(t, answerCheck(t, n, "text-a"), nil); out.Result != drill.ResultPass {
+		if out := runChk(t, answerCheck(t, n, "text-a"), nil); out.Result != drill.ResultPass {
 			t.Errorf("answer %q: %+v", text, out)
 		}
 	}
@@ -76,7 +76,7 @@ func TestLLMAnswerSpeedFloor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			n := oneModelNode(t, tt.backend)
 			n.chat.seq = []answer{{text: "READY", tps: tt.tps}}
-			out := run(t, answerCheck(t, n, "text-a"), nil)
+			out := runChk(t, answerCheck(t, n, "text-a"), nil)
 			if out.Result != tt.want || out.Code != tt.code {
 				t.Fatalf("outcome = %+v", out)
 			}
@@ -93,7 +93,7 @@ func TestSpeedFloorByBackend(t *testing.T) {
 func TestLLMAnswerWithoutTimingsCannotJudgeSpeed(t *testing.T) {
 	n := oneModelNode(t, "cuda")
 	n.chat.seq = []answer{{text: "READY"}}
-	out := run(t, answerCheck(t, n, "text-a"), nil)
+	out := runChk(t, answerCheck(t, n, "text-a"), nil)
 	if out.Result != drill.ResultPass || out.Details["speed_known"] != false {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -102,7 +102,7 @@ func TestLLMAnswerWithoutTimingsCannotJudgeSpeed(t *testing.T) {
 func TestLLMAnswerRetriesOnceThenPasses(t *testing.T) {
 	n := oneModelNode(t, "cuda")
 	n.chat.seq = []answer{{text: "Hello!", tps: 20}, {text: "READY", tps: 20}}
-	out := run(t, answerCheck(t, n, "text-a"), nil)
+	out := runChk(t, answerCheck(t, n, "text-a"), nil)
 	if out.Result != drill.ResultPass || out.Details["attempts"] != 2 {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -111,7 +111,7 @@ func TestLLMAnswerRetriesOnceThenPasses(t *testing.T) {
 func TestLLMAnswerWrongTwiceFailsWith022(t *testing.T) {
 	n := oneModelNode(t, "cuda")
 	n.chat.seq = []answer{{text: "Hello!", tps: 20}, {text: "Sure, anything else?", tps: 20}}
-	out := run(t, answerCheck(t, n, "text-a"), nil)
+	out := runChk(t, answerCheck(t, n, "text-a"), nil)
 	if out.Result != drill.ResultFail || out.Code != doctor.DRL022 || out.Details["attempts"] != 2 || out.Details["reason"] != "wrong_answer" {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -126,7 +126,7 @@ func TestLLMAnswerWrongTwiceFailsWith022(t *testing.T) {
 func TestLLMAnswerNoAnswerTwiceFailsWith022(t *testing.T) {
 	n := oneModelNode(t, "cuda")
 	n.chat.seq = []answer{{err: errors.New("router down")}}
-	out := run(t, answerCheck(t, n, "text-a"), nil)
+	out := runChk(t, answerCheck(t, n, "text-a"), nil)
 	if out.Result != drill.ResultFail || out.Code != doctor.DRL022 || out.Details["reason"] != "no_answer" || out.Details["error"] == nil {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -135,7 +135,7 @@ func TestLLMAnswerNoAnswerTwiceFailsWith022(t *testing.T) {
 func TestLLMAnswerLoadFailureIs020AndNothingIsAsked(t *testing.T) {
 	n := oneModelNode(t, "cuda")
 	n.models.failLoad["text-a"] = &drill.ModelError{Code: "LAI-LLM-012", Message: "the model did not start"}
-	out := run(t, answerCheck(t, n, "text-a"), nil)
+	out := runChk(t, answerCheck(t, n, "text-a"), nil)
 	if out.Result != drill.ResultFail || out.Code != doctor.DRL020 || out.Details["load_code"] != "LAI-LLM-012" || out.Details["reason"] != "load_failed" {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -149,8 +149,8 @@ func TestLLMAnswerLoadFailureDoesNotStopTheNextModel(t *testing.T) {
 	n.models.failLoad["text-a"] = errors.New("out of memory")
 	n.chat.seq = []answer{{text: "READY", tps: 20}}
 	cs := expand(t, LLMAnswerChecks(n.deps()))
-	a := run(t, cs[0], nil)
-	b := run(t, cs[1], nil)
+	a := runChk(t, cs[0], nil)
+	b := runChk(t, cs[1], nil)
 	if a.Result != drill.ResultFail || a.Code != doctor.DRL020 || b.Result != drill.ResultPass {
 		t.Fatalf("a = %+v, b = %+v", a, b)
 	}
@@ -161,7 +161,7 @@ func TestLLMAnswerDisablesThinkingForReasoningModels(t *testing.T) {
 	m.ClientHints = &catalog.ClientHints{Reasoning: true}
 	n := newNode(t, 1, "think-a", []string{"think-a"}, m)
 	n.chat.seq = []answer{{text: "READY", tps: 20}}
-	run(t, answerCheck(t, n, "think-a"), nil)
+	runChk(t, answerCheck(t, n, "think-a"), nil)
 	if rq := n.chat.requests(); len(rq) != 1 || !rq[0].DisableThinking {
 		t.Fatalf("requests = %+v", rq)
 	}

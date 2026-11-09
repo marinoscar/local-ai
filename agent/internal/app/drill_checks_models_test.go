@@ -160,6 +160,9 @@ func TestDrillWhisperRunning(t *testing.T) {
 // startDrill starts a drill, waiting while a model operation of the startup still holds llama busy.
 func startDrill(t *testing.T, d *Daemon, req drill.StartRequest) drill.Document {
 	t.Helper()
+	// Only the model checks: the content checks of the same drill (check 4 hashes the rig's stub models
+	// against catalog digests and quarantines them) would change the node under these tests.
+	req.Only = []string{"drl.llm", "drl.vlm", "drl.restore"}
 	eng := d.Components().Drill
 	var res drill.StartResult
 	var err error

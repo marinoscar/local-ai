@@ -43,7 +43,7 @@ func TestVLMPhotoAnswers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			n := visionNode(t)
 			n.chat.seq = []answer{tt.answer}
-			out := run(t, photoCheck(t, n), nil)
+			out := runChk(t, photoCheck(t, n), nil)
 			if out.Result != tt.want || out.Code != tt.code {
 				t.Fatalf("outcome = %+v", out)
 			}
@@ -58,7 +58,7 @@ func TestVLMPhotoSendsTheImageAndTheQuestion(t *testing.T) {
 	n := visionNode(t)
 	n.models.loadInfo = drill.LoadInfo{LoadMS: 9000}
 	n.chat.seq = []answer{{text: "7"}}
-	out := run(t, photoCheck(t, n), nil)
+	out := runChk(t, photoCheck(t, n), nil)
 	if out.Details["load_ms"] != int64(9000) || out.Details["answer"] != "7" {
 		t.Fatalf("details = %v", out.Details)
 	}
@@ -75,7 +75,7 @@ func TestVLMPhotoSendsTheImageAndTheQuestion(t *testing.T) {
 func TestVLMPhotoLoadFailureIs020(t *testing.T) {
 	n := visionNode(t)
 	n.models.failLoad["vis-c"] = &drill.ModelError{Code: "LAI-LLM-012", Message: "did not start"}
-	out := run(t, photoCheck(t, n), nil)
+	out := runChk(t, photoCheck(t, n), nil)
 	if out.Result != drill.ResultFail || out.Code != doctor.DRL020 || len(n.chat.requests()) != 0 {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -109,7 +109,7 @@ func TestVLMPhotoReasoningModelHasThinkingDisabled(t *testing.T) {
 	m.ClientHints = &catalog.ClientHints{Reasoning: true}
 	n := newNode(t, 1, "vis-c", []string{"vis-c"}, m)
 	n.chat.seq = []answer{{text: "7"}}
-	run(t, photoCheck(t, n), nil)
+	runChk(t, photoCheck(t, n), nil)
 	if rq := n.chat.requests(); len(rq) != 1 || !rq[0].DisableThinking {
 		t.Fatalf("requests = %+v", rq)
 	}
@@ -121,7 +121,7 @@ func TestVLMPhotoWithoutAVisionModelIsOneSkippedCheck(t *testing.T) {
 	if got := ids(cs); !reflect.DeepEqual(got, []string{"drl.vlm.photo"}) {
 		t.Fatalf("checks = %v", got)
 	}
-	out := run(t, cs[0], nil)
+	out := runChk(t, cs[0], nil)
 	if out.Result != drill.ResultSkip || out.Details["reason"] != "no_vision_model" || cs[0].Critical {
 		t.Fatalf("outcome = %+v critical %v", out, cs[0].Critical)
 	}
