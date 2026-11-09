@@ -449,6 +449,7 @@ Today's nodes run a hand-made `llama-qwen.service`. The migration swaps it for `
     - **What you should see:** the migration report: downtime (for example 14 s), model id and old alias, the key fingerprint, serve listeners **unchanged**, and **clients to update: none**.
     - **If it doesn't work:**
       - `LAI-LLM-017` "settings differ": the old unit's flags differ from the catalog. Read the diff. If the catalog's values are right, re-run the migration with `sudo aiagent migrate llama-qwen --accept-catalog-flags`; otherwise fix the catalog first. This is expected on **ai-n2**, whose flags were never written down.
+      - `LAI-LLM-017` "the old service's user cannot read ...": the folders above the model are closed to the user of `llama-qwen.service`, so the old service could not start again after a rollback. The migration opens them itself (only the right to walk through, never to read or list); if it still stops here, run `sudo chmod o+x /srv/localai /srv/localai/models` and run it again. Nothing was stopped: the old service is still serving.
       - If anything fails after the switch, the migration **rolls back by itself**: `llama-qwen.service` runs again as before and the installer stops with `LAI-INS-033`.
       - `LAI-LLM-029` (interrupted): run `sudo aiagent migrate llama-qwen` again; it continues.
 40. **Check the result:**

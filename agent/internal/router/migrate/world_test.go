@@ -386,9 +386,23 @@ func (x *fakeExec) Run(_ context.Context, c execx.Cmd) (execx.Result, error) {
 		}
 		return ok("")
 	case base == "runuser" && len(c.Args) >= 6 && c.Args[3] == "test":
-		fi, err := w.fs.Stat(c.Args[len(c.Args)-1])
-		if err != nil || w.unreadable[c.Args[len(c.Args)-1]] || fi.Mode().Perm()&0o004 == 0 {
+		file := c.Args[len(c.Args)-1]
+		fi, err := w.fs.Stat(file)
+		if err != nil || w.unreadable[file] || fi.Mode().Perm()&0o004 == 0 {
 			return exit(1)
+		}
+		if c.Args[1] != ServiceUser {
+			// Another user (the old unit's) must also be able to walk down to the file: every directory
+			// above it needs o+x, which is what a 0750 /srv/localai refused (#150).
+			if w.legacyUnreadable {
+				return exit(1)
+			}
+			for d := path.Dir(file); d != "/" && d != "."; d = path.Dir(d) {
+				di, err := w.fs.Stat(d)
+				if err != nil || di.Mode().Perm()&0o001 == 0 {
+					return exit(1)
+				}
+			}
 		}
 		return exit(0)
 	case base == "runuser":
@@ -670,21 +684,23 @@ type world struct {
 	draft            []byte
 
 	// Behaviour switches of the tests.
-	newBroken       bool
-	loadPolls       int
-	loadFails       bool
-	noAuth          bool
-	missingAlias    bool
-	chatStatus      int
-	v1Status        int
-	nctx            int
-	publicBefore    int
-	publicAfter     int
-	publicErr       bool
-	noTailscale     bool
-	strangerOnPort  bool
-	unreadable      map[string]bool
-	newBinaryBroken bool
+	newBroken      bool
+	loadPolls      int
+	loadFails      bool
+	noAuth         bool
+	missingAlias   bool
+	chatStatus     int
+	v1Status       int
+	nctx           int
+	publicBefore   int
+	publicAfter    int
+	publicErr      bool
+	noTailscale    bool
+	strangerOnPort bool
+	unreadable     map[string]bool
+	// legacyUnreadable makes every model unreadable for the old unit's user, whatever the modes say.
+	legacyUnreadable bool
+	newBinaryBroken  bool
 	// oldRouterFlags makes the new llama-server lack --models-memory-margin (llama.cpp before #21231).
 	oldRouterFlags bool
 	currentBroken  bool

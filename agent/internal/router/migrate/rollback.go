@@ -181,7 +181,13 @@ func (e *Engine) r3RestoreKey(_ context.Context, _ *Plan, _ bool) error {
 
 // R4: the symbolic links keep the old -m paths valid, so nothing has to move. With --restore-files the
 // files go back (same filesystem only), owned by the old unit's user.
-func (e *Engine) r4Files(_ context.Context, p *Plan, restore bool) error {
+func (e *Engine) r4Files(ctx context.Context, p *Plan, restore bool) error {
+	if !restore && e.oldServiceCannotRead(ctx, p) {
+		// The links keep the old -m valid only when the old user can follow them. When it cannot, starting the
+		// old service would fail (the 5 minute outage of the first run on ai-n2, #158): put the files back.
+		e.warnf("%s cannot read the models at their new place, so they go back to their old paths; otherwise %s would not start", p.User, e.legacy())
+		restore = true
+	}
 	if !restore {
 		return nil
 	}
@@ -206,6 +212,28 @@ func (e *Engine) r4Files(_ context.Context, p *Plan, restore bool) error {
 		}
 	}
 	return nil
+}
+
+// oldServiceCannotRead is true when a model that was moved (its old path is a link to the new one) cannot
+// be read by the old unit's user.
+func (e *Engine) oldServiceCannotRead(ctx context.Context, p *Plan) bool {
+	user := e.legacyUserToCheck(p)
+	if user == "" {
+		return false
+	}
+	for _, f := range p.Files {
+		fi, err := e.fs.Lstat(f.Old)
+		if err != nil || !isLink(fi) {
+			continue
+		}
+		if t, err := e.fs.Readlink(f.Old); err != nil || t != f.New {
+			continue
+		}
+		if !e.canRead(ctx, user, f.Old) {
+			return true
+		}
+	}
+	return false
 }
 
 // restoreFile moves one file back to its old path; ok is false when it is left where it is.
