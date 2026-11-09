@@ -164,3 +164,28 @@ func (c *Clock) WaitPending(ctx context.Context, n int) error {
 		}
 	}
 }
+
+// WaitArmed blocks until a timer that fires exactly d from now is pending, or ctx ends. A test uses it to be
+// sure a loop has armed its own timer (and not another loop's) before it moves the clock.
+func (c *Clock) WaitArmed(ctx context.Context, d time.Duration) error {
+	for {
+		c.mu.Lock()
+		ok := false
+		for _, t := range c.timers {
+			if !t.stopped && !t.fired && t.at.Sub(c.now) == d {
+				ok = true
+				break
+			}
+		}
+		ch := c.changed
+		c.mu.Unlock()
+		if ok {
+			return nil
+		}
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}

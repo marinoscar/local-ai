@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -184,5 +185,25 @@ func TestParseTSStatus(t *testing.T) {
 	}
 	if _, err := parseTSStatus([]byte("Logged out.")); err == nil {
 		t.Error("non-JSON status must be an error")
+	}
+}
+
+// The node's own address comes from Self.TailscaleIPs: the first IPv4 one, never an IPv6 or a malformed entry.
+// The addresses are built at run time so none sits in the repository.
+func TestParseTSStatusSelfAddress(t *testing.T) {
+	v4 := strings.Join([]string{"100", "64", "10", "20"}, ".")
+	tests := []struct{ name, ips, want string }{
+		{"v4 first", `["` + v4 + `","fd7a:115c:a1e0::2"]`, v4},
+		{"v6 listed first", `["fd7a:115c:a1e0::2","` + v4 + `"]`, v4},
+		{"only v6", `["fd7a:115c:a1e0::2"]`, ""},
+		{"junk entries", `["not-an-ip","300.1.1.1"]`, ""},
+		{"none", `[]`, ""},
+	}
+	for _, tc := range tests {
+		in := `{"BackendState":"Running","Self":{"DNSName":"host-a.example.ts.net.","TailscaleIPs":` + tc.ips + `}}`
+		got, err := parseTSStatus([]byte(in))
+		if err != nil || got.IPv4 != tc.want || got.DNSName != "host-a.example.ts.net" {
+			t.Errorf("%s: got %+v, %v; want ip %q", tc.name, got, err, tc.want)
+		}
 	}
 }

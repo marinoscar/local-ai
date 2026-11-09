@@ -26,6 +26,7 @@ const (
 	RouteConfig     = "config"
 	RouteState      = "state"
 	RouteKey        = "key"
+	RouteTailnet    = "tailnet"
 	RouteCatalog    = "catalog"
 	RouteClaim      = "claim"
 	RouteRenew      = "renew"
@@ -119,19 +120,21 @@ type Server struct {
 	// Catalog is served by the catalog route; nil answers 404 LAI-CLD-013.
 	Catalog *Bundle
 
-	creds    map[string]bool // accepted credentials; empty accepts any
-	revoked  map[string]bool
-	nodes    map[string]*Node // by name
-	byID     map[string]*Node
-	nextID   int
-	script   map[string][]Reply
-	forever  map[string]Reply
-	reqs     []Request
-	lastSeq  map[string]int64
-	states   []json.RawMessage
-	keys     map[string]string // node id -> key
-	keyCount int
-	cmds     commandState
+	creds        map[string]bool // accepted credentials; empty accepts any
+	revoked      map[string]bool
+	nodes        map[string]*Node // by name
+	byID         map[string]*Node
+	nextID       int
+	script       map[string][]Reply
+	forever      map[string]Reply
+	reqs         []Request
+	lastSeq      map[string]int64
+	states       []json.RawMessage
+	keys         map[string]string // node id -> key
+	keyCount     int
+	tailnets     map[string]Tailnet
+	tailnetCount int
+	cmds         commandState
 	// holdClaims makes a claim without a job wait (a long poll); see HoldClaims.
 	holdClaims bool
 	holds      map[string]chan struct{} // route -> gate the next answer waits on
@@ -174,10 +177,10 @@ func New(t testing.TB) *Server {
 	t.Helper()
 	s := &Server{
 		changed: make(chan struct{}), Now: time.Now, ServerFeatures: []string{"node_host_vitals"}, StateEndpoint: true, KeyEndpoint: true,
-		Handshake: Handshake{APIVersion: 1, Features: []string{"state.v1", "commands.v1", "catalog.v1", "key.v1"}, CommandPlane: "localai",
+		Handshake: Handshake{APIVersion: 1, Features: []string{"state.v1", "commands.v1", "catalog.v1", "key.v1", "tailnet.v1"}, CommandPlane: "localai",
 			HeartbeatIntervalS: 15, StateMinIntervalS: 5, StateMaxIntervalS: 60, ClaimWaitMaxMs: 25000},
 		creds: map[string]bool{}, revoked: map[string]bool{}, nodes: map[string]*Node{}, byID: map[string]*Node{},
-		script: map[string][]Reply{}, forever: map[string]Reply{}, lastSeq: map[string]int64{}, keys: map[string]string{},
+		script: map[string][]Reply{}, forever: map[string]Reply{}, lastSeq: map[string]int64{}, keys: map[string]string{}, tailnets: map[string]Tailnet{},
 		holds: map[string]chan struct{}{}, done: make(chan struct{}),
 	}
 	mux := http.NewServeMux()
@@ -187,6 +190,7 @@ func New(t testing.TB) *Server {
 	mux.HandleFunc("GET /api/nodes/{id}/localai/config", s.route(RouteConfig, s.config))
 	mux.HandleFunc("POST /api/nodes/{id}/localai/state", s.route(RouteState, s.state))
 	mux.HandleFunc("POST /api/nodes/{id}/localai/key", s.route(RouteKey, s.key))
+	mux.HandleFunc("POST /api/nodes/{id}/localai/tailnet", s.route(RouteTailnet, s.tailnet))
 	mux.HandleFunc("GET /api/nodes/{id}/localai/catalog", s.route(RouteCatalog, s.catalog))
 	s.cmdRoutes(mux)
 	s.Server = httptest.NewTLSServer(mux)
@@ -616,6 +620,38 @@ func (s *Server) key(_ http.ResponseWriter, r *http.Request, raw []byte) (int, a
 	s.keys[n.ID] = b.Key
 	s.keyCount++
 	return 200, envelope(map[string]any{"keyHint": b.Key[:4] + "…" + b.Key[60:], "storedAt": s.Now().UTC().Format(time.RFC3339)})
+}
+
+// Tailnet is what a node reported through POST .../localai/tailnet.
+type Tailnet struct{ IP, Machine string }
+
+// TailnetOf returns what the node (the cloud's server node id) reported and how many reports arrived.
+func (s *Server) TailnetOf(nodeID string) (Tailnet, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.tailnets[nodeID], s.tailnetCount
+}
+
+func (s *Server) tailnet(_ http.ResponseWriter, r *http.Request, raw []byte) (int, any) {
+	n, ok := s.node(r)
+	if !ok {
+		return 404, errNoNode
+	}
+	var b struct {
+		IP      string `json:"ip"`
+		Machine string `json:"machine"`
+	}
+	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&b); err != nil || !strings.HasPrefix(b.IP, "100.") {
+		return 400, map[string]any{"error": map[string]any{"message": "Bad Request"}}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	same := s.tailnets[n.ID] == Tailnet{IP: b.IP, Machine: b.Machine}
+	s.tailnets[n.ID] = Tailnet{IP: b.IP, Machine: b.Machine}
+	s.tailnetCount++
+	return 200, envelope(map[string]any{"stored": !same})
 }
 
 func (s *Server) catalog(w http.ResponseWriter, r *http.Request, _ []byte) (int, any) {

@@ -355,7 +355,8 @@ func (d *Daemon) build(ctx context.Context) error {
 		Config: cfg, State: c.State, Credential: cloud.CredentialStore{Path: c.Paths.CloudCredential(), FS: fs},
 		LinkFile: cloud.LinkStore{Path: c.Paths.CloudLink(), FS: fs}, Status: sdeps.Builder(), Snapshot: snap,
 		Hardware: c.Hardware, Keys: cloud.FileKeySource{Path: c.Paths.APIKey(), FS: fs, State: c.State},
-		Claim: d.claim, Events: c.Bus, Bus: c.Bus, Alerts: c.Doctor, Inflight: d.claim.Inflight, Online: mv.online,
+		Tailnet: tailnetSource(c.Tailscale),
+		Claim:   d.claim, Events: c.Bus, Bus: c.Bus, Alerts: c.Doctor, Inflight: d.claim.Inflight, Online: mv.online,
 		Clock: env.CloudClock, HTTP: env.CloudHTTP, Rand: env.CloudRand, Version: env.Version, StartedAt: d.began, Logger: log,
 	})
 	if err != nil {
@@ -913,4 +914,13 @@ func (v counterView) Counters() map[string]any {
 		out["cloud_claims"], out["cloud_failures"] = cc["claims"], cc["failed"]
 	}
 	return out
+}
+
+// tailnetSource is the cloud link's view of Tailscale: nil (no report) when the manager is not built, so a typed
+// nil pointer never ends up inside the interface.
+func tailnetSource(m *modes.TailscaleManager) cloud.TailnetSource {
+	if m == nil {
+		return nil
+	}
+	return m
 }

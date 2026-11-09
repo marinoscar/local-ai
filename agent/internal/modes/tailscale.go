@@ -431,6 +431,17 @@ func (m *TailscaleManager) TailnetURL(ctx context.Context) string {
 	return "https://" + dns + "/v1"
 }
 
+// SelfAddress is the node's own Tailscale IPv4 address and its MagicDNS name (without the trailing dot), read
+// from `tailscale status --json` (3 s). Both are "" when tailscale is not installed, not running or logged out.
+// The address is admin-only data: the caller sends it to the cloud and never logs it (issue #437).
+func (m *TailscaleManager) SelfAddress(ctx context.Context) (ip, machine string) {
+	st, kind, _ := m.readStatus(ctx)
+	if kind != statusOK || st.BackendState != backendRunning {
+		return "", ""
+	}
+	return st.IPv4, st.DNSName
+}
+
 // TailnetUp implements TailnetChecker for the prober: BackendState is Running and at least one peer is
 // Online. It reads only and never waits for a pass.
 func (m *TailscaleManager) TailnetUp(ctx context.Context) bool {

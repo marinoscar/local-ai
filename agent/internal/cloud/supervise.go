@@ -135,7 +135,7 @@ func (l *Link) probeRevoked(ctx context.Context) bool {
 func (l *Link) runLinked(ctx context.Context) (relinkReq, bool) {
 	lctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	for _, loop := range []func(context.Context){l.heartbeatLoop, l.stateLoop, l.keyLoop, l.eventLoop, l.configLoop} {
+	for _, loop := range []func(context.Context){l.heartbeatLoop, l.stateLoop, l.keyLoop, l.tailnetLoop, l.eventLoop, l.configLoop} {
 		wg.Add(1)
 		go func(f func(context.Context)) {
 			defer wg.Done()
