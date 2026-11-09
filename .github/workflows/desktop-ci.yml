@@ -59,6 +59,8 @@ jobs:
           dpkg-deb -c "$deb" | grep -E ' \./opt/ai-desktop/(ai-desktop|resources/apparmor-profile)$'
           dpkg-deb -c "$deb" | grep -E ' \./usr/share/applications/ai-desktop\.desktop$'
           ls release/ai-desktop-*-x86_64.AppImage
+      - name: apt can install the deb on every Ubuntu a node runs (24.04 and 26.04), not only on this runner
+        run: ../../scripts/release/check-deb-installs.sh "$(ls release/ai-desktop_*_amd64.deb)"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: ai-desktop-packages

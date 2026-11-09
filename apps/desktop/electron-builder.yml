@@ -37,7 +37,7 @@ linux:
 deb:
   artifactName: ai-desktop_${version}_${arch}.${ext}
   appArmorProfile: build/linux/ai-desktop.apparmor
-  depends: [libnotify4, libxtst6, libnss3, xdg-utils, libsecret-1-0, policykit-1]
+  depends: [libnotify4, libxtst6, libnss3, xdg-utils, libsecret-1-0, 'pkexec | policykit-1']
   recommends: [gnome-shell-extension-appindicator]
 appImage:
   artifactName: ai-desktop-${version}-x86_64.AppImage

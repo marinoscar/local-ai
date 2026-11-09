@@ -5,6 +5,7 @@
 #   scripts/release/assemble-desktop-release.sh SHA256SUMS + minisign, latest-linux.yml consistency
 #   scripts/release/desktop-release-notes.sh    release notes
 #   scripts/release/desktop-kit-snippet.sh      the kit-desktop catalog item, read from a verified download
+#   scripts/release/check-deb-installs.sh       apt can install the deb on every node Ubuntu (a fake docker here)
 #   .github/workflows/*.yml                     every workflow parses; desktop-release.yml keeps its safety properties
 #   .github/PULL_REQUEST_TEMPLATE/kit-desktop-bump.md
 # Needs bash, openssl, python3 with PyYAML (the lint part is skipped with a message when PyYAML is missing) and minisign.
@@ -153,6 +154,31 @@ for word in "Tag" "Asset" "sha256" "Size" "desktop-kit-snippet.sh" "kit-desktop"
 done
 t "the template has no 64-hex string (a pin comes from the script, never from the template)" 1 "" grep -E '[0-9a-f]{64}' "$TPL"
 
+# ---- check-deb-installs.sh (a fake docker on PATH: exit codes and messages, no containers, no network) ----------------
+echo "== check-deb-installs"
+DEBCHK="$ROOT/scripts/release/check-deb-installs.sh"
+mkdir -p "$w/fakebin" "$w/debs"; : >"$w/debs/ai-desktop_9.9.9_amd64.deb"
+# The fake docker answers per image: ubuntu:ok installs, ubuntu:bad is missing a dependency, ubuntu:nomirror has no lists.
+cat >"$w/fakebin/docker" <<'FAKE'
+#!/usr/bin/env bash
+for a in "$@"; do case "$a" in
+  ubuntu:ok) echo "Inst ai-desktop"; exit 0 ;;
+  ubuntu:bad) echo " ai-desktop : Depends: policykit-1 but it is not installable"; echo "E: Unable to correct problems"; exit 100 ;;
+  ubuntu:nomirror) exit 3 ;;
+esac; done
+exit 99
+FAKE
+chmod +x "$w/fakebin/docker"
+FD="PATH=$w/fakebin:$PATH"
+t "no arguments is a usage error" 2 "" "$DEBCHK"
+t "a file that is not a .deb is refused" 2 "is not a .deb" env "$FD" "$DEBCHK" "$w/debs/missing.deb"
+t "installable on every image passes" 0 "ok   ubuntu:ok" env "$FD" "$DEBCHK" "$w/debs/ai-desktop_9.9.9_amd64.deb" ubuntu:ok ubuntu:ok
+t "a dependency apt cannot satisfy fails and shows apt's reason" 1 "Depends: policykit-1" env "$FD" "$DEBCHK" "$w/debs/ai-desktop_9.9.9_amd64.deb" ubuntu:ok ubuntu:bad
+t "an unreachable mirror is an environment error, not a pass" 2 "mirror unreachable" env "$FD" "$DEBCHK" "$w/debs/ai-desktop_9.9.9_amd64.deb" ubuntu:ok ubuntu:nomirror
+t "a real failure outranks an unreachable mirror" 1 "FAIL ubuntu:bad" env "$FD" "$DEBCHK" "$w/debs/ai-desktop_9.9.9_amd64.deb" ubuntu:nomirror ubuntu:bad
+t "the default images are the node Ubuntu releases" 0 "" grep -qx 'DEFAULT_IMAGES=(ubuntu:24.04 ubuntu:26.04)' "$DEBCHK"
+t "the deb depends on pkexec, with policykit-1 only as a fallback" 0 "" grep -qF "'pkexec | policykit-1'" "$ROOT/apps/desktop/electron-builder.yml"
+
 # ---- workflow lint ----------------------------------------------------------------------------------------------------
 echo "== workflow lint"
 if python3 -c 'import yaml' 2>/dev/null; then
@@ -230,7 +256,7 @@ for name, job in jobs.items():
 ci = yaml.safe_load(open(".github/workflows/desktop-ci.yml"))
 ci_runs = "\n".join(s.get("run", "") for s in ci["jobs"]["desktop"]["steps"])
 rel_runs = "\n".join(s.get("run", "") for s in jobs["build"]["steps"])
-for cmd in ("npm ci", "node node_modules/electron/install.js", "npm run typecheck", "npm test", "npm run build", "node scripts/dist.mjs --linux --x64", "node scripts/packaged-app.mjs verify", "playwright test", "dpkg -I", "dpkg-deb -c"):
+for cmd in ("npm ci", "node node_modules/electron/install.js", "npm run typecheck", "npm test", "npm run build", "node scripts/dist.mjs --linux --x64", "node scripts/packaged-app.mjs verify", "playwright test", "dpkg -I", "dpkg-deb -c", "check-deb-installs.sh"):
     need(cmd in ci_runs, f"desktop-ci no longer has `{cmd}` (update this test and desktop-release.yml together)")
     need(cmd in rel_runs, f"the release build lacks `{cmd}` that desktop-ci runs")
 need("apt-get install" in rel_runs and "xvfb-run" in rel_runs and "test-copy" in rel_runs, "the release build installs the deb and runs the packaged e2e under xvfb")

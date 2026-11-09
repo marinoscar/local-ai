@@ -144,12 +144,14 @@ linux:
 deb:
   artifactName: ai-desktop_${version}_${arch}.${ext}   # electron-builder's deb default: ai-desktop_<version>_amd64.deb (arm64: _arm64)
   appArmorProfile: build/linux/ai-desktop.apparmor
-  depends: [libnotify4, libxtst6, libnss3, xdg-utils, libsecret-1-0, policykit-1]
+  depends: [libnotify4, libxtst6, libnss3, xdg-utils, libsecret-1-0, 'pkexec | policykit-1']
   recommends: [gnome-shell-extension-appindicator]
 appImage:
   artifactName: ai-desktop-${version}-x86_64.AppImage
 ```
 Two differences from the first draft of this block, both found when DSK-01 ran the build: the AppImage key is `appImage` (camelCase; `AppImage:` fails electron-builder's schema validation), and there is **no `LICENSE.txt` extraResource**: the repository has no license file yet (README section 12), so there is nothing to copy and no license is invented. Add `{ from: ../../LICENSE, to: LICENSE.txt }` back when the owner adds one.
+**Dependencies must exist on every Ubuntu a node runs** (24.04 and 26.04, [installer.md §3.3](installer.md#33-supported-systems)), not only on the CI runner. Privilege comes from `pkexec`, so the deb depends on `pkexec | policykit-1`: `pkexec` is the package on 22.04 and later, and `policykit-1`, a transitional name that Ubuntu 25.04 dropped, stays only as the fallback. `desktop-v0.1.0-rc.1` depended on `policykit-1` alone; it installed on the 24.04 runner and failed `apt install` on 26.04 (issue #129). [`scripts/release/check-deb-installs.sh`](../../scripts/release/check-deb-installs.sh) now dry-runs `apt-get install` of the deb in clean `ubuntu:24.04` and `ubuntu:26.04` containers in desktop-ci and in the release build, so a renamed or dropped dependency fails CI; an unreachable mirror is reported as an environment error, never as a pass.
+
 Only `deb` and `AppImage`. The deb installs to `/opt/ai-desktop/` with `/usr/bin/ai-desktop` → `/opt/ai-desktop/ai-desktop`, and `/usr/share/applications/ai-desktop.desktop`. The AppArmor profile is kvox-desktop's (`flags=(unconfined)`, `userns,`) for `/opt/ai-desktop/ai-desktop`, needed on Ubuntu 24.04+ for the Chromium sandbox.
 
 Process switches set in `index.ts` before `ready`: `app.commandLine.appendSwitch('disable-background-networking')`, `'no-pings'`, `'disable-component-update'`, `'disable-domain-reliability'`, `'disable-features', 'AutofillServerCommunication,MediaRouter,OptimizationHints,Translate'`. `spellcheck: false` on every webContents (dictionary downloads).
