@@ -172,7 +172,16 @@ grep -oE '`/(opt|etc|var|srv|run|usr)/[^` ]*`' "$tmp/section3.md" | tr -d '`' | 
 [[ -s "$tmp/canon.txt" ]] || { echo "ERROR $OVERVIEW:0: no installed paths found in section 3" >&2; exit 2; }
 # shellcheck disable=SC2129 # appending to the data file from several places on purpose
 awk '
-  function rx(s) { gsub(/<[^>]*>/, "@", s); gsub(/[][.+?(){}^$|\\]/, "\\\\&", s); gsub(/@/, "[^/]*", s); return s }
+  function rx(s,    out, i, c) {          # a path to an anchored-less regex: regex characters escaped, <x> -> [^/]*
+    gsub(/<[^>]*>/, "@", s); out = ""
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s, i, 1)
+      if (c == "@") out = out "[^/]*"
+      else if (index(".+?(){}^$|[]\\", c) > 0) out = out "\\" c
+      else out = out c
+    }
+    return out
+  }
   {
     p = $0
     # A directory below which anything is fine; the lab-wide folders only allow what section 3 names in them.
