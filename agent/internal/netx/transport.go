@@ -89,7 +89,7 @@ func (f *Fence) Wrap(caller string, inner DialFunc) DialFunc {
 // http.DefaultTransport except that the proxy environment is never read (the agent's unit sets none,
 // and a proxy would be one more way to reach the internet unseen).
 func (f *Fence) baseTransport(caller string, inner DialFunc) *http.Transport {
-	return &http.Transport{
+	tr := &http.Transport{
 		Proxy:                 nil,
 		DialContext:           f.Wrap(caller, inner),
 		ForceAttemptHTTP2:     true,
@@ -98,6 +98,8 @@ func (f *Fence) baseTransport(caller string, inner DialFunc) *http.Transport {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: time.Second,
 	}
+	f.track(tr)
+	return tr
 }
 
 // NewTransport returns a transport that dials through the fence and names caller when the request's

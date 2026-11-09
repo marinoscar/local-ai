@@ -150,3 +150,36 @@ func TestDeadProxyEnv(t *testing.T) {
 		t.Errorf("env = %v", g)
 	}
 }
+
+func TestAcquireClosesIdleConnectionsSoNoPooledConnectionOutlivesTheFence(t *testing.T) {
+	f := NewFence()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "pong") }))
+	defer srv.Close()
+	dials := 0
+	inner := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		dials++
+		var d net.Dialer
+		return d.DialContext(ctx, network, addr)
+	}
+	client := &http.Client{Transport: f.NewTransport("t", inner)}
+	get := func() {
+		t.Helper()
+		resp, err := client.Get(srv.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}
+	get()
+	get()
+	if dials != 1 {
+		t.Fatalf("dials = %d before the fence, want 1 (the connection is pooled)", dials)
+	}
+	l := f.Acquire()
+	get()
+	if dials != 2 {
+		t.Errorf("dials = %d, want 2: the fence must close pooled connections so every request dials again", dials)
+	}
+	l.Release()
+}

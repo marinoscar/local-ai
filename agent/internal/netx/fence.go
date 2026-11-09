@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"weak"
 )
 
 // ErrFenced is what a refused dial matches (errors.Is). The error text names the address and the
@@ -63,6 +65,11 @@ type Fence struct {
 	total int
 	order []key
 	count map[key]int
+
+	// transports are the transports made for this fence, weakly held (a short-lived client makes its own).
+	// Acquire closes their idle connections: a pooled connection opened before the drill would otherwise
+	// carry a request to the internet without any dial for the fence to see.
+	transports []weak.Pointer[http.Transport]
 }
 
 // NewFence returns an inactive fence. Tests make their own; the agent uses Default.
@@ -88,9 +95,17 @@ type Lease struct {
 // a deferred Release: the fence is reference counted, so it stays on until the last holder lets go.
 func (f *Fence) Acquire() *Lease {
 	f.mu.Lock()
-	defer f.mu.Unlock()
+	var idle []*http.Transport
 	if f.depth == 0 {
 		f.total, f.order, f.count = 0, nil, map[key]int{}
+		live := f.transports[:0]
+		for _, w := range f.transports {
+			if tr := w.Value(); tr != nil {
+				live = append(live, w)
+				idle = append(idle, tr)
+			}
+		}
+		f.transports = live
 	}
 	f.depth++
 	f.active.Store(true)
@@ -98,7 +113,28 @@ func (f *Fence) Acquire() *Lease {
 	for k, v := range f.count {
 		base[k] = v
 	}
-	return &Lease{f: f, baseTotal: f.total, base: base}
+	l := &Lease{f: f, baseTotal: f.total, base: base}
+	f.mu.Unlock()
+	for _, tr := range idle {
+		tr.CloseIdleConnections()
+	}
+	return l
+}
+
+// track remembers a transport so that Acquire can close its idle connections.
+func (f *Fence) track(tr *http.Transport) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if n := len(f.transports); n >= 256 && n&(n-1) == 0 { // at each doubling, drop the ones that were collected
+		live := f.transports[:0]
+		for _, w := range f.transports {
+			if w.Value() != nil {
+				live = append(live, w)
+			}
+		}
+		f.transports = live
+	}
+	f.transports = append(f.transports, weak.Make(tr))
 }
 
 // Release gives the hold back and returns what the fence refused since Acquire. The fence turns off
