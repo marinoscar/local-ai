@@ -16,6 +16,7 @@ import (
 
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
 
 // maxReplyBytes bounds a reply body: the catalog bundle (2 MB, JSON-escaped) is the largest.
@@ -30,7 +31,10 @@ type Doer interface {
 // default transport verifies the chain and the host name; nothing here turns it off) and the minimum
 // version is TLS 1.2. Per-request deadlines come from the context, not from the client.
 func NewHTTPClient() *http.Client {
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	// The cloud link honors the proxy environment like the default transport did; its dials go through
+	// the network fence (netx), which the drill uses to keep the link quiet while it runs.
+	tr := netx.NewTransport("cloud", nil)
+	tr.Proxy = http.ProxyFromEnvironment
 	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	tr.MaxIdleConnsPerHost = 2
 	tr.IdleConnTimeout = 60 * time.Second

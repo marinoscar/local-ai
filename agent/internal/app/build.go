@@ -433,6 +433,9 @@ func (d *Daemon) build(ctx context.Context) error {
 		arkActivity = d.ark.engine
 	}
 	drillChecks := drill.NewRegistry()
+	if err := registerFenceChecks(drillChecks, c.Paths); err != nil {
+		return err
+	}
 	if err := d.registerContentDrillChecks(drillChecks); err != nil {
 		return fmt.Errorf("drill content checks: %w", err)
 	}
@@ -445,8 +448,9 @@ func (d *Daemon) build(ctx context.Context) error {
 		State: c.State, Publisher: c.Bus, Mode: mv, Llama: llamaActivity{lock: c.OpLock, view: c.RouterWatcher},
 		Power: powerSource{h: c.Hardware}, Metrics: gauge, NodeID: node, AgentVersion: env.Version,
 		CatalogVersion: func() string { return c.Catalog.Get().Catalog.Version }, Clock: clock, Logger: log,
-		// The fence pauses the cloud link for the length of a run (drill.md section 4.4).
-		Fence: &drill.PausingFence{Link: c.Cloud},
+		// The fence pauses the cloud link for the length of a run and refuses every non-loopback dial of
+		// the agent's outbound transport (drill.md section 4.4).
+		Fence: newDrillFence(c.Cloud),
 	})
 	if err != nil {
 		return fmt.Errorf("drill engine: %w", err)

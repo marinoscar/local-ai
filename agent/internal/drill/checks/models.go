@@ -1,7 +1,3 @@
-// Package checks holds the concrete checks of the drill (drill.md section 4.2). Each file is one
-// area: llm.go, vlm.go, fit.go and restorecheck.go here (DRILL-03); the others are other issues'. A
-// check only sees small interfaces (the model layer, the chat endpoint, the node's facts), never the
-// router, systemd or the network, so every pass, warn and fail path runs against fakes.
 package checks
 
 import (

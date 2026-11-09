@@ -28,7 +28,7 @@ func TestRestoreCheck(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := newNode(t, 3, "a", []string{"a"}, model("a", 5000, 6000, "chat"))
+			n := newMdlNode(t, 3, "a", []string{"a"}, model("a", 5000, 6000, "chat"))
 			n.models.resident, n.models.readErr = tt.live, tt.readErr
 			c := RestoreCheck(n.deps())
 			if c.ID != "drl.restore" || c.Order != 22 || !c.Critical || c.Phase != drill.PhasePostRestore || c.FailCode != doctor.DRL090 {

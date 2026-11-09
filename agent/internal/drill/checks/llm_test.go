@@ -11,9 +11,9 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/drill"
 )
 
-func oneModelNode(t *testing.T, backend string) *node {
+func oneModelNode(t *testing.T, backend string) *mdlNode {
 	t.Helper()
-	n := newNode(t, 1, "text-a", []string{"text-a"}, model("text-a", 5000, 6000, "chat"))
+	n := newMdlNode(t, 1, "text-a", []string{"text-a"}, model("text-a", 5000, 6000, "chat"))
 	n.in.Fit.Backend = backend
 	if backend == "cpu" {
 		n.in.Fit.GTotalMiB = 0
@@ -21,7 +21,7 @@ func oneModelNode(t *testing.T, backend string) *node {
 	return n
 }
 
-func answerCheck(t *testing.T, n *node, id string) drill.Check {
+func answerCheck(t *testing.T, n *mdlNode, id string) drill.Check {
 	t.Helper()
 	return find(t, expand(t, LLMAnswerChecks(n.deps())), "drl.llm.answer."+id)
 }
@@ -145,7 +145,7 @@ func TestLLMAnswerLoadFailureIs020AndNothingIsAsked(t *testing.T) {
 }
 
 func TestLLMAnswerLoadFailureDoesNotStopTheNextModel(t *testing.T) {
-	n := newNode(t, 1, "text-a", []string{"text-a", "text-b"}, model("text-a", 5000, 6000, "chat"), model("text-b", 3000, 4000, "chat"))
+	n := newMdlNode(t, 1, "text-a", []string{"text-a", "text-b"}, model("text-a", 5000, 6000, "chat"), model("text-b", 3000, 4000, "chat"))
 	n.models.failLoad["text-a"] = errors.New("out of memory")
 	n.chat.seq = []answer{{text: "READY", tps: 20}}
 	cs := expand(t, LLMAnswerChecks(n.deps()))
@@ -159,7 +159,7 @@ func TestLLMAnswerLoadFailureDoesNotStopTheNextModel(t *testing.T) {
 func TestLLMAnswerDisablesThinkingForReasoningModels(t *testing.T) {
 	m := model("think-a", 5000, 6000, "reasoning")
 	m.ClientHints = &catalog.ClientHints{Reasoning: true}
-	n := newNode(t, 1, "think-a", []string{"think-a"}, m)
+	n := newMdlNode(t, 1, "think-a", []string{"think-a"}, m)
 	n.chat.seq = []answer{{text: "READY", tps: 20}}
 	runChk(t, answerCheck(t, n, "think-a"), nil)
 	if rq := n.chat.requests(); len(rq) != 1 || !rq[0].DisableThinking {
@@ -169,7 +169,7 @@ func TestLLMAnswerDisablesThinkingForReasoningModels(t *testing.T) {
 
 func TestLLMAnswerExpanderOneCheckPerLoadableModel(t *testing.T) {
 	big := model("big-d", 20000, 6000, "chat") // does not fit an 8 GB card
-	n := newNode(t, 1, "text-a", []string{"text-a", "big-d", "text-a", "vis-c", "gone-e"},
+	n := newMdlNode(t, 1, "text-a", []string{"text-a", "big-d", "text-a", "vis-c", "gone-e"},
 		model("text-a", 5000, 6000, "chat"), big, model("vis-c", 5200, 6000, "chat", "vision"))
 	n.in.Profile.Survival.Models = []string{"text-a", "big-d", "text-a", "vis-c", "gone-e"}
 	cs := expand(t, LLMAnswerChecks(n.deps()))
@@ -187,7 +187,7 @@ func TestLLMAnswerExpanderOneCheckPerLoadableModel(t *testing.T) {
 }
 
 func TestLLMAnswerQuickRunsOnlyTheDefault(t *testing.T) {
-	n := newNode(t, 1, "text-b", []string{"text-a", "text-b"}, model("text-a", 5000, 6000, "chat"), model("text-b", 3000, 4000, "chat"))
+	n := newMdlNode(t, 1, "text-b", []string{"text-a", "text-b"}, model("text-a", 5000, 6000, "chat"), model("text-b", 3000, 4000, "chat"))
 	cs := expand(t, LLMAnswerChecks(n.deps()))
 	a, b := find(t, cs, "drl.llm.answer.text-a"), find(t, cs, "drl.llm.answer.text-b")
 	if !a.SkipInQuick || b.SkipInQuick {

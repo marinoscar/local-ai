@@ -92,7 +92,7 @@ type presence map[string]bool
 func (p presence) Present(_ string, m *catalog.Model) bool { return p[m.ID] }
 
 // node is the fixture of a node: its facts and the fakes behind the deps.
-type node struct {
+type mdlNode struct {
 	in     router.Inputs
 	pres   presence
 	models *fakeModels
@@ -107,13 +107,13 @@ func model(id string, vram, ram int64, roles ...string) catalog.Model {
 }
 
 // newNode builds an 8 GB CUDA node with a profile whose survival list is the given models.
-func newNode(t *testing.T, modelsMax int, def string, survival []string, ms ...catalog.Model) *node {
+func newMdlNode(t *testing.T, modelsMax int, def string, survival []string, ms ...catalog.Model) *mdlNode {
 	t.Helper()
 	prof := catalog.Profile{
 		ID: "test", Router: catalog.Router{ModelsMax: modelsMax}, DefaultModel: def,
 		Survival: catalog.Survival{Models: survival, DefaultModel: def},
 	}
-	n := &node{
+	n := &mdlNode{
 		pres:   presence{},
 		models: &fakeModels{failLoad: map[string]error{}},
 		chat:   &fakeChat{},
@@ -132,7 +132,7 @@ func newNode(t *testing.T, modelsMax int, def string, survival []string, ms ...c
 	return n
 }
 
-func (n *node) deps() ModelDeps {
+func (n *mdlNode) deps() ModelDeps {
 	return ModelDeps{
 		Models: n.models, Chat: n.chat, Inputs: func() router.Inputs { return n.in },
 		Presence: n.pres, Photo: []byte("png-bytes"),

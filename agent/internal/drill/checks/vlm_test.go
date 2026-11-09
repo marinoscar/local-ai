@@ -10,13 +10,13 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/drill"
 )
 
-func visionNode(t *testing.T) *node {
+func visionNode(t *testing.T) *mdlNode {
 	t.Helper()
-	return newNode(t, 1, "text-a", []string{"text-a", "vis-c"},
+	return newMdlNode(t, 1, "text-a", []string{"text-a", "vis-c"},
 		model("text-a", 5000, 6000, "chat"), model("vis-c", 5200, 6000, "chat", "vision"))
 }
 
-func photoCheck(t *testing.T, n *node) drill.Check {
+func photoCheck(t *testing.T, n *mdlNode) drill.Check {
 	t.Helper()
 	return find(t, expand(t, VLMPhotoChecks(n.deps())), "drl.vlm.photo.vis-c")
 }
@@ -107,7 +107,7 @@ func TestVLMPhotoQuickRunsTheVisionDefault(t *testing.T) {
 func TestVLMPhotoReasoningModelHasThinkingDisabled(t *testing.T) {
 	m := model("vis-c", 5200, 6000, "chat", "vision")
 	m.ClientHints = &catalog.ClientHints{Reasoning: true}
-	n := newNode(t, 1, "vis-c", []string{"vis-c"}, m)
+	n := newMdlNode(t, 1, "vis-c", []string{"vis-c"}, m)
 	n.chat.seq = []answer{{text: "7"}}
 	runChk(t, photoCheck(t, n), nil)
 	if rq := n.chat.requests(); len(rq) != 1 || !rq[0].DisableThinking {
@@ -116,7 +116,7 @@ func TestVLMPhotoReasoningModelHasThinkingDisabled(t *testing.T) {
 }
 
 func TestVLMPhotoWithoutAVisionModelIsOneSkippedCheck(t *testing.T) {
-	n := newNode(t, 1, "text-a", []string{"text-a"}, model("text-a", 5000, 6000, "chat"))
+	n := newMdlNode(t, 1, "text-a", []string{"text-a"}, model("text-a", 5000, 6000, "chat"))
 	cs := expand(t, VLMPhotoChecks(n.deps()))
 	if got := ids(cs); !reflect.DeepEqual(got, []string{"drl.vlm.photo"}) {
 		t.Fatalf("checks = %v", got)
@@ -128,7 +128,7 @@ func TestVLMPhotoWithoutAVisionModelIsOneSkippedCheck(t *testing.T) {
 }
 
 func TestVLMPhotoSkipsAVisionModelThatCannotLoad(t *testing.T) {
-	n := newNode(t, 1, "text-a", []string{"text-a", "vis-big"},
+	n := newMdlNode(t, 1, "text-a", []string{"text-a", "vis-big"},
 		model("text-a", 5000, 6000, "chat"), model("vis-big", 30000, 6000, "chat", "vision"))
 	if got := ids(expand(t, VLMPhotoChecks(n.deps()))); !reflect.DeepEqual(got, []string{"drl.vlm.photo"}) {
 		t.Fatalf("checks = %v: a vision model that does not fit is check 7's to report", got)
