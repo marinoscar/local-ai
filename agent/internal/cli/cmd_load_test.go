@@ -160,7 +160,7 @@ func TestLoad(t *testing.T) {
 		r.publish = loadsWell
 		r.body = `{"id":"` + qwenID + `","status":"loading","op_id":"` + loadOpID + `","warning":{"code":"LAI-HW-005","message":"Other programs use much of the graphics memory."}}`
 		got := r.run(mgArgs("load", qwenID, "--no-wait"))
-		if got.code != 0 || !strings.Contains(got.errOut, "[LAI-HW-005]") || !strings.Contains(got.out, "Loading Qwen 3.5 9B has started") {
+		if got.code != 0 || !strings.Contains(got.errOut, "[LAI-HW-005]") || !strings.Contains(got.errOut, "Fix: Close games or other GPU programs") || !strings.Contains(got.out, "Loading Qwen 3.5 9B has started") {
 			t.Fatalf("%+v", got)
 		}
 		checkRun(t, r.run(mgArgs("--json", "load", qwenID, "--no-wait")), 0, r.body+"\n", "")
