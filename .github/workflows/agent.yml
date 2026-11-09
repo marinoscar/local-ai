@@ -6,10 +6,10 @@ name: agent
 # The UI (agent/ui) is built before the Go checks because its dist/ is embedded; its own tests are in ui.yml.
 on:
   pull_request:
-    paths: ['agent/**', 'catalog/**', 'packages/ui/**', 'docs/specs/agent.md', 'docs/specs/doctor-codes.md', 'scripts/agent-ci.sh', 'scripts/tests/test-agent-ci.sh', '.github/workflows/agent.yml']
+    paths: ['agent/**', 'catalog/**', 'packages/ui/**', 'docs/specs/agent.md', 'docs/specs/doctor-codes.md', 'scripts/agent-ci.sh', 'scripts/tests/test-agent-ci.sh', 'scripts/check-offline-assets.mjs', 'scripts/testdata/offline-assets/**', '.github/workflows/agent.yml']
   push:
     branches: [main]
-    paths: ['agent/**', 'catalog/**', 'packages/ui/**', 'docs/specs/agent.md', 'docs/specs/doctor-codes.md', 'scripts/agent-ci.sh', 'scripts/tests/test-agent-ci.sh', '.github/workflows/agent.yml']
+    paths: ['agent/**', 'catalog/**', 'packages/ui/**', 'docs/specs/agent.md', 'docs/specs/doctor-codes.md', 'scripts/agent-ci.sh', 'scripts/tests/test-agent-ci.sh', 'scripts/check-offline-assets.mjs', 'scripts/testdata/offline-assets/**', '.github/workflows/agent.yml']
 permissions:
   contents: read
 jobs:

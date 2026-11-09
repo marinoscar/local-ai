@@ -301,11 +301,11 @@ func okCheck(id string) build.Check { return build.Check{ID: id, Title: id, OK: 
 func TestRebuildDryRunPasses(t *testing.T) {
 	var asked []string
 	d := BuildDeps{
-		Llama: func(context.Context) build.Report {
+		Llama: func(context.Context, func([]string) []string) build.Report {
 			asked = append(asked, "llama")
 			return report(okCheck(build.CheckTools))
 		},
-		Whisper: func(context.Context) build.Report {
+		Whisper: func(context.Context, func([]string) []string) build.Report {
 			asked = append(asked, "whisper")
 			return report(okCheck(build.CheckTools))
 		},
@@ -321,12 +321,12 @@ func TestRebuildDryRunPasses(t *testing.T) {
 
 func TestRebuildDryRunMissingCmakeFailsWith071ListingKIT010(t *testing.T) {
 	d := BuildDeps{
-		Llama: func(context.Context) build.Report {
+		Llama: func(context.Context, func([]string) []string) build.Report {
 			return report(okCheck(build.CheckInputs), build.Check{
 				ID: build.CheckTools, Title: "Build tools", Code: doctor.KIT010, Detail: "cmake is not installed (needed to configure llama.cpp)",
 			})
 		},
-		Whisper: func(context.Context) build.Report { return report(okCheck(build.CheckTools)) },
+		Whisper: func(context.Context, func([]string) []string) build.Report { return report(okCheck(build.CheckTools)) },
 	}
 	c := KitRebuildDryRun(d)
 	out := c.Run(context.Background(), &drill.Env{})
@@ -347,8 +347,8 @@ func TestRebuildDryRunMissingCmakeFailsWith071ListingKIT010(t *testing.T) {
 
 func TestRebuildDryRunWhisperFailureAloneFails(t *testing.T) {
 	d := BuildDeps{
-		Llama: func(context.Context) build.Report { return report(okCheck(build.CheckTools)) },
-		Whisper: func(context.Context) build.Report {
+		Llama: func(context.Context, func([]string) []string) build.Report { return report(okCheck(build.CheckTools)) },
+		Whisper: func(context.Context, func([]string) []string) build.Report {
 			return report(build.Check{ID: build.CheckSource, Code: doctor.KIT002, Detail: "no source"})
 		},
 	}
@@ -359,7 +359,7 @@ func TestRebuildDryRunWhisperFailureAloneFails(t *testing.T) {
 }
 
 func TestRebuildDryRunWithoutWhisperChecksOnlyLlama(t *testing.T) {
-	d := BuildDeps{Llama: func(context.Context) build.Report { return report(okCheck(build.CheckTools)) }}
+	d := BuildDeps{Llama: func(context.Context, func([]string) []string) build.Report { return report(okCheck(build.CheckTools)) }}
 	out := KitRebuildDryRun(d).Run(context.Background(), &drill.Env{})
 	if out.Result != drill.ResultPass || out.Details["whisper_skipped"] == nil || out.Details["whisper_ok"] != nil {
 		t.Fatalf("outcome = %+v", out)
@@ -369,8 +369,8 @@ func TestRebuildDryRunWithoutWhisperChecksOnlyLlama(t *testing.T) {
 func TestRebuildDryRunSkipsWhisperWhenSpeechIsSwitchedOff(t *testing.T) {
 	asked := false
 	d := BuildDeps{
-		Llama: func(context.Context) build.Report { return report(okCheck(build.CheckTools)) },
-		Whisper: func(context.Context) build.Report {
+		Llama: func(context.Context, func([]string) []string) build.Report { return report(okCheck(build.CheckTools)) },
+		Whisper: func(context.Context, func([]string) []string) build.Report {
 			asked = true
 			return report(build.Check{ID: build.CheckTools, Code: doctor.KIT010})
 		},
@@ -384,7 +384,7 @@ func TestRebuildDryRunSkipsWhisperWhenSpeechIsSwitchedOff(t *testing.T) {
 
 func TestRebuildDryRunDetailsStayShort(t *testing.T) {
 	long := strings.Repeat("x", 2000)
-	d := BuildDeps{Llama: func(context.Context) build.Report {
+	d := BuildDeps{Llama: func(context.Context, func([]string) []string) build.Report {
 		var cs []build.Check
 		for i := 0; i < 8; i++ {
 			cs = append(cs, build.Check{ID: build.CheckTools, Code: doctor.KIT010, Detail: long})
@@ -399,7 +399,7 @@ func TestRebuildDryRunDetailsStayShort(t *testing.T) {
 
 func TestRegisterKitAddsTheFourChecks(t *testing.T) {
 	reg := drill.NewRegistry()
-	b := BuildDeps{Llama: func(context.Context) build.Report { return report() }}
+	b := BuildDeps{Llama: func(context.Context, func([]string) []string) build.Report { return report() }}
 	if err := RegisterKit(reg, &kitFix{}, b, PowerDeps{}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -419,5 +419,18 @@ func TestRegisterKitAddsTheFourChecks(t *testing.T) {
 	}
 	if err := RegisterKit(drill.NewRegistry(), &kitFix{}, BuildDeps{}, PowerDeps{}, nil); err == nil {
 		t.Fatal("the llama.cpp preflight is required")
+	}
+}
+
+func TestRebuildDryRunPassesTheSubprocessEnvironmentToThePreflights(t *testing.T) {
+	var got []string
+	pf := func(_ context.Context, subEnv func([]string) []string) build.Report {
+		got = subEnv([]string{"LC_ALL=C", "HTTPS_PROXY=http://proxy.example.test:3128"})
+		return report(okCheck(build.CheckTools))
+	}
+	KitRebuildDryRun(BuildDeps{Llama: pf}).Run(context.Background(), &drill.Env{})
+	joined := strings.Join(got, " ")
+	if !strings.Contains(joined, "LC_ALL=C") || strings.Contains(joined, "proxy.example.test") || !strings.Contains(joined, "HTTPS_PROXY=http://127.0.0.1:9") {
+		t.Fatalf("env = %v", got)
 	}
 }

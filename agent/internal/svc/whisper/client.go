@@ -12,6 +12,8 @@ import (
 	"net/textproto"
 	"strings"
 	"time"
+
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 )
 
 // The whisper-server client (companion-services.md section 4.2.4): POST /inference with a 16 kHz mono
@@ -130,7 +132,7 @@ func (c *Client) Transcribe(ctx context.Context, wav []byte, language, prompt st
 	req.Header.Set("Accept", "application/json")
 	doer := c.HTTP
 	if doer == nil {
-		doer = &http.Client{Transport: &http.Transport{Proxy: nil}}
+		doer = netx.Client("svc.whisper")
 	}
 	resp, err := doer.Do(req)
 	if err != nil {
@@ -188,7 +190,7 @@ func (c *Client) Alive(ctx context.Context) bool {
 	}
 	doer := c.HTTP
 	if doer == nil {
-		doer = &http.Client{Transport: &http.Transport{Proxy: nil}}
+		doer = netx.Client("svc.whisper")
 	}
 	resp, err := doer.Do(req)
 	if err != nil {

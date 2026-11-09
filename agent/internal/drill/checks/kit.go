@@ -109,9 +109,9 @@ func kitPresent(ctx context.Context, src KitSource) drill.Outcome {
 			if r.Internal {
 				failed = true
 				details["reason"] = "cannot_verify"
-				details["error"] = clipText(err.Error(), 300)
+				details["error"] = kitClip(err.Error(), 300)
 			} else {
-				skipped = append(skipped, r.ID+": "+clipText(err.Error(), 100))
+				skipped = append(skipped, r.ID+": "+kitClip(err.Error(), 100))
 			}
 			continue
 		}
@@ -155,13 +155,13 @@ func kitPresent(ctx context.Context, src KitSource) drill.Outcome {
 	details["roots_checked"] = checked
 	details["kit_overall"] = overall
 	if len(missing) > 0 {
-		details["missing"] = clipText(strings.Join(missing, "; "), 450)
+		details["missing"] = kitClip(strings.Join(missing, "; "), 450)
 	}
 	if len(codes) > 0 {
 		details["codes"] = strings.Join(codes, ", ")
 	}
 	if len(skipped) > 0 {
-		details["skipped"] = clipText(strings.Join(skipped, "; "), 300)
+		details["skipped"] = kitClip(strings.Join(skipped, "; "), 300)
 	}
 	switch {
 	case failed:
@@ -211,8 +211,10 @@ func worseColour(a, b string) string {
 
 // Preflight runs the offline preflight of one program's rebuild: what `aictl rebuild-llama --dry-run`
 // or `aictl rebuild-whisper --dry-run` runs, in this process, without a subprocess of aictl. It never
-// compiles, never writes and never uses the network (the request is offline and from the kit).
-type Preflight func(ctx context.Context) build.Report
+// compiles, never writes and never uses the network (the request is offline and from the kit). subEnv
+// is the environment of every program it runs (drill.Env.SubprocessEnv: no proxy, and a dead one, so a
+// tool that tries the network fails at once, drill.md section 4.4).
+type Preflight func(ctx context.Context, subEnv func(base []string) []string) build.Report
 
 // BuildDeps are the two preflights of check 18. Whisper may be nil on a node without the speech
 // service, and WhisperEnabled (when set) says whether the speech service is switched on in node.yaml:
@@ -235,11 +237,13 @@ func KitRebuildDryRun(d BuildDeps) drill.Check {
 	return drill.Check{
 		ID: "drl.kit.rebuild_dry_run", Area: "kit", Critical: true, Order: 18, Timeout: KitRebuildDryRunTimeout,
 		FailCode: doctor.DRL071,
-		Run:      func(ctx context.Context, _ *drill.Env) drill.Outcome { return d.rebuildDryRun(ctx) },
+		Run: func(ctx context.Context, env *drill.Env) drill.Outcome {
+			return d.rebuildDryRun(ctx, env.SubprocessEnv)
+		},
 	}
 }
 
-func (d BuildDeps) rebuildDryRun(ctx context.Context) drill.Outcome {
+func (d BuildDeps) rebuildDryRun(ctx context.Context, subEnv func([]string) []string) drill.Outcome {
 	details := map[string]any{}
 	ok := true
 	for _, p := range []struct {
@@ -254,7 +258,7 @@ func (d BuildDeps) rebuildDryRun(ctx context.Context) drill.Outcome {
 			details[p.name+"_skipped"] = "speech is switched off in node.yaml"
 			continue
 		}
-		rep := p.run(ctx)
+		rep := p.run(ctx, subEnv)
 		good := rep.OK()
 		details[p.name+"_ok"] = good
 		if !good {
@@ -276,13 +280,13 @@ func failedChecks(rep build.Report) string {
 		if s == "" {
 			s = c.ID
 		}
-		parts = append(parts, clipText(s, 140))
+		parts = append(parts, kitClip(s, 140))
 	}
-	return clipText(strings.Join(parts, "; "), 450)
+	return kitClip(strings.Join(parts, "; "), 450)
 }
 
-// clipText cuts s to n bytes (the cloud accepts detail strings of up to 500 characters).
-func clipText(s string, n int) string {
+// kitClip cuts s to n bytes (the cloud accepts detail strings of up to 500 characters).
+func kitClip(s string, n int) string {
 	s = strings.TrimSpace(s)
 	if len(s) <= n {
 		return s

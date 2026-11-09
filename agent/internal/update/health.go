@@ -12,6 +12,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
+	"github.com/marinoscar/local-ai/agent/internal/netx"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 )
 
@@ -275,7 +276,8 @@ func (r *Runner) WaitForUpdate(ctx context.Context, fetch func(context.Context) 
 // WaitForUpdate.
 func FetchHealth(client *http.Client, base string) func(context.Context) (Health, error) {
 	if client == nil {
-		client = &http.Client{Timeout: 5 * time.Second}
+		client = netx.Client("update.health")
+		client.Timeout = 5 * time.Second
 	}
 	return func(ctx context.Context) (Health, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/health", nil)

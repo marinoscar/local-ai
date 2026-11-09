@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/drill"
+	"github.com/marinoscar/local-ai/agent/internal/execx"
 )
 
 // runDrillOnly starts a drill of the given checks, waiting while a model operation of the startup still
@@ -97,3 +98,31 @@ func TestDaemonNewestVerifiedReadsTheContentIndex(t *testing.T) {
 		t.Fatalf("newestVerified = %v, %v", at, ok)
 	}
 }
+
+// Every program the drill's preflight runs gets the subprocess environment of drill.md section 4.4: no
+// proxy variable but a dead one, so a tool that tries the network fails at once; a command with no
+// environment of its own keeps its fixed PATH.
+func TestDrillRunnerAppliesTheSubprocessEnvironment(t *testing.T) {
+	var seen []string
+	inner := runnerFunc(func(_ context.Context, c execx.Cmd) (execx.Result, error) { seen = c.Env; return execx.Result{}, nil })
+	env := (&drill.Env{}).SubprocessEnv
+	r := drillRunner{inner: inner, env: env}
+
+	if _, err := r.Run(context.Background(), execx.Cmd{Path: "/bin/true", Env: []string{"LC_ALL=C", "http_proxy=http://proxy.example.test:3128"}}); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(seen, " ")
+	if !strings.Contains(joined, "LC_ALL=C") || strings.Contains(joined, "proxy.example.test") || !strings.Contains(joined, "HTTPS_PROXY=http://127.0.0.1:9") {
+		t.Fatalf("env = %v", seen)
+	}
+	if _, err := r.Run(context.Background(), execx.Cmd{Path: "/bin/true"}); err != nil {
+		t.Fatal(err)
+	}
+	if joined = strings.Join(seen, " "); !strings.Contains(joined, "PATH="+execx.FixedPath) || !strings.Contains(joined, "HTTP_PROXY=http://127.0.0.1:9") {
+		t.Fatalf("a command with no environment keeps the fixed PATH: %v", seen)
+	}
+}
+
+type runnerFunc func(context.Context, execx.Cmd) (execx.Result, error)
+
+func (f runnerFunc) Run(ctx context.Context, c execx.Cmd) (execx.Result, error) { return f(ctx, c) }

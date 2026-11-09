@@ -84,10 +84,28 @@ func (d *Daemon) drillKitPaths() []string {
 	return out
 }
 
+// drillRunner is an execx.Runner that gives every program the drill's subprocess environment (no
+// proxy, and a dead one: drill.md section 4.4). A command with no environment of its own would get the
+// minimal fixed one, so that is the base.
+type drillRunner struct {
+	inner execx.Runner
+	env   func(base []string) []string
+}
+
+// Run implements execx.Runner.
+func (r drillRunner) Run(ctx context.Context, c execx.Cmd) (execx.Result, error) {
+	base := c.Env
+	if base == nil {
+		base = []string{"PATH=" + execx.FixedPath}
+	}
+	c.Env = r.env(base)
+	return r.inner.Run(ctx, c)
+}
+
 // buildOptions are the seams of the build manager for a preflight: the programs it runs (the
 // daemon's runner and lookup), this computer's architecture, the kit's roots and the offline apt
 // simulation. A preflight reads and runs read-only programs; it compiles nothing and changes nothing.
-func (d *Daemon) drillBuildOptions(paths []string) build.Options {
+func (d *Daemon) drillBuildOptions(paths []string, subEnv func([]string) []string) build.Options {
 	env := d.env
 	run, lookup := env.Runner, env.Lookup
 	if run == nil {
@@ -95,6 +113,9 @@ func (d *Daemon) drillBuildOptions(paths []string) build.Options {
 	}
 	if lookup == nil {
 		lookup = execx.Lookup
+	}
+	if subEnv != nil {
+		run = drillRunner{inner: run, env: subEnv}
 	}
 	opt := build.Options{
 		Exec: run, Lookup: lookup, Arch: runtime.GOARCH, ScratchDir: build.DefaultScratchDir,
@@ -113,18 +134,18 @@ func (d *Daemon) drillBuildOptions(paths []string) build.Options {
 var drillPreflightRequest = build.Request{FromKit: true, DryRun: true, Offline: true}
 
 // llamaPreflight is the dry run of rebuild-llama, in this process.
-func (d *Daemon) llamaPreflight(ctx context.Context) build.Report {
+func (d *Daemon) llamaPreflight(ctx context.Context, subEnv func([]string) []string) build.Report {
 	paths := d.drillKitPaths()
-	opt := d.drillBuildOptions(paths)
+	opt := d.drillBuildOptions(paths, subEnv)
 	opt.Root = d.c.Paths.Join(build.DefaultRoot)
 	opt.Node = func() config.LlamaBlock { return d.c.Config.Get().Llama }
 	return build.New(opt).PreflightReport(ctx, drillPreflightRequest)
 }
 
 // whisperPreflight is the dry run of rebuild-whisper, in this process.
-func (d *Daemon) whisperPreflight(ctx context.Context) build.Report {
+func (d *Daemon) whisperPreflight(ctx context.Context, subEnv func([]string) []string) build.Report {
 	paths := d.drillKitPaths()
-	opt := d.drillBuildOptions(paths)
+	opt := d.drillBuildOptions(paths, subEnv)
 	opt.Recipe = build.WhisperRecipe
 	opt.Root = d.c.Paths.Join(build.DefaultWhisperRoot)
 	opt.Defaults = func() build.Defaults {

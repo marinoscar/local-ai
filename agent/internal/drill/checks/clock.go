@@ -30,11 +30,11 @@ type NewestVerified func() (at time.Time, ok bool)
 func Clock(newest NewestVerified) drill.Check {
 	return drill.Check{
 		ID: "drl.clock", Area: "clock", Order: 21,
-		Run: func(_ context.Context, env *drill.Env) drill.Outcome { return clock(env, newest) },
+		Run: func(_ context.Context, env *drill.Env) drill.Outcome { return clockCheck(env, newest) },
 	}
 }
 
-func clock(env *drill.Env, newest NewestVerified) drill.Outcome {
+func clockCheck(env *drill.Env, newest NewestVerified) drill.Outcome {
 	now := env.Now().UTC()
 	details := map[string]any{"now": now.Format(time.RFC3339)}
 	if newest == nil {
