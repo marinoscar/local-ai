@@ -16,6 +16,11 @@
 // paths and the embedded files of the node. Their dependencies are fields, so every path is tested with
 // a fake transport, a fake file system or a temp directory.
 //
+// DRILL-05 adds the kit and power checks: 17 drl.kit.present and 18 drl.kit.rebuild_dry_run (kit.go),
+// 20 drl.power (power.go) and 21 drl.clock (clock.go), registered by RegisterKit. They see the kit
+// verifier, the build preflights, the installer's hardening checks and the content index through small
+// interfaces; internal/app/drill_checks_kit.go builds them.
+//
 // Properties of every check in this package:
 //
 //   - A check reaches a service only through the agent's own routes (a request to the agent as the

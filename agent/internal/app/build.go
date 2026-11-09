@@ -459,6 +459,9 @@ func (d *Daemon) build(ctx context.Context) error {
 	if err := d.registerDrillModelChecks(drillChecks); err != nil {
 		return err
 	}
+	if err := d.registerDrillKitChecks(drillChecks); err != nil {
+		return err
+	}
 	// The routes and the server.
 	if err := d.buildServer(); err != nil {
 		return err
