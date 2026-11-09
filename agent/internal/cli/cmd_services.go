@@ -122,6 +122,12 @@ func renderServices(p *out.Printer, list []wireService) {
 		if s.Enabled != nil && !*s.Enabled {
 			note = append(note, tr("disabled", "desactivado"))
 		}
+		switch s.Device {
+		case "cpu":
+			note = append(note, tr("runs on the processor (cpu)", "usa el procesador (cpu)"))
+		case "gpu":
+			note = append(note, tr("runs on the graphics card (gpu)", "usa la tarjeta gráfica (gpu)"))
+		}
 		if s.Restarts > 0 {
 			note = append(note, fmt.Sprintf(tr("restarted %d times", "reiniciado %d veces"), s.Restarts))
 		}

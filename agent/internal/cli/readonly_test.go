@@ -704,6 +704,37 @@ func TestServicesWithoutUnits(t *testing.T) {
 	}
 }
 
+// Where the speech service runs its work is shown in plain words, in both languages (#105): on a small card
+// whisper runs on the processor, and an operator should see that without reading a file.
+func TestServicesShowTheSpeechDevice(t *testing.T) {
+	body := `{"services":[
+	  {"name":"llama","unit":"localai-llama.service","active":"active","sub":"running","healthy":true,"state":"ok"},
+	  {"name":"whisper","unit":"localai-whisper.service","active":"active","sub":"running","healthy":true,"state":"ok","model":"whisper-small","device":"%s"}]}`
+	for _, tc := range []struct{ name, lang, device, want string }{
+		{"cpu in English", "en", "cpu", "runs on the processor (cpu)"},
+		{"gpu in English", "en", "gpu", "runs on the graphics card (gpu)"},
+		{"cpu in Spanish", "es", "cpu", "usa el procesador (cpu)"},
+		{"gpu in Spanish", "es", "gpu", "usa la tarjeta gráfica (gpu)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newROFix(t, fake.Options{})
+			f.ag.Respond("GET", "/services", 200, fmt.Sprintf(body, tc.device))
+			r := f.run("--lang", tc.lang, "services")
+			if r.code != 0 || !strings.Contains(r.out, tc.want) {
+				t.Fatalf("want %q in:\n%s", tc.want, r.out)
+			}
+		})
+	}
+	t.Run("--json stays the agent body", func(t *testing.T) {
+		f := newROFix(t, fake.Options{})
+		f.ag.Respond("GET", "/services", 200, fmt.Sprintf(body, "cpu"))
+		r := f.run("--json", "services")
+		if r.code != 0 || !strings.Contains(r.out, `"device":"cpu"`) {
+			t.Fatalf("%+v", r)
+		}
+	})
+}
+
 // Hundreds of rows and thousands of log lines go through unchanged and unwrapped.
 func TestHugeOutput(t *testing.T) {
 	t.Run("logs 2000 long lines", func(t *testing.T) {

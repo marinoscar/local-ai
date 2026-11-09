@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
@@ -25,6 +26,30 @@ type whisperState struct {
 	// mu serializes applyWhisper; device is the device of the last applied selection (a string).
 	mu     sync.Mutex
 	device atomic.Value
+	// reserve is the graphics memory (MiB) the last applied selection reserves on the gpu: the model's
+	// min_vram_mib, 0 on the cpu or without a model. The router's fit rules read it as W_res through
+	// whisperReserveMiB.
+	reserve atomic.Int64
+}
+
+// whisperReserveMiB is W_res of the router's fit rules (llama-router.md section 4.3.1, companion-services.md
+// section 4.2.3): the resolved model's min_vram_mib while whisper's device is gpu and localai-whisper is not
+// running yet; 0 otherwise, because once the unit runs its memory is already measured in G_others and
+// counting it again would refuse loads that fit. A unit that cannot be read counts as not running: the
+// reservation is the safe side of a load that is about to share the card.
+func (d *Daemon) whisperReserveMiB() int64 {
+	reserve := d.whisper.reserve.Load()
+	if reserve <= 0 {
+		return 0
+	}
+	if d.c != nil && d.c.Systemd != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if st, err := d.c.Systemd.State(ctx, services.UnitWhisper); err == nil && st.Active() {
+			return 0
+		}
+	}
+	return reserve
 }
 
 // writeWhisperUnit writes localai-whisper.service and reloads systemd (companion-services.md section
@@ -83,6 +108,7 @@ func (d *Daemon) whisperInputs() whisper.Inputs {
 // to call from any trigger; calls are serialized.
 func (d *Daemon) applyWhisper(ctx context.Context) {
 	if !blockEnabled(d.c.Config.Get(), "whisper") || d.c.Systemd == nil || d.c.Catalog == nil {
+		d.whisper.reserve.Store(0)
 		return
 	}
 	d.whisper.mu.Lock()
@@ -99,6 +125,7 @@ func (d *Daemon) applyWhisper(ctx context.Context) {
 		}
 	}
 	d.whisper.device.Store(sel.Device)
+	d.whisper.reserve.Store(sel.ReserveMiB)
 	w := &whisper.EnvWriter{Path: d.c.Paths.WhisperEnv(), Units: d.c.Systemd, UID: -1, GID: -1}
 	if !d.env.Unprivileged && d.haveLocalAI {
 		w.UID, w.GID = 0, d.localaiGID
