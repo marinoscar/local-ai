@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"sort"
 	"strconv"
@@ -33,6 +34,8 @@ type tsStatus struct {
 	BackendState string
 	// DNSName is Self.DNSName without its trailing dot; "" when unknown.
 	DNSName string
+	// IPv4 is the node's own Tailscale IPv4 address (Self.TailscaleIPs); "" when unknown.
+	IPv4 string
 	// PeersOnline counts the peers reported Online.
 	PeersOnline int
 }
@@ -41,7 +44,8 @@ func parseTSStatus(b []byte) (tsStatus, error) {
 	var raw struct {
 		BackendState string `json:"BackendState"`
 		Self         *struct {
-			DNSName string `json:"DNSName"`
+			DNSName      string   `json:"DNSName"`
+			TailscaleIPs []string `json:"TailscaleIPs"`
 		} `json:"Self"`
 		Peer map[string]*struct {
 			Online bool `json:"Online"`
@@ -53,6 +57,12 @@ func parseTSStatus(b []byte) (tsStatus, error) {
 	st := tsStatus{BackendState: raw.BackendState}
 	if raw.Self != nil {
 		st.DNSName = strings.TrimSuffix(strings.TrimSpace(raw.Self.DNSName), ".")
+		for _, ip := range raw.Self.TailscaleIPs {
+			if a, err := netip.ParseAddr(strings.TrimSpace(ip)); err == nil && a.Is4() {
+				st.IPv4 = a.String()
+				break
+			}
+		}
 	}
 	for _, p := range raw.Peer {
 		if p != nil && p.Online {

@@ -61,8 +61,7 @@ In this page the new node is **ai-n4** on a machine called **dell-linux**. Use t
    - **Name:** for example `Dell Precision (ai-n4)`. Empty uses the node id.
    - **Public host:** `ai-n4.marin.cr` (filled in for you).
    - **Serve:** **Pattern B** unless you have a reason for A.
-   - **Tailnet name:** the machine name (`dell-linux`). Paste the full name (`dell-linux.<TAILNET>.ts.net`) to have it filled into the vhost file in Part 7; with the short name that file shows `<TAILNET>` for you to replace.
-   - **Tailnet IP:** if you know it (run `tailscale ip -4` on the node after Part 5), enter it now. It is stored for administrators only and is used only to fill in the vhost file in Part 7. Left empty, that file shows the placeholder `<TAILNET_IP_AI_N4>` and you type the address in by hand.
+   - **Tailnet name:** leave it empty. The node tells the cloud its own tailnet name and address by itself as soon as it contacts the cloud (Part 3, once Tailscale is connected), and the vhost file in Part 7 is filled in from them. There is no tailnet address to type anywhere in the wizard. (An older node that does not report them can still be set by hand under node page → **Settings**.)
    - **Profile hint:** your best guess (`small-8gb`, `cuda-12gb`, `max-128gb`, `cpu-only`); the installer confirms it.
    Press **Create node**.
    - **What you should see:** step 2 of 3, **Install on the node**, with the **node credential** `nod_…` **shown once** (hidden by default; **Show** and **Copy** are next to it) and the three install commands with the **checksum**. The credential works for this node only.
@@ -168,7 +167,7 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
     tailscale ip -4
     ```
 
-    - **What you should see:** this machine and the VPS `prod-server` in the list. The second command prints this node's tailnet IP (`100.…`). **That address is secret for this repo:** write it only into `inventory.local.yaml` (Part 9) and into the cloud (node page → **Settings** → **Tailnet IP**).
+    - **What you should see:** this machine and the VPS `prod-server` in the list. The second command prints this node's tailnet IP (`100.…`). **That address is secret for this repo:** write it only into `inventory.local.yaml` (Part 9). You do not enter it in the cloud: the node reports it by itself (node page → **Settings** shows it masked, with **Reveal**).
 17. **Check the node publishes itself on the tailnet** (the agent does this in online mode; the installer never does):
 
     ```
@@ -387,7 +386,7 @@ To rehearse with a test name first, the lab owner can set the setting `vps.stagi
 
 > 🛠 Verify when implemented (Epic E7).
 
-29. In the cloud, node page → **Settings**: check **Public host**, **Serve pattern**, **Tailnet machine**, **Tailnet IP**; set **gateway enabled** and a **priority**. Save.
+29. In the cloud, node page → **Settings**: check **Public host**, **Serve pattern**, **Tailnet machine** and the masked **Tailnet IP** (both were reported by the node; if the IP says *Not set*, the node is old or Tailscale was not connected when it enrolled: wait five minutes, the node asks again by itself, then look again); set **gateway enabled** and a **priority**. Save.
 30. Wizard step **8. Gateway test → Check**.
     - **What you should see:** ✔, and the banner "ai-n4 is part of the lab".
 31. From any computer, with a `lai_` key ([02 Part 3](02-chat-and-api-keys.md)):

@@ -129,10 +129,12 @@ type Deps struct {
 	Hardware HardwareView
 	Host     HostSource
 	Keys     KeySource
-	Claim    ClaimLoop
-	Events   EventSubscriber
-	Bus      Publisher
-	Alerts   AlertSink
+	// Tailnet gives the node's own tailnet address; nil means the node never reports it (issue #437).
+	Tailnet TailnetSource
+	Claim   ClaimLoop
+	Events  EventSubscriber
+	Bus     Publisher
+	Alerts  AlertSink
 	// Inflight returns the commands in flight: the count (slotsUsed of the vitals) and the record
 	// GET /cloud shows (nil for none). The claim loop provides it.
 	Inflight func() (count int, info map[string]any)
@@ -174,6 +176,8 @@ type Link struct {
 	stateWake chan struct{}
 	keyWake   chan struct{}
 	hbWake    chan struct{}
+	// tailnetWake asks the tailnet loop to look at the node's own address (a handshake that advertises it).
+	tailnetWake chan struct{}
 
 	// paused: a drill runs and the link stands still (pause.go).
 	paused atomic.Bool
@@ -234,7 +238,7 @@ func New(d Deps) (*Link, error) {
 	}
 	l := &Link{d: d, clk: d.Clock, rnd: d.Rand, hostSrc: d.Host,
 		opSem: make(chan struct{}, 1), sigCh: make(chan struct{}, 1),
-		stateWake: make(chan struct{}, 1), keyWake: make(chan struct{}, 1), hbWake: make(chan struct{}, 1)}
+		stateWake: make(chan struct{}, 1), keyWake: make(chan struct{}, 1), hbWake: make(chan struct{}, 1), tailnetWake: make(chan struct{}, 1)}
 	l.d.HTTP = pauseGate{next: d.HTTP, paused: &l.paused}
 	if l.clk == nil {
 		l.clk = RealClock{}

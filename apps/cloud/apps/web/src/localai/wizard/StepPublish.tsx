@@ -23,8 +23,8 @@ const STATE_CHIP: Record<StepState, { label: string; color: 'default' | 'success
 };
 
 const PLACEHOLDER_HELP: Record<string, string> = {
-  tailnetIp: 'The node’s tailnet IP is not stored yet, so the file shows a placeholder. Replace it with the address from "tailscale ip -4" on the node.',
-  tailnetName: 'The full tailnet name is not stored yet, so the file shows <TAILNET>. Replace it with your tailnet’s name (see "tailscale status").',
+  tailnetIp: 'The node has not reported its tailnet address yet, so the file shows a placeholder. It fills in by itself once the node has contacted the cloud; if the node is old, set it in the node’s Settings tab.',
+  tailnetName: 'The node has not reported its full tailnet name yet, so the file shows <TAILNET>. It fills in by itself once the node has contacted the cloud; if the node is old, set it in the node’s Settings tab.',
 };
 
 function showLabel(step: ChecklistStep): string {

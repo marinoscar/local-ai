@@ -77,12 +77,12 @@ describe('step 1: describe the node', () => {
     expect(client.createNode).not.toHaveBeenCalled();
   });
 
-  it('refuses an address outside the tailnet range', async () => {
+  it('does not ask for the tailnet address: the node reports it by itself (#437)', async () => {
     renderWizard();
     await waitFor(() => expect(screen.getByLabelText(/^Node id/)).toHaveValue(NODE_ID));
-    fireEvent.change(screen.getByLabelText(/^Tailnet IP/), { target: { value: ['192', '168', '1', '5'].join('.') } });
-    expect(screen.getByText(/not a Tailscale address/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create node' })).toBeDisabled();
+    expect(screen.queryByLabelText(/^Tailnet IP/)).toBeNull();
+    expect(screen.getByLabelText(/^Tailnet name/)).toBeInTheDocument();
+    expect(screen.getByText(/node reports its own tailnet name and address/)).toBeInTheDocument();
   });
 
   it('sends only what was filled in; blank optional fields and the derived host are left out', async () => {
@@ -96,12 +96,10 @@ describe('step 1: describe the node', () => {
   it('sends the fields it was given, a host override and Pattern A included', async () => {
     const { client } = renderWizard();
     await waitFor(() => expect(screen.getByLabelText(/^Node id/)).toHaveValue(NODE_ID));
-    const tailnetIp = ['100', '71', '8', '9'].join('.');
     fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Dell Precision (ai-n4)' } });
     fireEvent.change(screen.getByLabelText('Public host'), { target: { value: 'node.example.test' } });
     fireEvent.click(screen.getByRole('radio', { name: /Pattern A/ }));
     fireEvent.change(screen.getByLabelText(/^Tailnet name/), { target: { value: 'dell-linux' } });
-    fireEvent.change(screen.getByLabelText(/^Tailnet IP/), { target: { value: tailnetIp } });
     fireEvent.mouseDown(screen.getByLabelText(/^Profile hint/));
     fireEvent.click(await screen.findByRole('option', { name: 'cuda-12gb' }));
     fireEvent.click(screen.getByRole('button', { name: 'Create node' }));
@@ -112,7 +110,6 @@ describe('step 1: describe the node', () => {
       publicHost: 'node.example.test',
       servePattern: 'A',
       tailnetMachine: 'dell-linux',
-      tailnetIp,
       profile: 'cuda-12gb',
     });
   });
@@ -179,8 +176,9 @@ describe('step 2: install, with the credential shown once', () => {
     expect(commands).toHaveTextContent('curl -fsSLO https://github.com/marinoscar/local-ai/releases/download/node-v0.4.1/install-node.sh');
     expect(commands).toHaveTextContent(`sudo bash install-node.sh --node-id ${NODE_ID} --cloud-url https://ai.marin.cr --enroll`);
     expect(commands.textContent).not.toMatch(/nod_/);
-    expect(commands.textContent).not.toMatch(/\|\s*(sudo\s+)?(ba)?sh/); // never piped into a shell
+    expect(commands.textContent).not.toMatch(/\|\s*(sudo\s+)?(ba)?sh\b/); // never piped into a shell
     expect(screen.getByTestId('script-sha256')).toHaveTextContent(SHA);
+    expect(commands.textContent).toContain(`echo "${SHA}  install-node.sh" | sha256sum -c`); // OK or FAILED, no comparing by eye
     fireEvent.click(screen.getByRole('button', { name: 'Copy install commands' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('--enroll')));
     expect(screen.getByText(/It asks for the credential above/)).toBeInTheDocument();
@@ -384,7 +382,7 @@ describe('step 3: publish', () => {
     expect(within(row).queryByText(/server_name/)).toBeNull();
     fireEvent.click(within(row).getByRole('button', { name: 'Show file' }));
     expect(await within(row).findByLabelText('File /opt/infra/proxy/nginx/conf.d/ai-n4.marin.cr.conf')).toHaveTextContent('server_name ai-n4.marin.cr;');
-    expect(within(row).getByText(/tailnet IP is not stored yet/)).toBeInTheDocument();
+    expect(within(row).getByText(/has not reported its tailnet address yet/)).toBeInTheDocument();
     fireEvent.click(within(row).getByRole('button', { name: 'Copy Final HTTPS vhost (Pattern B)' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('server_name ai-n4.marin.cr;')));
     fireEvent.click(within(row).getByRole('button', { name: 'Hide' }));

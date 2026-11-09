@@ -21,6 +21,8 @@ const (
 	FeatureCommands = "commands.v1"
 	FeatureCatalog  = "catalog.v1"
 	FeatureKey      = "key.v1"
+	// FeatureTailnet: POST .../localai/tailnet exists (the node reports its own tailnet address, issue #437).
+	FeatureTailnet = "tailnet.v1"
 	// FeatureHostVitals is EAB's serverFeatures entry that lets heartbeats carry host, power and events.
 	FeatureHostVitals = "node_host_vitals"
 )
@@ -121,6 +123,9 @@ func (l *Link) handshake(ctx context.Context) error {
 		l.raise(doctor.CLD056, nil)
 	}
 	l.checkSkew(hr.ServerTime, now)
+	if slices.Contains(hs.Features, FeatureTailnet) {
+		l.kick(l.tailnetWake)
+	}
 	if !hs.KeyReported {
 		// The cloud lost the key (or never had it): push it again.
 		_ = l.d.State.Mutate(func(s *state.State) error { s.Key.CloudSynced = false; return nil })

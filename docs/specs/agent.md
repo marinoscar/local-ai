@@ -1512,7 +1512,7 @@ Every state change emits `cloud.state` and is logged (`component=cloud`).
 
 | Field | Use |
 |---|---|
-| `features` (`state.v1`, `commands.v1`, `catalog.v1`, `key.v1`) | which app routes exist |
+| `features` (`state.v1`, `commands.v1`, `catalog.v1`, `key.v1`, `tailnet.v1`) | which app routes exist |
 | `commandPlane` (`localai` \| `eab`) | which claim routes to use (§4.8.6) |
 | `heartbeatIntervalS` | overrides `cloud.poll.heartbeat_seconds` |
 | `stateMinIntervalS`, `stateMaxIntervalS` | debounce / maximum interval of the state push (§4.8.4) |
@@ -1565,6 +1565,9 @@ The rich Local AI state goes to **`POST /api/nodes/{server_node_id}/localai/stat
 
 #### 4.8.5 Llama key push
 `POST /api/nodes/{server_node_id}/localai/key` body `{"key": "<64 hex>", "fingerprint": "ab12…9f3c", "rotated_at": "…"}` ([cloud-app.md](cloud-app.md) §3.6; stored as `('localai_node_llama_key', '<node-id>')`: purpose `localai_node_llama_key`, name `<node-id>`, the address [security-model.md](../architecture/security-model.md) §2 names; EAB names may not contain `:`). Sent: at enroll; after every key rotation **before** the rotate command's result is reported; whenever the handshake says `keyReported: false`; on `POST /cloud/resend-key` (`aictl cloud resend-key`); and on link start while `state.key.cloud_synced == false`. HTTPS only (never with `dev_insecure`). `2xx` → `cloud_synced = true`. Failure → retry every 5 min while linked; `LAI-CLD-060` (warning) after 30 min unsynced. Only the fingerprint is ever logged.
+
+#### 4.8.5a Tailnet address push
+`POST /api/nodes/{server_node_id}/localai/tailnet` body `{"ip": "<tailnet address>", "machine": "<MagicDNS name>"}` ([cloud-app.md](cloud-app.md) §3.6; issue #437). The node reports its own address and name so the Add-node wizard does not ask a person for them. The `tailnet` loop of the link (`internal/cloud/tailnet.go`) runs when a handshake lists `tailnet.v1`, reads them from `tailscale status --json` (`Self.TailscaleIPs`, the first IPv4, and `Self.DNSName`; `TailscaleManager.SelfAddress`), and sends them. An address already sent is not sent again; it looks every hour (a new login changes the address) and every 5 minutes while tailscale is not up or the cloud did not take it. A cloud that does not list the feature is never called. The address goes into this one request body only: it is not logged (the log says "the tailnet address was sent to the cloud"), not in the capabilities (the scrubber still drops it there) and not in the state snapshot.
 
 #### 4.8.6 Command plane: claim, renew, settle
 Two wire-compatible planes, chosen by the handshake's `commandPlane` ([cloud-app.md](cloud-app.md) §3.6/§3.12):

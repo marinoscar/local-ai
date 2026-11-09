@@ -15,9 +15,16 @@ describe('buildInstall', () => {
     const lines = buildInstall(base).oneLiner!.split('\n');
     expect(lines).toHaveLength(3);
     expect(lines[0]).toBe('curl -fsSLO https://github.com/marinoscar/local-ai/releases/download/node-v0.4.1/install-node.sh');
-    expect(lines[1]).toMatch(/^sha256sum install-node\.sh/);
+    expect(lines[1]).toBe(`echo "${SHA}  install-node.sh" | sha256sum -c          # must print: install-node.sh: OK`);
     expect(lines[2]).toBe('sudo bash install-node.sh --node-id ai-n4 --cloud-url https://ai.marin.cr --enroll');
-    expect(buildInstall(base).oneLiner).not.toMatch(/\|\s*(sudo\s+)?(ba)?sh/);
+    expect(buildInstall(base).oneLiner).not.toMatch(/\|\s*(sudo\s+)?(ba)?sh\b/);
+  });
+
+  it('the check compares the checksum itself and prints OK or FAILED (#437); with no checksum it only prints the sum', () => {
+    expect(buildInstall(base).oneLiner).toContain(`echo "${SHA}  install-node.sh" | sha256sum -c`);
+    const unknown = buildInstall({ ...base, sha256: null }).oneLiner!.split('\n');
+    expect(unknown[1]).toMatch(/^sha256sum install-node\.sh\s+# compare with the checksum on the release page$/);
+    expect(unknown[1]).not.toContain('| sha256sum -c');
   });
 
   it('has no credential in it: --enroll asks for it on the terminal', () => {

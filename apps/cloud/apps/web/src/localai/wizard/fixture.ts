@@ -17,7 +17,7 @@ export function createResult(token: string = makeToken(), patch: Partial<CreateN
     install: {
       oneLiner: [
         'curl -fsSLO https://github.com/marinoscar/local-ai/releases/download/node-v0.4.1/install-node.sh',
-        'sha256sum install-node.sh          # compare with the checksum shown here',
+        `echo "${SHA}  install-node.sh" | sha256sum -c          # must print: install-node.sh: OK`,
         `sudo bash install-node.sh --node-id ${NODE_ID} --cloud-url https://ai.marin.cr --enroll`,
       ].join('\n'),
       pinnedScriptUrl: 'https://github.com/marinoscar/local-ai/releases/download/node-v0.4.1/install-node.sh',
