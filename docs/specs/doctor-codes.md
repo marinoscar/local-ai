@@ -487,7 +487,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-INS-017 | warning | The clock is wrong | Set the date and time, then re-run. |
 | LAI-INS-020 | error | This computer already has a different node id | Keep the old id, or uninstall with `--purge-config` first. |
 | LAI-INS-021 | critical | The agent download failed its signature check | Download again; if it repeats, don't install and report it. |
-| LAI-INS-030 | error | Package installation failed | Read the apt messages above, fix, and re-run. |
+| LAI-INS-030 | error | Package installation failed | If the disk is full, free some space; if a package from the kit is broken, copy the kit again from the AI-ARK drive; then run the installer again. |
 | LAI-INS-031 | error | The old llama-qwen service is still using port 8080 | Re-run without `--no-migrate`. |
 | LAI-INS-032 | error | Building llama.cpp failed | Read `build.log` in the failed build folder under `/opt/localai/llama.cpp/builds/` (named in the message); run `sudo install-node.sh --repair`. |
 | LAI-INS-033 | error | Migration failed and was rolled back | The old service is running again. Read the log and report it. |

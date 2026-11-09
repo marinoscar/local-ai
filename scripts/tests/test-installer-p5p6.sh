@@ -38,6 +38,12 @@ out="$(env FAKE_INSTALLED=none FAKE_APT_FAIL=1 P56_LOG="$p56" bash -c 'PATH="$1/
 t "apt failure prints at most the last 20 lines of apt" 0 "" bash -c 'n=$(grep -c "^  | apt noise line" <<<"$1"); [ "$n" -le 20 ] && [ "$n" -ge 1 ]' _ "$out"
 t "apt failure shows the error line" 0 "Unable to locate package fake" grep -F "Unable to locate package fake" <<<"$out"
 t "apt failure stops before the binaries" 0 "" bash -c '! test -s "$1"' _ "$p56/aiagent.log"
+t "apt failure with an unknown error names no cause" 0 "" bash -c '! grep -q "Most likely cause" <<<"$1"' _ "$out"
+run030() { env FAKE_INSTALLED=none FAKE_APT_FAIL=1 FAKE_APT_ERR="$1" P56_LOG="$p56" bash -c 'PATH="$1/bin:$PATH" LAI_INSTALLER_DEV=1 LAI_INSTALL_AIAGENT="$1/aiagent"; export PATH LAI_INSTALLER_DEV LAI_INSTALL_AIAGENT; UI_LANG="$3"; source "$2"; UI_LANG="$3"; phase_packages' _ "$p56" "$INST" "$2" 2>&1; }
+t "LAI-INS-030: a full disk is named, with its fix" 0 "the disk is full" grep -F "Most likely cause: the disk is full" <<<"$(run030 'E: Write error - write (28: No space left on device)' en)"
+t "LAI-INS-030: a full disk, in Spanish" 0 "el disco está lleno" grep -F "Causa más probable: el disco está lleno" <<<"$(run030 'E: Write error - write (28: No space left on device)' es)"
+t "LAI-INS-030: a damaged package is named, with its fix" 0 "damaged" grep -F "Most likely cause: a package from the kit is damaged" <<<"$(run030 'E: Failed to fetch  Hash Sum mismatch' en)"
+t "LAI-INS-030: a damaged package, in Spanish" 0 "dañado" grep -F "Causa más probable: un paquete del kit está dañado" <<<"$(run030 'dpkg-deb: error: file is not a Debian format archive' es)"
 
 echo "-- P6 offline"
 ark="$w/ark"; mkdir -p "$ark/localai/kit"

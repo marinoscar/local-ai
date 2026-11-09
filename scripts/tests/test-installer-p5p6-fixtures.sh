@@ -24,7 +24,7 @@ case "$*" in
 esac
 if [ -n "$FAKE_APT_FAIL" ]; then
   i=1; while [ $i -le 30 ]; do echo "apt noise line $i"; i=$((i + 1)); done
-  echo "E: Unable to locate package fake" >&2
+  echo "${FAKE_APT_ERR:-E: Unable to locate package fake}" >&2
   exit 100
 fi
 echo "apt ok: $*"

@@ -148,8 +148,8 @@ ins_text() {
     'LAI-INS-021 fix es') printf '%s' 'Descargue de nuevo; si se repite, no lo instale e infórmelo.' ;;
     'LAI-INS-030 title en') printf '%s' 'Package installation failed' ;;
     'LAI-INS-030 title es') printf '%s' 'Falló la instalación de paquetes' ;;
-    'LAI-INS-030 fix en') printf '%s' 'Read the apt messages above, fix, and re-run.' ;;
-    'LAI-INS-030 fix es') printf '%s' 'Lea los mensajes de apt de más arriba, corrija y vuelva a ejecutar.' ;;
+    'LAI-INS-030 fix en') printf '%s' 'If the disk is full, free some space; if a package from the kit is broken, copy the kit again from the AI-ARK drive; then run the installer again.' ;;
+    'LAI-INS-030 fix es') printf '%s' 'Si el disco está lleno, libere espacio; si un paquete del kit está dañado, copie de nuevo el kit desde el disco AI-ARK; luego vuelva a ejecutar el instalador.' ;;
     'LAI-INS-031 title en') printf '%s' 'The old llama-qwen service is still using port 8080' ;;
     'LAI-INS-031 title es') printf '%s' 'El antiguo servicio llama-qwen sigue usando el puerto 8080' ;;
     'LAI-INS-031 fix en') printf '%s' 'Re-run without '\''--no-migrate'\''.' ;;
@@ -1813,12 +1813,26 @@ phase_users_dirs() {
 
 # --- P6 packages --------------------------------------------------------------------------------------------------
 
+# inst04_apt_cause: from apt's last lines, say which of the two usual causes of LAI-INS-030 it looks like (issue #437),
+# in plain words and with the fix for that one. Nothing is said when neither fits: the fix of the code covers both.
+inst04_apt_cause() {
+  local text="${LAST_OUTPUT[*]}"
+  if [[ "$text" == *"No space left on device"* || "$text" == *"Not enough free disk space"* || "$text" == *"write error"* ]]; then
+    say "$(L "Most likely cause: the disk is full. Free some space (empty the trash, delete files you do not need; 'df -h /' shows how much is left), then run the installer again." \
+      "Causa más probable: el disco está lleno. Libere espacio (vacíe la papelera, borre archivos que no necesite; 'df -h /' muestra cuánto queda) y vuelva a ejecutar el instalador.")"
+  elif [[ "$text" == *"Hash Sum mismatch"* || "$text" == *"not a Debian format archive"* || "$text" == *"error processing archive"* || "$text" == *"unexpected end of file"* ]]; then
+    say "$(L "Most likely cause: a package from the kit is damaged. Copy the kit again from the AI-ARK drive, then run the installer again." \
+      "Causa más probable: un paquete del kit está dañado. Copie de nuevo el kit desde el disco AI-ARK y vuelva a ejecutar el instalador.")"
+  fi
+}
+
 # inst04_apt_fail <what>: LAI-INS-030 with apt's last 20 lines.
 inst04_apt_fail() {
   local n=${#LAST_OUTPUT[@]} from=0 i
   if ((n > 20)); then from=$((n - 20)); fi
   say "The last lines apt printed:"
   for ((i = from; i < n; i++)); do say "  | ${LAST_OUTPUT[i]}"; done
+  inst04_apt_cause
   fail 1 LAI-INS-030 "installing the packages failed at: $1. Read the apt messages above, fix what they name, then re-run: sudo install-node.sh"
 }
 
