@@ -238,7 +238,7 @@ Mapa completo de tareas, oleadas y ruta crítica: [ROADMAP.md](docs/ROADMAP.md).
 
 - **Primero el issue.** Todo cambio se registra en un issue de GitHub dentro de una épica. Un issue = una rama `<tipo>/<n.º de issue>-<descripción>` = un PR que dice `Closes #<issue>`. Los commits siguen Conventional Commits (`feat(agent): …`).
 - **Depuración de datos.** El repositorio es público. Ejecute `scripts/install-hooks.sh` una vez por clon; bloquea los commits que filtren valores del laboratorio. Revise cuando quiera con `scripts/check-redaction.sh`. Detalles en [AGENTS.md](AGENTS.md#local-setup-once-per-clone).
-- **Otras revisiones antes de subir cambios:** `scripts/check-links.sh` (todos los enlaces y anclas se resuelven) y `scripts/check-doctor-codes.sh` (los códigos de error coinciden con sus especificaciones). La CI ejecuta todas.
+- **Otras revisiones antes de subir cambios:** `scripts/check-links.sh` (todos los enlaces y anclas se resuelven), `scripts/check-doctor-codes.sh` (los códigos de error coinciden con sus especificaciones) y `scripts/check-runbooks.sh` (cada comando, opción, código y ruta que muestra un manual existe). La CI ejecuta todas.
 - **Compilar y probar cada parte:**
 
   | Parte | Comandos |

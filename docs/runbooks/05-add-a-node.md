@@ -116,6 +116,8 @@ The installer turns Ubuntu into a node: users and folders, packages, llama.cpp b
 
     - It asks you to **choose an admin PIN** (4 to 8 digits), twice. You'll need it to delete things or leave Survival mode. **Write it down** and keep it with the ark drive's paper copy of [01](01-survival-mode.md), not on the drive itself.
     - NVIDIA without a working driver: it offers to install it; say yes, reboot when told, and run the same command again.
+    - The installer also copies itself to `/opt/localai/installers/install-node.sh` and links it at `/usr/local/sbin/install-node.sh`, so any time later `sudo install-node.sh --repair` works exactly as typed (no `bash`, no folder). It turns on the nightly sync and the monthly drill (`localai-sync.timer`, `localai-drill.timer`).
+    - Two options for special cases: `--desktop-user <name>` (the person who normally uses this computer) when you run it directly as root instead of with `sudo`, and `--agent-sha256 <64-character value>` (the agent's checksum shown by the wizard) when the signature tool `minisign` cannot be installed.
     - **What you should see:** `==> [n/15] <phase>` lines, then `Local AI node ai-n4 is installed.`, the brain, local UI address, the API key hint `ab12…ef90`, and a **TO DO** list with a **VPS CHECKLIST**. Keep this terminal open or copy the text: it's also in `/var/log/localai-install.log`.
     - **If it doesn't work:** it stops with the phase and code. Fix what it says and run the same command again: it continues where it stopped. See [07 → Installer stopped](07-troubleshooting.md#installer-stopped).
 12. **Reboot** (laptop power settings only apply after a reboot; never restart logind by hand, see [09](09-laptop-as-server.md)):
@@ -213,7 +215,7 @@ The installer printed this checklist with the right pattern. The wizard's step 3
     - **What you should see:** the status goes **Queued**, **Running**, **Finished**, and the list shows six steps with **Done** or **Skipped**; the checklist below shows steps 2 to 5 as **Done**.
     - **If it doesn't work:** a step shows **Failed** with a sentence that says why (and the steps after it say **Not run**). Read the sentence, fix the cause, and press the button again: every step can be repeated safely. A failed vhost step always puts the old file back, so the other websites on the VPS keep working.
 - **C. Check it.** Do step 27 (validate) yourself. The helper checks `/health` and `/v1/models` too, but a second look costs a minute.
-- **D. To take a node off the internet again** (for example before you retire it), press **Unpublish…** in the same place and confirm. It removes the vhost and the DNS record and leaves the certificate to expire. The node itself keeps working on the tailnet.
+- **D. To take a node off the internet again** (for example before you retire it), press **Unpublish…** in the same place and confirm. It removes the vhost, reloads nginx, deletes the DNS record (the A record) and leaves the certificate to expire. The node itself keeps working on the tailnet.
 - Step 28 (commit the vhost in `marin-server-infra`) is still yours either way.
 
 To rehearse with a test name first, the lab owner can set the setting `vps.stagingSuffix` to `-staging`: the helper then publishes `ai-n4-staging.marin.cr` instead. Leave it empty for real nodes.
