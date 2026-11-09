@@ -41,3 +41,18 @@ jobs:
         run: scripts/check-doctor-codes.sh
       - name: Doctor code check self-test (fixtures)
         run: scripts/tests/test-doctor-codes.sh
+  runbooks:
+    # The mechanical half of the runbook dry runs (issues #166 to #176): every aictl/aiagent command and flag a
+    # runbook shows exists in the real binary's help, every code is in the registry, steps are numbered and
+    # carry their answers, installed paths are the canonical ones. It builds aictl from agent/ (so a CLI change
+    # that breaks a runbook fails here). scripts/check-runbooks.sh documents the rules.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: agent/go.mod
+      - name: shellcheck the runbook checker
+        run: shellcheck -S warning scripts/check-runbooks.sh scripts/tests/test-check-runbooks.sh
+      - name: Runbook checker self-test (fake binaries) and the real runbooks
+        run: scripts/tests/test-check-runbooks.sh
