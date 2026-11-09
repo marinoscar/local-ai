@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/services"
 	"github.com/marinoscar/local-ai/agent/internal/services/fake"
@@ -67,14 +68,33 @@ func TestWhisperReserveIsPassedToTheRouterInputs(t *testing.T) {
 	r := newRig(t)
 	d := r.start()
 	r.waitStarted()
-	d.whisper.reserve.Store(1500)
-	if got := d.routerInputs().Fit.WhisperReserveMiB; got != 1500 {
-		t.Errorf("router inputs W_res = %d, want 1500", got)
+	whisperIs := func(active string) {
+		r.sysd.Set(services.UnitState{Unit: services.UnitWhisper, ActiveState: active})
 	}
-	if d.merger == nil || d.merger.WhisperReserveMiB == nil || d.merger.WhisperReserveMiB() != 1500 {
-		t.Error("the model list does not get W_res")
+	// The daemon may start the speech unit in the fake while it comes up (it does on a slow machine), which is
+	// the "already running" case; so say what this half is about right before reading, and read again if the
+	// daemon got in between.
+	var inputs, list int64
+	for attempt := 0; attempt < 50; attempt++ {
+		whisperIs("inactive")
+		d.whisper.reserve.Store(1500)
+		inputs = d.routerInputs().Fit.WhisperReserveMiB
+		list = 0
+		if d.merger != nil && d.merger.WhisperReserveMiB != nil {
+			list = d.merger.WhisperReserveMiB()
+		}
+		if inputs == 1500 && list == 1500 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	r.sysd.Set(services.UnitState{Unit: services.UnitWhisper, ActiveState: services.ActiveActive})
+	if inputs != 1500 {
+		t.Errorf("router inputs W_res = %d, want 1500", inputs)
+	}
+	if list != 1500 {
+		t.Errorf("the model list gets W_res %d, want 1500", list)
+	}
+	whisperIs("active")
 	if got := d.routerInputs().Fit.WhisperReserveMiB; got != 0 {
 		t.Errorf("whisper running: W_res = %d, want 0", got)
 	}
