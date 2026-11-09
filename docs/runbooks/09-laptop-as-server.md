@@ -34,11 +34,11 @@ Use this when a laptop must work like a server: stay on with the lid closed, nev
    - **If it doesn't work:** run the repair, then **reboot**:
 
      ```
-     sudo bash /opt/localai/installers/install-node.sh --repair
+     sudo install-node.sh --repair
      sudo reboot
      ```
 
-     (If that file is missing, use the copy on the AI-ARK drive: `sudo bash /media/$USER/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/$USER/AI-ARK --repair`.)
+     (If the command is not found, use the copy on the AI-ARK drive: `sudo bash /media/$USER/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/$USER/AI-ARK --repair`.)
 
 2. **Each setting by hand.** Run each command; compare with "What you should see".
 
@@ -151,6 +151,8 @@ Use this only if the installer can't run, or one setting is wrong. These are exa
 
 ## Part 3. Things software can't set
 
+<!-- runbook-lint: no-expect-section (BIOS settings that differ on every maker) -->
+
 10. **BIOS: "Power on after AC restore"** (sometimes called "AC Power Recovery", "Restore on AC power loss" or "Wake on AC"). Restart, press the BIOS key at the logo (often **F10** on HP, **F2** on Dell and MSI, **Del** on desktops), find the option under *Power* or *Advanced*, set it **On**, save and exit. Not every laptop has it. Then the laptop starts by itself when power comes back after a cut.
     - With disk encryption (LUKS), it still stops at the passphrase prompt after a power cut. That's the trade-off ([05 Part 1](05-add-a-node.md)).
 11. **Battery charge limit:** if the BIOS or the maker's tool offers a limit (for example 80 %), turn it on for a laptop that is always plugged in. The battery lasts longer.
@@ -199,7 +201,7 @@ Use this only if the installer can't run, or one setting is wrong. These are exa
 19. To remove these settings, the installer can revert them (SSH, packages and users are left):
 
     ```
-    sudo bash /opt/localai/installers/install-node.sh --uninstall --revert-hardening
+    sudo install-node.sh --uninstall --revert-hardening
     ```
 
     That also uninstalls Local AI (content and settings are kept unless you add `--purge-…`). To revert only one setting by hand: delete the file you created in Part 2 (or `sudo systemctl unmask …` for step 4), then reboot.

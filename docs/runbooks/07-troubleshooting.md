@@ -43,6 +43,7 @@ Do this first, for every problem.
 
    - `LAI-CLI-002` (your user may not talk to the agent): `sudo usermod -aG localai-operators $USER`, then log out and back in.
    - `command not found`: Local AI isn't installed on this computer, or the link is missing. Try `sudo /opt/localai/bin/aiagent ctl doctor`. Otherwise see [05](05-add-a-node.md) or [06](06-rebuild-a-node-offline.md).
+   - The number a command ends with (for scripts and the timers): `3` means only "the agent is not reachable", `7` it timed out, `8` it finished with warnings, `9` it finished with errors.
 4. **See and control the three services** (AI `llama`, library `kiwix`, speech `whisper`): `aictl services` lists them; `aictl services start <name>`, `aictl services stop <name>` and `aictl services restart <name>` act on one (`aictl restart <name>` is the same as `services restart`). Stopping `llama` in Survival mode needs `--force`, on purpose.
 5. **Look at the logs** of one part: `aictl logs --unit llama` (also `agent`, `kiwix`, `whisper`, `sync`, `drill`). Keys and tokens are already removed from them, so they are safe to share.
 6. **Desktop app problems:** run `ai-desktop --diagnose` in a terminal (it opens no window and works over ssh). It prints what it checked as JSON, and the `checks` list at the end names every problem with its `LAI-DSK` code and the fix. `"checks": []` means nothing is wrong. It always ends without an error, even when it found problems; read the list, not the exit code. Add `| jq .checks` to see only the list.
@@ -70,7 +71,7 @@ Do this first, for every problem.
      `✓ Signature OK` must appear first. If it says the signature or a file doesn't match (`LAI-KIT-044` or `LAI-AGT-010`), **don't** install it; use the copy on the AI-ARK drive (`/media/$USER/AI-ARK/localai/kit/desktop/`) after checking it the same way.
    - `LAI-DSK-007`: the agent refused the app's login. Press **Make a new token** and type the administrator password; the app connects again by itself. In a terminal instead: `sudo aictl token rotate`, then restart the app.
    - `LAI-DSK-013`: no tray icon. In **Extensions**, turn on "AppIndicator and KStatusNotifierItem Support", then restart the app.
-   - `LAI-DSK-015`: the app's security sandbox couldn't start. Reinstall it from the `.deb` (same command as `LAI-DSK-006`).
+   - `LAI-DSK-015`: the app's security sandbox couldn't start. Reinstall it from the `.deb`: in the folder that holds it (`cd /srv/localai/kit/desktop`), run `sudo apt install ./ai-desktop_<version>_amd64.deb` (check it first as under `LAI-DSK-006`).
    - `LAI-DSK-016`: the app couldn't check or download an update. It shows in the menu (the three dots), under **Check for updates**, and nothing else changes. Try later, or install the update from the kit without internet (same command as `LAI-DSK-006`; [06 step 31a](06-rebuild-a-node-offline.md)). The switch is off by default, and the app does not look for updates in Offline or Survival mode even when it is on.
 3. **Nothing at `http://127.0.0.1:7070` either:** the agent is down. `sudo systemctl start localai-agent`, wait 10 seconds, try again. `LAI-AGT-006` means another program uses port 7070: `sudo ss -ltnp 'sport = :7070'` shows which.
    - **What you should see:** the Portal or the login page.
@@ -79,10 +80,10 @@ Do this first, for every problem.
 4. **Still broken:** repair the installation (keeps your key, PIN and content):
 
    ```
-   sudo bash /opt/localai/installers/install-node.sh --repair
+   sudo install-node.sh --repair
    ```
 
-   (If that file is missing, use the copy on the ark drive: `sudo bash /media/$USER/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/$USER/AI-ARK --repair`.)
+   (If the command is not found, use the copy on the ark drive: `sudo bash /media/$USER/AI-ARK/localai/kit/installers/install-node.sh --from-ark /media/$USER/AI-ARK --repair`.)
 
 ---
 
@@ -349,7 +350,7 @@ The admin PIN protects deletes, key rotation and leaving Survival mode. Starting
 **You see:** `LAI-HW-020` (lid closes → sleep), `LAI-NET-014` (Wi-Fi power saving), `LAI-INS-040` to `LAI-INS-044`, or SSH freezes.
 
 1. `aictl doctor --area HW --area NET`.
-2. Fix:`sudo bash /opt/localai/installers/install-node.sh --repair`, then **reboot**. **Don't restart `systemd-logind`** from the desktop; it can freeze the login.
+2. Fix: `sudo install-node.sh --repair`, then **reboot**. **Don't restart `systemd-logind`** from the desktop; it can freeze the login.
 3. Check each setting by hand and run the lid test: [09](09-laptop-as-server.md). Use an Ethernet cable if you can.
 
 ---
@@ -361,7 +362,7 @@ The installer prints the phase and code, and the full log is `/var/log/localai-i
 | Code | Fix |
 |---|---|
 | `LAI-INS-001` | Install Ubuntu 24.04 or 26.04 LTS (amd64 or arm64) |
-| `LAI-INS-003` | Run it as `sudo bash install-node.sh …` from the desktop user's terminal |
+| `LAI-INS-003` | Run it as `sudo bash install-node.sh …` from the desktop user's terminal, or, if you must be root, add `--desktop-user <name>` (the person who normally uses this computer) |
 | `LAI-INS-010` | Accept the driver install and reboot, or continue without GPU |
 | `LAI-INS-013` | Free disk space, or add `--yes` to accept a smaller budget |
 | `LAI-INS-014` | A port is in use: stop the program it names |

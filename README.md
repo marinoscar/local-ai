@@ -238,7 +238,7 @@ Full issue map, waves and critical path: [ROADMAP.md](docs/ROADMAP.md). Live sta
 
 - **Issue first.** Every change is tracked by a GitHub issue under an epic. One issue = one branch `<type>/<issue#>-<slug>` = one PR that says `Closes #<issue>`. Commits follow Conventional Commits (`feat(agent): …`).
 - **Redaction.** The repo is public. Run `scripts/install-hooks.sh` once per clone; it blocks commits that leak lab values. Check any time with `scripts/check-redaction.sh`. Details in [AGENTS.md](AGENTS.md#local-setup-once-per-clone).
-- **Other checks before you push:** `scripts/check-links.sh` (every link and anchor resolves) and `scripts/check-doctor-codes.sh` (error codes match their specs). CI runs all of them.
+- **Other checks before you push:** `scripts/check-links.sh` (every link and anchor resolves), `scripts/check-doctor-codes.sh` (error codes match their specs) and `scripts/check-runbooks.sh` (every command, flag, code and path a runbook shows exists). CI runs all of them.
 - **Build and test each part:**
 
   | Part | Commands |
