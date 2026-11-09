@@ -436,6 +436,9 @@ func (d *Daemon) build(ctx context.Context) error {
 	if err := registerFenceChecks(drillChecks, c.Paths); err != nil {
 		return err
 	}
+	if err := d.registerContentDrillChecks(drillChecks); err != nil {
+		return fmt.Errorf("drill content checks: %w", err)
+	}
 	c.Drill, err = drill.New(drill.Deps{
 		Registry: drillChecks, Results: results, Observer: reporter, Ark: arkActivity,
 		State: c.State, Publisher: c.Bus, Mode: mv, Llama: llamaActivity{lock: c.OpLock, view: c.RouterWatcher},

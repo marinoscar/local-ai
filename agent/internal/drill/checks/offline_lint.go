@@ -26,8 +26,8 @@ const OfflineLintID = "drl.config.offline_lint"
 // many books is the largest, well under it.
 const maxConfigBytes = 32 << 20
 
-// maxListed bounds the findings the details list; the count is exact.
-const maxListed = 50
+// maxLintListed bounds the findings the details list; the count is exact.
+const maxLintListed = 50
 
 // maxRemoteChars bounds the "remote" detail (a "; "-joined list), like the fence's "blocked".
 const maxRemoteChars = 500
@@ -67,7 +67,7 @@ type lintResult struct {
 
 func (r *lintResult) add(s string) {
 	r.total++
-	if len(r.findings) < maxListed {
+	if len(r.findings) < maxLintListed {
 		r.findings = append(r.findings, s)
 	}
 }

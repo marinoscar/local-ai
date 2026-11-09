@@ -17,11 +17,6 @@ type rtFunc func(*http.Request) (*http.Response, error)
 
 func (f rtFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-func run(t *testing.T, c drill.Check) drill.Outcome {
-	t.Helper()
-	return c.Run(context.Background(), &drill.Env{})
-}
-
 // realFenceCheck is check 1 over a real fenced transport and a private fence.
 func realFenceCheck(f *netx.Fence) drill.Check {
 	return Fence(FenceConfig{Active: f.Active, Transport: netx.Via(f.NewTransport("agent", nil), "agent")})
