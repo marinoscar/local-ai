@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -531,4 +532,89 @@ func TestStateJSONFollowsTheSteps(t *testing.T) {
 	if last := w.st.history[len(w.st.history)-1]; last.State != StateDone || last.Step != M10 || last.At.IsZero() {
 		t.Fatalf("last %+v", last)
 	}
+}
+
+// The first real migration (ai-n2, #158) put the model under a 0750 /srv/localai: the old unit's user could not
+// follow its link, so after a failed switch the old service would not start and the node was down for 5 minutes.
+// M3 now lets other users pass through the directories above the model (o+x, never o+r), M5 proves the old
+// user can read every file before anything stops, and a rollback puts the files back when it still cannot.
+func TestMigrationKeepsTheModelReachableForTheOldServiceUser(t *testing.T) {
+	t.Run("M3 adds the traverse bit to a closed /srv/localai and models, and nothing else", func(t *testing.T) {
+		w := newWorld(t, worldOpts{hasCurrent: true})
+		for _, d := range []string{"/srv/localai", "/srv/localai/models"} {
+			if err := w.fs.Chmod(d, 0o750); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := w.run(w.engine()); err != nil {
+			t.Fatalf("%v\n%s", err, w.out.String())
+		}
+		assertMigrated(t, w, "closed content root")
+		for _, d := range []string{"/srv/localai", "/srv/localai/models"} {
+			fi, err := w.fs.Stat(d)
+			if err != nil || fi.Mode().Perm() != 0o751 {
+				t.Errorf("%s is %v (%v), want 0751: pass through, never read or list", d, fi.Mode().Perm(), err)
+			}
+		}
+		if !strings.Contains(w.out.String(), "letting other users pass through /srv/localai") {
+			t.Errorf("the operator is not told:\n%s", w.out.String())
+		}
+	})
+	t.Run("an open content root is left alone", func(t *testing.T) {
+		w := newWorld(t, worldOpts{hasCurrent: true})
+		if _, err := w.run(w.engine()); err != nil {
+			t.Fatal(err)
+		}
+		if fi, _ := w.fs.Stat("/srv/localai/models"); fi.Mode().Perm() != 0o755 {
+			t.Errorf("mode %v", fi.Mode().Perm())
+		}
+		if strings.Contains(w.out.String(), "letting other users pass through") {
+			t.Error("nothing needed changing")
+		}
+	})
+	t.Run("M5 stops before the old service stops when its user still cannot read a model", func(t *testing.T) {
+		w := newWorld(t, worldOpts{hasCurrent: true})
+		w.legacyUnreadable = true
+		_, err := w.run(w.engine())
+		var me *Error
+		if !errors.As(err, &me) || me.RolledBack || me.Step != M5 || !strings.Contains(me.Message, "labuser (the user of the old service) cannot read") {
+			t.Fatalf("err = %v", err)
+		}
+		if st := w.sd.unit(w.legacy()); st.active != "active" {
+			t.Errorf("the old service must still serve: %+v", st)
+		}
+		w.legacyUnreadable = false
+		w.out = &lockedBuf{}
+		if _, err := w.run(w.engine()); err != nil {
+			t.Fatalf("the re-run: %v\n%s", err, w.out.String())
+		}
+		assertMigrated(t, w, "re-run after the cause is gone")
+	})
+	t.Run("a rollback puts the files back when the old user cannot follow the links, even without --restore-files", func(t *testing.T) {
+		w := migrated(t, worldOpts{hasCurrent: true, withDraft: true})
+		w.legacyUnreadable = true
+		if _, err := rollbackOf(w, false); err != nil {
+			t.Fatalf("%v\n%s", err, w.out.String())
+		}
+		for _, name := range []string{"Model-One-Q4.gguf", "draft.gguf"} {
+			old := "/home/labuser/models/m1/" + name
+			if fi, err := w.fs.Lstat(old); err != nil || !fi.Mode().IsRegular() {
+				t.Errorf("%s is not a regular file again: %v %v", old, fi, err)
+			}
+		}
+		if !strings.Contains(w.out.String(), "cannot read the models at their new place") {
+			t.Errorf("the operator is not told why:\n%s", w.out.String())
+		}
+		assertRolledBack(t, w, "old user cannot read")
+	})
+	t.Run("a rollback leaves the links alone when the old user can follow them", func(t *testing.T) {
+		w := migrated(t, worldOpts{hasCurrent: true})
+		if _, err := rollbackOf(w, false); err != nil {
+			t.Fatal(err)
+		}
+		fi, err := w.fs.Lstat("/home/labuser/models/m1/Model-One-Q4.gguf")
+		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+			t.Errorf("the link must stay: %v %v", fi, err)
+		}
+	})
 }
