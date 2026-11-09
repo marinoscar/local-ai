@@ -102,7 +102,7 @@ export function StepInstall({ nodeId, token, prefix, install, status, onContinue
                   ) : null}
                 </span>
               )}
-              . The second command must print exactly this.
+              . {install.scriptSha256 ? 'The second command compares it for you and must print install-node.sh: OK. If it prints FAILED, stop and download the file again.' : 'The second command prints the sum of the file you downloaded; it must be the same.'}
             </Typography>
             <Typography>It asks for the credential above. Paste it and press Enter (nothing appears while you paste).</Typography>
           </Stack>

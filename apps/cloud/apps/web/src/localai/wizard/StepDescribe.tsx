@@ -9,7 +9,6 @@ import type { CreateNodeInput, CreateNodeResult, ServePattern } from './wizardTy
 export const NODE_ID_RE = /^ai-n[1-9][0-9]{0,3}$/;
 const DOMAIN = 'marin.cr';
 /** The first octet 100 and second 64 to 127 (the Tailscale CGNAT block), or a Tailscale IPv6 address. */
-const TAILNET_IP_RE = /^(?:100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}|fd7a:115c:a1e0(?::[0-9a-fA-F]{1,4}){1,5})$/;
 const PROFILES = [
   { id: '', label: 'Not sure yet' },
   { id: 'small-8gb', label: 'small-8gb' },
@@ -32,7 +31,6 @@ export function StepDescribe({ client, onCreated }: StepDescribeProps) {
   const [hostTouched, setHostTouched] = useState(false);
   const [servePattern, setServePattern] = useState<ServePattern>('B');
   const [tailnetMachine, setTailnetMachine] = useState('');
-  const [tailnetIp, setTailnetIp] = useState('');
   const [profile, setProfile] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,8 +55,7 @@ export function StepDescribe({ client, onCreated }: StepDescribeProps) {
   const derivedHost = NODE_ID_RE.test(nodeId) ? `${nodeId}.${DOMAIN}` : '';
   const host = hostTouched ? publicHost : derivedHost;
   const idError = nodeId !== '' && !NODE_ID_RE.test(nodeId) ? 'Use ai-n and a number from 1 to 9999, for example ai-n4.' : null;
-  const ipError = tailnetIp !== '' && !TAILNET_IP_RE.test(tailnetIp.trim()) ? 'This is not a Tailscale address (it starts with 100.64 to 100.127).' : null;
-  const canSubmit = useMemo(() => NODE_ID_RE.test(nodeId) && ipError === null && !busy, [nodeId, ipError, busy]);
+  const canSubmit = useMemo(() => NODE_ID_RE.test(nodeId) && !busy, [nodeId, busy]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -72,7 +69,6 @@ export function StepDescribe({ client, onCreated }: StepDescribeProps) {
       ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
       ...(host && host !== derivedHost ? { publicHost: host.trim() } : {}),
       ...(tailnetMachine.trim() ? { tailnetMachine: tailnetMachine.trim() } : {}),
-      ...(tailnetIp.trim() ? { tailnetIp: tailnetIp.trim() } : {}),
       ...(profile ? { profile } : {}),
     };
     try {
@@ -139,16 +135,8 @@ export function StepDescribe({ client, onCreated }: StepDescribeProps) {
           label="Tailnet name"
           value={tailnetMachine}
           onChange={(event) => setTailnetMachine(event.target.value)}
-          helperText="The machine name, for example dell-linux. Paste the full name (dell-linux.<tailnet>.ts.net) to have it filled into the vhost file."
+          helperText="Optional. The node reports its own tailnet name and address when it contacts the cloud (Part 3), so you do not need to type either."
           slotProps={{ htmlInput: { autoCapitalize: 'none', spellCheck: false } }}
-        />
-        <TextField
-          label="Tailnet IP"
-          value={tailnetIp}
-          onChange={(event) => setTailnetIp(event.target.value)}
-          error={ipError !== null}
-          helperText={ipError ?? 'Optional now. Stored, shown to administrators only. Without it the vhost file keeps a placeholder.'}
-          slotProps={{ htmlInput: { inputMode: 'decimal', autoCapitalize: 'none', spellCheck: false } }}
         />
         <TextField select label="Profile hint" value={profile} onChange={(event) => setProfile(event.target.value)} helperText="Your best guess; the installer confirms it with aictl profile suggest.">
           {PROFILES.map((option) => (

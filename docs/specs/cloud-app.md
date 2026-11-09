@@ -434,7 +434,7 @@ Handshake. The agent calls it after `register` and whenever it gets a 404 on ano
 { "data": {
     "nodeId": "ai-n3",
     "apiVersion": 1,
-    "features": ["state.v1", "commands.v1", "catalog.v1", "key.v1"],
+    "features": ["state.v1", "commands.v1", "catalog.v1", "key.v1", "tailnet.v1"],
     "commandPlane": "localai",
     "heartbeatIntervalS": 15,
     "stateMinIntervalS": 5,
@@ -635,6 +635,14 @@ The agent reports its llama-server API key: at enrollment, after every key rotat
 { "key": "<64 lowercase hex>", "fingerprint": "ab12…9f3c", "rotated_at": "2026-11-02T15:04:05Z" }
 ```
 Validated with `z.object({ key: z.string().regex(/^[0-9a-f]{64}$/), fingerprint: z.string().regex(/^[0-9a-f]{4}…[0-9a-f]{4}$/), rotated_at: Iso }).strict()`; the server recomputes the fingerprint from `key` and refuses a mismatch (`400`). Stored with `CredentialsService.setSecret('localai_node_llama_key', <nodeId>, key)` (§3.8). Answers `200 { data: { keyHint: "ab12…9z0f", storedAt } }`. The body is excluded from request logging by the route config (`logLevel: 'warn'` and a `preSerialization` that never echoes it) and the value never appears in an error message.
+
+#### `POST /api/nodes/{id}/localai/tailnet`
+The node tells the cloud its own Tailscale address and name, so the Add-node wizard never asks a person to type them (issue #437, ADR-0009). Advertised as the handshake feature `tailnet.v1`; an older cloud does not list it and the agent does not call it. The agent sends it once the handshake lists the feature, again when the address changes (it looks every hour) and after a failure (every 5 minutes); the same address is not sent twice.
+
+```json
+{ "ip": "<Tailscale IPv4 or fd7a:115c:a1e0:… address>", "machine": "<name or full MagicDNS name, no trailing dot>" }
+```
+Validated with `z.object({ ip: tailnetAddress, machine: z.string().regex(machineName).optional() }).strict()` (`contracts/tailnet.schema.ts`; `machine` is lower-cased). `200 { data: { stored: boolean } }`: `true` when `tailnet_ip` or `tailnet_machine` of the node row changed, `false` for a repeat. A `400` names the fields that failed (`details.fields`), never a value. **Handling:** the address is admin-only data. The answer never echoes it, the audit row (`localai.node.updated`, `meta.source = "node"`) holds `tailnetIp: "<set>"` (or `"<changed>"`) and the machine name, no log line has it, and the snapshot route still refuses it. It lands on the row the publish checklist renders its snippets from, so the vhost file shows the real address as soon as the node has contacted the cloud. *As built:* `node-link/tailnet.controller.ts`, `tailnet.service.ts`, `contracts/tailnet.schema.ts`; tests `tailnet.service.spec.ts` and the real-SQL case in `test/localai/node-link.db.spec.ts`.
 
 #### Command plane: `POST /api/nodes/{id}/localai/commands/…`
 Wire shapes deliberately mirror EAB's `claim` / `renew` / `result` / `failure` (same field names, same 409 meaning), so the agent's EAB client is reused with a different path prefix ([agent.md](agent.md) §4.8).
@@ -1006,7 +1014,7 @@ Step 1 of 3 · Describe the node
   Name         [Dell Precision (ai-n4)]
   Public host  [ai-n4.marin.cr]  (derived)
   Serve        (•) Pattern B  --https=443   ( ) Pattern A  --tcp=18080
-  Tailnet name [dell-linux ]   Tailnet IP [100.___.___.___] (stored, admin-only)
+  Tailnet name [dell-linux ]   (optional; the node reports its own name and address when it first contacts the cloud)
   Profile hint [cuda-12gb ▾]  (installer confirms with `aictl profile suggest`)
                                                                     [Create node]
 Step 2 of 3 · Install on the node
@@ -1017,7 +1025,7 @@ Step 2 of 3 · Install on the node
   ┌─────────────────────────────────────────────────────────────────────────────┐
   │ curl -fsSLO https://github.com/marinoscar/local-ai/releases/download/       │
   │   node-v0.4.1/install-node.sh                                               │
-  │ sha256sum install-node.sh     # must print 3f9c…a1b2 (shown here)           │
+  │ echo "3f9c…a1b2  install-node.sh" | sha256sum -c      # prints: OK          │
   │ sudo bash install-node.sh --node-id ai-n4 \                                 │
   │   --cloud-url https://ai.marin.cr --enroll                    [Copy]         │
   └─────────────────────────────────────────────────────────────────────────────┘
@@ -1355,7 +1363,7 @@ A root of kind `ark_drive` uses the `root == ark_drive` rules above (one row per
 2. **Install one-liner** uses the latest agent release tag (`settings.agent.latestVersion`, tag `node-v<version>`), never `main`:
    ```bash
    curl -fsSLO https://github.com/marinoscar/local-ai/releases/download/node-v0.4.1/install-node.sh
-   sha256sum install-node.sh          # compare with scriptSha256 shown in the wizard
+   echo "<scriptSha256>  install-node.sh" | sha256sum -c   # prints install-node.sh: OK, or FAILED
    sudo bash install-node.sh --node-id ai-n4 --cloud-url https://ai.marin.cr --enroll
    ```
    The script is downloaded from the release (the `kit-agent-binaries` assets, [rebuild-kit.md](rebuild-kit.md) §3.2), checked, then run; it is never piped into `bash` ([installer.md](installer.md) §3.1 owns this). `--enroll` makes the installer prompt for the credential on `/dev/tty` (hidden input) and run `aictl cloud enroll --credential-stdin` ([installer.md](installer.md) §3.2; [aictl.md](aictl.md) §4.18). The credential is never put on a command line.
