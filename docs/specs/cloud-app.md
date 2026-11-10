@@ -434,7 +434,7 @@ Handshake. The agent calls it after `register` and whenever it gets a 404 on ano
 { "data": {
     "nodeId": "ai-n3",
     "apiVersion": 1,
-    "features": ["state.v1", "commands.v1", "catalog.v1", "key.v1", "tailnet.v1"],
+    "features": ["state.v1", "commands.v1", "catalog.v1", "key.v1", "tailnet.v1", "ensure.v1"],
     "commandPlane": "localai",
     "heartbeatIntervalS": 15,
     "stateMinIntervalS": 5,
@@ -538,10 +538,21 @@ export const LocalaiStateSnapshotV1 = z.object({
   }).strict().nullable(),
   tailscale: z.object({ serve_pattern: z.enum(['A', 'B', 'none']), serve_active: z.boolean(), backend_state: z.string().max(32).nullable() }).strict(),
   alerts: z.array(z.object({ code: Code, severity: z.enum(['info', 'warning', 'critical']), title: z.string().max(200) }).strict()).max(50),
+  ensure: EnsureBlockV1.optional(),               // issue #480: absent from an agent that predates "Install what's missing"
 }).strict();
 export type LocalaiStateSnapshotV1 = z.infer<typeof LocalaiStateSnapshotV1>;
 
-// Declared above LocalaiStateSnapshotV1 in the real file.
+// Declared above LocalaiStateSnapshotV1 in the real file. "Install what's missing" (ADR-0010, issue #480): what the node still
+// needs from its own kit and whether the agent is installing it. Codes, counts and step ids only: no path, no secret.
+const EnsureBlockV1 = z.object({
+  state: z.enum(['complete', 'installing', 'needs_you', 'off']),
+  auto: z.enum(['on', 'ask', 'off']),                                  // node.yaml ensure.auto
+  message: z.string().max(200),                                        // the agent's own sentence, in English; the app writes its own text
+  progress: z.object({ done: z.number().int().min(0), total: z.number().int().min(0) }).strict(),
+  next_action: z.object({ kind: z.enum(['none', 'wait', 'press_button', 'confirm', 'sync', 'fix']), step: z.string().max(64).nullable() }).strict(),
+  steps: z.array(z.object({ id: z.string().max(64), status: z.enum(['ok', 'pending', 'waiting', 'needs_confirm', 'blocked', 'running', 'done', 'failed', 'cancelled']) }).strict()).max(16),
+}).strict();
+
 // Full READY.json (ark-sync.md §4.12.1, authoritative for its fields) minus root.path
 // (drive mount paths contain the desktop user name) and minus generated_by.node_id (implicit).
 const ReadyItem = z.object({
@@ -609,6 +620,8 @@ Rules: `node_id` must equal the bound node's id (else `400 LAI-CLD-004`). The sn
 - **Never logged.** The body, any value from it, and the bearer. An accepted snapshot logs the node id, `seq`, the model count and the two flags at debug level.
 - **Tests.** Unit: `contracts/state.schema.spec.ts`, `contracts/scrubber.spec.ts`, `node-link/state.projection.spec.ts`, `node-link/state.service.spec.ts`, `node-link/node-link.body-limits.spec.ts`; HTTP over a mocked database: `test/localai/node-link-state-routes.spec.ts`; real SQL: `test/localai/node-link-state.db.spec.ts` (kept apart from `node-link.db.spec.ts` so the sibling cloud issues can extend that file without conflicts). Secret-looking test strings are built at test time (`test/localai/state-fixtures.ts`), never literals.
 
+**The `ensure` block and the `ensure.v1` feature (issue #480, ADR-0010).** The block is **optional**, so a snapshot from an agent that predates it still parses (the cloud may run a newer version than a node, and old agents keep working: `state.schema.spec.ts` proves both the old fixtures and the new block). The other direction is guarded by the handshake: an older cloud's schema is strict and would answer `400` to the unknown key on every push, so a newer agent adds the block **only when the handshake lists `ensure.v1`** (`Link.hasFeature`, `SnapshotBuilder.BuildWith`). The same feature says the cloud knows the command `ensure.run` (§3.7). The agent builds the block from the engine's picture ([agent.md](agent.md) §3.8.33): `state` (`complete`, `installing`, `needs_you`, `off`), `auto`, its own sentence cut to 200 characters, `progress`, the `kind` of the next action (and the step it is about) and the `id` and `status` of at most 16 parts; a value outside the closed sets becomes the safe reading (`needs_you`, `none`, `pending`). The engine publishes no bus event, so the block is as fresh as the next snapshot (a change of sync, mode, alert or drive, and at most `stateMaxIntervalS`, 60 s).
+
 #### `GET /api/nodes/{id}/localai/catalog`
 Serves the approved catalog, or `catalogPin` if set. Honours `If-None-Match` (the `bundleSha256` as a strong ETag) → `304`.
 
@@ -653,7 +666,7 @@ Wire shapes deliberately mirror EAB's `claim` / `renew` / `result` / `failure` (
             "ark.verify", "mode.offline", "key.rotate", "service.restart", "logs.tail", "catalog.refresh"],
   "limit": 1, "waitMs": 25000 }
 ```
-`types` is `node.yaml: cloud.allow` (names **without** the `localai.` prefix; the server prepends it). The example is an ark laptop whose operator removed `model.delete` and `agent.update`; the default `cloud.allow` is all 14 types, the list in [agent.md](agent.md) §3.4 and [security-model.md](../architecture/security-model.md) §4. `limit` is clamped to 1. `waitMs` is clamped to `[0, claimWaitMaxMs]`; the server holds the request until a matching command is queued for this node or the wait ends (long poll; §4.4). Response:
+`types` is `node.yaml: cloud.allow` (names **without** the `localai.` prefix; the server prepends it). The example is an ark laptop whose operator removed `model.delete` and `agent.update`; the default `cloud.allow` is all 15 types, the list in [agent.md](agent.md) §3.4 and [security-model.md](../architecture/security-model.md) §4. `limit` is clamped to 1. `waitMs` is clamped to `[0, claimWaitMaxMs]`; the server holds the request until a matching command is queued for this node or the wait ends (long poll; §4.4). Response:
 ```json
 { "data": { "jobs": [ {
     "job": { "id": "6b3c…", "type": "localai.model.load", "attempts": 1, "createdAt": "2026-11-02T15:04:00.000Z" },
@@ -778,6 +791,14 @@ export const COMMANDS = {
       rejected_code: z.string().regex(/^LAI-[A-Z]{2,3}-\d{3}$/).nullable(),
     }).strict(),
   },
+  'localai.ensure.run': {                // POST /ensure with the safe default (ADR-0010): the automatic steps from the node's own kit
+    params: z.object({}).strict(),       // exactly {}: no confirm, no dry run. Compiling and restarting a running service need a person at the node
+    result: z.object({
+      started: z.boolean(),              // false = a pass was already running, or there was nothing to do
+      state: z.enum(['complete', 'installing', 'needs_you', 'off']),
+      pending_steps: z.number().int().min(0).max(16),
+    }).strict(),
+  },
   'localai.agent.update': {              // agent self-update (agent.md §4.10): GitHub release, sha256 + minisign, rollback
     params: z.object({ version: Semver }).strict(),
     result: z.object({
@@ -806,6 +827,7 @@ Per-type policy (`apps/api/src/localai/commands/command-policy.ts`):
 | `service.restart` | lab:operate | 60 000 | 600 s | 10 min | 1 | `service` | none |
 | `logs.tail` | lab:operate | 30 000 | 300 s | 2 min | 1 | `unit` | none |
 | `catalog.refresh` | lab:operate | 60 000 | 600 s | 1 h | 1 | `-` | none |
+| `ensure.run` | lab:operate | 30 000 | 300 s | 1 h | 1 | `-` | none (the safe default only; the UI says a person at the node approves compiling or restarting a running service) |
 | `agent.update` | **lab:admin** | 300 000 | 900 s | 24 h | 1 | `-` | shows from → to version |
 
 **Hard cap** = the longest a claim may be renewed, counted from `claimed_at` (`hardCap` in §4.4 renew): lease × 10 by default, except `model.load` (600 s, a full load at maximum context) and `agent.update` (900 s: download, verify, restart and the 60 s health check). Renewing past the hard cap answers `409` and the sweeper then fails the command with `LAI-CLD-059`.
@@ -1078,6 +1100,7 @@ What `GET /api/localai/nodes` (lab:read) returns, and where the pieces live. Whe
 - **Ark rows.** One row per root in the snapshot: `internal` first, then drives by id. A root's kind comes from its id (`internal` or `ark-<8 hex>`). "Older than N days" counts whole days (30 d 23 h is still 30 days, so green). `drive_last_synced_at` is one value per node, so every `ark_drive` row uses it. When the snapshot has a drive time but no drive root, the card keeps one unplugged row (`rootId` `ark-drive`, `present: false`, "Drive not plugged in · last synced 6 days ago"). A node with no snapshot has one grey `internal` row, "no data yet". A plugged-in drive row is labelled by its age ("41 days"); the node's last sync result is shown on the internal row ("sync failed") and on the Sync line.
 - **Wireframe note.** §4.7 makes `sync.last_run.result == failed` red for every root, so in the shared fixture ai-n2's internal root is red ("sync failed"), not amber "tier 2" as the illustrative wireframe draws it. The rule is authoritative; the wireframe is not changed.
 - **`hardware`.** The card's `hardware` is the node's `hardware` column when set (for example "128 GB unified" on a shared-memory machine), otherwise the first GPU's name without the vendor prefix and the summed VRAM ("RTX 4080 12 GB"). The card line is `<backend> · <hardware>`. `vram` sums all GPUs of the snapshot.
+- **Install what's missing on the card (issue #480).** `NodeCardDto.ensure` is `null` or `{ state, auto, done, total, nextKind, nextStep }`, derived from the snapshot's `ensure` block by `ensureOf` in `node-card.builder.ts` (defensive: an unknown state is no block). The shared `NodeCard` shows `EnsureLine` right under the name and chips, before the hardware: `Complete`, `Installing (n of m)`, `Needs you: <one thing>` or `Automatic install is off`, in the viewer's language, from codes (never the node's sentence). The type is optional in `@localai/ui` (`ensure?: EnsureCard | null`) so the desktop's Lab, which rebuilds each card field by field, keeps compiling and ignores the field.
 - **Models.** `loadedModels` lists the models with status `loaded` (default first); `lastDefault` is the default model whatever its status. The web card shows `loadedModels` and the VRAM bar for `healthy` and `degraded` nodes, and "Last seen N ago" plus `lastDefault` with "(last)" for `quiet` and `down` nodes.
 - **Behind flags.** `agentBehind` is false when either version is missing or not `major.minor.patch`. `catalogBehind` is false when the node reports no catalog or no catalog is approved yet; otherwise true when the node's version differs from the approved one.
 - **Web.** Route `/lab` (`apps/web/src/localai/lab/LabOverviewPage.tsx`, gated on `lab:read`), and a `Lab` navigation destination (a destination, not a settings card) between Home and Settings. `useLabNodes.ts` polls every 5 s only while the tab is visible and refreshes when it becomes visible again. "Add node" (link to `/lab/nodes/new`, built in CLOUD-14) shows for `lab:admin` only; the empty state reads "No nodes yet". The components (`NodeCard`, `HealthChip`, `ModeChip`, `ArkChip`, `VramBar`, `ModelList`) are `packages/ui/src/lab/`, imported as `@localai/ui`; they take plain data and fetch nothing. Survival uses the theme's secondary colour. Their tests live with the web tests (`apps/web/src/localai/lab/`) because React and MUI are installed there; there is no Storybook in the repository, so no stories.
@@ -1116,6 +1139,7 @@ The page `/lab/nodes/:nodeId` (lab:read) and the node admin routes. Where this d
 - **Keys tab.** The key hint and reported-at time, **Rotate key…** (a confirmation that says Open WebUI uses the gateway, so usually nothing needs changing), and the credential as `nod_<prefix>…` with its last use. **Replace credential…** confirms, calls the route and shows the new token once in a dialog (copy button and the re-enroll steps); the token is only in that dialog's props, so closing it or reloading never shows it again.
 - **Settings tab.** The tailnet IP shows as `100.•••.•••.•••` (or "Not set"). **Reveal** calls `?reveal=tailnet` once per click and shows the value until **Hide** or until the tab is left; **Change…** and **Clear** edit it through `PATCH`. Saving sends only the fields that changed and shows the API's field messages. **Retire node…** needs the node id typed exactly; success returns to `/lab`.
 - **Doctor codes in the web app.** `apps/web/src/localai/doctorFixes.generated.ts` holds the meaning and fix of the `CLD`, `SYN`, `ARK`, `LLM` and `CAT` codes, generated from `docs/specs/doctor-codes.md` by `node apps/cloud/scripts/gen-doctor-fixes.mjs`; `doctorFixes.test.ts` fails when it differs from the registry.
+- **Install what's missing (issue #480, ADR-0010).** The Ark tab opens with a panel (`tabs/ArkTab.tsx` `EnsurePanel`, the shared `EnsureLine` and `ensureSummary` of `@localai/ui`): the state first in the viewer's language (`✓ Complete`, `… Installing (2 of 4)`, `! Needs you: <one thing>`, `! Automatic install is off`), the button **Install what's missing** (`CommandButton` for `ensure.run`: lab:operate, gated like every command, disabled with the plain reason in offline or survival mode, when the node is not enrolled or when it does not accept the type), and each part not yet in place with its status in words. The button is offered only when the agent will act on a press (`ensureCanStart`: the next action is `press_button` or `fix`, or `ensure.auto` is `off`); when the next thing is `confirm` (`whisper.build`, `restart.kiwix`) there is **no button**, and the panel says that compiling and restarting a running service need a person at the computer (the desktop app with the administrator PIN, or `aictl ensure --yes`): the cloud's command carries params `{}` and the agent's handler calls the safe default, so it cannot confirm them. Nothing is shown for a node whose snapshot has no `ensure` block (an agent that predates it), and no button. The panel's strings are English and Spanish (the node detail page's other strings are English only until its own translation). The Ark tab also no longer says "No sync has run on this node yet" while a first sync is running (`sync.last_run` is empty then): the line "A sync is running (n%)" is the only one.
 - **Tests.** API: `dto/patch-node.spec.ts`, `catalog-model-sizes.spec.ts`, and `test/localai/node-admin-routes.spec.ts` (the permission matrix of the three writes, the audit rows and their meta, the retire cancel, the reveal audit, the detail payload; real guards and seeded grants over a mocked database). Web: `NodeDetailPage.test.tsx` (every tab, the permission matrix, refusals, the one-time token, reveal, retire, loading / error / 404 states, axe per tab for an admin and a viewer), `ConfirmDialog.test.tsx`, `useNodeCommands.test.tsx`, `usePolledResource.test.tsx`, `commandPolicy.test.ts`, `commandText.test.ts`. The page was also rendered with Playwright at 1280, 800 and 390 px against mocked API data (no horizontal page scroll; tables scroll inside their own region); the Playwright specs of the issue's file list (`e2e/node-detail.spec.ts`, a fake agent over the node routes) are not part of this change: the repository has no Playwright setup for the cloud app yet.
 
 #### Language: English and Spanish (issue #436, ADR-0009 rule 7)
@@ -1522,7 +1546,7 @@ Until then, [runbooks/05-add-a-node.md](../runbooks/05-add-a-node.md) is the man
 ## 6. Security considerations
 
 - **Blast radius of a node credential:** EAB confines it to `/api/nodes/*`. Within that, the binding guard confines Local AI routes to one node. Remaining exposure until SR-2: EAB's own heartbeat/claim/register for other admin-owned worker nodes (display-only effects; no EAB jobs are node-eligible in v1, so claim yields nothing). Routing never trusts EAB health alone (§4.5).
-- **Compromised cloud** (T4): can only queue the 14 closed command types with strict params. The node allowlist and its own decoder are the last line. The cloud can't run shell commands, can't enter survival, can't return a node online, and `model.delete` never removes the last verified copy (agent-enforced).
+- **Compromised cloud** (T4): can only queue the 15 closed command types with strict params. The node allowlist and its own decoder are the last line. The cloud can't run shell commands, can't enter survival, can't return a node online, and `model.delete` never removes the last verified copy (agent-enforced).
 - **Secrets never stored in results or logs:** command results and snapshots are schema-closed and scrubbed; the key travels only on `POST …/key` over HTTPS and is stored encrypted. Request logging for `/api/nodes/*/localai/key` excludes bodies.
 - **Tailnet IPs:** stored only in `localai_nodes.tailnet_ip`; returned only to lab:admin with `?reveal=tailnet` (audited); never in snapshots, never in the gateway's public responses, never in logs (the logger redaction list includes the field name).
 - **PII:** the cloud stores user emails (EAB). Audit meta never includes prompt text. Gateway usage is metadata only ([gateway.md](gateway.md) §4.7).

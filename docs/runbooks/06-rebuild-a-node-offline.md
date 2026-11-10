@@ -219,7 +219,7 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
     sudo aictl catalog restore
     ```
 
-29. **A missing Ubuntu package or tool** (a fix line names one, for example `cmake`, or `LAI-KIT-010` / `LAI-KIT-011`; kiwix-tools, pmtiles and piper are the same). The kit is a local package source, and the agent installs from it by itself after a sync. To do it now, with no internet, after checking every file: press **Install what's missing** in the app or the Portal, or in a terminal type `aictl`, press **7**, then choose **Install what is missing (from the kit)**. Or in one line:
+29. **A missing Ubuntu package or tool** (a fix line names one, for example `cmake`, or `LAI-KIT-010` / `LAI-KIT-011`; kiwix-tools, pmtiles and piper are the same). The kit is a local package source, and the agent installs from it by itself after a sync. To do it now, with no internet, after checking every file: press **Install what's missing** in the Portal (**Status and battery**), in the desktop app (menu, three dots) or in the cloud app (node, tab **Ark**), or in a terminal type `aictl`, press **7**, then choose **Install what is missing (from the kit)**. Or in one line:
 
     ```
     aictl ensure

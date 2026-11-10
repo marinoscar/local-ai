@@ -232,7 +232,7 @@ cloud:
   dev_insecure: false
   allow:                            # node-side job allowlist, names WITHOUT the "localai." prefix (security-model.md §4)
     [status.refresh, model.load, model.unload, model.set_default, model.download, model.delete,
-     ark.sync, ark.verify, mode.offline, key.rotate, service.restart, logs.tail, catalog.refresh, agent.update]
+     ark.sync, ark.verify, mode.offline, key.rotate, service.restart, logs.tail, catalog.refresh, agent.update, ensure.run]
   concurrency: 1                    # EAB concurrency (1..4); local ops serialize anyway (§4.12)
   poll:                             # the cloud's handshake (GET …/localai/config) overrides these when present
     heartbeat_seconds: 15           # 5..60
@@ -326,7 +326,7 @@ logging:
 | `llama.load_timeout_seconds` | integer 30..3600 | `300` |
 | `tailscale.serve_pattern` | `A` \| `B` \| `none` | `none` |
 | `cloud.url` | `https://` URL without path, or `http://127.0.0.1:<port>` with `dev_insecure: true`. A non-https URL is reported as a `details.problems[]` entry with `code: "LAI-CLD-062"` inside the `LAI-AGT-002` report (§8.5) | `https://ai.marin.cr` |
-| `cloud.allow` | each entry ∈ the 14 known job names (§4.8.6); unknown entries are a validation error | all 14 |
+| `cloud.allow` | each entry ∈ the 15 known job names (§4.8.6); unknown entries are a validation error | all 15 |
 | `cloud.concurrency` | 1..4 | 1 |
 | `cloud.poll.heartbeat_seconds` | integer 5..60 (the cloud handshake overrides it, clamped to the same range) | `15` |
 | `cloud.poll.claim_seconds` | integer 1..30 (same override rule) | `3` |
@@ -943,7 +943,7 @@ It reads the disk and the kit's manifests only (nothing is hashed, nothing chang
 
 **Journal and audit.** The engine writes `/var/lib/localai/ensure/journal.json` (atomically, 0640) before a step starts and after it ends; a crash leaves a file the next start closes as `failed` ("interrupted") and the next pass re-plans from the machine itself (every step is idempotent). The journal also remembers a pending restart. Each step is audited as `ensure.step` and each pass as `ensure.run` (§4.11). Alerts: `LAI-KIT-051` (a step failed, cleared when the next pass succeeds), `LAI-KIT-052` (something waits for a person).
 
-**Not in the cloud snapshot yet.** The `ensure` block of the state snapshot ([cloud-app.md](cloud-app.md)) is the cloud node page's change (its schema is strict); until then the cloud shows the tier colours only.
+**In the cloud snapshot.** The state snapshot carries an `ensure` block ([cloud-app.md](cloud-app.md) §3.6: `state`, `auto`, the sentence in English, `progress`, the `kind` and `step` of the next action, and the `id` and `status` of at most 16 parts; no path and no secret), built by `app.ensureSnapshot` over `View`. It is sent **only when the cloud's handshake lists `ensure.v1`** (an older cloud's strict schema would refuse the key); an older agent sends none and a newer cloud still accepts its snapshots. The cloud's "Install what's missing" button is the command `ensure.run` (§4.8.6), which calls the same start as `POST /ensure` with the safe default (`app.ensureJobs`).
 
 ### 3.9 Authentication and request checks
 
@@ -1542,7 +1542,7 @@ Every state change emits `cloud.state` and is logged (`component=cloud`).
 
 | Field | Use |
 |---|---|
-| `features` (`state.v1`, `commands.v1`, `catalog.v1`, `key.v1`, `tailnet.v1`) | which app routes exist |
+| `features` (`state.v1`, `commands.v1`, `catalog.v1`, `key.v1`, `tailnet.v1`, `ensure.v1`) | which app routes exist; `ensure.v1`: the snapshot may carry the `ensure` block and `ensure.run` exists |
 | `commandPlane` (`localai` \| `eab`) | which claim routes to use (§4.8.6) |
 | `heartbeatIntervalS` | overrides `cloud.poll.heartbeat_seconds` |
 | `stateMinIntervalS`, `stateMaxIntervalS` | debounce / maximum interval of the state push (§4.8.4) |
@@ -1648,6 +1648,7 @@ loop while state ∈ {linked, backoff(heartbeat only)} and mode == online:
 | `service.restart` | `{service}` | `POST /services/{name}/restart` | |
 | `logs.tail` | `{unit, lines ≤ 500}` | `GET /logs` | result `lines` is an array of strings (`"<rfc3339> <message>"`), scrubbed |
 | `catalog.refresh` | `{}` | `POST /catalog/refresh` (fetches `GET …/localai/catalog`) | `accepted: false` + `rejected_code` (`LAI-CAT-002`) when lint fails |
+| `ensure.run` | `{}` | `POST /ensure` with the safe default (the automatic steps from the kit, no confirmation, no dry run: the same as the Portal's button; [§3.8.33](#3833-get-post-and-delete-ensure-adr-0010)). Returns at once; progress arrives in the snapshot's `ensure` block | result `{started, state, pending_steps}`; `started: false` when a pass was already running or nothing was missing. The engine's refusals end the command with their code (`LAI-SYN-005` a sync, verify or import run holds the slot, `LAI-AGT-022` a mode change, `LAI-AGT-024` the sync stack is not up). The cloud cannot confirm compiling or restarting a running service: the params are exactly `{}` |
 | `agent.update` | `{version}` | self-update (§4.10) | result `{from_version, to_version, status}` with `status` ∈ `updated` \| `rolled_back` \| `already_current` ([cloud-app.md](cloud-app.md) §3.7); settled **after** the new binary passes its health check (`updated`), or by the restored old binary (`rolled_back`); in offline/survival the job fails with `LAI-AGT-023`. The decoder is AGENT-18, the executor and settle-after-health AGENT-19 (§10) |
 
 The cloud cannot request `survival`, `online`, PIN, token, enroll/unenroll, profile changes, content deletes or arbitrary commands: those types do not exist.
