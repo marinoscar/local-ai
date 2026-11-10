@@ -141,13 +141,17 @@ func (s *ensureStack) whisperWant() ensure.WhisperWant {
 
 // wants is what the profile and node.yaml want: the kit items of the profile (the same list the index of the
 // kit is written from) turned into tools, packages and the speech program.
-func (s *ensureStack) wants(context.Context) (ensure.Wants, error) {
+func (s *ensureStack) wants(ctx context.Context) (ensure.Wants, error) {
 	roots := s.d.ark.roots.List()
 	if len(roots) == 0 {
 		return ensure.Wants{}, errors.New("there is no content root")
 	}
+	items, err := s.d.ark.kitItems(ctx, roots[0])
+	if err != nil {
+		return ensure.Wants{}, fmt.Errorf("the profile could not be read: %w", err)
+	}
 	var ids []string
-	for _, it := range s.d.ark.expectedKit(roots[0]) {
+	for _, it := range items {
 		ids = append(ids, it.ID)
 	}
 	return ensure.WantsFor(ids, s.facts()), nil
