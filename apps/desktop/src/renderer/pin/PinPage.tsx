@@ -4,7 +4,7 @@
 import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material';
 import { type FormEvent, type ReactElement, useEffect, useRef, useState } from 'react';
 import type { LocalaiPin } from '../../shared/types';
-import { type Feedback, STRINGS, canSubmit, feedbackFor, parseQuery, pick, sanitizePin } from './model';
+import { type Feedback, STRINGS, canSubmit, feedbackFor, parseQuery, pick, sanitizePin, textsFor } from './model';
 
 export interface PinPageProps {
   bridge?: LocalaiPin;
@@ -14,6 +14,7 @@ export interface PinPageProps {
 
 export function PinPage({ bridge, search }: PinPageProps): ReactElement {
   const { purpose, lang } = parseQuery(search);
+  const texts = textsFor(purpose);
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -57,9 +58,9 @@ export function PinPage({ bridge, search }: PinPageProps): ReactElement {
     <Box component="main" onKeyDown={(e) => e.key === 'Escape' && cancel()} sx={{ p: 3 }}>
       <Stack component="form" spacing={2} onSubmit={(e) => void submit(e)} noValidate>
         <Typography component="h1" variant="h6">
-          {pick(purpose === 'rotate-key' ? STRINGS.titleRotateKey : STRINGS.titleLeaveSurvival, lang)}
+          {pick(texts.title, lang)}
         </Typography>
-        <Typography variant="body2">{pick(purpose === 'rotate-key' ? STRINGS.promptRotateKey : STRINGS.promptLeaveSurvival, lang)}</Typography>
+        <Typography variant="body2">{pick(texts.prompt, lang)}</Typography>
         <TextField
           label={pick(STRINGS.label, lang)}
           type="password"

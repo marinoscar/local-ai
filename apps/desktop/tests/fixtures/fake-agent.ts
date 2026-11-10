@@ -43,6 +43,12 @@ export interface FakeAgent {
   readonly keyRequests: Array<{ authorization: string | undefined }>;
   /** Every `POST /api/v1/key/rotate`: the body, the bearer, the PIN grant header and whether it was accepted. */
   readonly keyRotations: Array<{ body: unknown; authorization: string | undefined; pinGrant: string | undefined; accepted: boolean }>;
+  /** The picture `GET /api/v1/ensure` answers (ADR-0010); a `POST` or `DELETE` replaces it. Default: Needs you, one pending step. */
+  ensureView: Record<string, unknown>;
+  /** Every `/api/v1/ensure` call: method, body, bearer, PIN grant header, `Accept-Language`, and whether a `confirm` was accepted. */
+  readonly ensureRequests: Array<{ method: string; body: unknown; authorization: string | undefined; pinGrant: string | undefined; language: string | undefined; accepted: boolean }>;
+  /** Answer the next `POST /api/v1/ensure` with this error (then back to accepting). */
+  failNextEnsure: { status: number; code: string; message: string; fix: string } | null;
   /** The admin PIN `POST /pin/verify` accepts; null: no PIN is set (409 LAI-SEC-005). */
   pin: string | null;
   /** Wrong PINs counted so far in the 5-minute window; at `maxPinFailures` the fake answers 429 LAI-SEC-004. */
@@ -157,6 +163,28 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     pinFailures: 0,
   };
   const MAX_PIN_FAILURES = 5;
+  const ensureStep = (id: string, status: string, over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id,
+    kind: id.startsWith('tool.') ? 'install_tool' : id === 'whisper.build' ? 'build_whisper' : 'restart_service',
+    status,
+    needs_confirmation: status === 'needs_confirm',
+    title: id === 'tool.piper' ? 'Voice program (piper)' : id === 'whisper.build' ? 'Build the speech program' : id,
+    detail: 'From the rebuild kit.',
+    ...over,
+  });
+  const ensureView = (stateName: string, steps: Array<Record<string, unknown>>): Record<string, unknown> => ({
+    state: stateName,
+    auto: 'on',
+    message: stateName === 'complete' ? 'Complete: this computer has everything it needs.' : stateName === 'installing' ? `Installing what's missing (1 of ${steps.length})` : 'Needs you: the voice program is missing.',
+    next_action: stateName === 'needs_you' ? { kind: 'press_button', text: "Press Install what's missing." } : { kind: stateName === 'installing' ? 'wait' : 'none', text: '' },
+    progress: { done: 0, total: steps.length },
+    steps,
+    run: null,
+    dry_run: false,
+    checked_at: '2026-11-10T10:00:00Z',
+  });
+  const ensureState = { view: ensureView('needs_you', [ensureStep('tool.piper', 'pending')]), fail: null as FakeAgent['failNextEnsure'] };
+  const ensureRequests: FakeAgent['ensureRequests'] = [];
   const keyRequests: FakeAgent['keyRequests'] = [];
   const keyRotations: FakeAgent['keyRotations'] = [];
   const pinVerifications: FakeAgent['pinVerifications'] = [];
@@ -478,6 +506,44 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
       return;
     }
 
+    if (path === '/api/v1/ensure' && (method === 'GET' || method === 'POST' || method === 'DELETE')) {
+      readBody(req, (body) => {
+        const pinGrant = req.headers['x-localai-pin-grant'];
+        const grant = Array.isArray(pinGrant) ? pinGrant[0] : pinGrant;
+        const language = req.headers['accept-language'];
+        const confirm = (body as { confirm?: unknown } | null)?.confirm;
+        const confirming = Array.isArray(confirm) && confirm.length > 0;
+        const accepted = credential(req) !== null && (!confirming || (state.validPinGrant !== null && grant === state.validPinGrant));
+        ensureRequests.push({ method, body, authorization: req.headers.authorization, pinGrant: grant, language: Array.isArray(language) ? language[0] : language, accepted });
+        if (credential(req) === null) {
+          error(res, 401, 'LAI-SEC-001', 'Missing or invalid credentials');
+          return;
+        }
+        if (method === 'GET') {
+          json(res, 200, ensureState.view);
+          return;
+        }
+        if (method === 'DELETE') {
+          ensureState.view = ensureView('needs_you', [ensureStep('tool.piper', 'cancelled')]);
+          json(res, 202, ensureState.view);
+          return;
+        }
+        if (ensureState.fail) {
+          const { status, code, message, fix } = ensureState.fail;
+          ensureState.fail = null;
+          json(res, status, { error: { code, message, fix, details: {} } });
+          return;
+        }
+        if (confirming && !accepted) {
+          json(res, 403, { error: { code: 'LAI-SEC-002', message: 'This action needs the admin PIN', fix: 'Enter the admin PIN when asked.', details: { pin_required: true, reason: 'confirm' } } });
+          return;
+        }
+        ensureState.view = ensureView('installing', [ensureStep('tool.piper', 'running')]);
+        json(res, 202, ensureState.view);
+      });
+      return;
+    }
+
     if (method === 'GET' && path === '/api/v1/events') {
       const via = credential(req);
       if (via === null) {
@@ -523,6 +589,19 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     keyRequests,
     keyRotations,
     pinVerifications,
+    ensureRequests,
+    get ensureView() {
+      return ensureState.view;
+    },
+    set ensureView(value: Record<string, unknown>) {
+      ensureState.view = value;
+    },
+    get failNextEnsure() {
+      return ensureState.fail;
+    },
+    set failNextEnsure(value: FakeAgent['failNextEnsure']) {
+      ensureState.fail = value;
+    },
     get apiKey() {
       return state.apiKey;
     },

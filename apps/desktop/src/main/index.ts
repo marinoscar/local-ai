@@ -26,6 +26,7 @@ import { type LogEntry, type Logger, createFileLogger } from './log';
 import { ABOUT, buildMenuTemplate } from './menu';
 import { hardenedWebPreferences, installPermissionHandlers, installWebContentsHardening } from './navigation';
 import { Notifier } from './notify';
+import { createEnsureActions, createEnsureApi } from './ensure';
 import { PinService, createPinApi } from './pin';
 import { installLocalaiProtocol, registerLocalaiScheme, rendererRoot, shellUrl } from './protocol';
 import { createSecretStore, tokenFilePath } from './secret-store';
@@ -346,6 +347,9 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     void Promise.race([copier.clearIfHeld(), new Promise((resolve) => setTimeout(resolve, 1500))]).finally(() => app.quit());
   });
   const showConnectionInfo = (): void => void windows.openModal('connection-info');
+  const showEnsure = (): void => void windows.openModal('ensure');
+  // "Install what's missing" (issue #480, ADR-0010): the window's four calls; confirming compiling or a restart goes through the PIN.
+  const ensure = createEnsureActions({ api: createEnsureApi(client), pin, lang: () => lang, log });
   const modes = new ModeController({ api: createModeApi(client), pin: pin satisfies PinPrompt, currentMode: () => tray?.mode ?? readStatus(feed.status).mode, log });
   const dialogs = createElectronDialogs(dialog as unknown as ElectronDialogApi);
   const notificationPort = createElectronNotificationPort({ Notification });
@@ -408,6 +412,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
       { lang, linked: settings.cloud.linked, autostart: settings.autostart, checkForUpdates: settings.updates.checkForUpdates, updateLines: describeUpdateStatus(updates.status, lang) },
       {
         connectionInfo: showConnectionInfo,
+        ensure: showEnsure,
         connect: () => {
           // Desktop.md 4.8 step 1: refused while the node is offline or in survival (or its mode is not known).
           if (!cloudSession.nodeOnline) notice('not-available', pick(CLOUD_TEXT.switchOnline, lang));
@@ -464,7 +469,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   registerHandlers(
     ipcMain,
     {
-      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => { if (!survival.active) windows.showTab(tab); }, setFullScreen: (flag) => survival.setFullScreen(flag), closePortal: () => survival.closePortal(), showMenu, settings: store, cloud: cloudSession, lab: { request: (req) => labProxy.request(req), cached: () => labProxy.cached(), openNode: (nodeId) => { const url = labNodeUrl(nodeId); if (url !== null && cloudSession.connectedModeActive()) void shell.openExternal(url); } }, pinWindowId: () => pin.windowId(), keys, pin: { submit: (id, value) => pin.submit(id, value), cancel: (id) => pin.cancel(id) }, errorActions, log, setMode: async (target) => {
+      ...createShellHandlers({ policy, version, lang: () => lang, status, openChild: open, showTab: (tab) => { if (!survival.active) windows.showTab(tab); }, setFullScreen: (flag) => survival.setFullScreen(flag), closePortal: () => survival.closePortal(), showMenu, settings: store, cloud: cloudSession, lab: { request: (req) => labProxy.request(req), cached: () => labProxy.cached(), openNode: (nodeId) => { const url = labNodeUrl(nodeId); if (url !== null && cloudSession.connectedModeActive()) void shell.openExternal(url); } }, pinWindowId: () => pin.windowId(), keys, ensure, pin: { submit: (id, value) => pin.submit(id, value), cancel: (id) => pin.cancel(id) }, errorActions, log, setMode: async (target) => {
         const outcome = await modes.setMode(target);
         return outcome.ok ? { ok: true } : { ok: false, code: outcome.code };
       } }),
@@ -540,6 +545,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   if (args.portal && screen !== 'survival') await survival.enter({ reason: 'portal' });
   // The e2e test copy opens the connection info at once: a native menu item cannot be clicked from Playwright.
   if (testHooksAllowed(app.isPackaged, process.execPath) && process.env['LOCALAI_DESKTOP_TEST_OPEN'] === 'connection-info') showConnectionInfo();
+  if (testHooksAllowed(app.isPackaged, process.execPath) && process.env['LOCALAI_DESKTOP_TEST_OPEN'] === 'ensure') showEnsure();
 }
 
 export interface StartOptions {

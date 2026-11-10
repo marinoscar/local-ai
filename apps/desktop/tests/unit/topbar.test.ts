@@ -68,12 +68,12 @@ describe('status pill and mode chip', () => {
 });
 
 describe('the menu (the three dots)', () => {
-  const actions = () => ({ connectionInfo: vi.fn(), connect: vi.fn(), disconnect: vi.fn(), setAutostart: vi.fn(), setUpdates: vi.fn(), about: vi.fn(), quit: vi.fn() });
+  const actions = () => ({ connectionInfo: vi.fn(), ensure: vi.fn(), connect: vi.fn(), disconnect: vi.fn(), setAutostart: vi.fn(), setUpdates: vi.fn(), about: vi.fn(), quit: vi.fn() });
   const state = { lang: 'en' as const, linked: false, autostart: true, checkForUpdates: false };
 
   it('lists the spec items in order', () => {
     const items = buildMenuTemplate(state, actions());
-    expect(items.map((i) => i.label ?? '---')).toEqual(['Connection info', 'Connect to the lab', '---', 'Start at login', 'Check for updates', '---', 'About', 'Quit']);
+    expect(items.map((i) => i.label ?? '---')).toEqual(['Connection info', "Install what's missing", 'Connect to the lab', '---', 'Start at login', 'Check for updates', '---', 'About', 'Quit']);
   });
 
   it('offers Disconnect instead of Connect when the lab is linked', () => {
@@ -97,13 +97,13 @@ describe('the menu (the three dots)', () => {
   it('routes the other items to their actions', () => {
     const a = actions();
     const items = buildMenuTemplate(state, a);
-    for (const label of ['Connection info', 'Connect to the lab', 'About', 'Quit']) items.find((i) => i.label === label)!.click!();
-    expect([a.connectionInfo, a.connect, a.about, a.quit].map((f) => f.mock.calls.length)).toEqual([1, 1, 1, 1]);
+    for (const label of ['Connection info', "Install what's missing", 'Connect to the lab', 'About', 'Quit']) items.find((i) => i.label === label)!.click!();
+    expect([a.connectionInfo, a.ensure, a.connect, a.about, a.quit].map((f) => f.mock.calls.length)).toEqual([1, 1, 1, 1, 1]);
   });
 
   it('is in Spanish when asked', () => {
     const labels = buildMenuTemplate({ ...state, lang: 'es' }, actions()).map((i) => i.label ?? '---');
-    expect(labels).toEqual(['Información de conexión', 'Conectar con el laboratorio', '---', 'Iniciar al abrir sesión', 'Buscar actualizaciones', '---', 'Acerca de', 'Salir']);
+    expect(labels).toEqual(['Información de conexión', 'Instalar lo que falta', 'Conectar con el laboratorio', '---', 'Iniciar al abrir sesión', 'Buscar actualizaciones', '---', 'Acerca de', 'Salir']);
     expect(NOT_AVAILABLE.es).toContain('Todavía');
     expect(ABOUT.detail('0.1.0', 'es')).toContain('Versión 0.1.0');
   });

@@ -152,6 +152,41 @@ export type ConnectionInfoResult = ConnectionInfo | KeyFailure;
 /** `revealKey()`: the full key, only for an explicit Reveal on the connection-info page. Each call re-reads `GET /key` (the agent audits it). */
 export type RevealResult = { ok: true; key: string } | KeyFailure;
 
+/** The steps of "Install what's missing" that a person must approve (agent.md 3.8.33): compiling, restarting a running service. */
+export const ENSURE_CONFIRM_STEPS = ['whisper.build', 'restart.kiwix'] as const;
+
+export type EnsureState = 'complete' | 'installing' | 'needs_you' | 'off';
+export type EnsureStepStatus = 'ok' | 'pending' | 'waiting' | 'needs_confirm' | 'blocked' | 'running' | 'done' | 'failed' | 'cancelled';
+
+/** One part of what the node needs; `title` and `detail` are in the language the main process asked the agent for. */
+export interface EnsureStepView {
+  id: string;
+  status: EnsureStepStatus;
+  title: string;
+  detail: string;
+  needsConfirmation: boolean;
+  /** The doctor code of a blocked or failed step. */
+  code?: string;
+}
+
+/** `GET /api/v1/ensure`, reduced to what the page shows (ADR-0010). Nothing in it is a secret. */
+export interface EnsureSnapshot {
+  state: EnsureState;
+  auto: 'on' | 'ask' | 'off';
+  message: string;
+  nextAction: { kind: 'none' | 'wait' | 'press_button' | 'confirm' | 'sync' | 'fix'; text: string; step?: string };
+  progress: { done: number; total: number; current?: string };
+  steps: EnsureStepView[];
+}
+
+/**
+ * What `ensure.*` answers. A failure keeps the agent's code, message and fix (`LAI-SYN-005` a sync is running, `LAI-AGT-022`
+ * a mode change, `LAI-AGT-024` not ready, `LAI-SEC-002` the PIN is needed); `cancelled` is the PIN window closed.
+ */
+export type EnsureResult =
+  | { ok: true; view: EnsureSnapshot; running: boolean }
+  | { ok: false; code: string; message?: string; fix?: string; status?: number; cancelled?: true };
+
 /** What `rotateKey()` answers (agent.md 3.8.14, plus the cases of the PIN window). */
 export type RotateKeyResult =
   | {
@@ -291,6 +326,17 @@ export interface LocalaiDesktop {
   // Added by DSK-08 (section 3.5 "As built"):
   /** "Rotate key..." of the connection-info page: asks for the PIN, then `POST /key/rotate` with the grant. */
   rotateKey(): Promise<RotateKeyResult>;
+  // Added for issue #480 (ADR-0010): "Install what's missing", the ensure window only.
+  ensure: {
+    /** `GET /api/v1/ensure`. */
+    view(): Promise<EnsureResult>;
+    /** The button: `POST /api/v1/ensure` with the safe default (the automatic steps, no confirmation). */
+    start(): Promise<EnsureResult>;
+    /** `DELETE /api/v1/ensure`: stops the running pass; what was installed stays. */
+    cancel(): Promise<EnsureResult>;
+    /** A person's OK for compiling or restarting a running service: asks for the PIN, then `POST` with `confirm`. */
+    confirm(steps: string[]): Promise<EnsureResult>;
+  };
 }
 
 /** `window.localaiDesktopHost` (agent pages): exactly these five members (desktop.md 3.5). */

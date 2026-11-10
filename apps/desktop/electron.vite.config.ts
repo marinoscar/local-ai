@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
 
-const pages = ['topbar', 'error', 'pin', 'connection-info', 'link', 'lab'] as const;
+const pages = ['topbar', 'error', 'pin', 'connection-info', 'link', 'lab', 'ensure'] as const;
 
 export default defineConfig({
   main: {

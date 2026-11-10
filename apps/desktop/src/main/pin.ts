@@ -13,9 +13,9 @@ import type { PinResult } from '../shared/types';
 
 export const MODULE = 'pin' as const;
 
-/** What the window says it is for. `leave-survival` is the tray's (and DSK-09's), `rotate-key` the connection-info page's. */
-export type PinPurpose = 'leave-survival' | 'rotate-key';
-export const PIN_PURPOSES: readonly PinPurpose[] = ['leave-survival', 'rotate-key'];
+/** What the window says it is for. `leave-survival` is the tray's (and DSK-09's), `rotate-key` the connection-info page's, `confirm-ensure` the ensure window's (compiling, restarting a running service). */
+export type PinPurpose = 'leave-survival' | 'rotate-key' | 'confirm-ensure';
+export const PIN_PURPOSES: readonly PinPurpose[] = ['leave-survival', 'rotate-key', 'confirm-ensure'];
 
 /** `pg_` and 43 base64url characters (agent.md 3.8.3). */
 export const GRANT_PATTERN = /^pg_[A-Za-z0-9_-]{43}$/;

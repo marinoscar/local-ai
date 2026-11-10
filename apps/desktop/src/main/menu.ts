@@ -17,6 +17,8 @@ export interface MenuState {
 
 export interface MenuActions {
   connectionInfo(): void;
+  /** "Install what's missing" (issue #480): opens the ensure window. */
+  ensure(): void;
   connect(): void;
   disconnect(): void;
   setAutostart(on: boolean): void;
@@ -36,6 +38,7 @@ export interface MenuTemplateItem {
 
 const STRINGS = {
   connectionInfo: { en: 'Connection info', es: 'Información de conexión' },
+  ensure: { en: "Install what's missing", es: 'Instalar lo que falta' },
   connect: { en: 'Connect to the lab', es: 'Conectar con el laboratorio' },
   disconnect: { en: 'Disconnect from the lab', es: 'Desconectar del laboratorio' },
   startAtLogin: { en: 'Start at login', es: 'Iniciar al abrir sesión' },
@@ -59,6 +62,7 @@ export function buildMenuTemplate(state: MenuState, actions: MenuActions): MenuT
   const { lang } = state;
   return [
     { label: pick(STRINGS.connectionInfo, lang), click: actions.connectionInfo },
+    { label: pick(STRINGS.ensure, lang), click: actions.ensure },
     state.linked ? { label: pick(STRINGS.disconnect, lang), click: actions.disconnect } : { label: pick(STRINGS.connect, lang), click: actions.connect },
     { type: 'separator' },
     { label: pick(STRINGS.startAtLogin, lang), type: 'checkbox', checked: state.autostart, click: () => actions.setAutostart(!state.autostart) },

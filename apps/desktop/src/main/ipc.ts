@@ -20,6 +20,7 @@ import type {
   CloudResult,
   ConnectionInfoResult,
   CopyKeyResult,
+  EnsureResult,
   LabCacheView,
   DesktopStatus,
   LinkBegin,
@@ -69,6 +70,10 @@ export const CHANNELS = {
   pinSubmit: 'localai:pin-submit',
   pinCancel: 'localai:pin-cancel',
   rotateKey: 'localai:rotate-key',
+  ensureView: 'localai:ensure-view',
+  ensureStart: 'localai:ensure-start',
+  ensureCancel: 'localai:ensure-cancel',
+  ensureConfirm: 'localai:ensure-confirm',
   lang: 'localai:lang',
   errorAction: ERROR_ACTION_CHANNEL,
   hostCopyApiKey: 'localai:host:copy-api-key',
@@ -420,6 +425,15 @@ export interface KeyActions {
   rotate(): Promise<RotateKeyResult>;
 }
 
+/** The ensure window's calls (src/main/ensure.ts, ADR-0010). `confirm` receives whatever the page sent and validates it. */
+export interface EnsureActions {
+  view(): Promise<EnsureResult>;
+  start(): Promise<EnsureResult>;
+  cancel(): Promise<EnsureResult>;
+  /** Asks for the PIN, then starts the pass with the steps the person approved. */
+  confirm(steps: unknown): Promise<EnsureResult>;
+}
+
 /** The PIN window's calls (src/main/pin.ts). `senderId` is the calling webContents. */
 export interface PinActions {
   submit(senderId: number, pin: unknown): Promise<PinResult>;
@@ -478,6 +492,8 @@ export interface BridgeDeps {
   keys?: KeyActions;
   /** The PIN window's calls (DSK-08). Absent: `pinSubmit` answers `not_implemented`. */
   pin?: PinActions;
+  /** "Install what's missing" (issue #480). Absent: its channels answer `not_implemented`. */
+  ensure?: EnsureActions;
   /** The error-page actions (DSK-03); `host`, `supervisor`, `retry`... are wired by index.ts. */
   errorActions: ActionDeps;
   /** Reported when a settings patch was refused (never the values). */
@@ -490,6 +506,7 @@ const asChild = (value: unknown): ChildWindowName | null => (typeof value === 's
 export function createShellHandlers(deps: BridgeDeps): HandlerTable {
   const stub = (kind: HandlerKind = 'invoke'): HandlerSpec => ({ kind, origin: 'shell', run: () => NOT_IMPLEMENTED });
   const onLabPage = (event: SenderEvent): boolean => isShellPage(event.senderFrame?.url ?? '', 'lab', deps.policy.devOrigin);
+  const onEnsurePage = (event: SenderEvent): boolean => isShellPage(event.senderFrame?.url ?? '', 'ensure', deps.policy.devOrigin);
   const onConnectionInfoPage = (event: SenderEvent): boolean => isShellPage(event.senderFrame?.url ?? '', 'connection-info', deps.policy.devOrigin);
   return {
     [CHANNELS.status]: { kind: 'invoke', origin: 'shell', run: () => deps.status() },
@@ -568,6 +585,12 @@ export function createShellHandlers(deps: BridgeDeps): HandlerTable {
     [CHANNELS.connectionInfo]: deps.keys ? { kind: 'invoke', origin: 'shell', accept: onConnectionInfoPage, run: () => deps.keys!.info() } : stub(),
     [CHANNELS.revealKey]: deps.keys ? { kind: 'invoke', origin: 'shell', accept: onConnectionInfoPage, run: () => deps.keys!.reveal() } : stub(),
     [CHANNELS.rotateKey]: deps.keys ? { kind: 'invoke', origin: 'shell', accept: onConnectionInfoPage, run: () => deps.keys!.rotate() } : stub(),
+    // Issue #480: "Install what's missing", for the ensure window only. No argument is read except the names of the steps a
+    // person approved, which the main process checks against the two the agent holds back.
+    [CHANNELS.ensureView]: deps.ensure ? { kind: 'invoke', origin: 'shell', accept: onEnsurePage, run: () => deps.ensure!.view() } : stub(),
+    [CHANNELS.ensureStart]: deps.ensure ? { kind: 'invoke', origin: 'shell', accept: onEnsurePage, run: () => deps.ensure!.start() } : stub(),
+    [CHANNELS.ensureCancel]: deps.ensure ? { kind: 'invoke', origin: 'shell', accept: onEnsurePage, run: () => deps.ensure!.cancel() } : stub(),
+    [CHANNELS.ensureConfirm]: deps.ensure ? { kind: 'invoke', origin: 'shell', accept: onEnsurePage, run: (_event, steps) => deps.ensure!.confirm(steps) } : stub(),
     // DSK-10: the lab link. No argument is read from the page: the code, the URL and the token live in the main process.
     [CHANNELS.cloudBeginLink]: {
       kind: 'invoke',
