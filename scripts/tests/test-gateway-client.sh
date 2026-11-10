@@ -2,6 +2,9 @@
 # test-gateway-client.sh: scripts/gateway-client.sh against a throwaway local HTTP server that behaves like the
 # gateway's /v1/models (401 LAI-GW-010 without a good key, a model list with one). No network, no real key: the
 # test key is generated at run time.
+# The assertions are written "check; ok \"name\" $?" on purpose: $? is the check's own status. Newer
+# Newer versions of the linter flag that shape (SC2319), so it is disabled here for the whole file.
+# shellcheck disable=SC2319
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
 SCRIPT="$PWD/scripts/gateway-client.sh"

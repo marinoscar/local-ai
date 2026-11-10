@@ -320,6 +320,11 @@ func TestUnitsVerify(t *testing.T) {
 		res, _ := execx.Exec{}.Run(context.Background(), execx.Cmd{Path: sa, Args: []string{"verify", filepath.Join(dir, f)}, Timeout: time.Minute, MaxOut: 1 << 20})
 		for _, line := range strings.Split(string(res.Stdout)+"\n"+string(res.Stderr), "\n") {
 			l := strings.TrimSpace(line)
+			// Only diagnostics about the files this test wrote count. systemd-analyze also reports on the
+			// host's own units (for example a removed option in a vendor unit), which is not ours to fix.
+			if strings.HasPrefix(l, "/") && !strings.HasPrefix(l, dir) {
+				continue
+			}
 			if l == "" || strings.Contains(l, "Command ") || strings.Contains(l, "is not executable") ||
 				strings.Contains(l, "No such file") || strings.Contains(l, "not found") || strings.Contains(l, "Failed to") ||
 				strings.Contains(l, "ConditionPath") || strings.Contains(l, "failed to load") || strings.Contains(l, "Unit ") && strings.Contains(l, "not found") {
