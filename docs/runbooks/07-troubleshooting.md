@@ -128,6 +128,30 @@ Do this first, for every problem.
 
 ---
 
+## The node says "Needs you", or a tool is missing
+
+**You see:** the node card (in the app, the Portal or the cloud) says **Needs you: …** or **Installing what's missing (2 of 4)**; or `aictl doctor` shows `LAI-KIT-010`, `LAI-KIT-011`, `LAI-KIT-051` or `LAI-KIT-052`, or a code that says a program is not installed (`LAI-SVC-003`, `LAI-SVC-020`, `LAI-SYN-061`).
+
+A node installs what is missing from the rebuild kit **by itself** after every sync, when the agent starts and when it goes online. This is for when it did not, or you do not want to wait.
+
+1. **Install what is missing.** In the app, the Portal or the node page in the cloud, press **Install what's missing**. In a terminal, type `aictl`, press **7** (Repair with no internet), then choose **Install what is missing (from the kit)**. Or type it in one line:
+
+   ```
+   aictl ensure
+   ```
+
+   To see first what it would do and change nothing, add `--dry-run`.
+   - **What you should see:** the state first (`Needs you: …` or `This computer is missing 3 thing(s) that the kit has. Installing them now.`), the list of what is missing, `… Installing what's missing (1 of 3)`, one `✓` line per thing installed, and at the end `✓ Complete: this computer has everything it needs.` Exit code 0.
+   - **If it doesn't work:** each failed step prints `✗`, its code and its fix; nothing was replaced, and you can run it again. `LAI-KIT-040` ("the kit does not have it yet"): connect the AI-ARK drive that has the kit, or run `aictl ark sync --wait` with internet, then press the button again. `LAI-KIT-001` (a file in the kit is damaged): `aictl kit verify --full`, then use another drive. `LAI-SYN-005` (a sync is running): wait for it; the node installs by itself when it ends. No agent (`LAI-CLI-001`): [The app won't open](#the-app-wont-open), or install by hand with `sudo aictl kit install <tool>` and `sudo aictl kit install-debs` ([06 steps 29 and 31](06-rebuild-a-node-offline.md)).
+2. **A step asks first.** Two things never happen without your OK: building the speech-to-text program from source (it takes up to an hour) and restarting the library service (it is unavailable for a few seconds). The node card says **Needs you** and names which. In a terminal `aictl ensure` asks `[y/N]`; in a script, `aictl ensure --yes` confirms them.
+   - **What you should see:** after you confirm, the progress line names the step and, at the end, `✓ Complete`.
+   - **If it doesn't work:** a confirmation over the network needs the admin PIN (`LAI-SEC-002`); in the terminal of the computer itself it does not.
+3. **Stop it, or turn the automatic part off.** `Ctrl-C` stops a run that you started (what was already installed stays). To make the node only report and wait for the button, set `ensure:` / `auto: ask` (or `off`) in `/etc/localai/node.yaml`; `on` is the default.
+   - **What you should see:** with `ask` or `off`, the node card says **Needs you** (or **Automatic install is off**) instead of installing, and `aictl doctor` shows `LAI-KIT-052` as a warning until you press the button.
+   - **If it doesn't work:** `LAI-AGT-002` after the edit means the value is not `on`, `ask` or `off`; the last good settings stay in use until you fix the line.
+
+---
+
 ## No library
 
 **You see:** "The library has no books" (`LAI-SVC-001`), "The library is not running" (`LAI-SVC-002`), or search finds nothing.
@@ -136,7 +160,7 @@ Do this first, for every problem.
 2. By code:
    - `LAI-SVC-001` (no books): plug in the AI-ARK drive; its books join the library within seconds. To copy them inside: `aictl ark import --wait`. With internet: `aictl ark sync --wait`.
    - `LAI-SVC-002` (the library service isn't running): `aictl restart kiwix`.
-   - `LAI-SVC-003` (the library program isn't installed): install it from the kit with `sudo aictl kit install kiwix-tools`, then `aictl restart kiwix`. If that fails, repair the installation ([The app won't open](#the-app-wont-open) step 4).
+   - `LAI-SVC-003` (the library program isn't installed): press **Install what's missing** (Portal, the app or the node page in the cloud), or in a terminal type `aictl ensure`; it installs the program from the kit and asks before it restarts the library. By hand, the same thing: `sudo aictl kit install kiwix-tools`, then `aictl restart kiwix`. If that fails, repair the installation ([The app won't open](#the-app-wont-open) step 4).
    - `LAI-SVC-004` (one book can't be opened): `aictl ark verify --wait`. The other books still work.
    - `LAI-SVC-005` (the library list couldn't be rebuilt): `aictl restart kiwix`; if it repeats, `aictl doctor`.
 3. **Read the library without the agent:** `http://127.0.0.1:8888/library/` (if kiwix still runs), or from the drive alone: [01 Part 9](01-survival-mode.md).
@@ -151,7 +175,7 @@ Do this first, for every problem.
    - `LAI-SVC-011`: `aictl restart whisper`.
    - `LAI-SVC-012`: `sudo aictl rebuild-whisper`.
    - `LAI-SVC-014`, `LAI-SVC-016`: speak closer, shorter than 2 minutes.
-3. **Voice output** (`LAI-SVC-020` program missing: `sudo aictl kit install piper`, or repair the installation as in [The app won't open](#the-app-wont-open) step 4; `LAI-SVC-021`/`LAI-SVC-022` no voice for the language: import or sync a voice). Answers still show as text.
+3. **Voice output** (`LAI-SVC-020` program missing: press **Install what's missing**, or type `aictl ensure`; by hand `sudo aictl kit install piper`; if that fails, repair the installation as in [The app won't open](#the-app-wont-open) step 4; `LAI-SVC-021`/`LAI-SVC-022` no voice for the language: import or sync a voice). Answers still show as text.
 4. **Photos** (`LAI-SVC-040` no vision model can run here; `LAI-SVC-041` its image part is missing: `aictl ark verify --item <model-id> --wait`; `LAI-SVC-108` photo unusable: JPEG or PNG under 30 MB).
 
 ---
@@ -248,7 +272,7 @@ The admin PIN protects deletes, key rotation and leaving Survival mode. Starting
    - `LAI-SYN-025` (stored files no longer match, possible disk damage): `aictl ark verify --full --wait`. If files keep failing, copy the ark to another drive.
    - `LAI-SYN-030` (the server no longer has the file): `aictl catalog refresh`.
    - `LAI-SYN-035` (the same item failed 3 runs in a row): `aictl doctor` shows its last error.
-   - `LAI-SYN-061` (a tool is missing): `sudo aictl kit install pmtiles` if the message names pmtiles; otherwise repair the installation (`--repair`, see [The app won't open](#the-app-wont-open) step 4).
+   - `LAI-SYN-061` (a tool is missing): press **Install what's missing**, or type `aictl ensure`. By hand: `sudo aictl kit install pmtiles` if the message names pmtiles; otherwise repair the installation (`--repair`, see [The app won't open](#the-app-wont-open) step 4).
    - `LAI-SYN-062` (manuals made without the real lab values): install the inventory with `sudo aictl docs inventory import <path-to>/inventory.local.yaml` (it checks the file and never prints its values) or plug in the drive, then sync.
    - `LAI-SYN-060` (couldn't compute the package list for the rebuild kit): if the message says a keyring "does not match the fingerprint pinned in the agent", the agent refuses that vendor key on purpose and does not fall back: install the newest agent release (it carries the vendor's current key, see [06](06-rebuild-a-node-offline.md) "Rotate a vendor apt keyring"), then sync again. If it says a keyring "is not available", this node is set to refuse vendor repositories whose key it does not have. To accept them, open `/etc/localai/node.yaml`, find the `sync:` block, set `apt_unverified_repos: allow` (or delete that line, `allow` is the default), save, and run `aictl ark sync --wait` again. Any other message: report it, a package name in the catalog probably changed; the old package set is kept.
    - `LAI-SYN-063` (yellow: the rebuild kit has packages from vendor repositories whose signature was not checked): a repository was used over https without a key the agent holds (the Tailscale and NVIDIA keys are built into the agent, so this means a different repository), so the vendor's signature is not checked when the kit is built; the kit's own checksums still protect it from damage. Nothing is broken. To go back to refusing such repositories, set `apt_unverified_repos: refuse` in the `sync:` block of `/etc/localai/node.yaml` (one line); the kit's package sets that need those repositories are then not built until their keys are pinned and embedded in the agent. `aictl kit verify` shows the same warning and names the repositories.
@@ -403,7 +427,7 @@ Each code is `LAI-<AREA>-<NNN>`. The registry of all codes is [doctor-codes.md](
 | Gateway | `LAI-GW` | `https://ai.marin.cr/v1` | [gateway.md §8](../specs/gateway.md#8-doctor-codes-lai-gw) | [API key doesn't work](#api-key-doesnt-work-401), [Open WebUI shows no lab models](#open-webui-shows-no-lab-models) |
 | Desktop | `LAI-DSK` | The Local AI app | [desktop.md §8](../specs/desktop.md#8-doctor-codes-lai-dsk) | [The app won't open](#the-app-wont-open) |
 | Installer | `LAI-INS` | `install-node.sh`, laptop settings | [installer.md §8](../specs/installer.md#8-doctor-codes-installer-output-is-terminal-only-english-and-spanish) | [Installer stopped](#installer-stopped), [Laptop sleeps](#laptop-sleeps-or-drops-off-the-network) |
-| Rebuild kit | `LAI-KIT` | Offline rebuild materials and builds | [rebuild-kit.md §8](../specs/rebuild-kit.md#8-doctor-codes-shown-in-the-desktop-english-and-spanish) | [06](06-rebuild-a-node-offline.md) |
+| Rebuild kit | `LAI-KIT` | Offline rebuild materials and builds | [rebuild-kit.md §8](../specs/rebuild-kit.md#8-doctor-codes-shown-in-the-desktop-english-and-spanish) | [The node says "Needs you"](#the-node-says-needs-you-or-a-tool-is-missing), [06](06-rebuild-a-node-offline.md) |
 | Drill | `LAI-DRL` | The monthly self-test | [drill.md §8](../specs/drill.md#8-doctor-codes-shown-in-the-desktop-english-and-spanish) | [08](08-scheduled-sync.md) |
 | Security / keys / PIN | `LAI-SEC` | Tokens, PIN, keys, permissions | [agent.md §8.4](../specs/agent.md#84-lai-sec--security-keys-pin) | [Forgot PIN](#forgot-pin), [API key doesn't work](#api-key-doesnt-work-401) |
 | Hardware | `LAI-HW` | GPU, memory, disk, heat, battery | [agent.md §8.3](../specs/agent.md#83-lai-hw--hardware) | [GPU](#gpu-not-detected-after-update), [Battery](#battery), [Disk full](#disk-full) |

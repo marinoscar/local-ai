@@ -1111,6 +1111,8 @@ Root-level rules (in addition):
 
 **Triggers.** `Service.Mounted(root)` at `drive.mounted`, `Service.RunFinished(roots...)` at the end of every sync, verify and import run, `Service.Unmounted(root)` at `drive.unmounted`, and `Service.Start` for a first report at startup and then one every 6 h. The wiring (`internal/app/ark.go`, [agent.md](agent.md) §4.1.1) calls them: `Start` is a worker of step 16, the engine's READY refresher calls `RunFinished` after every swap and at the end of a run, and the drive events worker calls `Mounted` and `Unmounted`. The `Regenerated` hook is left unset: the cloud link pushes its snapshot on its own cadence and after `sync.done`.
 
+**After a run: the node is made complete.** READY says what the kit holds; it does not install it. After every run that did something (`sync.done` with a state other than `skipped`), once the run slot is released, the agent's install engine ([rebuild-kit.md](rebuild-kit.md) §4.5, [ADR-0010](../decisions/0010-the-agent-keeps-the-node-complete.md)) plans again and installs what the profile wants and the node lacks from the kit items that verify (`ensure.auto: on`); with `ask` or `off` it only reports (`LAI-KIT-052`). It is a subscriber of `sync.done` and `mode.changed` on the event bus (`app.ensureWorker`), not a `run.Hooks` function: the engine and READY neither wait for it nor know about it, and a run is never held open by an install. It never writes into a content root.
+
 **Node level.** `ready.NodeSurvivalCapable(needs, reports)` is the survival check over the union of the verified items of every mounted root, and `Service.NodeSurvivalCapable()` is what `/status` and `/portal/status` show.
 
 ### 4.13 Re-verification (bit rot)

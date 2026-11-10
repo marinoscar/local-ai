@@ -85,6 +85,7 @@ El diagrama detallado, la tabla de componentes y todos los nombres canónicos (r
 - **El repositorio es público y está depurado de datos reales.** Los valores reales del laboratorio viven solo en un archivo que git ignora ([ADR-0007](docs/decisions/0007-public-repo-redaction.md)).
 - **La aplicación en la nube está construida sobre EnterpriseAppBase** ([ADR-0008](docs/decisions/0008-cloud-on-eab.md)).
 - **Todo está optimizado para las personas.** Alguien que nunca ha usado una terminal debe poder hacer cada tarea común leyendo la pantalla y eligiendo una opción. Los comandos escritos son el camino rápido, nunca el único ([ADR-0009](docs/decisions/0009-optimized-for-humans.md)).
+- **El agente mantiene el nodo completo.** Después de una sincronización instala lo que el kit de reconstrucción tiene y al nodo le falta, desde archivos que se comprueban y con una lista fija de acciones; compilar y reiniciar un servicio en marcha siempre preguntan antes, y un botón (o `aictl ensure`) lo hace cuando se pide ([ADR-0010](docs/decisions/0010-the-agent-keeps-the-node-complete.md)).
 
 ## 3. Los tres modos
 

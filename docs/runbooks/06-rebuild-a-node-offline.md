@@ -191,12 +191,12 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
 
       Fix any ✗ line as it says, then run step 20 again. `--from-kit` makes it take the source code only from the kit, so it never tries the internet.
     - `LAI-KIT-002` (the kit doesn't have the needed llama.cpp version; the command ends with exit code 1): choose a commit the kit has. `ls /media/$USER/AI-ARK/localai/kit/src/` shows `llama.cpp-<commit>.tar.gz` files; run `sudo aictl rebuild-llama --from-kit --commit <commit>`. `LAI-KIT-001` (the source in the kit is damaged): `aictl kit verify --full`, or use another drive.
-    - `LAI-KIT-010` (build tools missing) or `LAI-LLM-018` naming a missing package: install it from the kit with `sudo aictl kit install-debs --packages <package>` (step 29), then run step 20 again.
+    - `LAI-KIT-010` (build tools missing) or `LAI-LLM-018` naming a missing package: press **Install what's missing**, or type `aictl ensure` (step 29); by hand, `sudo aictl kit install-debs --packages <package>`. Then run step 20 again.
     - `LAI-KIT-048` (the ready-made build doesn't fit this computer): it says what is different and names the files the kit has; step 20 then builds from source by itself.
     - `LAI-LLM-019` (or `LAI-KIT-021` for the speech-to-text build): the new build didn't work; the previous one is still in use. Nothing broke.
     - **Only for experts** (each of these turns off the automatic choice and does exactly what it says): `--backend vulkan` or `--backend cpu` (build for that backend only), `--cuda-arch 75` (the GPU type when `LAI-HW-019` says it can't be detected: `75` for an RTX 20xx, `86` for RTX 30xx, `89` for RTX 40xx), `--jobs 2` (fewer parallel jobs), `--prebuilt <file>` (restore one ready-made file from `ls /media/$USER/AI-ARK/localai/kit/prebuilt/`; `sudo aictl rebuild-whisper` offers a file that fits exactly by itself).
 22. **Build without switching** (to test first): `sudo aictl rebuild-llama --from-kit --no-activate`. It builds and tests the new version but keeps the running one. Old builds are kept too (2 by default; `--keep <n>` changes it).
-23. **Speech-to-text has its own build:** `sudo aictl rebuild-whisper --from-kit` (same idea and flags, including `--prebuilt <file>`; `LAI-SVC-012` asks for it).
+23. **Speech-to-text has its own build:** `sudo aictl rebuild-whisper --from-kit` (same idea and flags, including `--prebuilt <file>`; `LAI-SVC-012` asks for it). A node with no speech program at all gets a ready-made one from the kit by itself, or when you press **Install what's missing**; building from source always asks first (`aictl ensure` asks, `aictl ensure --yes` confirms).
 24. **Save the working builds into the kit** (so the next rebuild of this computer can skip compiling): `sudo aictl kit export-build`. It also happens by itself after each successful build.
 
 ---
@@ -219,15 +219,21 @@ The installer already built llama.cpp. Use this later when: the AI service doesn
     sudo aictl catalog restore
     ```
 
-29. **A missing Ubuntu package** (a fix line names one, for example `cmake`, or `LAI-KIT-010` / `LAI-KIT-011`). The kit is a local package source; this installs from it with no internet, after checking every package file:
+29. **A missing Ubuntu package or tool** (a fix line names one, for example `cmake`, or `LAI-KIT-010` / `LAI-KIT-011`; kiwix-tools, pmtiles and piper are the same). The kit is a local package source, and the agent installs from it by itself after a sync. To do it now, with no internet, after checking every file: press **Install what's missing** in the app or the Portal, or in a terminal type `aictl`, press **7**, then choose **Install what is missing (from the kit)**. Or in one line:
+
+    ```
+    aictl ensure
+    ```
+
+    Add `--dry-run` to see what it would install without changing anything. It needs the agent running. **By hand**, with or without the agent, as root:
 
     ```
     sudo aictl kit install-debs --packages cmake
     ```
 
-    Several packages: separate them with commas (`--packages cmake,ninja-build`). Without `--packages` it installs everything a rebuild needs. With several drives or roots, add `--root <root-id>`. To see what it would install without changing anything, add `--dry-run`.
+    Several packages: separate them with commas (`--packages cmake,ninja-build`). Without `--packages` it installs everything a rebuild needs. With several drives or roots, add `--root <root-id>`; add `--dry-run` to see what it would install. A tool: `sudo aictl kit install kiwix-tools` (or `pmtiles`, `piper`).
     - **What you should see:** the packages being checked and installed, then `✓`.
-    - **If it doesn't work:** `LAI-KIT-001` (a package file in the kit is damaged): `aictl kit verify --part debs --full`, then use another drive or sync this one with internet. `LAI-KIT-042`: the kit is for a different Ubuntu version (step 2).
+    - **If it doesn't work:** `LAI-KIT-001` (a package file in the kit is damaged): `aictl kit verify --part debs --full`, then use another drive or sync this one with internet. `LAI-KIT-042`: the kit is for a different Ubuntu version (step 2). `LAI-KIT-040`: the kit does not have it; plug in the drive that does.
 
 30. **The Local AI program itself is broken** (the agent won't start after an update, or `LAI-INS-034`): put back the signed copy from the kit, or rebuild it from the kit's source code. (If even `aictl` is missing, `command not found`, skip to step 31.)
 
