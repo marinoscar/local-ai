@@ -31,14 +31,13 @@ func (c *fakeClock) Now() time.Time {
 }
 
 type fakeMachine struct {
-	mu        sync.Mutex
-	tools     map[string]string
-	missing   []string // packages dpkg does not have
-	pkgErr    error
-	whisper   bool
-	active    map[string]bool
-	asked     int
-	onInstall func() // not used by Machine; kept for symmetry
+	mu      sync.Mutex
+	tools   map[string]string
+	missing []string // packages dpkg does not have
+	pkgErr  error
+	whisper bool
+	active  map[string]bool
+	asked   int
 }
 
 func (m *fakeMachine) ToolVersion(tool string) string {

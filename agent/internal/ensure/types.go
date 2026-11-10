@@ -147,15 +147,6 @@ type Step struct {
 	File string `json:"-"`
 }
 
-// Done reports whether the step needs nothing more from this pass.
-func (s Step) settled() bool {
-	switch s.Status {
-	case StatusOK, StatusDone:
-		return true
-	}
-	return false
-}
-
 // Plan is what the planner found.
 type Plan struct {
 	Steps []Step `json:"steps"`
