@@ -62,6 +62,9 @@ export const COMMAND_POLICY = {
   'localai.service.restart': { permission: OPERATE, leaseMs: 60 * SECOND, renewIntervalMs: 20 * SECOND, hardCapMs: 600 * SECOND, queuedTtlMs: 10 * MINUTE, maxAttempts: 1, dedupSubject: subjectOf<'localai.service.restart'>((p) => p.service), confirmation: 'none' },
   'localai.logs.tail': { permission: OPERATE, leaseMs: 30 * SECOND, renewIntervalMs: 10 * SECOND, hardCapMs: 300 * SECOND, queuedTtlMs: 2 * MINUTE, maxAttempts: 1, dedupSubject: subjectOf<'localai.logs.tail'>((p) => p.unit), confirmation: 'none' },
   'localai.catalog.refresh': { permission: OPERATE, leaseMs: 60 * SECOND, renewIntervalMs: 20 * SECOND, hardCapMs: 600 * SECOND, queuedTtlMs: 1 * HOUR, maxAttempts: 1, dedupSubject: null, confirmation: 'none' },
+  // "Install what's missing" (ADR-0010): returns at once, like ark.sync; a node that is away for an hour would otherwise
+  // start an install nobody remembers asking for.
+  'localai.ensure.run': { permission: OPERATE, leaseMs: 30 * SECOND, renewIntervalMs: 10 * SECOND, hardCapMs: 300 * SECOND, queuedTtlMs: 1 * HOUR, maxAttempts: 1, dedupSubject: null, confirmation: 'none' },
   // A 5-minute lease and a 15-minute cap: the agent restarts itself mid-command and the new process renews (spec 5).
   'localai.agent.update': { permission: ADMIN, leaseMs: 300 * SECOND, renewIntervalMs: 60 * SECOND, hardCapMs: 900 * SECOND, queuedTtlMs: 24 * HOUR, maxAttempts: 1, dedupSubject: null, confirmation: 'show_version_change' },
 } as const satisfies Record<CommandType, CommandPolicy>;
