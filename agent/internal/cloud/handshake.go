@@ -23,6 +23,9 @@ const (
 	FeatureKey      = "key.v1"
 	// FeatureTailnet: POST .../localai/tailnet exists (the node reports its own tailnet address, issue #437).
 	FeatureTailnet = "tailnet.v1"
+	// FeatureEnsure: the state snapshot may carry the `ensure` block ("Install what's missing", ADR-0010) and the
+	// cloud may queue `localai.ensure.run`.
+	FeatureEnsure = "ensure.v1"
 	// FeatureHostVitals is EAB's serverFeatures entry that lets heartbeats carry host, power and events.
 	FeatureHostVitals = "node_host_vitals"
 )

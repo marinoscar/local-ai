@@ -26,7 +26,7 @@ import (
 // TypePrefix is the namespace of the Local AI job types on the cloud: "localai.model.load".
 const TypePrefix = "localai."
 
-// The 14 job names, without the prefix: the closed set the agent accepts (config.CloudJobNames).
+// The 15 job names, without the prefix: the closed set the agent accepts (config.CloudJobNames).
 const (
 	TypeStatusRefresh   = "status.refresh"
 	TypeModelLoad       = "model.load"
@@ -42,6 +42,8 @@ const (
 	TypeLogsTail        = "logs.tail"
 	TypeCatalogRefresh  = "catalog.refresh"
 	TypeAgentUpdate     = "agent.update"
+	// TypeEnsureRun is "Install what's missing" (ADR-0010): POST /ensure with the safe default.
+	TypeEnsureRun = "ensure.run"
 )
 
 // Limits are the per-type timings of cloud-app.md section 3.7.
@@ -55,12 +57,12 @@ type Limits struct {
 }
 
 // TypeLimits returns the limits of a job name (without the prefix) and false for a name that is not
-// one of the 14. The lease column of cloud-app.md section 3.7: 30 s, 60 s or 300 s; the hard cap is
+// one of the 15. The lease column of cloud-app.md section 3.7: 30 s, 60 s or 300 s; the hard cap is
 // the lease times ten, except model.load (600 s) and agent.update (900 s).
 func TypeLimits(name string) (Limits, bool) {
 	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
 	switch name {
-	case TypeStatusRefresh, TypeModelUnload, TypeModelSetDefault, TypeModelDownload, TypeArkSync, TypeArkVerify, TypeModeOffline, TypeLogsTail:
+	case TypeStatusRefresh, TypeModelUnload, TypeModelSetDefault, TypeModelDownload, TypeArkSync, TypeArkVerify, TypeModeOffline, TypeLogsTail, TypeEnsureRun:
 		return Limits{Lease: ms(30000), HardCap: ms(300000)}, true
 	case TypeModelLoad:
 		return Limits{Lease: ms(60000), HardCap: ms(600000)}, true

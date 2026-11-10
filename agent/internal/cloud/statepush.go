@@ -156,7 +156,7 @@ func (l *Link) pushStateOnce(ctx context.Context, timeout time.Duration) pushRes
 	if !ok {
 		return pushResult{outcome: pushFailed, err: ErrNotLinked}
 	}
-	b, err := l.snaps.Build(ctx)
+	b, err := l.snaps.BuildWith(ctx, BuildOpts{Ensure: l.hasFeature(FeatureEnsure)})
 	if err != nil {
 		l.log.Warn("a state snapshot could not be built", "error", errText(err))
 		return pushResult{outcome: pushFailed, err: err}

@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -733,4 +734,115 @@ func TestStopPushesALastSnapshotThatConforms(t *testing.T) {
 		t.Fatalf("%d snapshots accepted", len(states))
 	}
 	validate(t, states[1])
+}
+
+type fakeEnsure struct{ r *EnsureReport }
+
+func (f *fakeEnsure) Ensure(context.Context) *EnsureReport { return f.r }
+
+func ensureBuilder(t *testing.T, r *rig, src EnsureSource) *SnapshotBuilder {
+	t.Helper()
+	sb, err := NewSnapshotBuilder(SnapshotOptions{
+		Status: r.status, Models: r.models, Ark: r.ark, Drill: r.drill, Sync: &fakeSync{}, Config: cfgView{nodeConfig()}, Ensure: src,
+		BootID: "5d2f6a54-0f6e-4c53-9d1e-4b6f3f2a7c10", Now: r.clk.Now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sb
+}
+
+// The ensure block (ADR-0010) is optional on the wire: an older cloud's strict schema refuses the key, so it
+// goes out only when the build asks for it, and a snapshot without it still conforms.
+func TestSnapshotEnsureBlockIsOptInAndConformsToTheSchema(t *testing.T) {
+	r := newRig(t)
+	src := &fakeEnsure{r: &EnsureReport{
+		State: "needs_you", Auto: "on", Message: "Needs you: the speech program needs your OK to build.", Done: 1, Total: 3, NextKind: "confirm", NextStep: "whisper.build",
+		Steps: []EnsureStepReport{{ID: "tool.piper", Status: "done"}, {ID: "whisper.build", Status: "needs_confirm"}, {ID: "tool.pmtiles", Status: "ok"}},
+	}}
+	sb := ensureBuilder(t, r, src)
+
+	without, err := sb.Build(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if without.Snapshot.Ensure != nil || bytes.Contains(without.Body, []byte(`"ensure"`)) {
+		t.Fatalf("a build without the option carries the ensure block: %s", without.Body)
+	}
+	validate(t, without.Body)
+
+	with, err := sb.BuildWith(context.Background(), BuildOpts{Ensure: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate(t, with.Body)
+	e := with.Snapshot.Ensure
+	if e == nil || e.State != "needs_you" || e.Auto != "on" || e.Progress != (SnapProgress{Done: 1, Total: 3}) || e.NextAction.Kind != "confirm" || e.NextAction.Step == nil || *e.NextAction.Step != "whisper.build" || len(e.Steps) != 3 {
+		t.Fatalf("ensure = %+v", e)
+	}
+	if e.Steps[1] != (SnapEnsureStep{ID: "whisper.build", Status: "needs_confirm"}) {
+		t.Fatalf("steps = %+v", e.Steps)
+	}
+}
+
+func TestSnapshotEnsureBlockKeepsToTheClosedSetsAndTheLimits(t *testing.T) {
+	r := newRig(t)
+	long := strings.Repeat("x", 500)
+	steps := make([]EnsureStepReport, 0, 30)
+	for i := 0; i < 30; i++ {
+		steps = append(steps, EnsureStepReport{ID: long, Status: "exploded"})
+	}
+	src := &fakeEnsure{r: &EnsureReport{State: "weird", Auto: "weird", Message: long, Done: -4, Total: -1, NextKind: "weird", Steps: steps}}
+	b, err := ensureBuilder(t, r, src).BuildWith(context.Background(), BuildOpts{Ensure: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate(t, b.Body)
+	e := b.Snapshot.Ensure
+	if e.State != "needs_you" || e.Auto != "on" || e.NextAction.Kind != "none" || len(e.Message) != 200 || e.Progress.Done != 0 || e.Progress.Total != 0 || len(e.Steps) != 16 || len(e.Steps[0].ID) != 64 || e.Steps[0].Status != "pending" {
+		t.Fatalf("ensure = %+v", e)
+	}
+	if e.NextAction.Step != nil {
+		t.Fatalf("next step = %v", *e.NextAction.Step)
+	}
+}
+
+func TestSnapshotEnsureBlockIsLeftOutWithoutASourceOrAnEngine(t *testing.T) {
+	r := newRig(t)
+	for _, src := range []EnsureSource{nil, &fakeEnsure{}} {
+		b, err := ensureBuilder(t, r, src).BuildWith(context.Background(), BuildOpts{Ensure: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if b.Snapshot.Ensure != nil || bytes.Contains(b.Body, []byte(`"ensure"`)) {
+			t.Fatalf("the block is there: %s", b.Body)
+		}
+	}
+}
+
+// Only a cloud that lists ensure.v1 in its handshake gets the ensure block; an older one has a strict schema
+// that would answer 400 to the unknown key on every push.
+func TestEnsureBlockIsPushedOnlyToACloudThatAdvertisesIt(t *testing.T) {
+	src := &fakeEnsure{r: &EnsureReport{State: "complete", Auto: "on", Message: "Complete", NextKind: "none"}}
+	withSource := withDeps(func(d *Deps) { d.Snapshot.Ensure = src })
+
+	old := newRig(t, withSource)
+	quickState(old)
+	old.enroll()
+	old.waitCount("state", 1)
+	if body := old.srv.States()[0]; bytes.Contains(body, []byte(`"ensure"`)) {
+		t.Fatalf("a cloud without ensure.v1 got the block: %s", body)
+	}
+
+	newer := newRig(t, withSource)
+	quickState(newer)
+	newer.srv.Handshake.Features = append(newer.srv.Handshake.Features, FeatureEnsure)
+	newer.enroll()
+	newer.waitCount("state", 1)
+	body := newer.srv.States()[0]
+	validate(t, body)
+	var snap StateSnapshot
+	if err := json.Unmarshal(body, &snap); err != nil || snap.Ensure == nil || snap.Ensure.State != "complete" {
+		t.Fatalf("the block is missing from %s (%v)", body, err)
+	}
 }

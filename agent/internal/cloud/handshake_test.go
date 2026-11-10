@@ -27,7 +27,7 @@ func TestHandshakeBothPlanes(t *testing.T) {
 			r.srv.Handshake.ClaimWaitMaxMs = 12000
 			r.enroll()
 			s, ok := r.link.Session()
-			if !ok || s.Plane != tc.want || s.ClaimWaitMaxMs != 12000 || s.ServerNodeID == "" || len(s.Allow) != 14 || s.Concurrency != 1 {
+			if !ok || s.Plane != tc.want || s.ClaimWaitMaxMs != 12000 || s.ServerNodeID == "" || len(s.Allow) != 15 || s.Concurrency != 1 {
 				t.Fatalf("session %+v ok=%v", s, ok)
 			}
 			if r.link.CloudStatus().StateTransport != "endpoint" {

@@ -31,6 +31,42 @@ type StateSnapshot struct {
 	Drill          *SnapDrill      `json:"drill"`
 	Tailscale      SnapTailscale   `json:"tailscale"`
 	Alerts         []SnapAlert     `json:"alerts"`
+	// Ensure is "Install what's missing" (ADR-0010): optional on the wire, sent only to a cloud whose
+	// handshake lists FeatureEnsure (an older cloud's strict schema would refuse the key).
+	Ensure *SnapEnsure `json:"ensure,omitempty"`
+}
+
+// SnapEnsure is ensure: a compact picture of what the node still needs from its kit and whether the agent
+// is installing it. Nothing in it is a secret or a path: the state, the setting, one sentence, the
+// counts, what the person should do next and the status of each part.
+type SnapEnsure struct {
+	// State is complete, installing, needs_you or off.
+	State string `json:"state"`
+	// Auto is ensure.auto: on, ask or off.
+	Auto string `json:"auto"`
+	// Message is the agent's own sentence in English; the cloud writes its own text in the viewer's language.
+	Message    string           `json:"message"`
+	Progress   SnapProgress     `json:"progress"`
+	NextAction SnapEnsureNext   `json:"next_action"`
+	Steps      []SnapEnsureStep `json:"steps"`
+}
+
+// SnapProgress is ensure.progress.
+type SnapProgress struct {
+	Done  int `json:"done"`
+	Total int `json:"total"`
+}
+
+// SnapEnsureNext is ensure.next_action: none, wait, press_button, confirm, sync or fix, and the step it is about.
+type SnapEnsureNext struct {
+	Kind string  `json:"kind"`
+	Step *string `json:"step"`
+}
+
+// SnapEnsureStep is one entry of ensure.steps.
+type SnapEnsureStep struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
 }
 
 // SnapTransition is mode_transition.

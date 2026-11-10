@@ -335,6 +335,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	// drill's arrive through the hook.
 	var snap cloud.SnapshotOptions
 	snap.Drill = reporter
+	snap.Ensure = ensureSnapshot{d} // the engine is built after the link; the source looks at it when asked
 	if d.ark != nil {
 		snap.Ark, snap.Sync = d.ark.ready.CloudSource(), adapt.CloudSync{Engine: d.ark.engine}
 	}
@@ -669,6 +670,9 @@ func (d *Daemon) buildClaimPlane(sdeps statusapi.Deps) error {
 	}
 	if d.ark != nil {
 		jd.Ark = d.ark.jobsArk()
+	}
+	if d.ark != nil { // the engine itself is built later in the start-up; the command looks at it when it runs
+		jd.Ensure = lazyEnsureJobs{d}
 	}
 	var recoverFn func(context.Context, cloud.InflightEntry) bool
 	if d.updater != nil {
