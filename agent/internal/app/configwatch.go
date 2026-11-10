@@ -51,6 +51,9 @@ func (d *Daemon) applyConfigChange(ctx context.Context, c config.Change) {
 	if hasPrefix(c.Changed, "sync") {
 		d.ark.applySettings() // the bandwidth limit moves the shared bucket at once; the rest is read per run
 	}
+	if d.ensure != nil {
+		d.ensure.onConfigChange(c)
+	}
 	if hasPath(c.Changed, "llama.mode") {
 		d.applyLlamaMode(ctx)
 	}

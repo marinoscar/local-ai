@@ -26,7 +26,9 @@ type ConfirmError struct {
 	Reason string // unknown_step | not_waiting
 }
 
-func (e *ConfirmError) Error() string { return fmt.Sprintf("ensure: cannot confirm %q: %s", e.ID, e.Reason) }
+func (e *ConfirmError) Error() string {
+	return fmt.Sprintf("ensure: cannot confirm %q: %s", e.ID, e.Reason)
+}
 
 // Deps are what the Service needs.
 type Deps struct {

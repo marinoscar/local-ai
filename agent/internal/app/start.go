@@ -555,6 +555,9 @@ func (d *Daemon) stepPeriodic(ctx context.Context) error {
 	if d.ark != nil {
 		d.startWorker(d.ark.ready) // READY.json now and every 6 hours
 	}
+	if d.ensure != nil {
+		d.startWorker(&ensureWorker{s: d.ensure}) // installs what the kit holds and the node lacks (ADR-0010)
+	}
 	if d.firstAid != nil {
 		d.startWorker(d.firstAid) // first-aid article availability, off the request path
 	}

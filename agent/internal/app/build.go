@@ -462,6 +462,13 @@ func (d *Daemon) build(ctx context.Context) error {
 	if err := d.registerDrillKitChecks(drillChecks); err != nil {
 		return err
 	}
+	// The ensure engine (ADR-0010) sits on the ark stack and the service controller; the routes need it.
+	if d.ark != nil {
+		if d.ensure, err = d.buildEnsure(); err != nil {
+			d.log.Error("the install engine could not be built; GET /ensure answers 503", "code", doctor.AGT099, "error", err.Error())
+			d.raise(doctor.AGT099, map[string]any{"error": err.Error(), "subsystem": "ensure"})
+		}
+	}
 	// The routes and the server.
 	if err := d.buildServer(); err != nil {
 		return err
@@ -599,6 +606,12 @@ func (d *Daemon) buildServer() error {
 				return api.RegisterArkImport(reg, api.ArkImportDeps{Importer: arkUnavailable{}, Audit: d.audit, Logger: d.log})
 			}
 			return api.RegisterArkImport(reg, api.ArkImportDeps{Importer: adapt.Importer{Engine: d.ark.engine, Planner: d.ark.importer}, Audit: d.audit, Logger: d.log})
+		}},
+		{"ensure", func() error {
+			if d.ensure == nil { // no sync stack, no install engine: the routes answer 503
+				return api.RegisterEnsure(reg, api.EnsureDeps{Engine: ensureUnavailable{}})
+			}
+			return api.RegisterEnsure(reg, api.EnsureDeps{Engine: ensureEngine{d.ensure}})
 		}},
 		{"speech", func() error { return reg.Add(d.piper.Routes()...) }},
 		{"library", func() error {

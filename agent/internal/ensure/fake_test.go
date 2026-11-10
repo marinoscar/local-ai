@@ -15,26 +15,29 @@ import (
 )
 
 type fakeClock struct {
-	mu sync.Mutex
-	t  time.Time
+	mu     sync.Mutex
+	t      time.Time
+	frozen bool // golden files need the same time every time
 }
 
 func newClock() *fakeClock { return &fakeClock{t: time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)} }
 func (c *fakeClock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.t = c.t.Add(time.Second) // every reading moves on, so durations are never zero
+	if !c.frozen {
+		c.t = c.t.Add(time.Second) // every reading moves on, so durations are never zero
+	}
 	return c.t
 }
 
 type fakeMachine struct {
-	mu       sync.Mutex
-	tools    map[string]string
-	missing  []string // packages dpkg does not have
-	pkgErr   error
-	whisper  bool
-	active   map[string]bool
-	asked    int
+	mu        sync.Mutex
+	tools     map[string]string
+	missing   []string // packages dpkg does not have
+	pkgErr    error
+	whisper   bool
+	active    map[string]bool
+	asked     int
 	onInstall func() // not used by Machine; kept for symmetry
 }
 
@@ -132,7 +135,11 @@ type fakeInstaller struct {
 	kit     *fakeKit
 }
 
-func (f *fakeInstaller) record(call string) { f.mu.Lock(); f.calls = append(f.calls, call); f.mu.Unlock() }
+func (f *fakeInstaller) record(call string) {
+	f.mu.Lock()
+	f.calls = append(f.calls, call)
+	f.mu.Unlock()
+}
 func (f *fakeInstaller) Calls() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
