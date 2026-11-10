@@ -19,9 +19,9 @@ import (
 const SchemaVersion = 1
 
 // OwnedBlockNames are the top-level blocks whose schema and validation belong to other specs
-// (ark-sync.md 3.3, companion-services.md 3.1, survival-portal.md 3.4). They are parsed and
+// (ark-sync.md 3.3, companion-services.md 3.1, survival-portal.md 3.4, rebuild-kit.md 4.5). They are parsed and
 // kept as RawBlock; their packages register a BlockValidator through Hooks.
-var OwnedBlockNames = []string{"sync", "kiwix", "whisper", "piper", "maps", "portal"}
+var OwnedBlockNames = []string{"sync", "kiwix", "whisper", "piper", "maps", "portal", "ensure"}
 
 // Severity says whether a Problem blocks loading the file.
 type Severity string

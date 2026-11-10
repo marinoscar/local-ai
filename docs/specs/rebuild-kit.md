@@ -434,8 +434,8 @@ Plain list, also printed in the rebuild runbook:
 |---|---|---|---|---|
 | LAI-KIT-001 | error | A source package in the kit is damaged | Run `aictl kit verify --full`; sync the drive on a computer with internet. | Ejecute `aictl kit verify --full`; sincronice el disco con internet. |
 | LAI-KIT-002 | error | The kit doesn't have the needed llama.cpp version | Sync the kit with internet, or choose a commit that is in the kit. | Sincronice el kit con internet, o elija una versión que esté en el kit. |
-| LAI-KIT-010 | error | Build tools are missing | Run `sudo aictl kit install-debs`. | Ejecute `sudo aictl kit install-debs`. |
-| LAI-KIT-011 | error | The CUDA compiler is missing or doesn't match the driver | Run `sudo aictl kit install-debs`, or rebuild with `--backend vulkan`. | Ejecute `sudo aictl kit install-debs`, o reconstruya con `--backend vulkan`. |
+| LAI-KIT-010 | error | Build tools are missing | Press **Install what's missing**, or run `aictl ensure`; with no agent, run `sudo aictl kit install-debs`. | Pulse **Instalar lo que falta**, o ejecute `aictl ensure`; sin agente, ejecute `sudo aictl kit install-debs`. |
+| LAI-KIT-011 | error | The CUDA compiler is missing or doesn't match the driver | Press **Install what's missing**, or run `aictl ensure`; or rebuild with `--backend vulkan`. | Pulse **Instalar lo que falta**, o ejecute `aictl ensure`; o reconstruya con `--backend vulkan`. |
 | LAI-KIT-012 | error | No real Vulkan graphics device was found | Install the graphics driver from the kit, or use `--backend cpu`. | Instale el controlador gráfico del kit, o use `--backend cpu`. |
 | LAI-KIT-013 | error | The NVIDIA driver isn't loaded | Restart and choose the previous kernel in "Advanced options", or install the driver from the kit. | Reinicie y elija el kernel anterior en "Opciones avanzadas", o instale el controlador del kit. |
 | LAI-KIT-014 | error | Not enough disk space to build | Free 5 GB and try again. | Libere 5 GB e intente otra vez. |
@@ -454,6 +454,8 @@ Plain list, also printed in the rebuild runbook:
 | LAI-KIT-048 | error | The ready-made build doesn't fit this computer | Nothing was changed. Build from the kit source instead: `sudo aictl rebuild-llama --from-kit` (or `rebuild-whisper`). | No se cambió nada. Compile desde el código fuente del kit: `sudo aictl rebuild-llama --from-kit` (o `rebuild-whisper`). |
 | LAI-KIT-049 | error | A build could not be exported to the kit | The kit's other files are untouched. Free some space on the drive, then run `sudo aictl kit export-build` again. | Los demás archivos del kit no se tocaron. Libere espacio en el disco y ejecute `sudo aictl kit export-build` otra vez. |
 | LAI-KIT-050 | error | No configuration backup of this node was found | Plug in the AI-ARK drive that holds it, or give the file: `sudo aictl backup-config --restore <file>`. With no backup, skip this step. | Conecte el disco AI-ARK que la tiene, o indique el archivo: `sudo aictl backup-config --restore <archivo>`. Sin copia, omita este paso. |
+| LAI-KIT-051 | error | Installing what this computer is missing failed | Nothing was replaced. Press **Install what's missing** to try again, or run `aictl ensure`; if it fails again, `aictl ensure --dry-run` names the step. | No se reemplazó nada. Pulse **Instalar lo que falta** para intentar otra vez, o ejecute `aictl ensure`; si falla de nuevo, `aictl ensure --dry-run` indica el paso. |
+| LAI-KIT-052 | warning | This computer is missing something that needs your OK to install | Press **Install what's missing** or run `aictl ensure`; building from source and restarting a running service ask you first. | Pulse **Instalar lo que falta** o ejecute `aictl ensure`; compilar desde el código y reiniciar un servicio en marcha le preguntan antes. |
 
 ## 9. Test plan
 

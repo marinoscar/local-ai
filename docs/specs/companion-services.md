@@ -643,7 +643,7 @@ Shown in the desktop and the Portal, so both languages are given. Range 100–14
 |---|---|---|---|---|
 | LAI-SVC-001 | error | The library has no books | Plug in the ark drive, or run `aictl ark import`. | Conecte el disco del arca, o ejecute `aictl ark import`. |
 | LAI-SVC-002 | error | The library service isn't running | Press **Restart library**, or run `aictl services restart kiwix`. | Presione **Reiniciar biblioteca**, o ejecute `aictl services restart kiwix`. |
-| LAI-SVC-003 | error | The library program isn't installed | Run `sudo install-node.sh --repair`. | Ejecute `sudo install-node.sh --repair`. |
+| LAI-SVC-003 | error | The library program isn't installed | Press **Install what's missing**, or run `aictl ensure`. If that is not enough, run `sudo install-node.sh --repair`. | Pulse **Instalar lo que falta**, o ejecute `aictl ensure`. Si no basta, ejecute `sudo install-node.sh --repair`. |
 | LAI-SVC-004 | warning | One library book couldn't be opened | Run `aictl ark verify`. The other books still work. | Ejecute `aictl ark verify`. Los otros libros funcionan. |
 | LAI-SVC-005 | warning | The library list couldn't be rebuilt; the old list is used | Run `aictl services restart kiwix`. If it repeats, run `aictl doctor`. | Ejecute `aictl services restart kiwix`. Si se repite, ejecute `aictl doctor`. |
 | LAI-SVC-010 | error | No speech-recognition model is installed | Run `aictl ark sync --item whisper-small` (online) or `aictl ark import` from the drive. | Ejecute `aictl ark sync --item whisper-small` (con internet) o `aictl ark import` desde el disco. |
@@ -653,7 +653,7 @@ Shown in the desktop and the Portal, so both languages are given. Range 100–14
 | LAI-SVC-014 | warning | The recording couldn't be used (wrong format, too long, or silent) | Try again, speak closer to the microphone, and keep it under 2 minutes. | Intente otra vez, más cerca del micrófono, y menos de 2 minutos. |
 | LAI-SVC-015 | warning | Too many voice requests at once | Wait a few seconds and try again. | Espere unos segundos e intente otra vez. |
 | LAI-SVC-016 | warning | Speech recognition took too long | Try a shorter recording. | Intente con una grabación más corta. |
-| LAI-SVC-020 | error | The voice program isn't installed | Run `sudo install-node.sh --repair`. | Ejecute `sudo install-node.sh --repair`. |
+| LAI-SVC-020 | error | The voice program isn't installed | Press **Install what's missing**, or run `aictl ensure`. If that is not enough, run `sudo install-node.sh --repair`. | Pulse **Instalar lo que falta**, o ejecute `aictl ensure`. Si no basta, ejecute `sudo install-node.sh --repair`. |
 | LAI-SVC-021 | warning | No voice for this language; another voice was used | Install a voice for the language with `aictl ark sync`. | Instale una voz para el idioma con `aictl ark sync`. |
 | LAI-SVC-022 | warning | No voice is installed | Answers are shown as text. Install a voice with `aictl ark import` or `aictl ark sync`. | Las respuestas se muestran como texto. Instale una voz con `aictl ark import` o `aictl ark sync`. |
 | LAI-SVC-023 | error | The voice program failed | Try again. If it repeats, run `aictl doctor`. | Intente otra vez. Si se repite, ejecute `aictl doctor`. |

@@ -418,6 +418,8 @@ const (
 	KIT048 = "LAI-KIT-048"
 	KIT049 = "LAI-KIT-049"
 	KIT050 = "LAI-KIT-050"
+	KIT051 = "LAI-KIT-051"
+	KIT052 = "LAI-KIT-052"
 
 	// LAI-DRL
 	DRL001 = "LAI-DRL-001"
@@ -1682,7 +1684,7 @@ var table = []Code{
 		ID:       SYN061,
 		Severity: Error,
 		Title:    Msg{EN: "A tool sync needs is missing (pmtiles, git, apt-get)", ES: "Falta una herramienta que necesita la sincronización (pmtiles, git, apt-get)"},
-		Fix:      Msg{EN: "Run `sudo install-node.sh --repair`.", ES: "Ejecute `sudo install-node.sh --repair`."},
+		Fix:      Msg{EN: "Press **Install what's missing**, or run `aictl ensure`. If that is not enough, run `sudo install-node.sh --repair`.", ES: "Pulse **Instalar lo que falta**, o ejecute `aictl ensure`. Si no basta, ejecute `sudo install-node.sh --repair`."},
 	},
 	{
 		ID:       SYN062,
@@ -1835,7 +1837,7 @@ var table = []Code{
 		ID:       SVC003,
 		Severity: Error,
 		Title:    Msg{EN: "The library program isn't installed", ES: "El programa de la biblioteca no está instalado"},
-		Fix:      Msg{EN: "Run `sudo install-node.sh --repair`.", ES: "Ejecute `sudo install-node.sh --repair`."},
+		Fix:      Msg{EN: "Press **Install what's missing**, or run `aictl ensure`. If that is not enough, run `sudo install-node.sh --repair`.", ES: "Pulse **Instalar lo que falta**, o ejecute `aictl ensure`. Si no basta, ejecute `sudo install-node.sh --repair`."},
 	},
 	{
 		ID:       SVC004,
@@ -1898,7 +1900,7 @@ var table = []Code{
 		ID:       SVC020,
 		Severity: Error,
 		Title:    Msg{EN: "The voice program isn't installed", ES: "El programa de voz no está instalado"},
-		Fix:      Msg{EN: "Run `sudo install-node.sh --repair`.", ES: "Ejecute `sudo install-node.sh --repair`."},
+		Fix:      Msg{EN: "Press **Install what's missing**, or run `aictl ensure`. If that is not enough, run `sudo install-node.sh --repair`.", ES: "Pulse **Instalar lo que falta**, o ejecute `aictl ensure`. Si no basta, ejecute `sudo install-node.sh --repair`."},
 	},
 	{
 		ID:       SVC021,
@@ -2547,13 +2549,13 @@ var table = []Code{
 		ID:       KIT010,
 		Severity: Error,
 		Title:    Msg{EN: "Build tools are missing", ES: "Faltan herramientas de compilación"},
-		Fix:      Msg{EN: "Run `sudo aictl kit install-debs`.", ES: "Ejecute `sudo aictl kit install-debs`."},
+		Fix:      Msg{EN: "Press **Install what's missing**, or run `aictl ensure`; with no agent, run `sudo aictl kit install-debs`.", ES: "Pulse **Instalar lo que falta**, o ejecute `aictl ensure`; sin agente, ejecute `sudo aictl kit install-debs`."},
 	},
 	{
 		ID:       KIT011,
 		Severity: Error,
 		Title:    Msg{EN: "The CUDA compiler is missing or doesn't match the driver", ES: "Falta el compilador de CUDA o no coincide con el controlador"},
-		Fix:      Msg{EN: "Run `sudo aictl kit install-debs`, or rebuild with `--backend vulkan`.", ES: "Ejecute `sudo aictl kit install-debs`, o recompile con `--backend vulkan`."},
+		Fix:      Msg{EN: "Press **Install what's missing**, or run `aictl ensure`; or rebuild with `--backend vulkan`.", ES: "Pulse **Instalar lo que falta**, o ejecute `aictl ensure`; o recompile con `--backend vulkan`."},
 	},
 	{
 		ID:       KIT012,
@@ -2663,6 +2665,18 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "No configuration backup of this node was found", ES: "No se encontró ninguna copia de la configuración de este nodo"},
 		Fix:      Msg{EN: "Plug in the AI-ARK drive that holds it, or give the file: `sudo aictl backup-config --restore <file>`. With no backup, skip this step.", ES: "Conecte el disco AI-ARK que la tiene, o indique el archivo: `sudo aictl backup-config --restore <archivo>`. Sin copia, omita este paso."},
+	},
+	{
+		ID:       KIT051,
+		Severity: Error,
+		Title:    Msg{EN: "Installing what this computer is missing failed", ES: "Falló la instalación de lo que le falta a esta computadora"},
+		Fix:      Msg{EN: "Nothing was replaced. Press **Install what's missing** to try again, or run `aictl ensure`; if it fails again, `aictl ensure --dry-run` names the step.", ES: "No se reemplazó nada. Pulse **Instalar lo que falta** para intentar otra vez, o ejecute `aictl ensure`; si falla de nuevo, `aictl ensure --dry-run` indica el paso."},
+	},
+	{
+		ID:       KIT052,
+		Severity: Warning,
+		Title:    Msg{EN: "This computer is missing something that needs your OK to install", ES: "A esta computadora le falta algo que necesita su aprobación para instalarse"},
+		Fix:      Msg{EN: "Press **Install what's missing** or run `aictl ensure`; building from source and restarting a running service ask you first.", ES: "Pulse **Instalar lo que falta** o ejecute `aictl ensure`; compilar desde el código y reiniciar un servicio en marcha le preguntan antes."},
 	},
 	{
 		ID:       DRL001,

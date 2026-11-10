@@ -89,6 +89,9 @@ portal: # owned by survival-portal.md §3.4
   language: auto
   emergency_number: "911"
   kiosk: false
+
+ensure: # owned by rebuild-kit.md §4.5 (ADR-0010)
+  auto: on # on | ask | off
 # ---- end of blocks owned by other specs ----
 
 update:
