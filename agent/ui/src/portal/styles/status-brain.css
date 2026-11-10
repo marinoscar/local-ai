@@ -97,6 +97,7 @@
 }
 .works,
 .problems,
+.ensure-list,
 .choices {
   list-style: none;
   margin: 0 0 14px;
@@ -124,17 +125,21 @@
 .work-name {
   font-weight: 700;
 }
-.problem {
+.problem,
+.ensure-step {
   padding: 8px 12px;
   margin-bottom: 8px;
   border-left: 8px solid var(--line);
   background: var(--info-bg);
 }
-.problem-warning {
+.problem-warning,
+.ensure-step-needs_confirm,
+.ensure-step-blocked {
   background: var(--warn-bg);
 }
 .problem-error,
-.problem-critical {
+.problem-critical,
+.ensure-step-failed {
   background: var(--bad-bg);
 }
 .details {
@@ -196,4 +201,41 @@
 .panel .meter {
   display: block;
   width: 100%;
+}
+
+/* "Install what's missing" card (ADR-0010, survival-portal.md section 4.1.8). Classes only. */
+.ensure {
+  margin: 0 0 var(--gap);
+  padding: 16px 20px;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.ensure-complete {
+  border-color: var(--ok);
+}
+.ensure-needs_you,
+.ensure-off,
+.ensure-warn {
+  border-color: var(--warn);
+}
+.ensure-state {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 0 0 10px;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+.ensure-next {
+  margin: 0 0 10px;
+}
+.ensure-actions {
+  margin-top: 8px;
+}
+.ensure-steps {
+  margin-top: 12px;
+}
+.ensure-step-status {
+  font-weight: 400;
 }

@@ -90,6 +90,8 @@ type Action string
 const (
 	// ActionArkImport copies content from a connected AI-ARK drive (POST /ark/import).
 	ActionArkImport Action = "ark.import"
+	// ActionEnsureRun installs what the node is missing from the kit (POST /ensure, ADR-0010).
+	ActionEnsureRun Action = "ensure.run"
 	// ActionRestartKiwix restarts the library service (POST /services/kiwix/restart).
 	ActionRestartKiwix Action = "service.restart:kiwix"
 	// ActionRestartWhisper restarts the speech-recognition service (POST /services/whisper/restart).
@@ -100,7 +102,7 @@ const (
 
 // Actions returns the closed set of actions, sorted.
 func Actions() []Action {
-	return []Action{ActionArkImport, ActionPortalBrain, ActionRestartKiwix, ActionRestartWhisper}
+	return []Action{ActionArkImport, ActionEnsureRun, ActionPortalBrain, ActionRestartKiwix, ActionRestartWhisper}
 }
 
 // Valid reports whether a is one of Actions.
