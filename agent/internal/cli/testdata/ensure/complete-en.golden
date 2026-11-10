@@ -1,0 +1,4 @@
+exit 0
+--- stdout
+✓ Complete: this computer has everything it needs.
+--- stderr

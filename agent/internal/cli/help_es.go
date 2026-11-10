@@ -44,6 +44,7 @@ var helpES = map[string]string{
 	"docs render":            "Convierte los manuales y las especificaciones a HTML (y PDF) y genera la tarjeta de supervivencia.",
 	"doctor":                 "Ejecuta las comprobaciones de salud y explica cada problema con palabras sencillas.",
 	"download":               "Descarga un modelo de internet (modo en línea).",
+	"ensure":                 "Instala lo que le falta a este equipo, desde el kit de reconstrucción.",
 	"drill":                  "Ejecuta la prueba sin conexión (el simulacro), muestra sus resultados o registra la manual.",
 	"drill show":             "Muestra los resultados del último simulacro (o de una ejecución).",
 	"drill record-manual":    "Registra el simulacro trimestral de \"desenchufar\" que hizo a mano.",

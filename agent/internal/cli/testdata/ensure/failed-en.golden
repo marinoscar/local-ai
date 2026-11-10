@@ -1,0 +1,13 @@
+exit 9
+--- stdout
+i This computer is missing 2 thing(s) that the kit has. Installing them now.
+What is missing:
+  → Library tools (kiwix-tools): Install version 3.7 from the kit.
+  → Voice tools (piper): Install version 2023.11.14-2 from the kit.
+✓ Library tools (kiwix-tools): Installed from the kit (3.7).
+✗ Voice tools (piper): piper: could not be installed.  [LAI-KIT-047]
+  → Fix: Nothing was replaced. Read the message, then run
+         `aictl kit verify --full` and try again.
+i Run `aictl ensure` to try again.
+--- stderr
+! Needs you: piper could not be installed.

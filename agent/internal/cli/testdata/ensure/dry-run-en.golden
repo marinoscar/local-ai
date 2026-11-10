@@ -1,0 +1,8 @@
+exit 0
+--- stdout
+What would be installed:
+  → Library tools (kiwix-tools): Install version 3.7 from the kit.
+  → Voice tools (piper): Install version 2023.11.14-2 from the kit.
+i Dry run: nothing was changed.
+--- stderr
+! Needs you: 2 things are ready to install. Press Install what's missing.
