@@ -25,6 +25,20 @@ export interface ArkRoot {
   driveAgeDays: number | null;
 }
 
+/**
+ * "Install what's missing" at a glance (ADR-0010, issue #480): the state of the node's own kit installs, in codes. The
+ * words are written here in the viewer's language (`EnsureLine`), never taken from the node. `nextStep` is a step id such
+ * as `tool.piper`.
+ */
+export interface EnsureCard {
+  state: 'complete' | 'installing' | 'needs_you' | 'off';
+  auto: 'on' | 'ask' | 'off';
+  done: number;
+  total: number;
+  nextKind: 'none' | 'wait' | 'press_button' | 'confirm' | 'sync' | 'fix';
+  nextStep: string | null;
+}
+
 export interface NodeCardDto {
   nodeId: string;
   displayName: string;
@@ -46,6 +60,8 @@ export interface NodeCardDto {
   catalogVersion: string | null;
   catalogBehind: boolean;
   alerts: { active: number; critical: number };
+  /** Absent from an older cloud, `null` for a node that has not reported one (an agent that predates it). */
+  ensure?: EnsureCard | null;
 }
 
 /** The header counts of the Lab page. */

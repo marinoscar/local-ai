@@ -53,7 +53,8 @@
       "alerts": {
         "active": 0,
         "critical": 0
-      }
+      },
+      "ensure": null
     },
     {
       "nodeId": "ai-n2",
@@ -109,7 +110,8 @@
       "alerts": {
         "active": 2,
         "critical": 1
-      }
+      },
+      "ensure": null
     },
     {
       "nodeId": "ai-n3",
@@ -160,7 +162,8 @@
       "alerts": {
         "active": 0,
         "critical": 0
-      }
+      },
+      "ensure": null
     }
   ]
 }

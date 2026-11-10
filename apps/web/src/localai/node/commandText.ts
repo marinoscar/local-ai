@@ -39,6 +39,8 @@ export function describeCommand(type: string, params: Record<string, unknown> | 
       return `Fetch the ${str(p.unit)} logs`;
     case 'catalog.refresh':
       return 'Refresh the catalog';
+    case 'ensure.run':
+      return "Install what's missing";
     case 'agent.update':
       return `Update the agent to ${str(p.version)}`;
     default:
@@ -110,6 +112,10 @@ export function resultSummary(command: Pick<CommandView, 'type' | 'result'>): st
       return `${str(r.service)} is ${str(r.active_state)}`;
     case 'agent.update':
       return r.status === 'already_current' ? `already on ${str(r.to_version)}` : r.status === 'rolled_back' ? `rolled back to ${str(r.from_version)}` : `${str(r.from_version)} to ${str(r.to_version)}`;
+    case 'ensure.run': {
+      const pending = num(r.pending_steps) ?? 0;
+      return r.started === true ? `installing (${pending} part${pending === 1 ? '' : 's'} left to do)` : r.state === 'complete' ? 'nothing was missing' : 'an install was already running, or nothing could be started';
+    }
     case 'catalog.refresh':
       return r.accepted === false ? `the node kept its catalog (${str(r.rejected_code) || 'rejected'})` : r.changed === true ? `now on ${str(r.catalog_version)}` : 'already up to date';
     default:

@@ -10,6 +10,7 @@ describe('describeCommand', () => {
     expect(describeCommand('service.restart', { service: 'llama' })).toBe('Restart llama');
     expect(describeCommand('logs.tail', { unit: 'agent', lines: 50 })).toBe('Fetch the agent logs');
     expect(describeCommand('agent.update', { version: '0.4.2' })).toBe('Update the agent to 0.4.2');
+    expect(describeCommand('localai.ensure.run', {})).toBe("Install what's missing");
     expect(describeCommand('mode.offline', {})).toBe('Go offline');
     expect(describeCommand('something.new', {})).toBe('something.new');
   });
@@ -42,6 +43,9 @@ describe('resultSummary', () => {
     expect(resultSummary({ type: 'localai.model.download', result: { already_present: true, bytes_planned: 0 } })).toBe('already on disk');
     expect(resultSummary({ type: 'localai.ark.sync', result: { started: true, plan: { items_to_download: 3, bytes_to_download: 2_147_483_648, items_skipped_budget: 0 } } })).toBe('3 items to download (2 GB)');
     expect(resultSummary({ type: 'localai.key.rotate', result: { fingerprint: 'ab12…9f0e', cloud_synced: false } })).toContain('retry');
+    expect(resultSummary({ type: 'localai.ensure.run', result: { started: true, state: 'installing', pending_steps: 3 } })).toBe('installing (3 parts left to do)');
+    expect(resultSummary({ type: 'localai.ensure.run', result: { started: false, state: 'complete', pending_steps: 0 } })).toBe('nothing was missing');
+    expect(resultSummary({ type: 'localai.ensure.run', result: { started: false, state: 'installing', pending_steps: 2 } })).toBe('an install was already running, or nothing could be started');
     expect(resultSummary({ type: 'localai.agent.update', result: { from_version: '0.4.1', to_version: '0.4.2', status: 'updated' } })).toBe('0.4.1 to 0.4.2');
     expect(resultSummary({ type: 'localai.logs.tail', result: { unit: 'agent', lines: ['a secret line'], truncated: false } })).toBeNull();
     expect(resultSummary({ type: 'localai.model.load', result: undefined })).toBeNull();

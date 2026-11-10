@@ -1310,7 +1310,7 @@ export interface components {
          * @description The button of a fix (doctor-codes.md section 1.7): a closed set. Present on an alert or a capability only when its code has one; not in the state pushed to the cloud.
          * @enum {string}
          */
-        DoctorAction: "ark.import" | "service.restart:kiwix" | "service.restart:whisper" | "portal.brain";
+        DoctorAction: "ark.import" | "ensure.run" | "service.restart:kiwix" | "service.restart:whisper" | "portal.brain";
         /** @enum {string} */
         Severity: "info" | "warning" | "error" | "critical";
         /** @description One companion service. `name` and `unit` are always present (`unit` is null for piper and maps). The agent

@@ -2,10 +2,11 @@
 // the six tabs, every action with its permission and confirmation, the command line (queued -> running -> done, cancel
 // only while queued), the refusal texts of an Offline node, the one-time credential, the tailnet reveal, retire, and axe.
 import { ApiError } from '@marinoscar/platform-web/core';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { runAxe } from '../../__tests__/axe';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
+import { LanguageProvider } from '../../i18n/LanguageProvider';
 import { cancelCommand, getCommand, listCommands, sendCommand } from '../api/commands';
 import { getNodeDetail, patchNode, replaceNodeCredential, retireNode, revealTailnetIp } from '../api/nodes';
 import type { NodeDetail } from '../api/types';
@@ -40,7 +41,7 @@ async function openTab(name: string) {
   fireEvent.click(await screen.findByRole('tab', { name }));
 }
 
-const ACTION_NAMES = /^(load|unload|set default|download|sync now|preview|verify|restart|fetch|rotate key|replace credential|retire node|go offline|update agent|refresh status|save|reveal|change|set…|clear)/i;
+const ACTION_NAMES = /^(install what|load|unload|set default|download|sync now|preview|verify|restart|fetch|rotate key|replace credential|retire node|go offline|update agent|refresh status|save|reveal|change|set…|clear)/i;
 const actionButtons = () => screen.queryAllByRole('button').filter((button) => ACTION_NAMES.test(button.textContent ?? '') || /more actions/i.test(button.getAttribute('aria-label') ?? ''));
 
 beforeEach(() => {
@@ -368,6 +369,108 @@ describe('Ark tab', () => {
     renderPage(detail);
     await openTab('Ark');
     expect(await screen.findByText('The drive is not plugged in, so there are no details.')).toBeInTheDocument();
+  });
+});
+
+describe("Ark tab: Install what's missing (ADR-0010, issue #480)", () => {
+  const ensureOf = (over: Partial<NodeDetail['ensure'] & object> = {}, steps: Array<{ id: string; status: string }> = [{ id: 'tool.piper', status: 'pending' }]): Partial<NodeDetail> => {
+    const card = { state: 'needs_you', auto: 'on', done: 0, total: 1, nextKind: 'press_button', nextStep: null, ...over } as NonNullable<NodeDetail['ensure']>;
+    const base = detailFixture();
+    return {
+      ensure: card,
+      lastState: { ...base.lastState!, ensure: { state: card.state, auto: card.auto, message: 'x', progress: { done: card.done, total: card.total }, next_action: { kind: card.nextKind, step: card.nextStep }, steps: steps as never } },
+    };
+  };
+
+  it('leads with the state in words, lists the parts and offers the button; pressing it queues ensure.run with no params', async () => {
+    vi.mocked(sendCommand).mockResolvedValue(commandFixture({ type: 'localai.ensure.run', status: 'queued', params: {} }));
+    renderPage(detailFixture(ensureOf()), CONTRIBUTOR);
+    await openTab('Ark');
+    const panel = await screen.findByTestId('ark-ensure');
+    expect(within(panel).getByTestId('ark-ensure-line')).toHaveTextContent('Needs you: press Install what\'s missing');
+    expect(within(panel).getByTestId('ark-ensure-parts')).toHaveTextContent('the voice program (piper) · next in line');
+    // The panel comes before the sync buttons and the roots: state first.
+    expect(panel.compareDocumentPosition(screen.getByRole('button', { name: 'Sync now' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(within(panel).getByRole('button', { name: "Install what's missing" }));
+    await waitFor(() => expect(sendCommand).toHaveBeenCalledWith('ai-n2', 'ensure.run', {}));
+  });
+
+  it('shows Installing (n of m) and no button while a pass runs; Complete has none either', async () => {
+    const running = renderPage(detailFixture(ensureOf({ state: 'installing', done: 1, total: 4, nextKind: 'wait' }, [{ id: 'tool.piper', status: 'done' }, { id: 'tool.pmtiles', status: 'running' }])), CONTRIBUTOR);
+    await openTab('Ark');
+    expect(await screen.findByTestId('ark-ensure-line')).toHaveTextContent('Installing (2 of 4)');
+    expect(screen.queryByRole('button', { name: "Install what's missing" })).toBeNull();
+    running.unmount();
+    renderPage(detailFixture(ensureOf({ state: 'complete', total: 0, nextKind: 'none' }, [])), CONTRIBUTOR);
+    await openTab('Ark');
+    expect(await screen.findByTestId('ark-ensure-line')).toHaveTextContent('Complete');
+    expect(screen.queryByRole('button', { name: "Install what's missing" })).toBeNull();
+  });
+
+  it('never offers to confirm compiling or restarting: it says a person at the computer must', async () => {
+    renderPage(detailFixture(ensureOf({ nextKind: 'confirm', nextStep: 'whisper.build' }, [{ id: 'whisper.build', status: 'needs_confirm' }])), ADMIN);
+    await openTab('Ark');
+    const panel = await screen.findByTestId('ark-ensure');
+    expect(within(panel).getByTestId('ark-ensure-line')).toHaveTextContent('Needs you: approve speech recognition (build from source) at the computer');
+    expect(within(panel).queryByRole('button')).toBeNull();
+    expect(within(panel).getByTestId('ark-ensure-person')).toHaveTextContent('need a person at the computer');
+  });
+
+  it('a viewer sees the state but no button; a node that predates the block shows nothing and no button', async () => {
+    const viewer = renderPage(detailFixture(ensureOf()), VIEWER);
+    await openTab('Ark');
+    expect(await screen.findByTestId('ark-ensure-line')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: "Install what's missing" })).toBeNull();
+    viewer.unmount();
+    renderPage(detailFixture({ ensure: null }), CONTRIBUTOR);
+    await openTab('Ark');
+    await screen.findByTestId('ark-root-internal');
+    expect(screen.queryByTestId('ark-ensure')).toBeNull();
+    expect(screen.queryByRole('button', { name: "Install what's missing" })).toBeNull();
+  });
+
+  it('disables the button with the plain reason when the node does not accept the command or is in offline mode', async () => {
+    const refusing = renderPage(detailFixture({ ...ensureOf(), acceptedTypes: ['status.refresh', 'ark.sync'] }), CONTRIBUTOR);
+    await openTab('Ark');
+    const button = await screen.findByRole('button', { name: "Install what's missing" });
+    expect(button).toBeDisabled();
+    expect(button.parentElement).toHaveAttribute('title', expect.stringContaining('does not accept this command'));
+    refusing.unmount();
+    renderPage(detailFixture({ ...ensureOf(), mode: 'offline' }), CONTRIBUTOR);
+    await openTab('Ark');
+    expect(await screen.findByRole('button', { name: "Install what's missing" })).toBeDisabled();
+  });
+
+  it('is in Spanish with the language provider: the state, the button and the parts', async () => {
+    permissions = CONTRIBUTOR;
+    vi.mocked(getNodeDetail).mockResolvedValue(detailFixture(ensureOf()));
+    render(
+      <LanguageProvider initial="es">
+        <MemoryRouter initialEntries={['/lab/nodes/ai-n2']}>
+          <Routes>
+            <Route path="/lab/nodes/:nodeId" element={<NodeDetailPage now={LAB_NOW} commandPollMs={15} />} />
+          </Routes>
+        </MemoryRouter>
+      </LanguageProvider>,
+    );
+    await openTab('Ark');
+    const panel = await screen.findByTestId('ark-ensure');
+    expect(within(panel).getByTestId('ark-ensure-line')).toHaveTextContent('Necesita su ayuda: pulsar Instalar lo que falta');
+    expect(within(panel).getByRole('button', { name: 'Instalar lo que falta' })).toBeInTheDocument();
+    expect(within(panel).getByTestId('ark-ensure-parts')).toHaveTextContent('el programa de voz (piper) · en espera de turno');
+  });
+
+  it('a sync that is running with no finished run yet does not say that no sync has run', async () => {
+    const base = detailFixture();
+    renderPage(detailFixture({ lastState: { ...base.lastState!, sync: { running: true, progress_pct: 12, last_run: null } } }), CONTRIBUTOR);
+    await openTab('Ark');
+    expect(await screen.findByText(/A sync is running \(12%\)\./)).toBeInTheDocument();
+    expect(screen.queryByText('No sync has run on this node yet.')).toBeNull();
+    // Idle with no run: the old line stays.
+    cleanup();
+    renderPage(detailFixture({ lastState: { ...base.lastState!, sync: { running: false, progress_pct: null, last_run: null } } }), CONTRIBUTOR);
+    await openTab('Ark');
+    expect(await screen.findByText('No sync has run on this node yet.')).toBeInTheDocument();
   });
 });
 

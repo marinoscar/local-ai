@@ -161,6 +161,14 @@
       "rejected_code": null
     }
   },
+  "localai.ensure.run": {
+    "params": {},
+    "result": {
+      "started": true,
+      "state": "installing",
+      "pending_steps": 3
+    }
+  },
   "localai.agent.update": {
     "params": {
       "version": "0.2.0"

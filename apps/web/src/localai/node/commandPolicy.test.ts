@@ -2,10 +2,10 @@ import { agentUpdateState, compareVersions, gateFor, offlineReason, requiredPerm
 import { ALL_TYPES, detailFixture } from './fixture';
 
 describe('requiredPermission', () => {
-  it('needs lab:admin for exactly the four admin types and lab:operate for the other ten, with or without the prefix', () => {
+  it('needs lab:admin for exactly the four admin types and lab:operate for the other eleven, with or without the prefix', () => {
     const admin = ALL_TYPES.filter((type) => requiredPermission(type) === 'lab:admin');
     expect(admin.sort()).toEqual(['agent.update', 'key.rotate', 'mode.offline', 'model.delete']);
-    expect(ALL_TYPES.filter((type) => requiredPermission(type) === 'lab:operate')).toHaveLength(10);
+    expect(ALL_TYPES.filter((type) => requiredPermission(type) === 'lab:operate')).toHaveLength(11);
     expect(requiredPermission('localai.model.delete')).toBe('lab:admin');
     expect(requiredPermission('localai.model.load')).toBe('lab:operate');
   });

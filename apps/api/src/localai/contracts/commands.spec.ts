@@ -17,8 +17,8 @@ const read = <T = unknown>(name: string): T => JSON.parse(readFileSync(join(fixt
 const examples = read<Record<string, { params: unknown; result: unknown }>>('commands.examples.json');
 
 describe('COMMANDS registry', () => {
-  it('is the closed set of 14 types, each with a shared example', () => {
-    expect(COMMAND_TYPES).toHaveLength(14);
+  it('is the closed set of 15 types, each with a shared example', () => {
+    expect(COMMAND_TYPES).toHaveLength(15);
     expect(Object.keys(examples).sort()).toEqual([...COMMAND_TYPES].sort());
   });
 

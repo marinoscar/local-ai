@@ -3,10 +3,11 @@
 // the root is, when it was last synced and verified (and, for a drive, `drive_last_synced_at` as an age), and the last
 // sync run with its error code and the plain fix from the doctor registry. Sync now, Preview (dry run) and Verify are
 // lab:operate. The colours come from the API; nothing here recomputes readiness.
-import { ArkChip, formatAgo } from '@localai/ui';
+import { ArkChip, EnsureLine, ensureCanStart, ensureStepName, formatAgo, useLang } from '@localai/ui';
 import { Alert, Box, Chip, LinearProgress, Paper, Typography } from '@mui/material';
 
-import type { NodeDetail, SnapshotArkRoot } from '../../api/types';
+import { useT } from '../../../i18n/LanguageProvider';
+import type { NodeDetail, SnapshotArkRoot, SnapshotEnsure } from '../../api/types';
 import { plainError } from '../../doctorFix';
 import { FixText } from '../FixText';
 import { formatBytes, formatWhen } from '../format';
@@ -82,6 +83,72 @@ function RootPanel({ node, rootId, kind, present, colour, label, driveAgeDays, r
   );
 }
 
+const STEP_STATUS: Record<SnapshotEnsure['steps'][number]['status'], [string, string]> = {
+  ok: ['already installed', 'ya instalado'],
+  pending: ['next in line', 'en espera de turno'],
+  waiting: ['waiting for the button', 'espera el botón'],
+  needs_confirm: ['needs a person at the computer', 'necesita a una persona en la computadora'],
+  blocked: ['cannot be done yet (the kit lacks it)', 'aún no se puede (falta en el kit)'],
+  running: ['installing…', 'instalando…'],
+  done: ['installed', 'instalado'],
+  failed: ['failed', 'falló'],
+  cancelled: ['stopped', 'detenido'],
+};
+
+/**
+ * "Install what's missing" (ADR-0010, issue #480): the state of what the node installs from its own kit FIRST (Complete,
+ * Installing n of m, Needs you: one thing), the button that asks the agent to install it (`ensure.run`, lab:operate, the safe
+ * default only: compiling and restarting a running service are never started from here), and each part in plain words.
+ */
+function EnsurePanel({ node }: { node: NodeDetail }) {
+  const commands = useNodeCommands();
+  const t = useT();
+  const lang = useLang();
+  const ensure = node.ensure;
+  const block = node.lastState?.ensure;
+  if (!ensure) return null;
+  const parts = (block?.steps ?? []).filter((step) => step.status !== 'ok');
+  const waitsForAPerson = ensure.state === 'needs_you' && ensure.nextKind === 'confirm';
+  return (
+    <Paper variant="outlined" component="section" aria-label={t("Install what's missing", 'Instalar lo que falta')} data-testid="ark-ensure" sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <EnsureLine ensure={ensure} testId="ark-ensure-line" />
+      {ensureCanStart(ensure) ? (
+        <Box>
+          <CommandButton node={node} type="ensure.run" variant="contained" onPress={() => void commands.send('ensure.run', {})}>
+            {t("Install what's missing", 'Instalar lo que falta')}
+          </CommandButton>
+        </Box>
+      ) : null}
+      {waitsForAPerson ? (
+        <Alert severity="info" data-testid="ark-ensure-person">
+          {t(
+            'Compiling and restarting a running service need a person at the computer: the desktop app, with the administrator PIN, or aictl ensure --yes. They cannot be started from here.',
+            'Compilar y reiniciar un servicio en marcha necesitan a una persona en la computadora: la aplicación de escritorio, con el PIN de administrador, o aictl ensure --yes. No se pueden iniciar desde aquí.',
+          )}
+        </Alert>
+      ) : null}
+      {ensure.auto !== 'on' ? (
+        <Typography variant="body2" color="text.secondary">
+          {ensure.auto === 'ask'
+            ? t('The node asks before installing (ensure.auto: ask).', 'El nodo pregunta antes de instalar (ensure.auto: ask).')
+            : t('The node does not install by itself (ensure.auto: off).', 'El nodo no instala por sí solo (ensure.auto: off).')}
+        </Typography>
+      ) : null}
+      {parts.length > 0 ? (
+        <Box component="ul" sx={{ m: 0, pl: 2.5 }} data-testid="ark-ensure-parts">
+          {parts.map((step) => (
+            <li key={step.id}>
+              <Typography variant="body2" component="span">
+                {ensureStepName(step.id, lang)} · {lang === 'es' ? STEP_STATUS[step.status][1] : STEP_STATUS[step.status][0]}
+              </Typography>
+            </li>
+          ))}
+        </Box>
+      ) : null}
+    </Paper>
+  );
+}
+
 export function ArkTab({ node, now = new Date() }: { node: NodeDetail; now?: Date }) {
   const commands = useNodeCommands();
   const roots = node.lastState?.ark?.roots ?? [];
@@ -92,6 +159,7 @@ export function ArkTab({ node, now = new Date() }: { node: NodeDetail; now?: Dat
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <EnsurePanel node={node} />
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
         <CommandButton node={node} type="ark.sync" variant="contained" onPress={() => void commands.send('ark.sync', { dry_run: false })}>
           Sync now
@@ -124,7 +192,9 @@ export function ArkTab({ node, now = new Date() }: { node: NodeDetail; now?: Dat
               </Alert>
             ) : null}
           </>
-        ) : (
+        ) : syncing ? null : (
+          // A running first sync has no finished run yet (`sync.last_run` is empty): "A sync is running" above says it, and
+          // "No sync has run" would contradict it.
           <Typography variant="body2" color="text.secondary">
             No sync has run on this node yet.
           </Typography>

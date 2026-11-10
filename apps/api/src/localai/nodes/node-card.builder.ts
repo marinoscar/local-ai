@@ -9,7 +9,7 @@ import type { NodeHealth } from '@marinoscar/platform-api/nodes';
 import { arkColour, arkLabel, wholeDaysSince, type ArkRootInput, type ArkThresholds, type ArkTier, type SyncResult } from '../health/ark-colour';
 import { deriveHealth, isRoutable, type LabMode, type LabPhase, type LabServePattern } from '../health/derive-health';
 import { isAgentBehind, isCatalogBehind } from '../health/versions';
-import type { NodeCardDto } from './dto/node-card';
+import type { EnsureCardDto, NodeCardDto } from './dto/node-card';
 
 /** The `localai_nodes` columns a card reads (a structural subset of the Prisma row). */
 export interface CardNodeRow {
@@ -91,6 +91,30 @@ function vramOf(state: Record<string, unknown> | null): NodeCardDto['vram'] {
   const totalMib = gpus.reduce((sum, gpu) => sum + asCount(gpu.vram_total_mib), 0);
   if (totalMib === 0) return null;
   return { usedMib: gpus.reduce((sum, gpu) => sum + asCount(gpu.vram_used_mib), 0), totalMib };
+}
+
+const ENSURE_STATES: readonly string[] = ['complete', 'installing', 'needs_you', 'off'];
+const ENSURE_AUTOS: readonly string[] = ['on', 'ask', 'off'];
+const ENSURE_KINDS: readonly string[] = ['none', 'wait', 'press_button', 'confirm', 'sync', 'fix'];
+
+/** The ensure block of the last snapshot as a card summary; null for a snapshot without one (an older agent) or a damaged one. */
+function ensureOf(state: Record<string, unknown> | null): EnsureCardDto | null {
+  const block = state && isRecord(state.ensure) ? state.ensure : null;
+  if (block === null) return null;
+  const stateName = asString(block.state);
+  if (stateName === null || !ENSURE_STATES.includes(stateName)) return null;
+  const auto = asString(block.auto);
+  const progress = isRecord(block.progress) ? block.progress : {};
+  const next = isRecord(block.next_action) ? block.next_action : {};
+  const kind = asString(next.kind);
+  return {
+    state: stateName as EnsureCardDto['state'],
+    auto: auto !== null && ENSURE_AUTOS.includes(auto) ? (auto as EnsureCardDto['auto']) : 'on',
+    done: Math.floor(asCount(progress.done)),
+    total: Math.floor(asCount(progress.total)),
+    nextKind: kind !== null && ENSURE_KINDS.includes(kind) ? (kind as EnsureCardDto['nextKind']) : 'none',
+    nextStep: asString(next.step),
+  };
 }
 
 function arkOf(state: Record<string, unknown> | null, lastSyncResult: SyncResult | null, context: CardContext): NodeCardDto['ark'] {
@@ -178,6 +202,7 @@ export function buildNodeCard(source: CardSource, context: CardContext): NodeCar
     catalogVersion: node.catalogVersion,
     catalogBehind: isCatalogBehind(node.catalogVersion, context.approvedCatalogVersion),
     alerts,
+    ensure: ensureOf(state),
   };
 }
 
