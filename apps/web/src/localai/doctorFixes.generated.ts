@@ -141,7 +141,7 @@ export const DOCTOR_FIXES: Readonly<Record<string, DoctorFixRow>> = {
   'LAI-SYN-051': { severity: "info", meaning: "Content no longer in the profile is using disk space", fix: "Run `aictl ark prune --orphans` if you don't need it." },
   'LAI-SYN-052': { severity: "warning", meaning: "An item's MANIFEST is missing or damaged", fix: "Run `aictl ark verify`; the item will be fetched again." },
   'LAI-SYN-060': { severity: "warning", meaning: "Couldn't compute the package list for the rebuild kit", fix: "Report it: a package name in the catalog probably changed. The old package set is kept." },
-  'LAI-SYN-061': { severity: "error", meaning: "A tool sync needs is missing (pmtiles, git, apt-get)", fix: "Run `sudo install-node.sh --repair`." },
+  'LAI-SYN-061': { severity: "error", meaning: "A tool sync needs is missing (pmtiles, git, apt-get)", fix: "Press Install what's missing, or run `aictl ensure`. If that is not enough, run `sudo install-node.sh --repair`." },
   'LAI-SYN-062': { severity: "warning", meaning: "Manuals were made without the real lab values", fix: "Install it with `sudo aictl docs inventory import <file>` or plug in the ark drive, then sync." },
   'LAI-SYN-063': { severity: "warning", meaning: "The rebuild kit has packages from vendor repositories whose signature was not checked", fix: "Pin the repository's key and set sync.apt_unverified_repos to refuse." },
   'LAI-SYN-070': { severity: "error", meaning: "A drive copy no longer matches its own checksum", fix: "That copy is damaged. Sync the drive on a computer with internet, or use another drive." },
