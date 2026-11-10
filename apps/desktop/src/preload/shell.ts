@@ -35,6 +35,10 @@ const C = {
   settingsSet: 'localai:settings-set',
   pinSubmit: 'localai:pin-submit',
   rotateKey: 'localai:rotate-key',
+  ensureView: 'localai:ensure-view',
+  ensureStart: 'localai:ensure-start',
+  ensureCancel: 'localai:ensure-cancel',
+  ensureConfirm: 'localai:ensure-confirm',
   lang: 'localai:lang',
   errorAction: 'localai:error-action',
 } as const;
@@ -96,6 +100,12 @@ export function createShellBridge(ipc: IpcRendererLike): LocalaiDesktop {
     },
     pinSubmit: (pin) => invoke(C.pinSubmit, pin),
     rotateKey: () => invoke(C.rotateKey),
+    ensure: {
+      view: () => invoke(C.ensureView),
+      start: () => invoke(C.ensureStart),
+      cancel: () => invoke(C.ensureCancel),
+      confirm: (steps) => invoke(C.ensureConfirm, steps),
+    },
     lang: (): Lang => (ipc.sendSync(C.lang) === 'es' ? 'es' : 'en'),
     errorAction: (action, code) => invoke(C.errorAction, { action, code }),
     showMenu: () => {

@@ -134,6 +134,23 @@ type DrillReport struct {
 	ManualPlug bool
 }
 
+// EnsureSource is "Install what's missing" (ADR-0010): the engine's picture in the words of the snapshot. The app
+// implements it over internal/ensure, so this package never imports the engine.
+type EnsureSource interface {
+	Ensure(ctx context.Context) *EnsureReport
+}
+
+// EnsureReport is what an EnsureSource answers; nil when the engine is not up.
+type EnsureReport struct {
+	State, Auto, Message string
+	Done, Total          int
+	NextKind, NextStep   string
+	Steps                []EnsureStepReport
+}
+
+// EnsureStepReport is one part: its id and status.
+type EnsureStepReport struct{ ID, Status string }
+
 // SnapshotOptions configure a SnapshotBuilder.
 type SnapshotOptions struct {
 	// Status is required.
@@ -145,6 +162,8 @@ type SnapshotOptions struct {
 	Ark     ArkSource
 	Sync    SyncSource
 	Drill   DrillSource
+	// Ensure is the install engine's picture; nil leaves the block out.
+	Ensure EnsureSource
 	// BootID is a fresh UUID per agent process; required.
 	BootID string
 	Now    func() time.Time
@@ -197,6 +216,18 @@ func (b *Built) Commit() {
 // Build takes a snapshot now: seq goes up by one, the status view is read once, every string is
 // scrubbed and the body is trimmed to MaxSnapshotBytes.
 func (sb *SnapshotBuilder) Build(ctx context.Context) (*Built, error) {
+	return sb.BuildWith(ctx, BuildOpts{})
+}
+
+// BuildOpts are the choices of one build.
+type BuildOpts struct {
+	// Ensure adds the ensure block: set only when the cloud's handshake lists FeatureEnsure, because an older
+	// cloud's strict schema refuses the key (a 400 on every push).
+	Ensure bool
+}
+
+// BuildWith is Build with options.
+func (sb *SnapshotBuilder) BuildWith(ctx context.Context, o BuildOpts) (*Built, error) {
 	st := sb.o.Status.Build(ctx, true, statusBuildOptions)
 	now := sb.o.Now()
 	cfg := config.Defaults()
@@ -246,6 +277,9 @@ func (sb *SnapshotBuilder) Build(ctx context.Context) (*Built, error) {
 	snap.Sync = sb.snapSync()
 	var pendingDrill string
 	snap.Drill, pendingDrill = sb.snapDrill(drillAccepted)
+	if o.Ensure {
+		snap.Ensure = sb.snapEnsure(ctx)
+	}
 
 	dropped := scrubValue(reflect.ValueOf(&snap), "")
 	body, trimmed, err := fitSnapshot(&snap)
@@ -589,6 +623,35 @@ func (sb *SnapshotBuilder) snapSync() SnapSync {
 			ID: cut(l.ID, 64), FinishedAt: rfc3339(l.FinishedAt), Result: SyncResult(*l),
 			SkipReason: strPtrOrNil(cut(l.SkipReason, 64)), ErrorCode: codeOrNil(l.ErrorCode),
 		}
+	}
+	return out
+}
+
+// snapEnsure builds the ensure block: states and ids outside the closed sets become the safe reading
+// (needs_you, none), the sentence is cut, the steps are the first 16.
+func (sb *SnapshotBuilder) snapEnsure(ctx context.Context) *SnapEnsure {
+	if sb.o.Ensure == nil {
+		return nil
+	}
+	r := sb.o.Ensure.Ensure(ctx)
+	if r == nil {
+		return nil
+	}
+	out := &SnapEnsure{
+		State:      oneOf(r.State, "needs_you", "complete", "installing", "needs_you", "off"),
+		Auto:       oneOf(r.Auto, "on", "on", "ask", "off"),
+		Message:    cut(r.Message, 200),
+		Progress:   SnapProgress{Done: maxInt(r.Done, 0), Total: maxInt(r.Total, 0)},
+		NextAction: SnapEnsureNext{Kind: oneOf(r.NextKind, "none", "none", "wait", "press_button", "confirm", "sync", "fix"), Step: strPtrOrNil(cut(r.NextStep, 64))},
+		Steps:      []SnapEnsureStep{},
+	}
+	for _, s := range r.Steps {
+		if len(out.Steps) == 16 {
+			break
+		}
+		out.Steps = append(out.Steps, SnapEnsureStep{
+			ID: cut(s.ID, 64), Status: oneOf(s.Status, "pending", "ok", "pending", "waiting", "needs_confirm", "blocked", "running", "done", "failed", "cancelled"),
+		})
 	}
 	return out
 }

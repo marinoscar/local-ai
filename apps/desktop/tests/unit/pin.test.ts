@@ -296,6 +296,7 @@ describe('the PIN window’s texts', () => {
 
   it('the query picks the purpose and language and falls back to the safe reading', () => {
     expect(parseQuery('?purpose=rotate-key&lang=es')).toEqual({ purpose: 'rotate-key', lang: 'es' });
+    expect(parseQuery('?purpose=confirm-ensure&lang=es')).toEqual({ purpose: 'confirm-ensure', lang: 'es' });
     expect(parseQuery('?purpose=<script>&lang=fr')).toEqual({ purpose: 'leave-survival', lang: 'en' });
     expect(parseQuery('')).toEqual({ purpose: 'leave-survival', lang: 'en' });
   });

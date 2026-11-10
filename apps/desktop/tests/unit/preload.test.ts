@@ -36,10 +36,13 @@ describe('window.localaiDesktop (shell pages)', () => {
         'rotateKey',
         // DSK-09 (survival strip)
         'setFullScreen', 'closePortal',
+        // issue #480 (Install what's missing)
+        'ensure',
       ].sort(),
     );
     expect(Object.keys(bridge.cloud).sort()).toEqual(['beginLink', 'cached', 'linkState', 'openNode', 'openVerification', 'request', 'unlink']);
     expect(Object.keys(bridge.settings).sort()).toEqual(['get', 'set']);
+    expect(Object.keys(bridge.ensure).sort()).toEqual(['cancel', 'confirm', 'start', 'view']);
   });
 
   it('exposes no Node: no require, process, Buffer, ipcRenderer or fs on the object', () => {
@@ -66,6 +69,10 @@ describe('window.localaiDesktop (shell pages)', () => {
     await b.pinSubmit('1234');
     await b.rotateKey();
     await b.errorAction('open-portal', 'LAI-DSK-004');
+    await b.ensure.view();
+    await b.ensure.start();
+    await b.ensure.cancel();
+    await b.ensure.confirm(['whisper.build']);
     b.openWindow('chat');
     b.showTab('lab');
     b.showMenu();
@@ -91,6 +98,10 @@ describe('window.localaiDesktop (shell pages)', () => {
       [CHANNELS.pinSubmit, ['1234']],
       [CHANNELS.rotateKey, []],
       [CHANNELS.errorAction, [{ action: 'open-portal', code: 'LAI-DSK-004' }]],
+      [CHANNELS.ensureView, []],
+      [CHANNELS.ensureStart, []],
+      [CHANNELS.ensureCancel, []],
+      [CHANNELS.ensureConfirm, [['whisper.build']]],
     ]);
     expect(sent).toEqual([
       [CHANNELS.openWindow, ['chat']],

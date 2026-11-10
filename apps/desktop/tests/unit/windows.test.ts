@@ -476,6 +476,16 @@ describe('modal shell windows (PIN prompt, connection info)', () => {
     expect(made.modals).toHaveLength(2);
   });
 
+  it("the ensure window is a shell modal with the shell preload, titled in the language, and the PIN prompt opens over it", () => {
+    const { manager, main, made } = setup({ lang: 'es' });
+    main.visible = true;
+    const ensure = manager.openModal('ensure');
+    expect(made.modals[0]!.modal).toMatchObject({ url: 'localai://app/ensure/', preload: 'shell.js', title: 'Instalar lo que falta' });
+    expect(MODAL_WINDOWS.ensure.title.en).toBe("Install what's missing");
+    manager.openModal('pin', '?purpose=confirm-ensure&lang=es');
+    expect(made.modals[1]!.parent).toEqual({ child: ensure });
+  });
+
   it('the PIN prompt has its own strict preload and carries its query; titles follow the language', () => {
     const { manager, main, made } = setup({ lang: 'es' });
     main.visible = true;

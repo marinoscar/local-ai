@@ -1,5 +1,6 @@
 import "../styles/status-brain.css";
 import { isFixAction } from "../actions";
+import { EnsureCard } from "../components/EnsureCard";
 import { FixButton } from "../components/FixButton";
 import { clockText, durationText } from "../format";
 import { t, useLang, type Key } from "../i18n/i18n";
@@ -75,6 +76,7 @@ export function Status({ status }: { status: PortalStatus }) {
       <h1 id="screen-title" className="screen-title">
         {t("status.title")}
       </h1>
+      {status.session !== "none" ? <EnsureCard /> : null}
       <div className="status-grid">
         <div className="status-col">
           <h2 className="status-h">{t("status.battery")}</h2>

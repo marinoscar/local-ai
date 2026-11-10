@@ -35,12 +35,12 @@ func TestExampleParsesWithNoProblems(t *testing.T) {
 		t.Errorf("tailscale wrong: %+v", cfg.Tailscale)
 	}
 	c := cfg.Cloud
-	if c.URL != "https://ai.marin.cr" || c.DevInsecure || c.Concurrency != 1 || len(c.Allow) != 14 ||
+	if c.URL != "https://ai.marin.cr" || c.DevInsecure || c.Concurrency != 1 || len(c.Allow) != 15 ||
 		c.Poll != (config.PollBlock{HeartbeatSeconds: 15, ClaimSeconds: 3, StateSeconds: 60}) {
 		t.Errorf("cloud wrong: %+v", c)
 	}
 	if !reflect.DeepEqual(c.Allow, config.CloudJobNames()) {
-		t.Errorf("cloud.allow differs from the 14 known names: %v", c.Allow)
+		t.Errorf("cloud.allow differs from the 15 known names: %v", c.Allow)
 	}
 	if cfg.Ports != (config.PortsBlock{Agent: 7070, Llama: 8080, Kiwix: 8888, Whisper: 8081}) {
 		t.Errorf("ports wrong: %+v", cfg.Ports)
@@ -110,7 +110,7 @@ func TestMinimalFileTakesDefaults(t *testing.T) {
 		{"tailscale.manage", cfg.Tailscale.Manage, false},
 		{"tailscale.serve_pattern", cfg.Tailscale.ServePattern, "none"},
 		{"cloud.url", cfg.Cloud.URL, "https://ai.marin.cr"},
-		{"cloud.allow", len(cfg.Cloud.Allow), 14},
+		{"cloud.allow", len(cfg.Cloud.Allow), 15},
 		{"cloud.concurrency", cfg.Cloud.Concurrency, 1},
 		{"cloud.poll.heartbeat_seconds", cfg.Cloud.Poll.HeartbeatSeconds, 15},
 		{"cloud.poll.claim_seconds", cfg.Cloud.Poll.ClaimSeconds, 3},
@@ -218,7 +218,7 @@ func TestExplicitNullMeansDefaultOrNil(t *testing.T) {
 	if len(probs) != 0 {
 		t.Fatalf("nulls must load clean: %+v", probs)
 	}
-	if cfg.Llama.LoadTimeoutSeconds != 300 || cfg.Llama.CudaArch != nil || cfg.UI.Language != "auto" || len(cfg.Cloud.Allow) != 14 {
+	if cfg.Llama.LoadTimeoutSeconds != 300 || cfg.Llama.CudaArch != nil || cfg.UI.Language != "auto" || len(cfg.Cloud.Allow) != 15 {
 		t.Errorf("nulls must keep defaults: %+v", cfg)
 	}
 }

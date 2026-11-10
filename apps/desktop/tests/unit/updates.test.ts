@@ -688,10 +688,10 @@ describe('menu status lines', () => {
   });
 
   it('the native menu shows them greyed out under the ticked box, and not when the box is off', () => {
-    const actions = { connectionInfo() {}, connect() {}, disconnect() {}, setAutostart() {}, setUpdates() {}, about() {}, quit() {} };
+    const actions = { connectionInfo() {}, ensure() {}, connect() {}, disconnect() {}, setAutostart() {}, setUpdates() {}, about() {}, quit() {} };
     const base = { lang: 'en' as const, linked: false, autostart: true, checkForUpdates: true, updateLines: ['LAI-DSK-016 · x', 'fix'] };
     const labels = buildMenuTemplate(base, actions).map((i) => `${i.label ?? '---'}${i.enabled === false ? ' (disabled)' : ''}`);
-    expect(labels).toEqual(['Connection info', 'Connect to the lab', '---', 'Start at login', 'Check for updates', 'LAI-DSK-016 · x (disabled)', 'fix (disabled)', '---', 'About', 'Quit']);
+    expect(labels).toEqual(['Connection info', "Install what's missing", 'Connect to the lab', '---', 'Start at login', 'Check for updates', 'LAI-DSK-016 · x (disabled)', 'fix (disabled)', '---', 'About', 'Quit']);
     expect(buildMenuTemplate({ ...base, checkForUpdates: false }, actions).map((i) => i.label ?? '---')).not.toContain('fix');
   });
 });

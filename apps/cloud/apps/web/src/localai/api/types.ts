@@ -55,6 +55,16 @@ export interface SnapshotArkRoot {
   last_verify_at: string | null;
 }
 
+/** The `ensure` block of a snapshot (contracts/state.schema.ts `EnsureBlockV1`): absent from an agent that predates it. */
+export interface SnapshotEnsure {
+  state: 'complete' | 'installing' | 'needs_you' | 'off';
+  auto: 'on' | 'ask' | 'off';
+  message: string;
+  progress: { done: number; total: number };
+  next_action: { kind: 'none' | 'wait' | 'press_button' | 'confirm' | 'sync' | 'fix'; step: string | null };
+  steps: Array<{ id: string; status: 'ok' | 'pending' | 'waiting' | 'needs_confirm' | 'blocked' | 'running' | 'done' | 'failed' | 'cancelled' }>;
+}
+
 export interface NodeSnapshot {
   mode?: string;
   llama?: { build?: string; backend?: string; router?: string; models_max?: number };
@@ -62,6 +72,7 @@ export interface NodeSnapshot {
   models?: SnapshotModel[];
   services?: SnapshotService[];
   ark?: { roots?: SnapshotArkRoot[]; drive_last_synced_at?: string | null };
+  ensure?: SnapshotEnsure;
   sync?: { running?: boolean; progress_pct?: number | null; last_run?: { id: string; finished_at: string; result: string; skip_reason: string | null; error_code: string | null } | null };
 }
 

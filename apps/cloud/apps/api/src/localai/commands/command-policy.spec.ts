@@ -3,7 +3,7 @@ import { LOCALAI_PERMISSION_IDS } from '../localai.permissions';
 import { COMMAND_POLICY, dedupKeyFor, policyOf } from './command-policy';
 
 describe('the command policy table (spec 3.7)', () => {
-  it('lists exactly the registry\'s 14 types', () => {
+  it('lists exactly the registry\'s 15 types', () => {
     expect(Object.keys(COMMAND_POLICY).sort()).toEqual([...COMMAND_TYPES].sort());
   });
 
@@ -23,6 +23,7 @@ describe('the command policy table (spec 3.7)', () => {
     'localai.logs.tail': ['lab:operate', 30, 300, 2],
     'localai.catalog.refresh': ['lab:operate', 60, 600, 60],
     'localai.agent.update': ['lab:admin', 300, 900, 24 * 60],
+    'localai.ensure.run': ['lab:operate', 30, 300, 60],
   };
 
   it.each(Object.entries(TABLE))('%s: permission, lease, hard cap and queued TTL match the spec table', (type, [permission, lease, cap, ttl]) => {

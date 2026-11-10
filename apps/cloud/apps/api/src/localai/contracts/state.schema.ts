@@ -142,6 +142,39 @@ export type DrillResultsV1 = z.infer<typeof DrillResultsV1>;
 
 const Mode = z.enum(['online', 'offline', 'survival']);
 
+/**
+ * "Install what's missing" (ADR-0010): what the node still needs from its own kit and whether the agent is installing it.
+ * OPTIONAL on the wire: an agent that predates it sends no `ensure` key and its snapshots still parse (the cloud may run a
+ * newer version than a node). A newer agent sends it only to a cloud whose handshake lists `ensure.v1`, because an older
+ * cloud's strict schema would refuse the key. No path, no secret: states, counts and step ids and statuses.
+ */
+export const EnsureBlockV1 = z
+  .object({
+    state: z.enum(['complete', 'installing', 'needs_you', 'off']),
+    auto: z.enum(['on', 'ask', 'off']),
+    /** The agent's own sentence in English; the app writes its text in the viewer's language from the codes. */
+    message: z.string().max(200),
+    progress: z.object({ done: z.number().int().min(0), total: z.number().int().min(0) }).strict(),
+    next_action: z
+      .object({
+        kind: z.enum(['none', 'wait', 'press_button', 'confirm', 'sync', 'fix']),
+        step: z.string().max(64).nullable(),
+      })
+      .strict(),
+    steps: z
+      .array(
+        z
+          .object({
+            id: z.string().max(64),
+            status: z.enum(['ok', 'pending', 'waiting', 'needs_confirm', 'blocked', 'running', 'done', 'failed', 'cancelled']),
+          })
+          .strict(),
+      )
+      .max(16),
+  })
+  .strict();
+export type EnsureBlockV1 = z.infer<typeof EnsureBlockV1>;
+
 export const LocalaiStateSnapshotV1 = z
   .object({
     schema_version: z.literal(1),
@@ -299,6 +332,8 @@ export const LocalaiStateSnapshotV1 = z
     alerts: z
       .array(z.object({ code: Code, severity: z.enum(['info', 'warning', 'critical']), title: z.string().max(200) }).strict())
       .max(50),
+    /** Absent from an agent that predates "Install what's missing" (issue #480). */
+    ensure: EnsureBlockV1.optional(),
   })
   .strict();
 export type LocalaiStateSnapshotV1 = z.infer<typeof LocalaiStateSnapshotV1>;

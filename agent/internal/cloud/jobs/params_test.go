@@ -16,15 +16,15 @@ import (
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
-// Every type has a decoder, and the set is exactly the 14 job names of the config.
-func TestHandlersCoverTheFourteenTypes(t *testing.T) {
+// Every type has a decoder, and the set is exactly the 15 job names of the config.
+func TestHandlersCoverTheFifteenTypes(t *testing.T) {
 	f := newFakes()
 	var got []string
 	for _, h := range Handlers(f.deps()) {
 		got = append(got, h.Type())
 	}
 	want := config.CloudJobNames()
-	if !reflect.DeepEqual(got, sortedLike(want, got)) || len(got) != 14 {
+	if !reflect.DeepEqual(got, sortedLike(want, got)) || len(got) != 15 {
 		t.Errorf("handlers = %v, want the %d names %v", got, len(want), want)
 	}
 	if _, err := cloud.NewRegistry(Handlers(f.deps())...); err != nil {

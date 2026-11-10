@@ -143,6 +143,35 @@ let streams = [];
 let loadAnswer = 202;
 // The answer of the fix buttons (POST /ark/import, /services/{kiwix|whisper}/restart): 2xx, 409 or 429.
 let fixAnswer = 0;
+// GET/POST/DELETE /api/v1/ensure (ADR-0010): the picture the test sets with POST /__ensure, and the
+// refusal (409 or 503) the next POST answers.
+function ensureView(state, steps) {
+  const todo = steps.filter((s) => s.status !== "ok").length;
+  return {
+    state,
+    auto: "on",
+    message:
+      state === "complete"
+        ? "Complete: this computer has everything it needs."
+        : state === "installing"
+          ? `Installing what's missing (1 of ${steps.length})`
+          : "Needs you: the speech program is missing.",
+    next_action:
+      state === "complete"
+        ? { kind: "none", text: "" }
+        : state === "installing"
+          ? { kind: "wait", text: "Wait: it is installing." }
+          : { kind: "press_button", text: "Press Install what's missing." },
+    progress: { done: 0, total: state === "installing" ? steps.length : todo },
+    steps,
+    run: null,
+    dry_run: false,
+    checked_at: "2026-11-10T10:00:00Z",
+  };
+}
+const piperStep = (status) => ({ id: "tool.piper", kind: "install_tool", status, needs_confirmation: false, title: "Voice program (piper)", detail: "Installs the voice program from the kit." });
+let ensure = ensureView("needs_you", [piperStep("pending")]);
+let ensureAnswer = 0;
 
 function send(res, code, body, headers = {}) {
   res.writeHead(code, headers);
@@ -178,6 +207,16 @@ createServer(async (req, res) => {
       seen = [];
       loadAnswer = 202;
       fixAnswer = 0;
+      ensure = ensureView("needs_you", [piperStep("pending")]);
+      ensureAnswer = 0;
+      return send(res, 200, "ok");
+    }
+    if (p === "/__ensure" && req.method === "POST") {
+      ensure = { ...ensure, ...JSON.parse(await readBody(req)) };
+      return send(res, 200, "ok");
+    }
+    if (p === "/__ensure-answer") {
+      ensureAnswer = Number(url.searchParams.get("status") || 0);
       return send(res, 200, "ok");
     }
     if (p === "/__status" && req.method === "POST") {
@@ -223,6 +262,30 @@ createServer(async (req, res) => {
     return send(res, 200, JSON.stringify(status), {
       "Content-Type": "application/json",
     });
+  }
+  if (p === "/api/v1/ensure") {
+    const json = { "Content-Type": "application/json" };
+    const lang = req.headers["accept-language"] ?? null;
+    if (req.method === "GET") {
+      seen.push({ path: p, method: "GET", lang });
+      return send(res, 200, JSON.stringify(ensure), json);
+    }
+    seen.push({ path: p, method: req.method, lang, body: await readBody(req) });
+    const errors = {
+      409: { code: "LAI-SYN-005", message: "A copy or check is running", fix: "Try again when it ends." },
+      503: { code: "LAI-AGT-024", message: "The install service is starting", fix: "Try again in a minute." },
+    };
+    if (req.method === "POST" && errors[ensureAnswer])
+      return send(res, ensureAnswer, JSON.stringify({ error: errors[ensureAnswer] }), json);
+    if (req.method === "POST") {
+      ensure = ensureView("installing", [piperStep("running")]);
+      return send(res, 202, JSON.stringify(ensure), json);
+    }
+    if (req.method === "DELETE") {
+      ensure = ensureView("needs_you", [piperStep("cancelled")]);
+      return send(res, 202, JSON.stringify(ensure), json);
+    }
+    return send(res, 405, "no");
   }
   if (p === "/api/v1/mode/survival" && req.method === "POST") {
     status = { ...status, mode: "survival", session: "portal" };

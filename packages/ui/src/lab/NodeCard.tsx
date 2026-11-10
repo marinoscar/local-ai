@@ -10,6 +10,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { pick, useLang, type Lang } from '../lang';
 import { ArkChip } from './ArkChip';
 import { backendLabel, formatAgo, formatClock, shortCatalog } from './format';
+import { EnsureLine } from './EnsureLine';
 import { HealthChip } from './HealthChip';
 import { ModeChip } from './ModeChip';
 import { ModelList } from './ModelList';
@@ -117,6 +118,9 @@ export function NodeCard({ node, now = new Date(), timeZone, actions }: NodeCard
             {node.health === 'quiet' && node.phase === 'pending' ? null : <ModeChip mode={node.mode} />}
           </Box>
         </Box>
+
+        {/* State first (ADR-0009 rule 4, ADR-0010): is this node complete, installing, or waiting for a person? */}
+        <EnsureLine ensure={node.ensure} />
 
         {hardware ? <Typography variant="body2">{hardware}</Typography> : null}
 

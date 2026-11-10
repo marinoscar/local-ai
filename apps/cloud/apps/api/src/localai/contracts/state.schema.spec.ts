@@ -35,6 +35,47 @@ describe('LocalaiStateSnapshotV1', () => {
     expect(DrillResultsV1.safeParse(snapshot.drill!.results).success).toBe(true);
   });
 
+  describe('the ensure block ("Install what\'s missing", issue #480)', () => {
+    const block = () => ({
+      state: 'needs_you',
+      auto: 'on',
+      message: 'Needs you: the speech program needs your OK to build.',
+      progress: { done: 1, total: 3 },
+      next_action: { kind: 'confirm', step: 'whisper.build' },
+      steps: [
+        { id: 'tool.piper', status: 'done' },
+        { id: 'whisper.build', status: 'needs_confirm' },
+      ],
+    });
+
+    it('is optional: a snapshot from an agent that predates it still parses, and nothing is added to it', () => {
+      const old = ai3();
+      expect('ensure' in old).toBe(false);
+      const parsed = LocalaiStateSnapshotV1.safeParse(old);
+      expect(parsed.success).toBe(true);
+      expect(parsed.success && 'ensure' in parsed.data).toBe(false);
+      for (const snapshot of lab3()) expect(ok(snapshot)).toBe(true);
+    });
+
+    it('parses a snapshot that carries it, and keeps it', () => {
+      const snapshot = { ...ai3(), ensure: block() };
+      expect(LocalaiStateSnapshotV1.parse(snapshot)).toEqual(snapshot);
+      expect(ok({ ...ai3(), ensure: { ...block(), state: 'complete', next_action: { kind: 'none', step: null }, steps: [] } })).toBe(true);
+    });
+
+    it('is strict and bounded: unknown keys, states, statuses and 17 steps are refused', () => {
+      expect(ok({ ...ai3(), ensure: { ...block(), extra: 1 } })).toBe(false);
+      expect(ok({ ...ai3(), ensure: { ...block(), state: 'exploded' } })).toBe(false);
+      expect(ok({ ...ai3(), ensure: { ...block(), auto: 'sometimes' } })).toBe(false);
+      expect(ok({ ...ai3(), ensure: { ...block(), next_action: { kind: 'fix', step: null, text: 'x' } } })).toBe(false);
+      expect(ok({ ...ai3(), ensure: { ...block(), steps: [{ id: 'tool.piper', status: 'exploded' }] } })).toBe(false);
+      expect(ok({ ...ai3(), ensure: { ...block(), steps: [{ id: 'tool.piper', status: 'ok', error: '/etc/x' }] } })).toBe(false);
+      expect(ok({ ...ai3(), ensure: { ...block(), steps: Array.from({ length: 17 }, (_, i) => ({ id: `s${i}`, status: 'ok' })) } })).toBe(false);
+      expect(ok({ ...ai3(), ensure: { ...block(), message: 'x'.repeat(201) } })).toBe(false);
+      expect(ok({ ...ai3(), ensure: { ...block(), progress: { done: -1, total: 3 } } })).toBe(false);
+    });
+  });
+
   describe('size and shape bounds', () => {
     it('accepts 200 models and refuses 201', () => {
       const snapshot = ai3();

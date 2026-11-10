@@ -34,4 +34,17 @@ describe('fake agent', () => {
     expect(posted.status).toBe(204);
     expect(agent.probeResults).toEqual([{ fetch: 'failed', img: 'failed', ws: 'failed' }]);
   });
+
+  it('serves the ensure picture, records each call, and wants the PIN grant only for a confirmation', async () => {
+    agent = await startFakeAgent({ port: 0 });
+    const headers = { authorization: `Bearer ${agent.token}`, 'content-type': 'application/json' };
+    expect((await fetch(`${agent.url}/api/v1/ensure`)).status).toBe(401);
+    const got = await fetch(`${agent.url}/api/v1/ensure`, { headers });
+    expect(((await got.json()) as { state: string }).state).toBe('needs_you');
+    const started = await fetch(`${agent.url}/api/v1/ensure`, { method: 'POST', headers, body: '{}' });
+    expect(started.status).toBe(202);
+    const refused = await fetch(`${agent.url}/api/v1/ensure`, { method: 'POST', headers, body: JSON.stringify({ confirm: ['whisper.build'] }) });
+    expect(refused.status).toBe(403);
+    expect(agent.ensureRequests.map((r) => [r.method, r.accepted])).toEqual([['GET', false], ['GET', true], ['POST', true], ['POST', false]]);
+  });
 });

@@ -44,7 +44,7 @@ func TestEnrollRegistersHandshakesAndLinks(t *testing.T) {
 	if body.Name != "ai-n3" || body.Hostname != "host-a" || body.CLIVersion != "aiagent/0.1.0" || body.Concurrency != 1 {
 		t.Errorf("register body %+v", body)
 	}
-	if len(body.EligibleTypes) != 14 || body.EligibleTypes[0] != "localai.status.refresh" || len(body.Capabilities.Localai.Allow) != 14 || body.Capabilities.Localai.Schema != 1 {
+	if len(body.EligibleTypes) != 15 || body.EligibleTypes[0] != "localai.status.refresh" || len(body.Capabilities.Localai.Allow) != 15 || body.Capabilities.Localai.Schema != 1 {
 		t.Errorf("eligible types / allow: %v / %v", body.EligibleTypes, body.Capabilities.Localai.Allow)
 	}
 	if regs[0].Credential != testCredential {

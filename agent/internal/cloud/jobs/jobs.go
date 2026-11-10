@@ -91,6 +91,8 @@ type Ark interface {
 	StartVerify(ctx context.Context, req ArkRequest) (ArkVerifyStarted, error)
 }
 
+// (see ensure.go for Ensure)
+
 // Modes is the mode engine: *modes.Engine implements it.
 type Modes interface {
 	Request(ctx context.Context, target modes.Mode, o modes.RequestOptions) (modes.Result, error)
@@ -158,6 +160,8 @@ type Deps struct {
 	Hardware Hardware
 	// AgentUpdate is AGENT-19's updater; nil makes agent.update fail with LAI-AGT-023.
 	AgentUpdate AgentUpdater
+	// Ensure is the install engine's start call (ADR-0010); nil leaves ensure.run out.
+	Ensure Ensure
 
 	// Clock times the wait for modelOpsMu; nil is the wall clock.
 	Clock cloud.Clock
@@ -175,7 +179,7 @@ func (d Deps) clock() cloud.Clock {
 // (Router, Status), model.unload and model.set_default (Router), model.download and model.delete
 // (Models), ark.sync and ark.verify (Ark), mode.offline (Modes), key.rotate (Models),
 // service.restart (Services), logs.tail (Logs), catalog.refresh (Catalog, Status); agent.update is
-// always there.
+// always there; ensure.run needs Ensure (the install engine).
 func Handlers(d Deps) []cloud.Handler {
 	var hs []cloud.Handler
 	add := func(ok bool, h cloud.Handler) {
@@ -197,6 +201,7 @@ func Handlers(d Deps) []cloud.Handler {
 	add(d.Logs != nil, newLogsTail(d))
 	add(d.Catalog != nil && d.Status != nil, newCatalogRefresh(d))
 	add(true, newAgentUpdate(d))
+	add(d.Ensure != nil, newEnsureRun(d))
 	return hs
 }
 

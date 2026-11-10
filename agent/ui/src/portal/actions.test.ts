@@ -8,6 +8,7 @@ describe("fix actions", () => {
   it("are the closed set of doctor-codes.md section 1.7", () => {
     expect(Object.keys(ACTIONS).sort()).toEqual([
       "ark.import",
+      "ensure.run",
       "portal.brain",
       "service.restart:kiwix",
       "service.restart:whisper",
@@ -25,7 +26,7 @@ describe("fix actions", () => {
       expect(en[a.done]).toBeTruthy();
       if (a.path !== null)
         expect(a.path).toMatch(
-          /^\/api\/v1\/(ark\/import|services\/(kiwix|whisper)\/restart)$/,
+          /^\/api\/v1\/(ark\/import|ensure|services\/(kiwix|whisper)\/restart)$/,
         );
     }
   });
@@ -46,6 +47,19 @@ describe("fix actions", () => {
     ]);
     expect(calls[0][1]?.method).toBe("POST");
     expect(calls[0][1]?.body).toBe("{}");
+  });
+
+  it("ensure.run POSTs {} to /ensure and its typed command is aictl ensure", async () => {
+    const calls: [string, RequestInit | undefined][] = [];
+    const fetcher = async (path: string, init?: RequestInit) => {
+      calls.push([path, init]);
+      return new Response("{}", { status: 202 });
+    };
+    expect(await runFix("ensure.run", fetcher)).toEqual({ ok: true });
+    expect(calls[0][0]).toBe("/api/v1/ensure");
+    expect(calls[0][1]?.method).toBe("POST");
+    expect(calls[0][1]?.body).toBe("{}");
+    expect(ACTIONS["ensure.run"].command).toBe("aictl ensure");
   });
 
   it("the brain action calls nothing", async () => {

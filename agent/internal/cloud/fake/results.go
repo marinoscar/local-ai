@@ -79,6 +79,7 @@ var resultSchemas = map[string]spec{
 	"localai.catalog.refresh": obj(map[string]spec{
 		"catalog_version": str(reCatalog, 0), "changed": boolean(), "accepted": boolean(), "rejected_code": null(str(reCode, 0)),
 	}),
+	"localai.ensure.run": obj(map[string]spec{"started": boolean(), "state": enum("complete", "installing", "needs_you", "off"), "pending_steps": integer(0)}),
 	"localai.agent.update": obj(map[string]spec{
 		"from_version": str(reSemver, 0), "to_version": str(reSemver, 0), "status": enum("updated", "already_current", "rolled_back"),
 	}),

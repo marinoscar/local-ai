@@ -12,7 +12,7 @@ const preloadDir = join(here, '..', '..', 'src', 'preload');
 const MAIN_MODULES = [
   'index', 'agent-client', 'agent-supervisor', 'windows', 'navigation', 'egress-guard', 'csp', 'protocol', 'tray',
   'autostart', 'clipboard', 'pin', 'survival', 'cloud-link', 'cloud-api', 'secret-store', 'settings', 'updates', 'i18n',
-  'diagnose', 'log', 'startup', 'notify', 'ipc', 'menu', 'args', 'system-actions',
+  'diagnose', 'log', 'startup', 'notify', 'ipc', 'menu', 'args', 'system-actions', 'ensure',
 ];
 
 const loaders = import.meta.glob('../../src/main/*.ts');
@@ -52,7 +52,7 @@ describe('src/preload layout', () => {
 });
 
 describe('src/renderer layout', () => {
-  it.each(['topbar', 'error', 'pin', 'connection-info', 'link', 'lab'])('%s has an index.html and a main.tsx', (page) => {
+  it.each(['topbar', 'error', 'pin', 'connection-info', 'link', 'lab', 'ensure'])('%s has an index.html and a main.tsx', (page) => {
     const files = readdirSync(join(here, '..', '..', 'src', 'renderer', page));
     expect(files).toContain('index.html');
     expect(files).toContain('main.tsx');

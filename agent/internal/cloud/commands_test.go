@@ -86,7 +86,7 @@ func TestDecodeParams(t *testing.T) {
 	})
 }
 
-// TypeLimits is the lease and hard cap table of cloud-app.md section 3.7 for exactly the 14 types the
+// TypeLimits is the lease and hard cap table of cloud-app.md section 3.7 for exactly the 15 types the
 // config accepts.
 func TestTypeLimitsMatchTheSpecTable(t *testing.T) {
 	want := map[string][2]time.Duration{
@@ -104,9 +104,10 @@ func TestTypeLimitsMatchTheSpecTable(t *testing.T) {
 		TypeLogsTail:        {30 * time.Second, 300 * time.Second},
 		TypeCatalogRefresh:  {60 * time.Second, 600 * time.Second},
 		TypeAgentUpdate:     {300 * time.Second, 900 * time.Second},
+		TypeEnsureRun:       {30 * time.Second, 300 * time.Second},
 	}
 	names := config.CloudJobNames()
-	if len(names) != 14 || len(want) != 14 {
+	if len(names) != 15 || len(want) != 15 {
 		t.Fatalf("%d config names, %d expected", len(names), len(want))
 	}
 	for _, n := range names {

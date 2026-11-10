@@ -9,7 +9,7 @@ import { z } from 'zod';
 export const LOCALAI_NODE_API_VERSION = 1;
 
 /** The app routes under `/api/nodes/{id}/localai/` the agent may use. A feature is listed when its route exists. */
-export const LOCALAI_NODE_FEATURES = ['state.v1', 'commands.v1', 'catalog.v1', 'key.v1', 'tailnet.v1'] as const;
+export const LOCALAI_NODE_FEATURES = ['state.v1', 'commands.v1', 'catalog.v1', 'key.v1', 'tailnet.v1', 'ensure.v1'] as const;
 
 /**
  * Which command plane the agent claims from. `localai` (the app-owned `localai_commands` table) until EAB ships

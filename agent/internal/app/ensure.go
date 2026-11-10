@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
+	"github.com/marinoscar/local-ai/agent/internal/audit"
+	"github.com/marinoscar/local-ai/agent/internal/cloud"
+	"github.com/marinoscar/local-ai/agent/internal/cloud/jobs"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/ensure"
@@ -214,6 +217,66 @@ func ensureAPIError(err error) error {
 		return api.NewError(api.CodeBusy, http.StatusConflict, map[string]any{"reason": "mode_change"})
 	}
 	return err
+}
+
+// ensureJobs is the cloud command `ensure.run`: the same start as POST /ensure with the safe default (the
+// automatic steps, no confirmation, no dry run), so the cloud can never confirm compiling or restarting a
+// running service. The engine's refusals are the route's (409 LAI-SYN-005, 409 LAI-AGT-022).
+type ensureJobs struct{ s *ensureStack }
+
+var _ jobs.Ensure = ensureJobs{}
+
+func (e ensureJobs) StartEnsure(ctx context.Context, actor audit.Actor) (jobs.EnsureStarted, error) {
+	v, started, err := e.s.svc.Start(ctx, ensure.StartRequest{Actor: actor, Lang: "en"})
+	if err != nil {
+		return jobs.EnsureStarted{}, ensureAPIError(err)
+	}
+	running := started || v.State == ensure.StateInstalling && !v.DryRun
+	return jobs.EnsureStarted{Running: running, State: string(v.State), Pending: pendingSteps(v)}, nil
+}
+
+// lazyEnsureJobs finds the engine when the command runs: the claim plane is built before the engine.
+type lazyEnsureJobs struct{ d *Daemon }
+
+var _ jobs.Ensure = lazyEnsureJobs{}
+
+func (l lazyEnsureJobs) StartEnsure(ctx context.Context, actor audit.Actor) (jobs.EnsureStarted, error) {
+	if l.d.ensure == nil {
+		return jobs.EnsureStarted{}, ensureUnavailable{}.err()
+	}
+	return ensureJobs{l.d.ensure}.StartEnsure(ctx, actor)
+}
+
+// pendingSteps counts the parts that are not in place.
+func pendingSteps(v ensure.View) int {
+	n := 0
+	for _, s := range v.Steps {
+		if s.Status != ensure.StatusOK && s.Status != ensure.StatusDone {
+			n++
+		}
+	}
+	return n
+}
+
+// ensureSnapshot is the cloud snapshot's ensure block: the engine's picture in English (the cloud writes its
+// own text in the viewer's language from the codes). It is nil until the engine is built, and when it is not.
+type ensureSnapshot struct{ d *Daemon }
+
+var _ cloud.EnsureSource = ensureSnapshot{}
+
+func (e ensureSnapshot) Ensure(ctx context.Context) *cloud.EnsureReport {
+	if e.d.ensure == nil {
+		return nil
+	}
+	v := e.d.ensure.svc.View(ctx, "en")
+	r := &cloud.EnsureReport{
+		State: string(v.State), Auto: string(v.Auto), Message: v.Message, Done: v.Progress.Done, Total: v.Progress.Total,
+		NextKind: string(v.NextAction.Kind), NextStep: v.NextAction.Step,
+	}
+	for _, s := range v.Steps {
+		r.Steps = append(r.Steps, cloud.EnsureStepReport{ID: s.ID, Status: string(s.Status)})
+	}
+	return r
 }
 
 // ensureUnavailable answers 503 while the sync stack is not up.

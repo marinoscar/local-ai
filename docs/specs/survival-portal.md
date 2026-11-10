@@ -72,6 +72,7 @@ Issued by `GET /portal` when `state.mode == survival` and the request passes the
   | `POST /api/v1/models/{id}/load` | `id` must be `loadable: true`; the client body is ignored and replaced by `{"wait": false, "unload_others": U}` where `U = !CanKeepOthers(id, loaded)` from the fit API ([llama-router.md](llama-router.md) §4.3): other models stay loaded only when the fit rules say the target fits next to all of them |
   | `GET /api/v1/events` | `types` limited to `mode.*`, `model.*`, `service.state`, `drive.*`, `alert.*` (other requested patterns are silently dropped, not refused) |
   | `POST /api/v1/ark/import` | the client body is ignored and replaced by the **safe default**: a real import (never a dry run) of the profile's items from the **first** connected AI-ARK drive that can be read (mount order; `ready` or `read_only`, an `unclean` drive is skipped, so several drives are never `LAI-ARK-015`), with no catalog install and no `add_to_profile` (no `node.yaml` change). An import only copies verified items in; it never deletes anything (ark-sync.md §4.14). No usable drive → `409 LAI-SVC-118`; another run active → `409 LAI-SYN-005` |
+  | `GET`, `POST`, `DELETE /api/v1/ensure` | read the picture, start a pass, cancel it (ADR-0010, [agent.md](agent.md) §3.8.33). The client body of `POST` is ignored and replaced by the **safe default**: the automatic steps from the kit, never a confirmation and never a dry run, so compiling and restarting a running service cannot be started from the Portal (they need a person at the computer or the PIN). Another run active → `409 LAI-SYN-005`; a mode change in flight → `409 LAI-AGT-022`; the sync stack not up → `503 LAI-AGT-024` |
   | `POST /api/v1/services/kiwix/restart`, `POST /api/v1/services/whisper/restart` | restart only, through these two literal routes; the generic `/services/{name}/{action}` stays operator-only, so a Portal session can never restart `llama` or stop anything. The body is ignored |
 - Every state-changing request (`POST`, `PUT`, `DELETE`) made with a Portal session also needs `Origin` equal to `http://127.0.0.1:7070`, `http://localhost:7070` or `localai://app` (CSRF defence). `Sec-Fetch-Site: same-origin` alone is **not** enough for Portal sessions (stricter than the operator-session rule of [agent.md](agent.md) §3.9.1 step 8, which accepts either). A missing or other `Origin` → `403`.
 - `/chat/` in survival mode is anonymous (auth `none`, [agent.md](agent.md) §3.9.3/§3.11.1): no Portal cookie is needed, so the WebUI works even if cookies are blocked. Outside survival `/chat/*` needs a full session or a Portal session.
@@ -146,7 +147,7 @@ Returns only what a stranger at the keyboard needs. **Never** included: tokens, 
 }
 ```
 - `clock_ok` is `false` when the system clock is earlier than the agent binary's build time, or earlier than the newest `verified_at` in any mounted root's READY.json (a clock cannot go backwards past a time it has already seen); otherwise `true`.
-- `capabilities.<x>.action` and `alerts[].action` are present when the code has a button ([doctor-codes.md](doctor-codes.md) §1.7: `ark.import`, `service.restart:kiwix`, `service.restart:whisper`, `portal.brain`); the SPA shows it as the primary button of the problem (§4.2, §4.1.8).
+- `capabilities.<x>.action` and `alerts[].action` are present when the code has a button ([doctor-codes.md](doctor-codes.md) §1.7: `ark.import`, `ensure.run`, `service.restart:kiwix`, `service.restart:whisper`, `portal.brain`); the SPA shows it as the primary button of the problem (§4.2, §4.1.8).
 - `capabilities.<x>.code` is present only when the state is caused by a problem. `needs_switch` is not a problem, so it carries no `code`. `LAI-SVC-106` ("No brain is running") is mapped here by the Portal status builder when no brain is loaded or loadable.
 - `capabilities.<x>.reason` is a stable word (`loading`, `starting`, `llama_degraded`, `not_loaded`, `no_brain`, `needs_switch`, `no_vision_model`, `disabled`, `service_degraded`, `no_voice_for_language`, `no_voice`, `no_books`, `no_map`, `no_assets`, `no_search`, `no_inventory`, `no_docs`); the SPA maps it to copy. Extra fields: `photo.vision_model`, `talk.stt` and `talk.tts_languages` (language codes of the installed voices), `library.books`, `maps.search` and `maps.gps` (`gps` is `false` until a position source exists), `manuals.items`. When the llama service is down, `chat` and `photo` are `unavailable` with `LAI-SVC-102`; `maps` with the supervisor in `down` is `LAI-SVC-034`; a voice missing for the UI language only is `LAI-SVC-021`.
 - `power.low` is on battery and at most 20 %; `power.critical` is on battery and at most 10 %. The status also derives `LAI-SVC-111` / `112` (from those flags) and `LAI-SVC-113` (`llama.backend: cpu`) as alerts when the alert manager does not already list them.
@@ -297,6 +298,8 @@ Items come from `capabilities.manuals.items` (rendered runbooks under `/docs/`).
 │ CLOCK  Mon 2 Nov 2026, 14:05                 │                                               │
 └──────────────────────────────────────────────┴───────────────────────────────────────────────┘
 ```
+**The "What this computer needs" card** (ADR-0010; `components/EnsureCard.tsx`, `ensure.ts`) is the first thing on this screen when a session exists (`session` is not `none`), above the two columns. It is state first: a mark and the agent's own sentence (`GET /api/v1/ensure`, `message`, in the UI language, which the Portal sends as `Accept-Language`): `✓ Complete: this computer has everything it needs.`, `… Installing what's missing (2 of 4)` or `! Needs you: <the one thing>`; `Automatic install is off` when `ensure.auto` is `off` and something is missing. Under it, the one next thing to do (`next_action.text`, hidden when it is `none` or `wait`). One button: **Install what's missing** (`fix.ensure`; shown when a step is `pending`, `waiting` or `failed` and no pass runs), which `POST`s `{}` to `/api/v1/ensure`. While a pass runs the button becomes **Stop installing** (`DELETE /api/v1/ensure`; "Stopped. What was already installed stays."), a progress bar shows "Step n of m" and the card polls every second (every five seconds otherwise). Below, a list "Each part" (open unless complete) with each step's title, its status in words (`ensure.step.*`) and its detail; a step with status `needs_confirm` (`whisper.build`, `restart.kiwix`) shows what it costs (`ensure.warn.*`: an hour or more of processor; the library restarts for a few seconds) and that a person must approve it at the computer (`sudo aictl ensure --yes`) or in the desktop app, because a Portal session cannot confirm it. A refusal shows the agent's message, fix and `Code:` (`LAI-SYN-005`, `LAI-AGT-022`, `LAI-AGT-024`) and the button stays usable. If the agent cannot answer, the card says so and keeps the last picture. Keyboard only: ordinary buttons in the tab order; the state change is announced politely, an error assertively. Strings: `ensure.*` and `fix.ensure*` (§4.9).
+
 Each problem shows its code, a one-sentence title and the fix, in the UI language. A problem whose alert carries an `action` (§3.5, [doctor-codes.md](doctor-codes.md) §1.7) also shows the **fix button** described in §4.2 under its fix. There is no "Leave survival mode" button here (that is in the Dashboard and needs the PIN).
 
 #### 4.1.9 Switch brain (button 8)
@@ -342,6 +345,7 @@ An **unavailable** button is still focusable and pressable. Pressing it opens a 
 | `action` | Button (`fix.*` key, §4.9) | What it does |
 |---|---|---|
 | `ark.import` | **Copy from the AI-ARK drive** | `POST /api/v1/ark/import` with `{}`: the agent replaces the body with the safe default (§3.3) |
+| `ensure.run` | **Install what's missing** | `POST /api/v1/ensure` with `{}`: the agent replaces the body with the safe default (§3.3); the button says it started and Status shows the progress (§4.1.8) |
 | `service.restart:kiwix` | **Restart the library** | `POST /api/v1/services/kiwix/restart` |
 | `service.restart:whisper` | **Restart speech** | `POST /api/v1/services/whisper/restart` |
 | `portal.brain` | **Choose a brain** | opens Switch brain (§4.1.9); calls nothing |
@@ -628,6 +632,31 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `fix.importStarted` | Copying from the drive has started. It can take a while; this page updates by itself. | Comenzó la copia desde la unidad. Puede tardar; esta página se actualiza sola. |
 | `fix.restarted` | Done: it was restarted. This page updates by itself. | Listo: se reinició. Esta página se actualiza sola. |
 | `fix.failed` | That did not work: {message} | No funcionó: {message} |
+| `fix.ensure` | Install what's missing | Instalar lo que falta |
+| `fix.ensureStarted` | Installing what's missing has started. Open Status to follow it; this page updates by itself. | Comenzó la instalación de lo que falta. Abra Estado para seguirla; esta página se actualiza sola. |
+| `ensure.title` | What this computer needs | Lo que necesita esta computadora |
+| `ensure.state.complete` | Complete | Completa |
+| `ensure.state.installing` | Installing | Instalando |
+| `ensure.state.needs_you` | Needs you | Necesita su ayuda |
+| `ensure.state.off` | Automatic install is off | La instalación automática está apagada |
+| `ensure.next` | What to do next | Qué hacer ahora |
+| `ensure.cancel` | Stop installing | Detener la instalación |
+| `ensure.progress` | Step {done} of {total} | Paso {done} de {total} |
+| `ensure.stopped` | Stopped. What was already installed stays. | Detenido. Lo que ya se instaló se queda. |
+| `ensure.steps` | Each part | Cada parte |
+| `ensure.step.ok` | Already installed | Ya instalado |
+| `ensure.step.pending` | Next in line | En espera de turno |
+| `ensure.step.waiting` | Waiting for the button | Espera el botón |
+| `ensure.step.needs_confirm` | Needs your OK | Necesita su aprobación |
+| `ensure.step.blocked` | Cannot be done yet | Aún no se puede |
+| `ensure.step.running` | Installing … | Instalando … |
+| `ensure.step.done` | Installed | Instalado |
+| `ensure.step.failed` | Failed | Falló |
+| `ensure.step.cancelled` | Stopped | Detenido |
+| `ensure.needsOk` | A person must approve this first. At the computer, type {cmd}, or use the desktop app. | Una persona debe aprobarlo antes. En la computadora, escriba {cmd}, o use la aplicación de escritorio. |
+| `ensure.warn.whisper.build` | It builds the speech program from source. It can take an hour or more and uses the whole processor. | Compila el programa de voz desde el código. Puede tardar una hora o más y usa todo el procesador. |
+| `ensure.warn.restart.kiwix` | It restarts the library for a few seconds. Anyone reading will lose their place. | Reinicia la biblioteca unos segundos. Quien esté leyendo perderá su lugar. |
+| `ensure.unavailable` | This computer cannot say what is missing right now. Try again in a minute. | Esta computadora no puede decir ahora qué le falta. Inténtelo de nuevo en un minuto. |
 
 Doctor-code titles and fixes come from the agent in the UI language (§3.5).
 

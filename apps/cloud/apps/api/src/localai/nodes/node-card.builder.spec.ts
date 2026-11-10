@@ -93,6 +93,36 @@ describe('buildNodeCard: edge cases', () => {
     expect(ark).toEqual([{ rootId: 'ark-drive', kind: 'ark_drive', present: false, colour: 'amber', label: 'Drive not plugged in · last synced 41 days ago', driveAgeDays: 41 }]);
   });
 
+  describe('the ensure summary ("Install what\'s missing", issue #480)', () => {
+    const state = (ensure: unknown) => ({ ...(LAB_3_SOURCES[0]!.node.lastState as object), ensure });
+    const block = {
+      state: 'needs_you',
+      auto: 'on',
+      message: 'Needs you',
+      progress: { done: 1, total: 3 },
+      next_action: { kind: 'confirm', step: 'whisper.build' },
+      steps: [{ id: 'whisper.build', status: 'needs_confirm' }],
+    };
+
+    it('is null for a snapshot without the block (an agent that predates it): the card still builds', () => {
+      expect(LAB_3_SOURCES.map((source) => buildNodeCard(source, LAB_CONTEXT).ensure)).toEqual([null, null, null]);
+      expect(buildNodeCard(with_(0, { lastState: null }), LAB_CONTEXT).ensure).toBeNull();
+    });
+
+    it('is a summary of the block: codes only, never the sentence or the step list', () => {
+      const card = buildNodeCard(with_(0, { lastState: state(block) }), LAB_CONTEXT);
+      expect(card.ensure).toEqual({ state: 'needs_you', auto: 'on', done: 1, total: 3, nextKind: 'confirm', nextStep: 'whisper.build' });
+      expect(LabNodesResponseSchema.parse({ summary: summarize([card], 0), nodes: [card] }).nodes[0]!.ensure).toEqual(card.ensure);
+    });
+
+    it('reads a damaged block without throwing: an unknown state is no block, unknown words fall back', () => {
+      expect(buildNodeCard(with_(0, { lastState: state({ ...block, state: 'exploded' }) }), LAB_CONTEXT).ensure).toBeNull();
+      expect(buildNodeCard(with_(0, { lastState: state('x') }), LAB_CONTEXT).ensure).toBeNull();
+      const card = buildNodeCard(with_(0, { lastState: state({ state: 'complete', auto: 'weird', progress: { done: -4, total: 'x' }, next_action: { kind: 'weird', step: 5 } }) }), LAB_CONTEXT);
+      expect(card.ensure).toEqual({ state: 'complete', auto: 'on', done: 0, total: 0, nextKind: 'none', nextStep: null });
+    });
+  });
+
   it('puts the default model first among the loaded ones and reads a damaged lastState without throwing', () => {
     const models = [
       { modelId: 'b-model-q4', status: 'loaded', isDefault: false },

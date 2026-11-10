@@ -1,7 +1,7 @@
 // The PIN window's texts and decisions (docs/specs/desktop.md 4.6). Pure data and functions: the page and its unit test import it.
 import type { Lang, PinResult } from '../../shared/types';
 
-export type PinPurpose = 'leave-survival' | 'rotate-key';
+export type PinPurpose = 'leave-survival' | 'rotate-key' | 'confirm-ensure';
 
 interface Bilingual {
   en: string;
@@ -15,6 +15,8 @@ export const STRINGS = {
   titleRotateKey: { en: 'Rotate the API key', es: 'Cambiar la clave de API' },
   promptLeaveSurvival: { en: 'Enter the administrator PIN to leave survival mode.', es: 'Escribe el PIN de administrador para salir del modo supervivencia.' },
   promptRotateKey: { en: 'Enter the administrator PIN to create a new API key.', es: 'Escribe el PIN de administrador para crear una clave de API nueva.' },
+  titleConfirmEnsure: { en: 'Approve the install', es: 'Aprobar la instalación' },
+  promptConfirmEnsure: { en: 'Enter the administrator PIN to approve compiling or restarting a running service.', es: 'Escribe el PIN de administrador para aprobar la compilación o el reinicio de un servicio en marcha.' },
   label: { en: 'PIN (4 to 8 digits)', es: 'PIN (de 4 a 8 dígitos)' },
   ok: { en: 'OK', es: 'Aceptar' },
   cancel: { en: 'Cancel', es: 'Cancelar' },
@@ -37,10 +39,25 @@ export const STRINGS = {
 export const pick = (text: Bilingual, lang: Lang): string => text[lang];
 const fill = (text: string, n: number): string => text.replace('{n}', String(n));
 
+const PURPOSES: readonly PinPurpose[] = ['leave-survival', 'rotate-key', 'confirm-ensure'];
+
+/** The title and prompt of a purpose. */
+export function textsFor(purpose: PinPurpose): { title: Bilingual; prompt: Bilingual } {
+  switch (purpose) {
+    case 'rotate-key':
+      return { title: STRINGS.titleRotateKey, prompt: STRINGS.promptRotateKey };
+    case 'confirm-ensure':
+      return { title: STRINGS.titleConfirmEnsure, prompt: STRINGS.promptConfirmEnsure };
+    default:
+      return { title: STRINGS.titleLeaveSurvival, prompt: STRINGS.promptLeaveSurvival };
+  }
+}
+
 /** `?purpose=rotate-key&lang=es`. Anything else falls back to the safest reading (leave survival, English). */
 export function parseQuery(search: string): { purpose: PinPurpose; lang: Lang } {
   const params = new URLSearchParams(search);
-  return { purpose: params.get('purpose') === 'rotate-key' ? 'rotate-key' : 'leave-survival', lang: params.get('lang') === 'es' ? 'es' : 'en' };
+  const asked = params.get('purpose');
+  return { purpose: PURPOSES.find((p) => p === asked) ?? 'leave-survival', lang: params.get('lang') === 'es' ? 'es' : 'en' };
 }
 
 /** Digits only, at most 8: what the field keeps of whatever was typed or pasted. */

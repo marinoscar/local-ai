@@ -1,4 +1,4 @@
-// The command registry (docs/specs/cloud-app.md section 3.7): a CLOSED set of 14 command types, each with a strict
+// The command registry (docs/specs/cloud-app.md section 3.7): a CLOSED set of 15 command types, each with a strict
 // Zod schema for its params (what the cloud may ask) and its result (what the agent may answer). Unknown keys are
 // rejected on both sides (`.strict()` here, `DisallowUnknownFields` in the Go agent), so the cloud can queue exactly
 // these and nothing else. The Go agent mirrors it in `agent/internal/cloud/jobs`; both load the shared examples in
@@ -166,6 +166,19 @@ export const COMMANDS = {
       })
       .strict(),
   },
+  'localai.ensure.run': {
+    // agent API: POST /ensure with the safe default (the automatic steps from the node's own kit, no confirmation, no dry
+    // run). Compiling and restarting a running service need a person at the node, so the cloud cannot ask for them: the
+    // params are exactly `{}`. Returns at once; the progress arrives in the snapshots' `ensure` block.
+    params: z.object({}).strict(),
+    result: z
+      .object({
+        started: z.boolean(), // false = a pass was already running, or there was nothing to do
+        state: z.enum(['complete', 'installing', 'needs_you', 'off']),
+        pending_steps: z.number().int().min(0).max(16),
+      })
+      .strict(),
+  },
   'localai.agent.update': {
     // agent self-update (agent.md section 4.10): GitHub release, sha256 + minisign, rollback
     params: z.object({ version: Semver }).strict(),
@@ -187,7 +200,7 @@ export const COMMAND_TYPES = Object.keys(COMMANDS) as CommandType[];
 /** The prefix the cloud prepends to the names an agent sends (`model.load` -> `localai.model.load`). */
 export const COMMAND_TYPE_PREFIX = 'localai.';
 
-/** Whether `value` is one of the 14 command types (with the `localai.` prefix). */
+/** Whether `value` is one of the 15 command types (with the `localai.` prefix). */
 export function isCommandType(value: unknown): value is CommandType {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(COMMANDS, value);
 }

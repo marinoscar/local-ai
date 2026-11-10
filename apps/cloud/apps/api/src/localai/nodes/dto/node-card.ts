@@ -5,6 +5,23 @@
 // route's `?reveal=tailnet`.
 import { z } from 'zod';
 
+/**
+ * "Install what's missing" at a glance (ADR-0010, issue #480): derived from the snapshot's `ensure` block, `null` when the node
+ * has not sent one (an agent that predates it, or no snapshot yet). The app writes the words in the viewer's language from
+ * these codes: `nextStep` is a step id such as `tool.piper`, never a path.
+ */
+export const EnsureCardSchema = z
+  .object({
+    state: z.enum(['complete', 'installing', 'needs_you', 'off']),
+    auto: z.enum(['on', 'ask', 'off']),
+    done: z.number().int().min(0),
+    total: z.number().int().min(0),
+    nextKind: z.enum(['none', 'wait', 'press_button', 'confirm', 'sync', 'fix']),
+    nextStep: z.string().nullable(),
+  })
+  .strict();
+export type EnsureCardDto = z.infer<typeof EnsureCardSchema>;
+
 export const NodeCardDtoSchema = z
   .object({
     nodeId: z.string(),
@@ -44,6 +61,7 @@ export const NodeCardDtoSchema = z
     catalogVersion: z.string().nullable(),
     catalogBehind: z.boolean(),
     alerts: z.object({ active: z.number().int(), critical: z.number().int() }).strict(),
+    ensure: EnsureCardSchema.nullable(),
   })
   .strict();
 export type NodeCardDto = z.infer<typeof NodeCardDtoSchema>;

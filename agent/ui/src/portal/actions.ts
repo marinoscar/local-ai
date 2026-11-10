@@ -7,6 +7,7 @@ import type { Key } from "./i18n/i18n";
 
 export type FixAction =
   | "ark.import"
+  | "ensure.run"
   | "service.restart:kiwix"
   | "service.restart:whisper"
   | "portal.brain";
@@ -28,6 +29,12 @@ export const ACTIONS: Record<FixAction, ActionInfo> = {
     command: "aictl ark import",
     path: "/api/v1/ark/import",
     done: "fix.importStarted",
+  },
+  "ensure.run": {
+    label: "fix.ensure",
+    command: "aictl ensure",
+    path: "/api/v1/ensure",
+    done: "fix.ensureStarted",
   },
   "service.restart:kiwix": {
     label: "fix.restartLibrary",

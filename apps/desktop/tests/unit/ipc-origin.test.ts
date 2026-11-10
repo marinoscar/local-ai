@@ -8,6 +8,7 @@ import {
   CHANNELS,
   type BridgeDeps,
   type HandlerTable,
+  type EnsureActions,
   type KeyActions,
   type SenderEvent,
   buildDesktopStatus,
@@ -476,6 +477,38 @@ describe('what an allowed shell page can do', () => {
     // An iframe inside the page is not the page.
     await expect(wrapped[CHANNELS.revealKey]!(from(INFO, 1, {}))).rejects.toThrow();
     expect(keys.reveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("the ensure calls work from the ensure page only, and the page's list of steps is judged by the action, not here", async () => {
+    const ensure: EnsureActions = {
+      view: vi.fn(async () => ({ ok: false as const, code: 'x' })),
+      start: vi.fn(async () => ({ ok: false as const, code: 'x' })),
+      cancel: vi.fn(async () => ({ ok: false as const, code: 'x' })),
+      confirm: vi.fn(async () => ({ ok: false as const, code: 'x' })),
+    };
+    const wrapped = wrap(makeDeps({ ensure }).deps);
+    const PAGE = 'localai://app/ensure/';
+    const channels = [CHANNELS.ensureView, CHANNELS.ensureStart, CHANNELS.ensureCancel, CHANNELS.ensureConfirm];
+    for (const channel of channels) {
+      for (const url of [SHELL, 'localai://app/lab/', 'localai://app/connection-info/', 'localai://app/error/?code=LAI-DSK-004', AGENT, 'https://ai.marin.cr/lab/']) await expect(wrapped[channel]!(from(url)), `${channel} from ${url}`).rejects.toThrow();
+      // An iframe inside the page is not the page.
+      await expect(wrapped[channel]!(from(PAGE, 1, {}))).rejects.toThrow();
+    }
+    for (const fn of Object.values(ensure)) expect(fn).not.toHaveBeenCalled();
+    await wrapped[CHANNELS.ensureView]!(from(PAGE));
+    await wrapped[CHANNELS.ensureStart]!(from(PAGE), { confirm: ['whisper.build'] });
+    await wrapped[CHANNELS.ensureCancel]!(from(PAGE));
+    await wrapped[CHANNELS.ensureConfirm]!(from(PAGE), ['restart.kiwix']);
+    expect(ensure.view).toHaveBeenCalledTimes(1);
+    // The start button takes no argument from the page: whatever it sends never reaches the action.
+    expect(ensure.start).toHaveBeenCalledWith();
+    expect(ensure.cancel).toHaveBeenCalledTimes(1);
+    expect(ensure.confirm).toHaveBeenCalledWith(['restart.kiwix']);
+  });
+
+  it('without an ensure action the channels answer not_implemented', async () => {
+    const wrapped = wrap(makeDeps().deps);
+    expect(await wrapped[CHANNELS.ensureStart]!(from('localai://app/ensure/'))).toEqual({ ok: false, code: 'not_implemented' });
   });
 
   it('the connection-info page of the Vite dev origin counts when the host passes it (unpackaged builds)', async () => {

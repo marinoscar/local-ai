@@ -78,6 +78,7 @@ The set is **closed** (v1): adding an action means a new row here, the constant 
 | Action | Button (Portal, en) | What it does | Typed command | Codes |
 |---|---|---|---|---|
 | `ark.import` | Copy from the AI-ARK drive | `POST /api/v1/ark/import` with the safe default: the first connected, usable AI-ARK drive, the profile's items, nothing deleted (survival-portal.md §3.3) | `aictl ark import` | LAI-LLM-008, LAI-CLD-025, LAI-ARK-020, LAI-SVC-001, LAI-SVC-010, LAI-SVC-022, LAI-SVC-030, LAI-SVC-031, LAI-SVC-032, LAI-KIT-040, LAI-DRL-011 |
+| `ensure.run` | Install what's missing | `POST /api/v1/ensure` with the safe default: the automatic steps from the kit, no confirmation (compiling and restarting a running service still ask a person; agent.md §3.8.33) | `aictl ensure` | LAI-SYN-061, LAI-SVC-003, LAI-SVC-020, LAI-KIT-010, LAI-KIT-011, LAI-KIT-051, LAI-KIT-052 |
 | `service.restart:kiwix` | Restart the library | `POST /api/v1/services/kiwix/restart` | `aictl services restart kiwix` | LAI-SVC-002, LAI-SVC-005, LAI-DRL-030 |
 | `service.restart:whisper` | Restart speech | `POST /api/v1/services/whisper/restart` | `aictl services restart whisper` | LAI-SVC-011, LAI-DRL-032 |
 | `portal.brain` | Choose a brain | opens the Portal's Switch brain screen (`/portal/brain`); calls nothing | — | LAI-SVC-102, LAI-SVC-106, LAI-SVC-107, LAI-DRL-090 |

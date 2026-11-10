@@ -45,13 +45,14 @@ type fakes struct {
 	status   *fakeStatus
 	state    *fakeState
 	hw       *fakeHardware
+	ensure   *fakeEnsure
 	clock    *fake.Clock
 }
 
 func newFakes() *fakes {
 	f := &fakes{
 		router: &fakeRouter{}, models: &fakeModels{}, ark: &fakeArk{}, modes: &fakeModes{}, services: &fakeServices{},
-		logs: &fakeLogs{}, catalog: &fakeCatalog{}, link: &fakeLink{}, state: &fakeState{}, hw: &fakeHardware{},
+		logs: &fakeLogs{}, catalog: &fakeCatalog{}, link: &fakeLink{}, state: &fakeState{}, hw: &fakeHardware{}, ensure: &fakeEnsure{},
 		clock: fake.NewClock(t0),
 	}
 	f.modes.info = modes.Info{Mode: modes.Online, Effective: modes.Online}
@@ -63,7 +64,7 @@ func (f *fakes) deps() Deps {
 	return Deps{
 		Router: f.router, Models: f.models, Ark: f.ark, Modes: f.modes, Services: f.services, Logs: f.logs,
 		Catalog: f.catalog, Link: f.link, Status: f.status, State: f.state, Hardware: f.hw,
-		Clock: fakeClock{f.clock},
+		Ensure: f.ensure, Clock: fakeClock{f.clock},
 	}
 }
 
@@ -381,3 +382,17 @@ func (h *fakeHardware) Refresh(context.Context) hardware.Snapshot {
 
 func i64(n int64) *int64   { return &n }
 func str(s string) *string { return &s }
+
+type fakeEnsure struct {
+	mu     sync.Mutex
+	actors []audit.Actor
+	res    EnsureStarted
+	err    error
+}
+
+func (f *fakeEnsure) StartEnsure(_ context.Context, actor audit.Actor) (EnsureStarted, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.actors = append(f.actors, actor)
+	return f.res, f.err
+}

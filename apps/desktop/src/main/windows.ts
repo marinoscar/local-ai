@@ -190,10 +190,11 @@ export interface ChildWindowInit {
 }
 
 /** The modal shell windows (desktop.md 4.6): the PIN prompt and the connection info. */
-export type ModalName = 'pin' | 'connection-info';
+export type ModalName = 'pin' | 'connection-info' | 'ensure';
 
 export const MODAL_WINDOWS: Readonly<Record<ModalName, { page: string; width: number; height: number; preload: 'shell.js' | 'pin.js'; title: { en: string; es: string } }>> = {
   'connection-info': { page: 'connection-info', width: 760, height: 700, preload: 'shell.js', title: { en: 'Connection info', es: 'Datos de conexión' } },
+  ensure: { page: 'ensure', width: 640, height: 720, preload: 'shell.js', title: { en: "Install what's missing", es: 'Instalar lo que falta' } },
   pin: { page: 'pin', width: 400, height: 420, preload: 'pin.js', title: { en: 'Administrator PIN', es: 'PIN de administrador' } },
 };
 
@@ -504,7 +505,7 @@ class Manager implements WindowManager {
       return existing;
     }
     const spec = MODAL_WINDOWS[name];
-    const over = name === 'pin' ? this.modalWindow('connection-info') : null;
+    const over = name === 'pin' ? (this.modalWindow('ensure') ?? this.modalWindow('connection-info')) : null;
     const parent: ModalParent = over ? { child: over } : this.#main.isVisible() && !this.#main.isMinimized() ? { main: this.#main } : null;
     const win = this.#o.factory.createModalWindow(
       { url: this.#o.shellPageUrl(spec.page, query), width: spec.width, height: spec.height, title: spec.title[this.#o.lang()], preload: spec.preload },

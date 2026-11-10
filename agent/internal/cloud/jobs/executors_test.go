@@ -835,3 +835,74 @@ func TestHandlerRefusesParamsOfAnotherType(t *testing.T) {
 	_, err := f.handler(t, cloud.TypeModelLoad).Run(context.Background(), job("job-1"), struct{}{})
 	wantCode(t, err, doctor.AGT099)
 }
+
+// ---------------------------------------------------------------------------------------------------
+// ensure.run (ADR-0010)
+
+func TestEnsureRun(t *testing.T) {
+	t.Run("starts a pass with the safe default and answers what is left", func(t *testing.T) {
+		f := newFakes()
+		f.ensure.res = EnsureStarted{Running: true, State: "installing", Pending: 3}
+		out, err := f.run(t, cloud.TypeEnsureRun, `{}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := resultJSON(t, cloud.TypeEnsureRun, out); got != `{"started":true,"state":"installing","pending_steps":3}` {
+			t.Errorf("result = %s", got)
+		}
+		if len(f.ensure.actors) != 1 || f.ensure.actors[0] != audit.Cloud("job-1") {
+			t.Errorf("actors = %+v", f.ensure.actors)
+		}
+	})
+	t.Run("nothing to do or a pass already running is not an error", func(t *testing.T) {
+		f := newFakes()
+		f.ensure.res = EnsureStarted{State: "complete"}
+		out, err := f.run(t, cloud.TypeEnsureRun, `{}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := resultJSON(t, cloud.TypeEnsureRun, out); got != `{"started":false,"state":"complete","pending_steps":0}` {
+			t.Errorf("result = %s", got)
+		}
+	})
+	t.Run("a state or count outside the schema is made safe", func(t *testing.T) {
+		f := newFakes()
+		f.ensure.res = EnsureStarted{State: "exploded", Pending: -2}
+		out, err := f.run(t, cloud.TypeEnsureRun, `{}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := resultJSON(t, cloud.TypeEnsureRun, out); got != `{"started":false,"state":"needs_you","pending_steps":0}` {
+			t.Errorf("result = %s", got)
+		}
+	})
+	t.Run("the engine's refusals end the command with their code", func(t *testing.T) {
+		for _, c := range []struct {
+			code   string
+			status int
+		}{{doctor.SYN005, 409}, {doctor.AGT024, 503}} {
+			f := newFakes()
+			f.ensure.err = api.NewError(c.code, c.status, nil)
+			_, err := f.run(t, cloud.TypeEnsureRun, `{}`)
+			wantCode(t, err, c.code)
+		}
+	})
+	t.Run("params are strict: no confirm, no dry run, nothing", func(t *testing.T) {
+		f := newFakes()
+		h := f.handler(t, cloud.TypeEnsureRun)
+		for _, raw := range []string{`{"confirm":["whisper.build"]}`, `{"dry_run":true}`, `{"x":1}`, `[]`} {
+			if _, err := h.Decode(json.RawMessage(raw)); err == nil {
+				t.Errorf("params %s were accepted", raw)
+			}
+		}
+	})
+	t.Run("without the engine the type is left out", func(t *testing.T) {
+		d := newFakes().deps()
+		d.Ensure = nil
+		for _, h := range Handlers(d) {
+			if h.Type() == cloud.TypeEnsureRun {
+				t.Fatal("ensure.run is registered without an engine")
+			}
+		}
+	})
+}
