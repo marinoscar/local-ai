@@ -333,7 +333,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-SYN-051 | info | Content no longer in the profile is using disk space | Run `aictl ark prune --orphans` if you don't need it. |
 | LAI-SYN-052 | warning | An item's MANIFEST is missing or damaged | Run `aictl ark verify`; the item will be fetched again. |
 | LAI-SYN-060 | warning | Couldn't compute the package list for the rebuild kit | Report it: a package name in the catalog probably changed. The old package set is kept. |
-| LAI-SYN-061 | error | A tool sync needs is missing (pmtiles, git, apt-get) | Run `sudo install-node.sh --repair`. |
+| LAI-SYN-061 | error | A tool sync needs is missing (pmtiles, git, apt-get) | Press **Install what's missing**, or run `aictl ensure`. If that is not enough, run `sudo install-node.sh --repair`. |
 | LAI-SYN-062 | warning | Manuals were made without the real lab values | Install it with `sudo aictl docs inventory import <file>` or plug in the ark drive, then sync. |
 | LAI-SYN-063 | warning | The rebuild kit has packages from vendor repositories whose signature was not checked | Pin the repository's key and set sync.apt_unverified_repos to refuse. |
 | LAI-SYN-070 | error | A drive copy no longer matches its own checksum | That copy is damaged. Sync the drive on a computer with internet, or use another drive. |
@@ -370,7 +370,7 @@ Every action is something a Portal session may already do, so a button never nee
 |---|---|---|---|
 | LAI-SVC-001 | error | The library has no books | Plug in the ark drive, or run `aictl ark import`. |
 | LAI-SVC-002 | error | The library service isn't running | Press **Restart library**, or run `aictl services restart kiwix`. |
-| LAI-SVC-003 | error | The library program isn't installed | Run `sudo install-node.sh --repair`. |
+| LAI-SVC-003 | error | The library program isn't installed | Press **Install what's missing**, or run `aictl ensure`. If that is not enough, run `sudo install-node.sh --repair`. |
 | LAI-SVC-004 | warning | One library book couldn't be opened | Run `aictl ark verify`. The other books still work. |
 | LAI-SVC-005 | warning | The library list couldn't be rebuilt; the old list is used | Run `aictl services restart kiwix`. If it repeats, run `aictl doctor`. |
 | LAI-SVC-010 | error | No speech-recognition model is installed | Run `aictl ark sync --item whisper-small` (online) or `aictl ark import` from the drive. |
@@ -380,7 +380,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-SVC-014 | warning | The recording couldn't be used (wrong format, too long, or silent) | Try again, speak closer to the microphone, and keep it under 2 minutes. |
 | LAI-SVC-015 | warning | Too many voice requests at once | Wait a few seconds and try again. |
 | LAI-SVC-016 | warning | Speech recognition took too long | Try a shorter recording. |
-| LAI-SVC-020 | error | The voice program isn't installed | Run `sudo install-node.sh --repair`. |
+| LAI-SVC-020 | error | The voice program isn't installed | Press **Install what's missing**, or run `aictl ensure`. If that is not enough, run `sudo install-node.sh --repair`. |
 | LAI-SVC-021 | warning | No voice for this language; another voice was used | Install a voice for the language with `aictl ark sync`. |
 | LAI-SVC-022 | warning | No voice is installed | Answers are shown as text. Install a voice with `aictl ark import` or `aictl ark sync`. |
 | LAI-SVC-023 | error | The voice program failed | Try again. If it repeats, run `aictl doctor`. |
@@ -511,8 +511,8 @@ Every action is something a Portal session may already do, so a button never nee
 |---|---|---|---|
 | LAI-KIT-001 | error | A source package in the kit is damaged | Run `aictl kit verify --full`; sync the drive on a computer with internet. |
 | LAI-KIT-002 | error | The kit doesn't have the needed llama.cpp version | Sync the kit with internet, or choose a commit that is in the kit. |
-| LAI-KIT-010 | error | Build tools are missing | Run `sudo aictl kit install-debs`. |
-| LAI-KIT-011 | error | The CUDA compiler is missing or doesn't match the driver | Run `sudo aictl kit install-debs`, or rebuild with `--backend vulkan`. |
+| LAI-KIT-010 | error | Build tools are missing | Press **Install what's missing**, or run `aictl ensure`; with no agent, run `sudo aictl kit install-debs`. |
+| LAI-KIT-011 | error | The CUDA compiler is missing or doesn't match the driver | Press **Install what's missing**, or run `aictl ensure`; or rebuild with `--backend vulkan`. |
 | LAI-KIT-012 | error | No real Vulkan graphics device was found | Install the graphics driver from the kit, or use `--backend cpu`. |
 | LAI-KIT-013 | error | The NVIDIA driver isn't loaded | Restart and choose the previous kernel in "Advanced options", or install the driver from the kit. |
 | LAI-KIT-014 | error | Not enough disk space to build | Free 5 GB and try again. |
@@ -531,6 +531,8 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-KIT-048 | error | The ready-made build doesn't fit this computer | Nothing was changed. Build from the kit source instead: `sudo aictl rebuild-llama --from-kit` (or `rebuild-whisper`). |
 | LAI-KIT-049 | error | A build could not be exported to the kit | The kit's other files are untouched. Free some space on the drive, then run `sudo aictl kit export-build` again. |
 | LAI-KIT-050 | error | No configuration backup of this node was found | Plug in the AI-ARK drive that holds it, or give the file: `sudo aictl backup-config --restore <file>`. With no backup, skip this step. |
+| LAI-KIT-051 | error | Installing what this computer is missing failed | Nothing was replaced. Press **Install what's missing** to try again, or run `aictl ensure`; if it fails again, `aictl ensure --dry-run` names the step. |
+| LAI-KIT-052 | warning | This computer is missing something that needs your OK to install | Press **Install what's missing** or run `aictl ensure`; building from source and restarting a running service ask you first. |
 
 ### `LAI-DRL` — owner: [drill.md](drill.md)
 > Copied from [drill.md](drill.md) §8 (authoritative; Spanish fixes are there).

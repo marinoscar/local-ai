@@ -1,0 +1,77 @@
+{
+  "state": "needs_you",
+  "auto": "ask",
+  "message": "Needs you: 5 things are ready to install. Press Install what's missing.",
+  "next_action": {
+    "kind": "press_button",
+    "text": "Press Install what's missing.",
+    "step": "apt.packages"
+  },
+  "progress": {
+    "done": 0,
+    "total": 5
+  },
+  "steps": [
+    {
+      "id": "apt.packages",
+      "kind": "install_packages",
+      "status": "waiting",
+      "target": "packages",
+      "item": "kit-debs",
+      "packages": [
+        "cmake",
+        "curl",
+        "git"
+      ],
+      "needs_confirmation": false,
+      "title": "System packages for the AI engine",
+      "detail": "Install 3 packages from the kit."
+    },
+    {
+      "id": "tool.kiwix-tools",
+      "kind": "install_tool",
+      "status": "waiting",
+      "target": "kiwix-tools",
+      "item": "kit-kiwix-tools",
+      "version": "3.7.0",
+      "needs_confirmation": false,
+      "title": "Library tools (kiwix-tools)",
+      "detail": "Install version 3.7.0 from the kit."
+    },
+    {
+      "id": "tool.pmtiles",
+      "kind": "install_tool",
+      "status": "waiting",
+      "target": "pmtiles",
+      "item": "kit-pmtiles",
+      "version": "1.22",
+      "needs_confirmation": false,
+      "title": "Map tools (pmtiles)",
+      "detail": "Install version 1.22 from the kit."
+    },
+    {
+      "id": "tool.piper",
+      "kind": "install_tool",
+      "status": "waiting",
+      "target": "piper",
+      "item": "kit-piper",
+      "version": "2023.11.14-2",
+      "needs_confirmation": false,
+      "title": "Voice tools (piper)",
+      "detail": "Install version 2023.11.14-2 from the kit."
+    },
+    {
+      "id": "whisper.restore",
+      "kind": "restore_whisper",
+      "status": "waiting",
+      "target": "whisper",
+      "item": "kit-whisper-cpp",
+      "needs_confirmation": false,
+      "title": "Speech-to-text program (ready-made)",
+      "detail": "Install it from the kit."
+    }
+  ],
+  "run": null,
+  "dry_run": false,
+  "checked_at": "2026-11-10T12:00:00Z"
+}

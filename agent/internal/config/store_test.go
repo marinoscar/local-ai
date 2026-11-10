@@ -229,7 +229,7 @@ func TestUpdateKeepsTheMapKeyOrderOfTheFile(t *testing.T) {
 	for i := 0; i < len(m.Content); i += 2 {
 		keys = append(keys, m.Content[i].Value)
 	}
-	want := "schema_version node profile profile_overrides catalog llama tailscale cloud sync kiwix whisper piper maps portal update ui ports logging"
+	want := "schema_version node profile profile_overrides catalog llama tailscale cloud sync kiwix whisper piper maps portal ensure update ui ports logging"
 	if strings.Join(keys, " ") != want {
 		t.Errorf("key order changed:\n got  %v\n want %s", keys, want)
 	}

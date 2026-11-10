@@ -1,0 +1,9 @@
+exit 0
+--- stdout
+i A esta computadora le faltan 1 cosa(s) que el kit tiene. Instalándolas ahora.
+Lo que falta:
+  → Library tools (kiwix-tools): Instalar la versión 3.7 desde el kit.
+✓ Library tools (kiwix-tools): Installed from the kit (3.7).
+✓ Completo: esta computadora tiene todo lo que necesita.
+--- stderr
+… Instalando lo que falta (1 de 1)

@@ -55,6 +55,7 @@ tags:
   - {name: cloud, description: "The cloud link."}
   - {name: drill, description: "The offline-readiness drill (owned by drill.md)."}
   - {name: docs, description: "The rendered manuals index."}
+  - {name: ensure, description: "Keeping the node complete: installing what the kit holds (ADR-0010)."}
 
 paths:
   /health:
@@ -1400,6 +1401,163 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
           description: "LAI-SYN-005: a sync run is active (wait for it, or cancel it). LAI-CAT-001: no catalog is loaded, so orphans cannot be told apart (details.reason no_catalog)."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /ensure:
+    get:
+      tags: [ensure]
+      operationId: getEnsure
+      summary: What this computer is missing, and what the agent is doing about it
+      description: |
+        The picture a node card or the Portal shows: `state` is `complete` (nothing left to install),
+        `installing` (a pass runs, or one is about to), `needs_you` (a step needs a person: a confirmation, a
+        failure, a kit item that is missing, or `ensure.auto: ask`) or `off` (`ensure.auto: off` and something is
+        missing). `message` and `next_action.text` are plain words in the language of the request; `steps` lists
+        each thing the profile wants with its status. It reads the disk and the kit's manifests only (nothing is
+        hashed, nothing is changed) and is cached for a few seconds. agent.md section 3.8.33. rebuild-kit.md
+        section 4.5.
+      x-localai-auth: [op, portal]
+      x-localai-timeout: "5 s"
+      responses:
+        "200":
+          description: The picture.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EnsureView"}
+              examples:
+                complete:
+                  value:
+                    state: complete
+                    auto: "on"
+                    message: "Complete: this computer has everything it needs."
+                    next_action: {kind: none, text: "Nothing to do."}
+                    progress: {done: 0, total: 0}
+                    steps:
+                      - {id: tool.kiwix-tools, kind: install_tool, status: ok, target: kiwix-tools, item: kit-kiwix-tools, version: "3.7.0-2", needs_confirmation: false, title: "Library tools (kiwix-tools)", detail: "Installed (3.7.0-2)."}
+                    run: null
+                    dry_run: false
+                    checked_at: "2026-11-10T12:00:00Z"
+                installing:
+                  value:
+                    state: installing
+                    auto: "on"
+                    message: "Installing what's missing (2 of 3)"
+                    next_action: {kind: wait, text: "Wait: it keeps going by itself. You can cancel it."}
+                    progress: {done: 1, total: 3, current: tool.pmtiles}
+                    steps:
+                      - {id: apt.packages, kind: install_packages, status: done, target: packages, item: kit-debs, packages: [cmake, git], needs_confirmation: false, title: "System packages for the AI engine", detail: "Installed from the kit."}
+                      - {id: tool.pmtiles, kind: install_tool, status: running, target: pmtiles, item: kit-pmtiles, version: "1.22.1", needs_confirmation: false, title: "Map tools (pmtiles)", detail: "Installing now."}
+                      - {id: tool.piper, kind: install_tool, status: pending, target: piper, item: kit-piper, version: "2023.11.14-2", needs_confirmation: false, title: "Voice tools (piper)", detail: "Install version 2023.11.14-2 from the kit."}
+                    run: {id: "ens-1793534400000000000", trigger: sync_done, dry_run: false, started_at: "2026-11-10T12:00:00Z"}
+                    dry_run: false
+                    checked_at: "2026-11-10T12:00:03Z"
+                needs_you:
+                  value:
+                    state: needs_you
+                    auto: "on"
+                    message: "Needs you: building the speech-to-text program takes a long time and needs your OK."
+                    next_action: {kind: confirm, text: "Confirm it when you are ready.", step: whisper.build}
+                    progress: {done: 0, total: 1}
+                    steps:
+                      - {id: whisper.build, kind: build_whisper, status: needs_confirm, target: whisper, item: kit-whisper-cpp, needs_confirmation: true, title: "Speech-to-text program (build from source)", detail: "Building it takes a long time, so it starts only when you confirm."}
+                    run: null
+                    dry_run: false
+                    checked_at: "2026-11-10T12:00:00Z"
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+    post:
+      tags: [ensure]
+      operationId: startEnsure
+      summary: Install what is missing, now
+      description: |
+        Starts one pass over the steps that wait (the button **Install what's missing**, `aictl ensure`).
+        Everything from the kit is installed one step at a time, only from a kit item that verifies at that
+        moment, through a fixed list of actions. Answers `202` with the picture when a pass runs (started now or
+        already running: asking twice is not an error), `200` with the picture for `dry_run: true` (nothing is
+        written, the steps that would run are `pending`) and when there was nothing to do. `confirm` names steps
+        with status `needs_confirm` (`whisper.build`, `restart.kiwix`): compiling and restarting a service that
+        runs never happen without it, and sending it needs admin* (`403` with `details.pin_required` for an
+        operator without the PIN; not needed for a dry run). A confirmation that names no step waiting for one
+        is `400`. A Portal session has its body ignored and replaced by the safe default: the automatic steps,
+        nothing that needs a confirmation, never a dry run. Allowed in every mode (it uses only what is on disk).
+        agent.md section 3.8.33.
+      x-localai-auth: [op, portal]
+      x-localai-auth-note: "Portal: body ignored and replaced by the safe default (the automatic steps only). confirm needs admin*."
+      x-localai-timeout: "10 s"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EnsureRequest"}
+            examples:
+              start: {value: {dry_run: false, confirm: []}}
+              compile: {value: {confirm: [whisper.build]}}
+      responses:
+        "200":
+          description: The picture (dry run, or nothing to do).
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EnsureView"}
+        "202":
+          description: A pass is running; poll `GET /ensure`.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EnsureView"}
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+          description: "LAI-AGT-020: a `confirm` entry is not a step id or names no step waiting for a confirmation (details.field confirm, details.reason unknown_step or not_waiting, details.step)."
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-SYN-005: a sync, verify or import run is active (the kit may be changing; try again when it ends). LAI-AGT-022: a mode change is in flight."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+    delete:
+      tags: [ensure]
+      operationId: cancelEnsure
+      summary: Stop installing
+      description: |
+        Cancels the running pass: the program it runs is stopped, the steps not started are not started
+        (`cancelled`), and what was installed stays (every step is complete or not done at all). `202` with the
+        picture when a pass was running, `200` when none was (cancelling twice is not an error). The next pass
+        starts from what the computer has. agent.md section 3.8.33.
+      x-localai-auth: [op, portal]
+      x-localai-timeout: "10 s"
+      responses:
+        "200":
+          description: Nothing was running.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EnsureView"}
+        "202":
+          description: The pass was stopped.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EnsureView"}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "413": {$ref: "#/components/responses/TooLarge"}
         "415": {$ref: "#/components/responses/UnsupportedMediaType"}
         "500": {$ref: "#/components/responses/Internal"}
@@ -3609,6 +3767,82 @@ components:
               reason: {type: string, enum: [last_verified_copy, read_only, replacement_unverified]}
               kind: {type: string, enum: [orphan, trash]}
         freed_bytes: {type: integer, minimum: 0}
+
+    EnsureRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        dry_run: {type: boolean, default: false}
+        confirm:
+          description: "Step ids with status needs_confirm that the caller confirms (needs admin*)."
+          type: array
+          maxItems: 8
+          items: {type: string, enum: [whisper.build, restart.kiwix]}
+
+    EnsureStep:
+      type: object
+      required: [id, kind, status, needs_confirmation, title, detail]
+      additionalProperties: false
+      properties:
+        id: {type: string, enum: [apt.packages, tool.kiwix-tools, tool.pmtiles, tool.piper, whisper.restore, whisper.build, restart.kiwix]}
+        kind: {type: string, enum: [install_packages, install_tool, restore_whisper, build_whisper, restart_service]}
+        status:
+          description: "ok: nothing to do. pending: the next pass does it. waiting: the same, but ensure.auto is ask or off. needs_confirm: only with a confirmation. blocked: the kit cannot supply it (reason). running, done, failed (code), cancelled."
+          type: string
+          enum: [ok, pending, waiting, needs_confirm, blocked, running, done, failed, cancelled]
+        target: {type: string}
+        item: {type: string}
+        version: {type: string}
+        from: {type: string}
+        packages: {type: array, items: {type: string}}
+        needs_confirmation: {type: boolean}
+        reason: {type: string, enum: [kit_missing, kit_damaged, not_in_kit]}
+        code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+        error: {type: string}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+        title: {type: string}
+        detail: {type: string}
+
+    EnsureView:
+      type: object
+      required: [state, auto, message, next_action, progress, steps, run, dry_run, checked_at]
+      additionalProperties: false
+      properties:
+        state: {type: string, enum: [complete, installing, needs_you, off]}
+        auto: {type: string, enum: ["on", ask, "off"]}
+        message: {type: string}
+        next_action:
+          type: object
+          required: [kind, text]
+          additionalProperties: false
+          properties:
+            kind: {type: string, enum: [none, wait, press_button, confirm, sync, fix]}
+            text: {type: string}
+            step: {type: string}
+        progress:
+          type: object
+          required: [done, total]
+          additionalProperties: false
+          properties:
+            done: {type: integer, minimum: 0}
+            total: {type: integer, minimum: 0}
+            current: {type: string}
+        steps: {type: array, items: {$ref: "#/components/schemas/EnsureStep"}}
+        run:
+          description: "The running pass, else the latest one; null before the first."
+          type: [object, "null"]
+          required: [id, trigger, dry_run, started_at]
+          additionalProperties: false
+          properties:
+            id: {type: string}
+            trigger: {type: string, enum: [sync_done, start, mode_online, manual]}
+            dry_run: {type: boolean}
+            started_at: {type: string, format: date-time}
+            finished_at: {type: string, format: date-time}
+            result: {type: string, enum: [nothing_to_do, ok, partial, failed, cancelled]}
+        dry_run: {type: boolean}
+        checked_at: {type: string, format: date-time}
 
     Catalog:
       description: "GET /catalog (agent.md section 3.8.21; catalog.md)."

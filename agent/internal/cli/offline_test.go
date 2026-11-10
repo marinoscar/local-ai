@@ -123,6 +123,7 @@ func offlineCases() []offlineCase {
 		apiCase("restart", "restart", "llama"),
 		apiCase("logs", "logs"),
 		apiCase("doctor", "doctor"),
+		apiCase("ensure", "ensure"),
 		apiCase("drill", "drill"),
 		apiCase("drill", "drill", "--cancel"),
 		apiCase("drill", "drill", "show"),

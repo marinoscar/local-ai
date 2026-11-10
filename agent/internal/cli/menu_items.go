@@ -70,6 +70,7 @@ func menuTree() []menuItem {
 			}},
 		}},
 		{en: "Repair with no internet (rebuild kit)", es: "Reparar sin internet (kit de reconstrucción)", sub: []menuItem{
+			{en: "Install what is missing (from the kit)", es: "Instalar lo que falta (desde el kit)", args: []string{"ensure"}},
 			{en: "Is the rebuild kit complete?", es: "¿Está completo el kit de reconstrucción?", args: []string{"kit", "status"}},
 			{en: "Check the rebuild kit (slow)", es: "Comprobar el kit de reconstrucción (lento)", args: []string{"kit", "verify"}},
 			{en: "Rebuild the AI engine (llama.cpp)", es: "Reconstruir el motor de IA (llama.cpp)", args: []string{"rebuild-llama"}, hintEN: "(needs sudo)", hintES: "(necesita sudo)"},

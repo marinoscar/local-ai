@@ -1163,3 +1163,33 @@ func (a *Apt) installedVersions(ctx context.Context, names []string) (map[string
 	}
 	return out, nil
 }
+
+// Installed says which of names dpkg has installed, and at which version (names it does not know, or
+// that are only partly installed, are absent). It only reads.
+func (a *Apt) Installed(ctx context.Context, names []string) (map[string]string, error) {
+	if len(names) == 0 {
+		return map[string]string{}, nil
+	}
+	return a.installedVersions(ctx, names)
+}
+
+// KitPackages lists the package names the kit in kitDir carries for this machine (the entries of the
+// PACKAGES.lock of its repositories), read without hashing anything: the planner uses it to tell a package
+// the kit can supply from one it cannot. The errors are the ones ReposFor gives.
+func (a *Apt) KitPackages(kitDir string) (map[string]bool, error) {
+	repos, err := ReposFor(a.FS, kitDir, a.Codename, a.Arch)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, r := range repos {
+		entries, err := peekLock(a.FS, r)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range entries {
+			out[e.Name] = true
+		}
+	}
+	return out, nil
+}

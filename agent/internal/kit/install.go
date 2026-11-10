@@ -658,3 +658,51 @@ func (t *ToolInstaller) restartAgent(ctx context.Context) error {
 	}
 	return nil
 }
+
+// ---- reading without installing (the ensure planner) --------------------------------------------
+
+// KitVersion says which version of a tarball tool (kiwix-tools, pmtiles, piper) the kit in kitDir holds for
+// this machine, reading its MANIFEST.json only: nothing is hashed, so it is cheap enough to ask often. The
+// file is still hashed by Locate and Install right before it is used. The errors are the ones Locate gives
+// for a missing folder (ErrToolNotInKit) or a damaged manifest (ErrToolDamaged).
+func (t *ToolInstaller) KitVersion(kitDir, tool string) (string, error) {
+	var dirName string
+	var pick releaseFile
+	switch tool {
+	case ToolKiwix:
+		dirName, pick = "kiwix-tools", kiwixFile
+	case ToolPmtiles:
+		dirName, pick = "pmtiles", pmtilesFile
+	case ToolPiper:
+		dirName, pick = "piper", piperFile
+	default:
+		return "", toolErr(tool, ErrToolNotInKit, "not a tarball tool of the kit", nil)
+	}
+	dir := filepath.Join(kitDir, PartTools, dirName)
+	m, err := manifest.Load(t.FS, dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return "", toolErr(tool, ErrToolNotInKit, "the kit has no "+filepath.Join(PartTools, dirName)+" folder with a MANIFEST.json", nil)
+	case err != nil:
+		return "", toolErr(tool, ErrToolDamaged, "the MANIFEST.json of "+filepath.Join(PartTools, dirName)+" is damaged or incomplete", err)
+	}
+	_, version, ok := pick(m, t.Arch)
+	if !ok {
+		return "", toolErr(tool, ErrToolNotInKit, "its MANIFEST.json lists no file for "+t.Arch, nil)
+	}
+	return version, nil
+}
+
+// CurrentVersion is the version of a tarball tool that /opt/localai/<tool>/current points to, "" when it is
+// not installed.
+func (t *ToolInstaller) CurrentVersion(tool string) string {
+	switch tool {
+	case ToolKiwix:
+		return t.current("kiwix-tools")
+	case ToolPmtiles:
+		return t.current("pmtiles")
+	case ToolPiper:
+		return t.current("piper")
+	}
+	return ""
+}

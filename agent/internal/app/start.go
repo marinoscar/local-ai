@@ -14,6 +14,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
+	"github.com/marinoscar/local-ai/agent/internal/ensure"
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
 	"github.com/marinoscar/local-ai/agent/internal/logx"
@@ -142,7 +143,7 @@ func (d *Daemon) stepConfig(context.Context) error {
 		DetectBackend: hardware.DetectBackend,
 		// The owners of a node.yaml block validate it (the store refuses a file one of them rejects).
 		Blocks: map[string]config.BlockValidator{"sync": run.SettingsValidator{}, "piper": piper.BlockValidator{},
-			"portal": portal.BlockValidator{}},
+			"portal": portal.BlockValidator{}, "ensure": ensure.BlockValidator{}},
 	}
 	store := config.Open(config.Options{Root: env.Root, Clock: env.Clock, Hooks: hooks})
 	d.c.Config = store
@@ -553,6 +554,9 @@ func (d *Daemon) stepPeriodic(ctx context.Context) error {
 	d.startWorker(&doctorLoop{d: d}) // not doctor.Manager.Start: every pass is serialized (doctorloop.go)
 	if d.ark != nil {
 		d.startWorker(d.ark.ready) // READY.json now and every 6 hours
+	}
+	if d.ensure != nil {
+		d.startWorker(&ensureWorker{s: d.ensure}) // installs what the kit holds and the node lacks (ADR-0010)
 	}
 	if d.firstAid != nil {
 		d.startWorker(d.firstAid) // first-aid article availability, off the request path

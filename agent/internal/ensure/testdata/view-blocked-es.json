@@ -1,0 +1,31 @@
+{
+  "state": "needs_you",
+  "auto": "on",
+  "message": "Necesita su ayuda: el kit todavía no tiene kiwix-tools. Sincronice la unidad AI-ARK.",
+  "next_action": {
+    "kind": "sync",
+    "text": "Conecte la unidad AI-ARK que tiene el kit, o sincronice con internet (`aictl ark sync`).",
+    "step": "tool.kiwix-tools"
+  },
+  "progress": {
+    "done": 0,
+    "total": 1
+  },
+  "steps": [
+    {
+      "id": "tool.kiwix-tools",
+      "kind": "install_tool",
+      "status": "blocked",
+      "target": "kiwix-tools",
+      "item": "kit-kiwix-tools",
+      "needs_confirmation": false,
+      "reason": "kit_missing",
+      "code": "LAI-KIT-040",
+      "title": "Herramientas de la biblioteca (kiwix-tools)",
+      "detail": "El kit todavía no tiene kiwix-tools. Conecte la unidad AI-ARK o sincronice con internet."
+    }
+  ],
+  "run": null,
+  "dry_run": false,
+  "checked_at": "2026-11-10T12:00:00Z"
+}

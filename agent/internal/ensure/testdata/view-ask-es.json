@@ -1,0 +1,77 @@
+{
+  "state": "needs_you",
+  "auto": "ask",
+  "message": "Necesita su ayuda: 5 cosas están listas para instalar. Pulse Instalar lo que falta.",
+  "next_action": {
+    "kind": "press_button",
+    "text": "Pulse Instalar lo que falta.",
+    "step": "apt.packages"
+  },
+  "progress": {
+    "done": 0,
+    "total": 5
+  },
+  "steps": [
+    {
+      "id": "apt.packages",
+      "kind": "install_packages",
+      "status": "waiting",
+      "target": "packages",
+      "item": "kit-debs",
+      "packages": [
+        "cmake",
+        "curl",
+        "git"
+      ],
+      "needs_confirmation": false,
+      "title": "Paquetes del sistema para el motor de IA",
+      "detail": "Instalar 3 paquetes desde el kit."
+    },
+    {
+      "id": "tool.kiwix-tools",
+      "kind": "install_tool",
+      "status": "waiting",
+      "target": "kiwix-tools",
+      "item": "kit-kiwix-tools",
+      "version": "3.7.0",
+      "needs_confirmation": false,
+      "title": "Herramientas de la biblioteca (kiwix-tools)",
+      "detail": "Instalar la versión 3.7.0 desde el kit."
+    },
+    {
+      "id": "tool.pmtiles",
+      "kind": "install_tool",
+      "status": "waiting",
+      "target": "pmtiles",
+      "item": "kit-pmtiles",
+      "version": "1.22",
+      "needs_confirmation": false,
+      "title": "Herramientas de mapas (pmtiles)",
+      "detail": "Instalar la versión 1.22 desde el kit."
+    },
+    {
+      "id": "tool.piper",
+      "kind": "install_tool",
+      "status": "waiting",
+      "target": "piper",
+      "item": "kit-piper",
+      "version": "2023.11.14-2",
+      "needs_confirmation": false,
+      "title": "Herramientas de voz (piper)",
+      "detail": "Instalar la versión 2023.11.14-2 desde el kit."
+    },
+    {
+      "id": "whisper.restore",
+      "kind": "restore_whisper",
+      "status": "waiting",
+      "target": "whisper",
+      "item": "kit-whisper-cpp",
+      "needs_confirmation": false,
+      "title": "Programa de voz a texto (ya compilado)",
+      "detail": "Instalarlo desde el kit."
+    }
+  ],
+  "run": null,
+  "dry_run": false,
+  "checked_at": "2026-11-10T12:00:00Z"
+}

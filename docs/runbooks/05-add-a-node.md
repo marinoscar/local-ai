@@ -409,7 +409,7 @@ To rehearse with a test name first, the lab owner can set the setting `vps.stagi
     - [architecture/lab-inventory.md](../architecture/lab-inventory.md) §1: add a row (public endpoint, machine name, hardware, backend, profile, pattern, model, status), with placeholders for IPs.
     - Run `scripts/check-redaction.sh` before committing. It fails on any tailnet IP, VPS IP or key.
 35. **Back up the node's settings** onto the ark drive: `sudo aictl backup-config --to-ark`. It is saved in `localai/kit/config/<node-id>/` on the drive ([04](04-ark-drive.md) step 16).
-36. **Leave it overnight** online and plugged in for the first sync. Next morning: `aictl ark status` should be green or yellow ([08](08-scheduled-sync.md)).
+36. **Leave it overnight** online and plugged in for the first sync. Next morning: `aictl ark status` should be green or yellow ([08](08-scheduled-sync.md)). After each sync the node installs what the kit holds by itself (kiwix-tools, pmtiles, piper, the offline packages, the speech program), so the node card should say **Complete**. If it says **Needs you** or **Installing what's missing**, press **Install what's missing** in the app, the Portal or the node page in the cloud, or in a terminal type `aictl` and choose **7**, **Install what is missing (from the kit)**, or one line: `aictl ensure` ([07 → The node says "Needs you"](07-troubleshooting.md#the-node-says-needs-you-or-a-tool-is-missing)).
 
 ---
 

@@ -1,0 +1,12 @@
+exit 0
+--- stdout
+i This computer is missing 2 thing(s) that the kit has. Installing them now.
+What is missing:
+  → Library tools (kiwix-tools): Install version 3.7 from the kit.
+  → Voice tools (piper): Install version 2023.11.14-2 from the kit.
+✓ Library tools (kiwix-tools): Installed from the kit (3.7).
+✓ Voice tools (piper): Installed from the kit (2023.11.14-2).
+✓ Complete: this computer has everything it needs.
+--- stderr
+… Installing what's missing (1 of 2): Voice tools (piper)
+… Installing what's missing (2 of 2): Voice tools (piper)

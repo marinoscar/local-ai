@@ -92,7 +92,8 @@ type Daemon struct {
 	pSessions  *portal.Sessions
 	pMetrics   *portal.Metrics
 	syncEngine modelsapi.SyncEngine
-	ark        *arkStack // nil when the sync stack could not be built
+	ark        *arkStack    // nil when the sync stack could not be built
+	ensure     *ensureStack // nil when the sync stack or the install engine could not be built (ensure.go)
 	piper      *piper.Service
 	whisperSTT *whisper.STTService
 	maps       *maps.Maps

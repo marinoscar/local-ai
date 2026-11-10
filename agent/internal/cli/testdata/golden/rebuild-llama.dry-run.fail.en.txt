@@ -5,7 +5,8 @@
   /srv/localai/kit/src/llama.cpp-x.tar.gz (sha256 matches the kit manifest)
 ✗ Build tools (gcc, g++, cmake 3.21 or newer, ninja, pkg-config): not installed:
   ninja, pkg-config.  [LAI-KIT-010]
-  → Fix: Run `sudo aictl kit install-debs`.
+  → Fix: Press **Install what's missing**, or run `aictl ensure`; with no agent,
+         run `sudo aictl kit install-debs`.
 i To install what is missing from the kit, run:
   `sudo aictl kit install-debs --packages ninja-build,pkg-config`
 

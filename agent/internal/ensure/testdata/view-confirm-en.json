@@ -1,0 +1,29 @@
+{
+  "state": "needs_you",
+  "auto": "on",
+  "message": "Needs you: building the speech-to-text program takes a long time and needs your OK.",
+  "next_action": {
+    "kind": "confirm",
+    "text": "Confirm it when you are ready.",
+    "step": "whisper.build"
+  },
+  "progress": {
+    "done": 0,
+    "total": 1
+  },
+  "steps": [
+    {
+      "id": "whisper.build",
+      "kind": "build_whisper",
+      "status": "needs_confirm",
+      "target": "whisper",
+      "item": "kit-whisper-cpp",
+      "needs_confirmation": true,
+      "title": "Speech-to-text program (build from source)",
+      "detail": "Building it takes a long time, so it starts only when you confirm."
+    }
+  ],
+  "run": null,
+  "dry_run": false,
+  "checked_at": "2026-11-10T12:00:00Z"
+}

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # test-openwebui-cutover.sh: scripts/openwebui-cutover.sh with a fake `docker` on PATH. No VPS, no database, no real key:
 # the fake prints canned `psql -Atc` rows, records every call, and the key-like values are built at run time.
+# The assertions are written "check; ok \"name\" $?" on purpose: $? is the check's own status. Newer
+# Newer versions of the linter flag that shape (SC2319), so it is disabled here for the whole file.
+# shellcheck disable=SC2319
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
 SCRIPT="$PWD/scripts/openwebui-cutover.sh"

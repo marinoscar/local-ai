@@ -1,0 +1,71 @@
+{
+  "state": "complete",
+  "auto": "on",
+  "message": "Complete: this computer has everything it needs.",
+  "next_action": {
+    "kind": "none",
+    "text": "Nothing to do."
+  },
+  "progress": {
+    "done": 0,
+    "total": 0
+  },
+  "steps": [
+    {
+      "id": "apt.packages",
+      "kind": "install_packages",
+      "status": "ok",
+      "target": "packages",
+      "item": "kit-debs",
+      "needs_confirmation": false,
+      "title": "System packages for the AI engine",
+      "detail": "Installed."
+    },
+    {
+      "id": "tool.kiwix-tools",
+      "kind": "install_tool",
+      "status": "ok",
+      "target": "kiwix-tools",
+      "item": "kit-kiwix-tools",
+      "version": "3.7.0",
+      "needs_confirmation": false,
+      "title": "Library tools (kiwix-tools)",
+      "detail": "Installed (3.7.0)."
+    },
+    {
+      "id": "tool.pmtiles",
+      "kind": "install_tool",
+      "status": "ok",
+      "target": "pmtiles",
+      "item": "kit-pmtiles",
+      "version": "1.22",
+      "needs_confirmation": false,
+      "title": "Map tools (pmtiles)",
+      "detail": "Installed (1.22)."
+    },
+    {
+      "id": "tool.piper",
+      "kind": "install_tool",
+      "status": "ok",
+      "target": "piper",
+      "item": "kit-piper",
+      "version": "2023.11.14-2",
+      "needs_confirmation": false,
+      "title": "Voice tools (piper)",
+      "detail": "Installed (2023.11.14-2)."
+    },
+    {
+      "id": "whisper.restore",
+      "kind": "restore_whisper",
+      "status": "ok",
+      "target": "whisper",
+      "item": "kit-whisper-cpp",
+      "needs_confirmation": false,
+      "title": "Speech-to-text program (ready-made)",
+      "detail": "Installed."
+    }
+  ],
+  "run": null,
+  "dry_run": false,
+  "checked_at": "2026-11-10T12:00:00Z"
+}

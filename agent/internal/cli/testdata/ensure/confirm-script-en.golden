@@ -1,0 +1,9 @@
+exit 8
+--- stdout
+What is missing:
+  ! Speech-to-text program (build from source): Building it takes a long time, so it starts only when you confirm.
+i Run `aictl ensure --yes` to confirm "Speech-to-text program (build from
+  source)".
+--- stderr
+! Needs you: building the speech-to-text program takes a long time and needs
+  your OK.

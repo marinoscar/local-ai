@@ -54,6 +54,16 @@ jobs:
         if: steps.detect.outputs.present == 'true'
         working-directory: agent
         run: go test ./api/... ./internal/api/...
+      - name: The install engine over a kit fixture, with the network disabled (unshare -n)
+        # ADR-0010: the agent installs what the kit holds with nothing but files on disk. The test builds a kit
+        # fixture, runs the whole engine over it (tools, packages, a flipped byte that installs nothing) and
+        # fails unless the network really is unreachable.
+        if: steps.detect.outputs.present == 'true'
+        working-directory: agent
+        run: |
+          set -euo pipefail
+          go test -c -o "$RUNNER_TEMP/ensure-host.test" ./internal/ensure/host
+          sudo unshare -n env LOCALAI_EXPECT_NO_NETWORK=1 "$RUNNER_TEMP/ensure-host.test" -test.run '^TestTheEngine|^TestABadChecksum' -test.v
       - name: Static builds for linux/amd64 and linux/arm64
         if: steps.detect.outputs.present == 'true'
         run: scripts/agent-ci.sh build

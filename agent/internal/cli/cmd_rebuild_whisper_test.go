@@ -384,7 +384,7 @@ func TestRebuildWhisperDryRun(t *testing.T) {
 		out := unwrap(r.out)
 		for _, want := range []string{
 			"✓ Build inputs", "✗ Build tools (gcc, g++, cmake 3.21 or newer, ninja, pkg-config): not installed: ninja.  [LAI-KIT-010]",
-			"→ Fix: Run `sudo aictl kit install-debs`.",
+			"→ Fix: Press **Install what's missing**, or run `aictl ensure`; with no agent,",
 			"`sudo aictl kit install-debs --packages ninja-build`",
 			"Not ready: fix the checks marked above",
 		} {

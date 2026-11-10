@@ -735,6 +735,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ensure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What this computer is missing, and what the agent is doing about it
+         * @description The picture a node card or the Portal shows: `state` is `complete` (nothing left to install),
+         *     `installing` (a pass runs, or one is about to), `needs_you` (a step needs a person: a confirmation, a
+         *     failure, a kit item that is missing, or `ensure.auto: ask`) or `off` (`ensure.auto: off` and something is
+         *     missing). `message` and `next_action.text` are plain words in the language of the request; `steps` lists
+         *     each thing the profile wants with its status. It reads the disk and the kit's manifests only (nothing is
+         *     hashed, nothing is changed) and is cached for a few seconds. agent.md section 3.8.33. rebuild-kit.md
+         *     section 4.5.
+         *
+         */
+        get: operations["getEnsure"];
+        put?: never;
+        /**
+         * Install what is missing, now
+         * @description Starts one pass over the steps that wait (the button **Install what's missing**, `aictl ensure`).
+         *     Everything from the kit is installed one step at a time, only from a kit item that verifies at that
+         *     moment, through a fixed list of actions. Answers `202` with the picture when a pass runs (started now or
+         *     already running: asking twice is not an error), `200` with the picture for `dry_run: true` (nothing is
+         *     written, the steps that would run are `pending`) and when there was nothing to do. `confirm` names steps
+         *     with status `needs_confirm` (`whisper.build`, `restart.kiwix`): compiling and restarting a service that
+         *     runs never happen without it, and sending it needs admin* (`403` with `details.pin_required` for an
+         *     operator without the PIN; not needed for a dry run). A confirmation that names no step waiting for one
+         *     is `400`. A Portal session has its body ignored and replaced by the safe default: the automatic steps,
+         *     nothing that needs a confirmation, never a dry run. Allowed in every mode (it uses only what is on disk).
+         *     agent.md section 3.8.33.
+         *
+         */
+        post: operations["startEnsure"];
+        /**
+         * Stop installing
+         * @description Cancels the running pass: the program it runs is stopped, the steps not started are not started
+         *     (`cancelled`), and what was installed stays (every step is complete or not done at all). `202` with the
+         *     picture when a pass was running, `200` when none was (cancelling twice is not an error). The next pass
+         *     starts from what the computer has. agent.md section 3.8.33.
+         *
+         */
+        delete: operations["cancelEnsure"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/catalog": {
         parameters: {
             query?: never;
@@ -2212,6 +2262,74 @@ export interface components {
                 kind?: "orphan" | "trash";
             }[];
             freed_bytes: number;
+        };
+        EnsureRequest: {
+            /** @default false */
+            dry_run: boolean;
+            /** @description Step ids with status needs_confirm that the caller confirms (needs admin*). */
+            confirm?: ("whisper.build" | "restart.kiwix")[];
+        };
+        EnsureStep: {
+            /** @enum {string} */
+            id: "apt.packages" | "tool.kiwix-tools" | "tool.pmtiles" | "tool.piper" | "whisper.restore" | "whisper.build" | "restart.kiwix";
+            /** @enum {string} */
+            kind: "install_packages" | "install_tool" | "restore_whisper" | "build_whisper" | "restart_service";
+            /**
+             * @description ok: nothing to do. pending: the next pass does it. waiting: the same, but ensure.auto is ask or off. needs_confirm: only with a confirmation. blocked: the kit cannot supply it (reason). running, done, failed (code), cancelled.
+             * @enum {string}
+             */
+            status: "ok" | "pending" | "waiting" | "needs_confirm" | "blocked" | "running" | "done" | "failed" | "cancelled";
+            target?: string;
+            item?: string;
+            version?: string;
+            from?: string;
+            packages?: string[];
+            needs_confirmation: boolean;
+            /** @enum {string} */
+            reason?: "kit_missing" | "kit_damaged" | "not_in_kit";
+            code?: string;
+            error?: string;
+            /** Format: date-time */
+            started_at?: string;
+            /** Format: date-time */
+            finished_at?: string;
+            title: string;
+            detail: string;
+        };
+        EnsureView: {
+            /** @enum {string} */
+            state: "complete" | "installing" | "needs_you" | "off";
+            /** @enum {string} */
+            auto: "on" | "ask" | "off";
+            message: string;
+            next_action: {
+                /** @enum {string} */
+                kind: "none" | "wait" | "press_button" | "confirm" | "sync" | "fix";
+                text: string;
+                step?: string;
+            };
+            progress: {
+                done: number;
+                total: number;
+                current?: string;
+            };
+            steps: components["schemas"]["EnsureStep"][];
+            /** @description The running pass, else the latest one; null before the first. */
+            run: {
+                id: string;
+                /** @enum {string} */
+                trigger: "sync_done" | "start" | "mode_online" | "manual";
+                dry_run: boolean;
+                /** Format: date-time */
+                started_at: string;
+                /** Format: date-time */
+                finished_at?: string;
+                /** @enum {string} */
+                result?: "nothing_to_do" | "ok" | "partial" | "failed" | "cancelled";
+            } | null;
+            dry_run: boolean;
+            /** Format: date-time */
+            checked_at: string;
         };
         /** @description GET /catalog (agent.md section 3.8.21; catalog.md). */
         Catalog: {
@@ -3851,6 +3969,118 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             /** @description LAI-SYN-005: a sync run is active (wait for it, or cancel it). LAI-CAT-001: no catalog is loaded, so orphans cannot be told apart (details.reason no_catalog). */
             409: components["responses"]["Conflict"];
+            413: components["responses"]["TooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            500: components["responses"]["Internal"];
+            503: components["responses"]["Starting"];
+        };
+    };
+    getEnsure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The picture. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnsureView"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["Internal"];
+            503: components["responses"]["Starting"];
+        };
+    };
+    startEnsure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EnsureRequest"];
+            };
+        };
+        responses: {
+            /** @description The picture (dry run, or nothing to do). */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnsureView"];
+                };
+            };
+            /** @description A pass is running; poll `GET /ensure`. */
+            202: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnsureView"];
+                };
+            };
+            /** @description LAI-AGT-020: a `confirm` entry is not a step id or names no step waiting for a confirmation (details.field confirm, details.reason unknown_step or not_waiting, details.step). */
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description LAI-SYN-005: a sync, verify or import run is active (the kit may be changing; try again when it ends). LAI-AGT-022: a mode change is in flight. */
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["TooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            500: components["responses"]["Internal"];
+            503: components["responses"]["Starting"];
+        };
+    };
+    cancelEnsure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Nothing was running. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnsureView"];
+                };
+            };
+            /** @description The pass was stopped. */
+            202: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnsureView"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             413: components["responses"]["TooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             500: components["responses"]["Internal"];

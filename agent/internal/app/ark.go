@@ -469,9 +469,19 @@ func (s *arkStack) readyRefresher() run.ReadyRefresher {
 
 // expectedKit are the kit items the profile of a root wants, so the index can list what is missing.
 func (s *arkStack) expectedKit(root ark.Root) []catalog.ContentItem {
-	in, err := s.plans.Gather(context.Background(), root.ID, plan.GatherOptions{})
+	out, err := s.kitItems(context.Background(), root)
 	if err != nil {
 		return nil
+	}
+	return out
+}
+
+// kitItems is expectedKit with the reason when the plan could not be gathered (no catalog, an unknown profile):
+// the install engine must not read "nothing is wanted" out of a failure.
+func (s *arkStack) kitItems(ctx context.Context, root ark.Root) ([]catalog.ContentItem, error) {
+	in, err := s.plans.Gather(ctx, root.ID, plan.GatherOptions{})
+	if err != nil {
+		return nil, err
 	}
 	var out []catalog.ContentItem
 	for _, it := range plan.DesiredItems(in.Catalog, in.Profile, in.Overrides, in.Root, in.Node).Items {
@@ -479,7 +489,7 @@ func (s *arkStack) expectedKit(root ark.Root) []catalog.ContentItem {
 			out = append(out, *it.Content)
 		}
 	}
-	return out
+	return out, nil
 }
 
 type kitRefreshing struct {
