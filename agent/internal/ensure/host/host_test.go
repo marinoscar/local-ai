@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -272,6 +273,7 @@ func TestTheAgentIsNeverInstalledByTheEngine(t *testing.T) {
 }
 
 func TestABadChecksumInstallsNothing(t *testing.T) {
+	requireNoNetworkIfAsked(t)
 	// The file has the size the manifest records (a quick verification cannot tell), but one byte is
 	// flipped. The executor asks the kit, then the installer hashes the file against the manifest.
 	f := newFixture(t)
@@ -462,11 +464,25 @@ func TestWhisperInstalledMeansAProgramThatCanRun(t *testing.T) {
 
 // ---- the whole engine over the kit fixture ----------------------------------------------------
 
+// requireNoNetworkIfAsked fails the test when the CI job that runs it inside `unshare -n` finds the
+// network reachable (LOCALAI_EXPECT_NO_NETWORK=1): the engine must work with nothing but files on disk.
+func requireNoNetworkIfAsked(t *testing.T) {
+	t.Helper()
+	if os.Getenv("LOCALAI_EXPECT_NO_NETWORK") != "1" {
+		return
+	}
+	if c, err := net.DialTimeout("tcp", "1.1.1.1:443", 2*time.Second); err == nil {
+		_ = c.Close()
+		t.Fatal("the network is reachable: this test must run with it disabled")
+	}
+}
+
 type fixedClock struct{ t time.Time }
 
 func (c fixedClock) Now() time.Time { return c.t }
 
 func TestTheEngineOverAKitFixtureInstallsWhatTheNodeIsMissingWithNoNetwork(t *testing.T) {
+	requireNoNetworkIfAsked(t)
 	f := newFixture(t)
 	clock := fixedClock{time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)}
 	f.running["kiwix"] = true
