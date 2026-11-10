@@ -15,7 +15,7 @@ export const MODEL_TOO_BIG = 'qwen3-coder-next-q4km';
 
 export const ALL_TYPES = [
   'status.refresh', 'model.load', 'model.unload', 'model.set_default', 'model.download', 'model.delete', 'ark.sync', 'ark.verify',
-  'mode.offline', 'key.rotate', 'service.restart', 'logs.tail', 'catalog.refresh', 'agent.update',
+  'mode.offline', 'key.rotate', 'service.restart', 'logs.tail', 'catalog.refresh', 'agent.update', 'ensure.run',
 ];
 
 export function detailFixture(patch: Partial<NodeDetail> = {}): NodeDetail {
