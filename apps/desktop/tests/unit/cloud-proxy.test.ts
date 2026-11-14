@@ -40,8 +40,8 @@ describe('the allowlist: what passes', () => {
   it('the body that goes out is rebuilt: nothing is carried over by reference', () => {
     const params = { model_id: 'qwen3.6-35b-a3b-q4km', unload_others: true };
     const decision = decideCloudRequest(post('/api/localai/nodes/ai-n2/commands', { type: 'model.load', params }));
-    expect(decision.allow && decision.body?.params).toEqual(params);
-    expect(decision.allow && decision.body?.params).not.toBe(params);
+    expect(decision.allow && (decision.body as { params?: unknown } | undefined)?.params).toEqual(params);
+    expect(decision.allow && (decision.body as { params?: unknown } | undefined)?.params).not.toBe(params);
   });
 });
 
