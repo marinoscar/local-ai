@@ -25,7 +25,7 @@ export const pick = (text: Bilingual, lang: Lang): string => text[lang];
 // ---------------------------------------------------------------------------------------------------------------------
 
 /** The codes this app can show as a page or in `--diagnose`. All are registered in doctor-codes.md. */
-export const ERROR_CODES = ['LAI-DSK-001', 'LAI-DSK-002', 'LAI-DSK-003', 'LAI-DSK-004', 'LAI-DSK-005', 'LAI-DSK-006', 'LAI-DSK-007', 'LAI-DSK-015'] as const;
+export const ERROR_CODES = ['LAI-DSK-001', 'LAI-DSK-002', 'LAI-DSK-003', 'LAI-DSK-004', 'LAI-DSK-005', 'LAI-DSK-006', 'LAI-DSK-007', 'LAI-DSK-015', 'LAI-DSK-017'] as const;
 export type DskCode = (typeof ERROR_CODES)[number];
 
 export function isDskCode(value: unknown): value is DskCode {
@@ -33,7 +33,7 @@ export function isDskCode(value: unknown): value is DskCode {
 }
 
 /**
- * The buttons of an error page. `open-portal` is on every page. `allow-user`, `rotate-token` and `restart-computer`
+ * The buttons of an error page. `open-portal` is on every page. `allow-user`, `repair-access`, `rotate-token` and `restart-computer`
  * run a fixed command (src/main/system-actions.ts); `open-library` opens kiwix-serve, which needs no agent.
  */
 export const ERROR_ACTIONS = [
@@ -43,6 +43,7 @@ export const ERROR_ACTIONS = [
   'open-portal',
   'open-browser',
   'allow-user',
+  'repair-access',
   'rotate-token',
   'open-library',
   'restart-computer',
@@ -50,7 +51,7 @@ export const ERROR_ACTIONS = [
 export type ErrorAction = (typeof ERROR_ACTIONS)[number];
 
 /** Buttons that fix the problem themselves: the page then folds the typed command under "Use a terminal instead". */
-export const FIX_ACTIONS: readonly ErrorAction[] = ['allow-user', 'rotate-token', 'start-agent'];
+export const FIX_ACTIONS: readonly ErrorAction[] = ['allow-user', 'repair-access', 'rotate-token', 'start-agent'];
 
 /** The one IPC channel the error page uses (preload/shell.ts invokes it, startup.ts handles it). */
 export const ERROR_ACTION_CHANNEL = 'localai:error-action' as const;
@@ -172,6 +173,23 @@ export const ERROR_COPY: Readonly<Record<DskCode, ErrorCopy>> = {
     command: 'sudo apt install ./ai-desktop_<version>_amd64.deb',
     actions: ['copy-command', 'open-portal'],
   },
+  'LAI-DSK-017': {
+    severity: 'error',
+    title: {
+      en: "You're allowed, but this computer's settings block the agent's key file",
+      es: 'Tienes permiso, pero la configuración de esta computadora bloquea el archivo de clave del agente',
+    },
+    message: {
+      en: 'This user is already allowed to control Local AI, but the folder that holds the key is closed to it.',
+      es: 'Este usuario ya tiene permiso para controlar Local AI, pero la carpeta que guarda la clave está cerrada para él.',
+    },
+    fix: {
+      en: 'Press "Fix access" and enter the administrator password. Local AI then connects by itself. If it keeps happening, press "Restart the computer".',
+      es: 'Presiona "Reparar el acceso" e ingresa la contraseña de administrador. Luego Local AI se conecta por sí solo. Si sigue pasando, presiona "Reiniciar la computadora".',
+    },
+    command: 'sudo chmod o+x /etc/localai',
+    actions: ['repair-access', 'open-portal', 'restart-computer', 'copy-command'],
+  },
 };
 
 /** The text of a page or check in one language. */
@@ -226,6 +244,7 @@ export const PAGE_STRINGS = {
   unitState: { en: 'Service state', es: 'Estado del servicio' },
   actionFailed: { en: 'That did not work. Read the steps above.', es: 'No funcionó. Lee los pasos de arriba.' },
   allowUser: { en: 'Allow this user', es: 'Permitir este usuario' },
+  repairAccess: { en: 'Fix access', es: 'Reparar el acceso' },
   rotateToken: { en: 'Make a new token', es: 'Crear un token nuevo' },
   openLibrary: { en: 'Open the library only', es: 'Abrir solo la biblioteca' },
   restartComputer: { en: 'Restart the computer', es: 'Reiniciar la computadora' },
@@ -238,6 +257,7 @@ export const PAGE_STRINGS = {
     en: 'Done. Now log out and log back in once so the change takes effect. Save your work first.',
     es: 'Listo. Ahora cierra sesión y vuelve a entrar una vez para que el cambio funcione. Guarda tu trabajo antes.',
   },
+  repairDone: { en: 'Access fixed. Connecting again…', es: 'Acceso reparado. Conectando otra vez…' },
   rotateDone: { en: 'A new token was made. Connecting again…', es: 'Se creó un token nuevo. Conectando otra vez…' },
   fixCancelled: {
     en: 'The password window was closed, or the password was not accepted. Press the button to try again.',
@@ -284,6 +304,7 @@ export const ACTION_LABEL: Readonly<Record<ErrorAction, Bilingual>> = {
   'open-portal': PAGE_STRINGS.openPortal,
   'open-browser': PAGE_STRINGS.openBrowser,
   'allow-user': PAGE_STRINGS.allowUser,
+  'repair-access': PAGE_STRINGS.repairAccess,
   'rotate-token': PAGE_STRINGS.rotateToken,
   'open-library': PAGE_STRINGS.openLibrary,
   'restart-computer': PAGE_STRINGS.restartComputer,

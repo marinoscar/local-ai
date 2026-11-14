@@ -19,7 +19,7 @@
 | Credential | Where it lives | Who can read it | How it's created | Rotation |
 |---|---|---|---|---|
 | llama API key (64 hex) | `/etc/localai/api-key` (root 0600), injected with `LoadCredential=llama-api-key:/etc/localai/api-key` | root, plus llama-server via `%d/llama-api-key` | installer: `openssl rand -hex 32` (or reuse the existing `/etc/llama-qwen/api-key` on migration) | `aictl key rotate`: write the new key, restart llama, report it to the cloud (encrypted channel = the HTTPS node plane), print the clients to update |
-| Agent token `lat_…` | `/etc/localai/agent-token` (root:localai-operators 0640) | root, operators, ai-desktop (running as an operator) | agent on first start, if absent | `aictl token rotate` (root). ai-desktop re-reads it on a 401 |
+| Agent token `lat_…` | `/etc/localai/agent-token` (root:localai-operators 0640; its folder `/etc/localai` is 0751 so operators can reach it without listing it, issue #483) | root, operators, ai-desktop (running as an operator) | agent on first start, if absent | `aictl token rotate` (root). ai-desktop re-reads it on a 401 |
 | Cloud credential `nod_…` | `/etc/localai/cloud-credential` (root 0600) | root (the agent) | cloud UI **Add node** shows it once, and `aictl cloud enroll` stores it | revoke in the cloud, then enroll again |
 | Admin PIN | `/etc/localai/admin-pin` (argon2id; 4–8 digits) | root | set by the installer, or by `aictl pin set` (root) | `aictl pin set` (root). Forgotten PIN: [runbooks/07-troubleshooting.md](../runbooks/07-troubleshooting.md) |
 | Gateway keys `lai_…` | cloud DB, stored as sha256 hashes, with the prefix kept for display | cloud only | the user issues it in the cloud UI, shown once | revoke and issue again |

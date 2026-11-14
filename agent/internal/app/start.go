@@ -295,11 +295,44 @@ func (d *Daemon) stepSecrets(context.Context) error {
 	if created {
 		d.raise(auth.CodeTokenCreated, nil)
 	}
+	// The token is root:localai-operators 0640, inside /etc/localai (root:localai). Without the pass-through bit
+	// for others, an operator who is not in the localai group never reaches it (issue #483). A node set up
+	// before the fix gets it here, so an agent update repairs it without `aiagent setup dirs`.
+	if old, changed, err := ensureOperatorTraverse(p.Etc()); err != nil {
+		d.log.Warn("the configuration folder could not be checked", "path", p.Etc(), "error", err.Error())
+	} else if changed {
+		d.log.Info("the configuration folder now lets operators reach the agent token", "path", p.Etc(),
+			"old_mode", fmt.Sprintf("%04o", uint32(old)), "new_mode", fmt.Sprintf("%04o", uint32(old|0o001)))
+	}
 	if len(fixed) > 0 {
 		d.log.Warn("secret files had unsafe permissions and were fixed", "code", auth.CodeSecretPermissions, "issues", fixed)
 		d.raise(auth.CodeSecretPermissions, map[string]any{"issues": fixed})
 	}
 	return nil
+}
+
+// ensureOperatorTraverse adds the others-execute bit (pass through, never list) to the configuration folder when
+// it lacks it, and changes nothing else. It returns the old mode and whether it changed. A missing folder is not
+// an error here (step 5 and the installer own creating it).
+func ensureOperatorTraverse(dir string) (old os.FileMode, changed bool, err error) {
+	info, err := os.Stat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	if !info.IsDir() {
+		return 0, false, fmt.Errorf("%s is not a folder", dir)
+	}
+	old = info.Mode().Perm()
+	if old&0o001 != 0 {
+		return old, false, nil
+	}
+	if err := os.Chmod(dir, old|0o001); err != nil {
+		return old, false, err
+	}
+	return old, true, nil
 }
 
 // ---- step 7: the audit log ----------------------------------------------------------------------

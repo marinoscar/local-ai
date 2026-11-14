@@ -3,7 +3,7 @@
 import { checkApiVersion, type AgentClient, type TokenResult } from './agent-client';
 import { type DskCode, type ErrorAction, ERROR_ACTIONS, ERROR_COPY, isDskCode } from './i18n';
 import { type Logger, NULL_LOGGER } from './log';
-import type { AgentSupervisor } from './agent-supervisor';
+import { type AgentSupervisor, codeForGroupDiagnosis } from './agent-supervisor';
 import type { SystemActions, SystemFailure } from './system-actions';
 
 export const MODULE = 'startup' as const;
@@ -44,7 +44,7 @@ export type StartupResult =
   | { screen: 'error'; code: DskCode };
 
 /** The token-file failures the Portal can ride out: it is served without a login (desktop.md 4.7 rule 5). */
-const TOKEN_FILE_CODES: readonly DskCode[] = ['LAI-DSK-001', 'LAI-DSK-002', 'LAI-DSK-003'];
+const TOKEN_FILE_CODES: readonly DskCode[] = ['LAI-DSK-001', 'LAI-DSK-002', 'LAI-DSK-003', 'LAI-DSK-017'];
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -52,7 +52,7 @@ const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(
 export async function codeForTokenFailure(failure: Extract<TokenResult, { ok: false }>, supervisor: Pick<AgentSupervisor, 'diagnoseTokenAccess'>): Promise<DskCode> {
   if (failure.reason !== 'permission-denied') return 'LAI-DSK-003';
   const diagnosis = await supervisor.diagnoseTokenAccess();
-  return diagnosis.kind === 'needs-relogin' ? 'LAI-DSK-002' : 'LAI-DSK-001';
+  return codeForGroupDiagnosis(diagnosis.kind);
 }
 
 export async function runStartup(deps: StartupDeps): Promise<StartupResult> {
@@ -279,6 +279,14 @@ export async function handleErrorAction(request: { action: ErrorAction; code: Ds
       const result = await deps.system.allowUser();
       // The new group reaches this login only after logging out and in: the page then offers "Log out now".
       return result.ok ? { ok: true } : systemFailure(result.reason);
+    }
+    case 'repair-access': {
+      if (deps.system === undefined) return { ok: false, reason: 'unavailable' };
+      const result = await deps.system.repairAccess();
+      if (!result.ok) return systemFailure(result.reason);
+      // No new login is needed: the folder opens at once. Run the start-up sequence again (token, session, status).
+      deps.retry();
+      return { ok: true };
     }
     case 'rotate-token': {
       if (deps.system === undefined) return { ok: false, reason: 'unavailable' };

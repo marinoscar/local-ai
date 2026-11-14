@@ -80,7 +80,8 @@ describe('start-up sequence (desktop.md 4.1)', () => {
   it.each([
     ['not-member', 'LAI-DSK-001'],
     ['needs-relogin', 'LAI-DSK-002'],
-    ['member-active', 'LAI-DSK-001'],
+    // Issue #483: already a member with the group active, so "Allow this user" would change nothing.
+    ['member-active', 'LAI-DSK-017'],
   ] as const)('token EACCES with group %s: %s', async (group, code) => {
     const s = setup({ token: [{ ok: false, reason: 'permission-denied' }], group });
     expect(await run(s)).toEqual({ screen: 'error', code });
@@ -279,15 +280,28 @@ describe('error-page actions', () => {
     expect(log.browser).toBe(1);
   });
 
-  const fakeSystem = (answers: Partial<Record<'allowUser' | 'rotateToken' | 'reboot', SystemResult>> = {}) => {
+  const fakeSystem = (answers: Partial<Record<'allowUser' | 'repairAccess' | 'rotateToken' | 'reboot', SystemResult>> = {}) => {
     const calls: string[] = [];
     const system: SystemActions = {
       allowUser: async () => (calls.push('allowUser'), answers.allowUser ?? { ok: true }),
+      repairAccess: async () => (calls.push('repairAccess'), answers.repairAccess ?? { ok: true }),
       rotateToken: async () => (calls.push('rotateToken'), answers.rotateToken ?? { ok: true }),
       reboot: async () => (calls.push('reboot'), answers.reboot ?? { ok: true }),
     };
     return { system, calls };
   };
+
+  it('repair-access runs the fixed call and restarts the sequence at once (no new login needed)', async () => {
+    const { system, calls } = fakeSystem();
+    const { d, log } = deps({ system });
+    expect(await handleErrorAction({ action: 'repair-access', code: 'LAI-DSK-017' }, d)).toEqual({ ok: true });
+    expect(calls).toEqual(['repairAccess']);
+    expect(log.retried).toBe(1);
+    const cancelled = deps({ system: fakeSystem({ repairAccess: { ok: false, reason: 'cancelled' } }).system });
+    expect(await handleErrorAction({ action: 'repair-access', code: 'LAI-DSK-017' }, cancelled.d)).toEqual({ ok: false, reason: 'cancelled' });
+    expect(cancelled.log.retried).toBe(0);
+    expect(await handleErrorAction({ action: 'repair-access', code: 'LAI-DSK-017' }, deps().d)).toEqual({ ok: false, reason: 'unavailable' });
+  });
 
   it('allow-user runs the fixed call and does not restart the sequence (the group needs a new login)', async () => {
     const { system, calls } = fakeSystem();
@@ -361,6 +375,9 @@ describe('error-page actions', () => {
     expect(parseActionRequest({ action: 'allow-user', code: 'LAI-DSK-004' })).toBeNull();
     expect(parseActionRequest({ action: 'rotate-token', code: 'LAI-DSK-007' })).not.toBeNull();
     expect(parseActionRequest({ action: 'rotate-token', code: 'LAI-DSK-001' })).toBeNull();
+    expect(parseActionRequest({ action: 'repair-access', code: 'LAI-DSK-017' })).not.toBeNull();
+    expect(parseActionRequest({ action: 'repair-access', code: 'LAI-DSK-001' })).toBeNull();
+    expect(parseActionRequest({ action: 'allow-user', code: 'LAI-DSK-017' })).toBeNull();
     for (const code of ['LAI-DSK-003', 'LAI-DSK-004', 'LAI-DSK-005']) {
       expect(parseActionRequest({ action: 'restart-computer', code })).not.toBeNull();
       expect(parseActionRequest({ action: 'open-library', code })).not.toBeNull();

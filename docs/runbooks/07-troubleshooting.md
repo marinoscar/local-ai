@@ -57,6 +57,7 @@ Do this first, for every problem.
 1. **Use the browser instead, right now:** open `http://127.0.0.1:7070`. The Survival Portal at `http://127.0.0.1:7070/portal` needs no login. For the dashboard, get a login code with `aictl ui-code` and type it.
 2. **Read the code on the error page** and do the matching fix:
    - `LAI-DSK-001`: this user isn't allowed yet. Press **Allow this user** and type the administrator password, then press **Log out now** and log back in. In a terminal instead: `sudo usermod -aG localai-operators $USER`, then log out and back in.
+   - `LAI-DSK-017`: this user is already allowed, but the computer's settings block the key file. Press **Fix access** and type the administrator password; Local AI connects by itself. In a terminal instead: `sudo chmod o+x /etc/localai`. If it keeps happening, press **Restart the computer**.
    - `LAI-DSK-002`: you were just added to the group; log out and back in once.
    - `LAI-DSK-003`: the agent's token file doesn't exist yet. Press **Start agent**. If it keeps happening, the install didn't finish: run the installer again ([05](05-add-a-node.md)).
    - `LAI-DSK-004`: the Local AI agent isn't running. Press **Start agent** and type your login password.

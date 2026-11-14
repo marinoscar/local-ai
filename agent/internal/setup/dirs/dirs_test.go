@@ -184,7 +184,7 @@ func TestTableMatchesOverview(t *testing.T) {
 		"/opt/localai/llama.cpp/builds": "root:root 0755", "/opt/localai/llama.cpp/src": "root:root 0755",
 		"/opt/localai/whisper.cpp/builds": "root:root 0755", "/opt/localai/piper": "root:root 0755",
 		"/opt/localai/kiwix-tools": "root:root 0755", "/opt/localai/pmtiles": "root:root 0755",
-		"/etc/localai": "root:localai 0750", "/etc/localai/catalog": "root:localai 0750",
+		"/etc/localai": "root:localai 0751", "/etc/localai/catalog": "root:localai 0750",
 		"/var/lib/localai":      "localai:localai 0750",
 		"/var/lib/localai/sync": "localai:localai 0750", "/var/lib/localai/drill": "localai:localai 0750",
 		"/var/lib/localai/cloud": "localai:localai 0750", "/var/lib/localai/kiwix": "localai:localai 0750",
@@ -239,7 +239,7 @@ func TestWrongOwnerAndModeAreCorrectedWithOldValues(t *testing.T) {
 	got := strings.Join(lines, "\n")
 	for _, want := range []string{
 		"fix owner of /etc/localai: uid0:gid0 -> root:localai",
-		"fix mode of /etc/localai: 0755 -> 0750",
+		"fix mode of /etc/localai: 0755 -> 0751",
 		"fix mode of /var/lib/localai/update: 0755 -> 0700",
 		"fix mode of " + ContentRoot + "/.trash: 0755 -> 0700",
 	} {
@@ -250,8 +250,27 @@ func TestWrongOwnerAndModeAreCorrectedWithOldValues(t *testing.T) {
 	if strings.Contains(got, "/models") {
 		t.Errorf("a non-private layout dir must be left alone:\n%s", got)
 	}
-	if f.files["/etc/localai"].mode != 0o750 || f.files["/etc/localai"].gid != f.users["localai"][1] {
+	if f.files["/etc/localai"].mode != 0o751 || f.files["/etc/localai"].gid != f.users["localai"][1] {
 		t.Error("not corrected")
+	}
+}
+
+// Issue #483: a node set up before the fix has /etc/localai 0750, which keeps every operator who is not in the
+// localai group away from agent-token (root:localai-operators 0640). A re-run gives others the pass-through bit only.
+func TestEtcLocalaiOldModeGetsOperatorTraverse(t *testing.T) {
+	f := newFake()
+	run(t, f, Options{DesktopUser: "alice"})
+	f.files["/etc/localai"].mode = 0o750
+	rep := run(t, f, Options{DesktopUser: "alice"})
+	var lines []string
+	for _, c := range rep.Changes {
+		lines = append(lines, c.String())
+	}
+	if got := strings.Join(lines, "\n"); got != "fix mode of /etc/localai: 0750 -> 0751" {
+		t.Fatalf("changes:\n%s", got)
+	}
+	if m := f.files["/etc/localai"].mode; m != 0o751 || m&0o004 != 0 {
+		t.Fatalf("mode %04o: want 0751 (others may pass through, never list)", m)
 	}
 }
 

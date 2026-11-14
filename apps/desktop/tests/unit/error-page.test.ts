@@ -10,6 +10,11 @@ describe('error page layout', () => {
     expect(errorPageLayout('LAI-DSK-001')).toEqual({ buttons: ['allow-user', 'open-portal'], leadCommand: null, terminalCommand: 'sudo usermod -aG localai-operators $USER' });
   });
 
+  it('LAI-DSK-017 leads with "Fix access"; the chmod command goes under "Use a terminal instead"', () => {
+    expect(errorPageLayout('LAI-DSK-017')).toEqual({ buttons: ['repair-access', 'open-portal', 'restart-computer'], leadCommand: null, terminalCommand: 'sudo chmod o+x /etc/localai' });
+    expect(ACTION_LABEL['repair-access']).toEqual({ en: 'Fix access', es: 'Reparar el acceso' });
+  });
+
   it('LAI-DSK-007 leads with "Make a new token", keeps Open in browser and the Portal', () => {
     expect(errorPageLayout('LAI-DSK-007')).toEqual({ buttons: ['rotate-token', 'open-browser', 'open-portal'], leadCommand: null, terminalCommand: 'sudo aictl token rotate' });
   });

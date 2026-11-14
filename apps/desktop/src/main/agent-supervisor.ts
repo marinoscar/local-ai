@@ -4,6 +4,7 @@
 // the agent's /health. No shell is ever used: `execFile` with fixed arguments, and no user input in any argument.
 import { execFile } from 'node:child_process';
 import { userInfo } from 'node:os';
+import type { DskCode } from './i18n';
 import { type Logger, NULL_LOGGER, scrub } from './log';
 
 export const MODULE = 'agent-supervisor' as const;
@@ -17,9 +18,18 @@ const GETENT = '/usr/bin/getent';
  * Why the token file could not be read (it answered `EACCES`):
  * - `not-member`: the user is not in `localai-operators` (LAI-DSK-001);
  * - `needs-relogin`: the user is in the group, but this login session does not have it yet (LAI-DSK-002);
- * - `member-active`: the user is in the group and has it; the group is not the cause (the file's mode is).
+ * - `member-active`: the user is in the group and has it; the group is not the cause: the folder or the file blocks it (LAI-DSK-017).
  */
 export type GroupDiagnosis = { kind: 'not-member' | 'needs-relogin' | 'member-active'; gid?: number };
+/**
+ * EACCES on the token file, by group diagnosis: not in the group (001), in it but not in this login yet (002), or in it
+ * and active, so the group is not the cause: the folder or the file blocks it (017, issue #483). "Allow this user" is
+ * offered only for 001; for a member it changes nothing.
+ */
+export function codeForGroupDiagnosis(kind: 'not-member' | 'needs-relogin' | 'member-active'): DskCode {
+  if (kind === 'needs-relogin') return 'LAI-DSK-002';
+  return kind === 'member-active' ? 'LAI-DSK-017' : 'LAI-DSK-001';
+}
 
 export interface GroupDeps {
   /** Output of `getent group localai-operators` (`name:x:gid:member,member`), or null when the group does not exist. */
