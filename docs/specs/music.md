@@ -196,6 +196,8 @@ The page of the agent's embedded UI (agent.md §3.11), built in `packages/ui` an
 
 The page loads no network asset (AGENTS.md rule 3).
 
+**Labels** (English / Spanish; the runbook [12](../runbooks/12-make-music-and-switch-workloads.md) quotes them, so a change here changes it too): **Switch to Music** / **Cambiar a Música**; Lyrics / Letra; Style / Estilo; Length / Duración; Language / Idioma; How many versions / Cuántas versiones; **Add a sample** / **Agregar una muestra**; **Sounds like this** / **Suena como esto**; **Same song, my lyrics** / **La misma canción, mi letra**; More options / Más opciones; How closely / Qué tan parecido; **Make the song** / **Hacer la canción**; Requests / Solicitudes; **Cancel** / **Cancelar**; My songs / Mis canciones; **Download** / **Descargar**; **Delete** / **Borrar**; "Music is ready" / "La música está lista"; "Music is starting (about a minute)" / "La música está iniciando (cerca de un minuto)". The workload switcher box is "What this computer does" / "Lo que hace esta computadora"; the `aictl` menu entry is "Switch what this computer does" / "Cambiar lo que hace esta computadora".
+
 ## 4. Behaviour
 
 ### 4.1 Loading and unloading
