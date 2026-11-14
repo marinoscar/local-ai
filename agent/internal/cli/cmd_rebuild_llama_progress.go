@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/marinoscar/local-ai/agent/internal/cli/theme"
 	"io"
 	"path/filepath"
 	"regexp"
@@ -201,7 +202,7 @@ func (p *llamaPrinter) compileLine(s string) {
 	if p.tty {
 		if p.rend == nil {
 			p.rend = progress.NewRenderer(progress.RenderOptions{
-				Out: p.c.Stderr, TTY: true, Color: !p.c.Global.NoColor, UTF8: out.UTF8Enabled(p.c.env.Getenv),
+				Out: p.c.Stderr, TTY: true, Color: !p.c.Global.NoColor, UTF8: out.UTF8Enabled(p.c.env.Getenv), Depth: theme.DetectDepth(p.c.env.Getenv),
 				Lang: string(p.c.Lang), Clock: llamaRenderClock{},
 			})
 		}

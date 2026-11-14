@@ -8,7 +8,11 @@
 // the golden tests pin it.
 package out
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/marinoscar/local-ai/agent/internal/cli/theme"
+)
 
 // Severity is how serious a problem is. It picks the symbol and the colour, and whether --quiet
 // hides it. The values match the severities of the doctor registry.
@@ -79,15 +83,15 @@ func ColorEnabled(stdoutIsTTY, noColorFlag, jsonMode bool, getenv func(string) s
 	return true
 }
 
-// ANSI select-graphic-rendition codes of the colour table.
+// The colour roles of the output (ADR-0014, internal/cli/theme): each picks a Corona colour at the
+// terminal's depth, and the 8 ANSI colours aictl always used on a terminal that announces nothing.
 const (
-	ansiReset  = "\x1b[0m"
-	codeGreen  = "32"
-	codeBlue   = "34"
-	codeYellow = "33"
-	codeRed    = "31"
-	codeCyan   = "36"
-	codeDim    = "2"
+	codeGreen  = theme.OK
+	codeBlue   = theme.Info
+	codeYellow = theme.Warn
+	codeRed    = theme.Error
+	codeCyan   = theme.Progress
+	codeDim    = theme.Dim
 	// codeBoldRed is the critical symbol: red and bold.
-	codeBoldRed = "1;31"
+	codeBoldRed = theme.Critical
 )

@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"github.com/marinoscar/local-ai/agent/internal/cli/theme"
 	"io"
 	"net/http"
 	"os"
@@ -73,6 +74,7 @@ func (c *Call) Follow(fs FollowSpec) (progress.Result, error) {
 		JSON:   c.Global.JSON,
 		Color:  tty && !c.Global.NoColor,
 		UTF8:   out.UTF8Enabled(c.env.Getenv),
+		Depth:  theme.DetectDepth(c.env.Getenv),
 		Lang:   string(c.Lang),
 		Clock:  fs.Clock,
 	})

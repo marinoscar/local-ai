@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/marinoscar/local-ai/agent/internal/cli/theme"
 	"github.com/marinoscar/local-ai/agent/internal/config"
 )
 
@@ -89,6 +90,8 @@ type RenderOptions struct {
 	// characters, else the ASCII set of aictl.md section 3.3.
 	Color bool
 	UTF8  bool
+	// Depth is the terminal's colour depth (theme.DetectDepth): Corona colours when it allows.
+	Depth theme.Depth
 	// Lang is "en" or "es".
 	Lang string
 	// Clock is the time source of the elapsed time and of the redraw throttle; default the real one.
@@ -337,11 +340,12 @@ func (r *TextRenderer) symbol(s Severity) (string, int) {
 
 // paint wraps s in an ANSI colour when colour is on.
 func (r *TextRenderer) paint(code int, s string) string {
-	if !r.o.Color || s == "" {
-		return s
-	}
-	return fmt.Sprintf("\x1b[%dm%s\x1b[0m", code, s)
+	return theme.Paint(r.o.Color, r.o.Depth, roleOf[code], s)
 }
+
+// roleOf maps the 8-colour codes this renderer names to the Corona roles (ADR-0014): the spinner is
+// gold, status keeps green, amber, red and blue, elapsed time is dim.
+var roleOf = map[int]theme.Role{32: theme.OK, 34: theme.Info, 33: theme.Warn, 31: theme.Error, 36: theme.Progress, 2: theme.Dim}
 
 // truncate cuts s to at most max columns (runes), ending in an ellipsis when it had to cut.
 func truncate(s string, max int, uni bool) string {

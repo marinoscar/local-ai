@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/marinoscar/local-ai/agent/internal/cli/theme"
 	"io"
 	"strings"
 	"time"
@@ -492,7 +493,7 @@ func watchEvents(ctx context.Context, open events.OpenFunc, kick chan<- struct{}
 // roFramePrinter is a Printer like c.Out that writes both streams into w (one redraw frame).
 func roFramePrinter(c *Call, w io.Writer) *out.Printer {
 	return out.New(out.Options{
-		Stdout: w, Stderr: w, Lang: c.Lang, Color: !c.Global.NoColor, UTF8: out.UTF8Enabled(c.env.Getenv),
+		Stdout: w, Stderr: w, Lang: c.Lang, Color: !c.Global.NoColor, UTF8: out.UTF8Enabled(c.env.Getenv), Depth: theme.DetectDepth(c.env.Getenv),
 		Quiet: c.Global.Quiet, Verbose: c.Global.Verbose,
 	})
 }

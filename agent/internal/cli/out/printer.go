@@ -3,6 +3,7 @@ package out
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/marinoscar/local-ai/agent/internal/cli/theme"
 	"io"
 	"strings"
 	"time"
@@ -17,6 +18,9 @@ type Options struct {
 	Lang           i18n.Lang
 	// Color paints symbols and secondary text; UTF8 picks the symbol set.
 	Color, UTF8 bool
+	// Depth is how many colours the terminal shows (theme.DetectDepth): Corona's own colours on a
+	// truecolor terminal, the nearest of 256, else the 8 basic ones. Zero is Basic.
+	Depth theme.Depth
 	// Quiet hides everything but errors and essential results; Verbose adds details, request ids and
 	// absolute times; JSON turns every human stdout method into a no-op (the JSON writer owns
 	// stdout) and routes error problems to it.
@@ -90,11 +94,8 @@ func (p *Printer) Stdout() io.Writer { return p.o.Stdout }
 func (p *Printer) Stderr() io.Writer { return p.o.Stderr }
 
 // paint wraps s in an ANSI colour when colour is on.
-func (p *Printer) paint(code, s string) string {
-	if !p.o.Color || s == "" {
-		return s
-	}
-	return "\x1b[" + code + "m" + s + ansiReset
+func (p *Printer) paint(code theme.Role, s string) string {
+	return theme.Paint(p.o.Color, p.o.Depth, code, s)
 }
 
 // Dim renders secondary text (ids, paths, times) dim; plain without colour.
@@ -109,7 +110,7 @@ func (p *Printer) stdoutLine(s string) {
 
 // wrapped writes msg after symbol sym (painted with code), wrapped to the width, continuation lines
 // aligned under the text, to w.
-func (p *Printer) wrapped(w io.Writer, sym, code, msg string) {
+func (p *Printer) wrapped(w io.Writer, sym string, code theme.Role, msg string) {
 	for i, l := range Wrap(msg, p.o.Width, sym+" ", strings.Repeat(" ", DisplayWidth(sym)+1)) {
 		if i == 0 {
 			l = p.paint(code, sym) + l[len(sym):]
@@ -248,7 +249,8 @@ func (p *Printer) Finding(pr Problem) {
 
 // writeProblem is the layout shared by Problem and Finding.
 func (p *Printer) writeProblem(w io.Writer, pr Problem, sev Severity) {
-	var sym, color string
+	var sym string
+	var color theme.Role
 	switch sev {
 	case SevInfo:
 		sym, color = p.sym.Info, codeBlue
