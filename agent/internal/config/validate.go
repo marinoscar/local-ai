@@ -121,7 +121,7 @@ func Validate(cfg Config, h *Hooks) Problems {
 }
 
 // workloadNameRe is catalog.WorkloadNameRe (this package does not import the catalog).
-var workloadNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+var workloadNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
 
 // workloads checks workloads{}: a name like the profile's, both labels, at least one model, and, when
 // the catalog is known, every model id in it (LAI-CAT-020).
@@ -157,7 +157,8 @@ func (v *validator) workloads(ws map[string]Workload, h *Hooks) {
 		}
 		for i, id := range w.Models {
 			if known != nil && !known[id] {
-				v.coded(fmt.Sprintf("%s.models[%d]", p, i), CodeWorkloadModel, SeverityError, "model %q is not in the catalog", id)
+				// Non-blocking (agent.md section 3.4): the file loads, that workload is left out.
+				v.coded(fmt.Sprintf("%s.models[%d]", p, i), CodeWorkloadModel, SeverityWarning, "model %q is not in the catalog; this workload is left out", id)
 			}
 		}
 	}

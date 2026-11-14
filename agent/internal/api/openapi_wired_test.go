@@ -19,6 +19,7 @@ import (
 	hwfake "github.com/marinoscar/local-ai/agent/internal/hardware/fake"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/portal"
+	"github.com/marinoscar/local-ai/agent/internal/router"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
 	"github.com/marinoscar/local-ai/agent/internal/svc/whisper"
@@ -107,6 +108,8 @@ func implementedRoutes(t *testing.T) []api.Route {
 	routes = append(routes, api.ArkImportRoutes(api.ArkImportDeps{})...)
 	// GET, POST and DELETE /ensure (ADR-0010); the engine is not called, so it stays nil.
 	routes = append(routes, api.EnsureRoutes(api.EnsureDeps{})...)
+	// GET /workloads and POST /workloads/{name}/activate (E11, #509); the orchestrator is not called.
+	routes = append(routes, router.WorkloadRoutes(router.WorkloadRouteOptions{})...)
 	// GET /docs/index (AGENT-16); /docs/ itself is outside the API prefix and not in the document.
 	routes = append(routes, api.DocsRoutes(api.DocsOptions{})...)
 	return routes

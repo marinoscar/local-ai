@@ -37,7 +37,6 @@ func TestWorkloadValidation(t *testing.T) {
 	cases := []struct {
 		name, yaml, path, code string
 	}{
-		{"unknown model", "workloads:\n  chat:\n    label: {en: Chat, es: Charla}\n    models: [no-such]\n", "workloads.chat.models[0]", config.CodeWorkloadModel},
 		{"bad name", "workloads:\n  Chat:\n    label: {en: Chat, es: Charla}\n    models: [gemma-4b]\n", "workloads.Chat", ""},
 		{"no Spanish label", "workloads:\n  chat:\n    label: {en: Chat}\n    models: [gemma-4b]\n", "workloads.chat.label", ""},
 		{"no models", "workloads:\n  chat:\n    label: {en: Chat, es: Charla}\n    models: []\n", "workloads.chat.models", ""},
@@ -54,6 +53,12 @@ func TestWorkloadValidation(t *testing.T) {
 				t.Errorf("problem = %+v, want an error with code %q", p, c.code)
 			}
 		})
+	}
+	// An unknown model id is a warning: the file loads (agent.md section 3.4).
+	cfg, probs := config.Load([]byte(minimal+"workloads:\n  chat:\n    label: {en: Chat, es: Charla}\n    models: [no-such]\n"), catalogHooks())
+	p, ok := findProblem(probs, "workloads.chat.models[0]")
+	if !ok || p.Severity != config.SeverityWarning || p.Code != config.CodeWorkloadModel || probs.HasErrors() || len(cfg.Workloads) != 1 {
+		t.Errorf("unknown model: %+v, %+v", p, probs)
 	}
 	// Without a catalog the model ids are not judged.
 	if _, probs := config.Load([]byte(minimal+"workloads:\n  chat:\n    label: {en: Chat, es: Charla}\n    models: [no-such]\n"), nil); len(probs) != 0 {

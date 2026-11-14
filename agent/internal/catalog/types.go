@@ -343,7 +343,7 @@ type Workload struct {
 }
 
 // WorkloadNameRe is the form of a workload name ("coding", "music", "voice-chat").
-var WorkloadNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+var WorkloadNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
 
 // WorkloadLabel is the bilingual name of a workload.
 type WorkloadLabel struct {

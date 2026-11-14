@@ -170,8 +170,9 @@ type orCfg struct {
 	noRestarter bool
 	loadTime    time.Duration
 	// extra are catalog models next to orCatalog (E11: music models); engines the engine adapters.
-	extra   []catalog.Model
-	engines []EngineAdapter
+	extra     []catalog.Model
+	engines   []EngineAdapter
+	workloads []Workload
 }
 
 // orRig is an Orchestrator over the HTTP fake router, a real state store on an in-memory filesystem,
@@ -308,6 +309,7 @@ func (r *orRig) inputs() Inputs {
 	return Inputs{
 		NodeID: "ai-test", Catalog: &catalog.Catalog{Version: "test", Models: append(orCatalog(), r.cfg.extra...)},
 		Profile: r.cfg.profile, Llama: r.cfg.llama, Roots: r.cfg.roots, Fit: r.cfg.env, Survival: r.cfg.survival,
+		Workloads: r.cfg.workloads,
 	}
 }
 

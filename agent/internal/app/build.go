@@ -211,6 +211,9 @@ func (d *Daemon) build(ctx context.Context) error {
 	if err := vision.Register(c.Checks, visionSource{d}); err != nil {
 		return err
 	}
+	if err := d.registerMusicChecks(); err != nil {
+		return err
+	}
 
 	// The llama router: client, watcher, the one shared lock, generators, orchestrator, reconciler.
 	c.Router, err = router.NewClient(router.Options{Port: cfg.Get().Ports.Llama, Keys: router.NewFileKey(fs, c.Paths.APIKey()), Logger: log,
@@ -250,6 +253,13 @@ func (d *Daemon) build(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("unit generator: %w", err)
 	}
+	var engines []router.EngineAdapter
+	if music, merr := d.newMusicAdapter(); merr != nil {
+		log.Error("the music engine adapter could not be built; music models cannot load", "error", merr.Error())
+	} else {
+		d.music = music
+		engines = append(engines, music)
+	}
 	c.Orchestrator, err = router.NewOrchestrator(router.OrchestratorOptions{
 		Router: c.Router, State: c.State, Inputs: d.routerInputs, Presence: router.ManifestPresence{FS: fs},
 		Lock: c.OpLock, Generator: c.Generator, Publisher: c.Bus, Audit: d.audit, Alerts: alerts,
@@ -258,6 +268,7 @@ func (d *Daemon) build(ctx context.Context) error {
 		Units: c.UnitGenerator, Stopper: llamaUnit{c.Systemd},
 		UnitBase: func() router.UnitInputs { return router.UnitInputs{Port: cfg.Get().Ports.Llama} },
 		Builds:   router.FileBuild{FS: fs, Path: c.Paths.BuildJSON()}, Timing: env.RouterTiming, Clock: clock, Logger: log,
+		Engines: engines,
 	})
 	if err != nil {
 		return fmt.Errorf("orchestrator: %w", err)
@@ -302,6 +313,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	merger := &statusapi.ModelMerger{
 		Config: cfg, Catalog: c.Catalog, State: c.State, Mode: mv, Hardware: c.Hardware, Router: c.RouterWatcher,
 		Roots: d.roots, Presence: router.ManifestPresence{FS: fs}, WhisperReserveMiB: d.whisperReserveMiB,
+		EngineModels: d.musicEngineModels,
 	}
 	svcView := health.Combine(c.Watcher, sup)
 	gauge := &gauges{}
@@ -551,6 +563,14 @@ func (d *Daemon) buildServer() error {
 			return api.RegisterModelOps(reg, api.ModelOpsDeps{
 				Orchestrator: router.NewHTTPOps(c.Orchestrator), LoadTimeout: loadTimeout(cfg), ModelsMax: max,
 			})
+		}},
+		{"workloads", func() error {
+			cfg := c.Config.Get()
+			max := 1
+			if p := d.profile(); p != nil && cfg.Llama.Mode != router.LlamaModeSingle {
+				max = p.Router.ModelsMax
+			}
+			return router.RegisterWorkloads(reg, router.WorkloadRouteOptions{Orchestrator: c.Orchestrator, LoadTimeout: loadTimeout(cfg), ModelsMax: max})
 		}},
 		{"mode", func() error {
 			return api.RegisterMode(reg, api.ModeDeps{Engine: c.Modes, Audit: d.audit, Logger: d.log})
@@ -819,6 +839,7 @@ func (d *Daemon) routerInputs() router.Inputs {
 		NodeID: cfg.Node.ID, Catalog: cs.Catalog, Profile: prof, Overrides: cfg.ProfileOverrides, Llama: cfg.Llama,
 		Roots: d.roots(), Fit: router.NewEnv(d.c.Hardware.Snapshot(), cfg.Llama.Backend, rcfg, d.whisperReserveMiB()),
 		StateDefault: def, Survival: st.Mode == state.ModeSurvival,
+		Workloads: d.resolveWorkloads(cs.Catalog, prof),
 	}
 }
 

@@ -817,6 +817,8 @@ func examples() map[string]any {
 		TypeDrillStarted:        DrillStarted{RunID: "drill-1", Trigger: "manual", Quick: true},
 		TypeDrillCheckDone:      DrillCheckDone{RunID: "drill-1", ID: "check-a", Result: "warn", Code: "LAI-DRL-001"},
 		TypeDrillDone:           DrillDone{RunID: "drill-1", Overall: "pass", SurvivalReady: true},
+		TypeWorkloadProgress:    WorkloadProgress{OpID: "op_1", Name: "music", Phase: WorkloadLoading, Model: "m-a", Done: 1, Total: 2},
+		TypeWorkloadDone:        WorkloadDone{OpID: "op_1", Name: "music", Result: WorkloadOK},
 	}
 }
 
