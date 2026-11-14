@@ -316,6 +316,15 @@ const (
 	SVC116 = "LAI-SVC-116"
 	SVC117 = "LAI-SVC-117"
 	SVC118 = "LAI-SVC-118"
+	// LAI-SVC-151..158: music (E11, docs/specs/music.md section 8).
+	SVC151 = "LAI-SVC-151"
+	SVC152 = "LAI-SVC-152"
+	SVC153 = "LAI-SVC-153"
+	SVC154 = "LAI-SVC-154"
+	SVC155 = "LAI-SVC-155"
+	SVC156 = "LAI-SVC-156"
+	SVC157 = "LAI-SVC-157"
+	SVC158 = "LAI-SVC-158"
 
 	// LAI-GW
 	GW001 = "LAI-GW-001"
@@ -2104,6 +2113,54 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "No usable AI-ARK drive is connected to copy from", ES: "No hay una unidad AI-ARK utilizable conectada para copiar"},
 		Fix:      Msg{EN: "Plug in the AI-ARK drive, wait a minute, then press **Copy from the AI-ARK drive** again.", ES: "Conecte la unidad AI-ARK, espere un minuto y presione otra vez **Copiar desde la unidad AI-ARK**."},
+	},
+	{
+		ID:       SVC151,
+		Severity: Warning,
+		Title:    Msg{EN: "Music is not loaded", ES: "La música no está cargada"},
+		Fix:      Msg{EN: "Switch to the **Music** workload (or load the music model), wait until it is ready, then try again.", ES: "Cambie a la carga de trabajo **Música** (o cargue el modelo de música), espere a que esté lista e intente otra vez."},
+	},
+	{
+		ID:       SVC152,
+		Severity: Error,
+		Title:    Msg{EN: "The music engine crashed during a song", ES: "El motor de música falló durante una canción"},
+		Fix:      Msg{EN: "Load the music model again and retry; if it keeps failing, run `aictl doctor` and read the music logs.", ES: "Cargue otra vez el modelo de música y reintente; si sigue fallando, ejecute `aictl doctor` y lea los registros de música."},
+	},
+	{
+		ID:       SVC153,
+		Severity: Warning,
+		Title:    Msg{EN: "The music queue is full", ES: "La cola de música está llena"},
+		Fix:      Msg{EN: "Wait for a song in progress to finish, then try again.", ES: "Espere a que termine una canción en curso e intente otra vez."},
+	},
+	{
+		ID:       SVC154,
+		Severity: Warning,
+		Title:    Msg{EN: "The sample or the song request was rejected", ES: "Se rechazó la muestra o la solicitud de la canción"},
+		Fix:      Msg{EN: "Use a WAV, MP3, FLAC or OGG sample of at most 20 MiB and 60 seconds, and keep lyrics under 8 KiB.", ES: "Use una muestra WAV, MP3, FLAC u OGG de 20 MiB y 60 segundos como máximo, y mantenga la letra bajo 8 KiB."},
+	},
+	{
+		ID:       SVC155,
+		Severity: Error,
+		Title:    Msg{EN: "There is not enough disk space to save the song", ES: "No hay espacio en disco suficiente para guardar la canción"},
+		Fix:      Msg{EN: "Delete old songs or other content to free disk space, then try again.", ES: "Borre canciones antiguas u otro contenido para liberar espacio en disco e intente otra vez."},
+	},
+	{
+		ID:       SVC156,
+		Severity: Error,
+		Title:    Msg{EN: "Cloud song request: the sample could not be downloaded or its checksum is wrong", ES: "Solicitud de canción de la nube: no se pudo descargar la muestra o su suma de control es incorrecta"},
+		Fix:      Msg{EN: "Send the request again from the cloud; if it fails again, upload the sample once more.", ES: "Envíe otra vez la solicitud desde la nube; si vuelve a fallar, suba la muestra de nuevo."},
+	},
+	{
+		ID:       SVC157,
+		Severity: Error,
+		Title:    Msg{EN: "Cloud song request: the song could not be uploaded", ES: "Solicitud de canción de la nube: no se pudo subir la canción"},
+		Fix:      Msg{EN: "Check the node's internet connection; the song is kept on the node and can be played from its Music page.", ES: "Revise la conexión a internet del nodo; la canción se guarda en el nodo y se puede escuchar en su página de Música."},
+	},
+	{
+		ID:       SVC158,
+		Severity: Info,
+		Title:    Msg{EN: "The song was cancelled", ES: "Se canceló la canción"},
+		Fix:      Msg{EN: "Nothing to fix; start a new song when you are ready.", ES: "No hay nada que corregir; empiece una canción nueva cuando quiera."},
 	},
 	{
 		ID:       GW001,
