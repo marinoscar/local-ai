@@ -67,8 +67,13 @@ check() { # name, unit file, optional drop-in file, optional unit name (default 
     mkdir -p "$dir/$uname.d"
     cp "$dropin" "$dir/$uname.d/50-env.conf"
   fi
-  local out
-  if out="$(systemd-analyze verify "$dir/$uname" 2>&1)" && [[ -z "$out" ]]; then
+  local out rc=0
+  out="$(systemd-analyze verify "$dir/$uname" 2>&1)" || rc=$?
+  # Warnings about the host's own units (for example a CI runner's /usr/lib/systemd/system files that
+  # use an option the runner's newer systemd removed) say nothing about the unit under test: drop them,
+  # so only messages about our files (or with no file at all) fail the check.
+  out="$(printf '%s\n' "$out" | grep -Ev '^(/usr)?/lib/systemd/system/[^:]+:[0-9]+: ' || true)"
+  if [[ $rc -eq 0 && -z "$out" ]]; then
     echo "ok   $name"
   else
     echo "FAIL $name" >&2
