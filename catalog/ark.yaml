@@ -34,7 +34,7 @@ content:
   # issue #360). The signed list comes first: an item's version is the first 12 digits of its first file's sha256, so the
   # version names the release the list signs, and a node that synced the item before the list was added fetches it again.
   # Not here yet: kit-cuda-redist is off by default. kit-desktop pins a published desktop release (issue #491).
-  # kit-agent-binaries and kit-agent-source pin the pre-release node-v0.1.0-rc.7. Pins below were computed from
+  # kit-agent-binaries and kit-agent-source pin the pre-release node-v0.1.0-rc.9. Pins below were computed from
   # the downloaded release files (decision #251); nothing is copied from a mirror's listing unchecked.
 
   - id: kit-catalog
@@ -75,7 +75,7 @@ content:
 
   - id: kit-agent-binaries
     kind: kit
-    display_name: "Agent node-v0.1.0-rc.7 (rebuild kit)"
+    display_name: "Agent node-v0.1.0-rc.9 (rebuild kit)"
     summary: "The signed agent program for amd64 and arm64, its checksums and the installer, to rebuild a node offline."
     summary_es: "El programa del agente firmado para amd64 y arm64, sus sumas y el instalador, para reconstruir un nodo sin internet."
     survival_tier: 1
@@ -83,18 +83,18 @@ content:
     source:
       type: url
       files:
-        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.7/SHA256SUMS", sha256: "4a29e3550cfe5ce92daa15452e9d067b0b21d4ee1ef9ad182fc860a03f5fe6ee", name: "release/SHA256SUMS"}
-        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.7/SHA256SUMS.minisig", sha256: "ff2e0afac417742a918fb3ecc16c3153c1d40824cd3cb1b6bf1271a62b020ffa", name: "release/SHA256SUMS.minisig"}
-        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.7/aiagent-linux-amd64", sha256: "af9d4f608b7e3bf5fdb50098089d786e760c30495a776b67382bd655588c9550"}
-        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.7/aiagent-linux-arm64", sha256: "046d54c357fda42d68308d588954bfc851f32280b8d3475220422842ce10bda7"}
-        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.7/install-node.sh", sha256: "370e10b39f9cfd6eb238d0f131e86afcc6ba3dce012420b34b0215261b7f0ae3"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.9/SHA256SUMS", sha256: "e1ffe61c67aa86443ad6d8452382d0e02e78d10db728f018419c9348cfc94420", name: "release/SHA256SUMS"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.9/SHA256SUMS.minisig", sha256: "5ff727d9d38fb5dcdbe958e611390c02cfa1447f9daa4ac86409a30e11c12a33", name: "release/SHA256SUMS.minisig"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.9/aiagent-linux-amd64", sha256: "87a9a4606da4f30cedaad12010c80ad1a38fc9308f534086c597233fb82da9bc"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.9/aiagent-linux-arm64", sha256: "8918ff7bb3d4804303ccf4e7fe7c2c8fca7323b622f2ed5b07c0506d2f197ffc"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.9/install-node.sh", sha256: "12537cc66299d7bb3bd2872748aa33915627d06dd343f3b27d1777576f2c508f"}
       version_policy: pinned
       checksum: pinned
     expected_size_bytes: 52000000
 
   - id: kit-agent-source
     kind: kit
-    display_name: "Agent source node-v0.1.0-rc.7 (rebuild kit)"
+    display_name: "Agent source node-v0.1.0-rc.9 (rebuild kit)"
     summary: "The agent source with its vendored libraries, to rebuild the agent offline with the Go toolchain of the kit."
     summary_es: "El código fuente del agente con sus bibliotecas, para reconstruir el agente sin internet con el compilador de Go del kit."
     survival_tier: 1
@@ -102,14 +102,14 @@ content:
     source:
       type: url
       files:
-        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.7/local-ai-node-v0.1.0-rc.7-src.tar.gz", sha256: "9882b540316cc70a2880ab86e51719e2c8a6eb5ba38bffd57c2f8028e6edaa04"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/node-v0.1.0-rc.9/local-ai-node-v0.1.0-rc.9-src.tar.gz", sha256: "f6293ef73056ab7a3735a777597ead64e0c20a570ae3a263614cac6bff2688c1"}
       version_policy: pinned
       checksum: pinned
     expected_size_bytes: 9500000
 
   - id: kit-desktop
     kind: kit
-    display_name: "ai-desktop 0.1.0-rc.2 (rebuild kit)"
+    display_name: "ai-desktop 0.1.0-rc.3 (rebuild kit)"
     summary: "The ai-desktop app (.deb and AppImage), to reinstall the app on a node with no internet."
     summary_es: "La aplicación ai-desktop (.deb y AppImage), para reinstalarla en un nodo sin internet."
     survival_tier: 1
@@ -117,8 +117,8 @@ content:
     source:
       type: url
       files:
-        - {url: "https://github.com/marinoscar/local-ai/releases/download/desktop-v0.1.0-rc.2/ai-desktop_0.1.0-rc.2_amd64.deb", sha256: "889cee0874c877a9f645be874f63ad0017e909a207d75090977e12e0e3232462"}
-        - {url: "https://github.com/marinoscar/local-ai/releases/download/desktop-v0.1.0-rc.2/ai-desktop-0.1.0-rc.2-x86_64.AppImage", sha256: "92eecda117d5b72a1fc8373f73b5c717f940740270fdacf0e69a57434b756403"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/desktop-v0.1.0-rc.3/ai-desktop_0.1.0-rc.3_amd64.deb", sha256: "688d2eb2e284bd0473764d315474e20d2563769205b7ae8313c986fff4ef38f2"}
+        - {url: "https://github.com/marinoscar/local-ai/releases/download/desktop-v0.1.0-rc.3/ai-desktop-0.1.0-rc.3-x86_64.AppImage", sha256: "f511722fda97d9ac7b19b2d4d404d8c019c4bf2e2ea29071b0310bdc441abb16"}
       version_policy: pinned
       checksum: pinned
     expected_size_bytes: 227000000

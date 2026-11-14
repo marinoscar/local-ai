@@ -55,6 +55,7 @@
   "health.out.pass": "✓ Salió bien. Todo lo necesario en una emergencia funciona.",
   "health.out.warn": "! Salió bien con avisos. Funciona, pero algunas cosas necesitan atención.",
   "health.out.fail": "✗ Falló. Algo necesario en una emergencia no funciona.",
+  "health.out.empty": "El último simulacro no revisó nada, así que no dice nada de esta computadora. Haga un simulacro de práctica.",
   "health.out.aborted": "El simulacro se detuvo antes de terminar. Todo volvió a quedar como estaba.",
   "health.out.skipped": "El simulacro no se hizo.",
   "health.out.manual_pass": "✓ Se registró un simulacro de \"desconectar todo\" que salió bien.",

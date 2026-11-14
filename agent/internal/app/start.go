@@ -379,9 +379,14 @@ func (d *Daemon) stepSubsystems(ctx context.Context) error {
 	d.startWorker(c.Config)
 	d.startWorker(c.Watcher)
 	// The kiwix unit is rewritten at every start (like the whisper unit), so an agent upgrade that changes
-	// the unit text reaches the disk without a node.yaml edit. The writer never starts or stops the unit.
+	// the unit text reaches the disk without a node.yaml edit. The writer never starts or stops the unit;
+	// a kiwix that was already running with the old text is restarted once, in the background, so the new
+	// flags apply now (the first one: --nodatealiases, without which every undated library link such as
+	// the Portal's first-aid entries answered 404). A kiwix that is not running is left alone.
 	if cfg := d.c.Config.Get(); blockEnabled(cfg, "kiwix") && d.c.Systemd != nil {
-		d.writeKiwixUnit(ctx, kiwixThreads(cfg))
+		if d.writeKiwixUnit(ctx, kiwixThreads(cfg)) {
+			d.restartKiwixIfRunning()
+		}
 	}
 	d.startWorker(&placesWorker{d: d}) // the place index: built now and on every change of the places item
 	if d.ark != nil {

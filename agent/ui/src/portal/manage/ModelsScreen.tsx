@@ -21,6 +21,7 @@ import {
   formatSize,
   groups,
   isBrain,
+  isHelper,
   rowState,
   type ButtonName,
   type ButtonRule,
@@ -389,7 +390,11 @@ export function ModelsScreen({ status }: { status: PortalStatus }) {
           {survival.has(m.id) ? (
             <span className="tag model-tag">{t("models.tag.survival")}</span>
           ) : null}
-          {isBrain(m) ? null : <span className="tag model-tag">{t("models.tag.speech")}</span>}
+          {isHelper(m) ? (
+            <span className="tag model-tag">{t("models.tag.helper")}</span>
+          ) : isBrain(m) ? null : (
+            <span className="tag model-tag">{t("models.tag.speech")}</span>
+          )}
         </div>
         <p className="model-state">
           <strong>{state}</strong>

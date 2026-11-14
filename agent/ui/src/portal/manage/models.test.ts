@@ -48,6 +48,17 @@ describe("rowState (agent.md section 3.8.7 status)", () => {
 });
 
 describe("buttons (dashboard.md sections 3.2 and 5)", () => {
+  it("a helper (an embedding model) is never offered as a brain: only Download or Delete", () => {
+    const helper = row({ id: "embeddinggemma-300m-q8", roles: ["embedding"] });
+    expect(shown(buttons(helper, ctx))).toEqual({ delete: null });
+    expect(shown(buttons({ ...helper, present: false, status: "absent" }, ctx))).toEqual({ download: null });
+    // It is listed with the brains, not with the speech models; a chat model with roles is still a brain.
+    const g = groups([helper, row({ id: "qwen", roles: ["chat", "vision"] })]);
+    expect(g.brains.map((m) => m.id).sort()).toEqual(["embeddinggemma-300m-q8", "qwen"]);
+    expect(g.speech).toEqual([]);
+    expect(shown(buttons(row({ roles: ["chat"] }), ctx))).toHaveProperty("use");
+  });
+
   it("a brain in use offers Unload, Make default; Delete says unload first", () => {
     expect(shown(buttons(row({ status: "loaded", loaded: true }), ctx))).toEqual({
       unload: null,

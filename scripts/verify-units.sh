@@ -57,18 +57,12 @@ for bin in "${bins[@]}"; do
   fi
 done
 
+# host_noise drops what systemd-analyze says about the runner's own unit files (a newer systemd on the
+# CI image warns "Support for option CPUAccounting= has been removed" for units under /usr/lib/systemd),
+# so only what concerns our units counts. Anything about a file under the test folder stays.
+host_noise() { grep -vE '^(/usr/lib|/lib|/etc|/run)/systemd/[^ ]*:[0-9]+: ' || true; }
+
 fail=0
-# verify FILE...: `systemd-analyze verify`, printing what it says and failing when it fails or says
-# anything. Warnings about the host's own units (for example a CI runner's /usr/lib/systemd/system
-# files that use an option the runner's newer systemd removed) say nothing about the units under test:
-# they are dropped, so only messages about our files (or with no file at all) count.
-verify() {
-  local raw rc=0
-  raw="$(systemd-analyze verify "$@" 2>&1)" || rc=$?
-  raw="$(printf '%s\n' "$raw" | grep -Ev '^(/usr)?/lib/systemd/system/[^:]+:[0-9]+: ' || true)"
-  printf '%s' "$raw"
-  [[ $rc -eq 0 && -z "$raw" ]]
-}
 check() { # name, unit file, optional drop-in file, optional unit name (default localai-llama.service)
   local name="$1" unit="$2" dropin="${3:-}" uname="${4:-localai-llama.service}"
   local dir="$tmp/$name"
@@ -78,8 +72,10 @@ check() { # name, unit file, optional drop-in file, optional unit name (default 
     mkdir -p "$dir/$uname.d"
     cp "$dropin" "$dir/$uname.d/50-env.conf"
   fi
-  local out
-  if out="$(verify "$dir/$uname")"; then
+  local out rc=0
+  out="$(systemd-analyze verify "$dir/$uname" 2>&1)" || rc=$?
+  out="$(host_noise <<<"$out")"
+  if [[ $rc -eq 0 && -z "$out" ]]; then
     echo "ok   $name"
   else
     echo "FAIL $name" >&2
@@ -106,7 +102,10 @@ check_drill() {
   mkdir -p "$dir"
   cp "$units/localai-drill.service" "$units/localai-drill.timer" "$units/localai-agent.service" "$dir/"
   local out
-  if out="$(verify "$dir/localai-drill.service" "$dir/localai-drill.timer")"; then
+  rc=0
+  out="$(systemd-analyze verify "$dir/localai-drill.service" "$dir/localai-drill.timer" 2>&1)" || rc=$?
+  out="$(host_noise <<<"$out")"
+  if [[ $rc -eq 0 && -z "$out" ]]; then
     echo "ok   drill service and timer"
   else
     echo "FAIL drill service and timer" >&2
@@ -123,7 +122,10 @@ check_sync() {
   mkdir -p "$dir"
   cp "$units/localai-sync.service" "$units/localai-sync.timer" "$units/localai-agent.service" "$dir/"
   local out
-  if out="$(verify "$dir/localai-sync.service" "$dir/localai-sync.timer")"; then
+  rc=0
+  out="$(systemd-analyze verify "$dir/localai-sync.service" "$dir/localai-sync.timer" 2>&1)" || rc=$?
+  out="$(host_noise <<<"$out")"
+  if [[ $rc -eq 0 && -z "$out" ]]; then
     echo "ok   sync service and timer"
   else
     echo "FAIL sync service and timer" >&2
