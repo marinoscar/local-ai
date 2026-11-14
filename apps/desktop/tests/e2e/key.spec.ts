@@ -176,10 +176,25 @@ test.describe('the connection-info window and the PIN prompt', () => {
     expect(agent.pinVerifications.map((v) => v.outcome)).toEqual(['locked', 'no-pin']);
   });
 
-  test('leaving survival from the shell bridge asks for the PIN and sends the grant with that one mode request', async () => {
+  test('leaving survival from the shell bridge needs no PIN (ADR-0011): one request, no PIN window', async () => {
+    agent.mode = 'survival';
+    run = await launch({ token: agent.token, env: NO_TRAY });
+    const bar = (await waitForContents(run.app, isTopBar)).id;
+    await waitForContents(run.app, isAgentUrl);
+    await expect.poll(() => agent.openEventStreams()).toBe(1);
+
+    expect(await evaluateIn<unknown>(run.app, bar, "window.localaiDesktop.setMode('online')")).toEqual({ ok: true });
+    expect(agent.modeRequests).toHaveLength(1);
+    expect(agent.modeRequests[0]).toMatchObject({ path: '/api/v1/mode', body: { target: 'online', wait: false }, pinGrant: undefined });
+    expect(agent.pinVerifications).toHaveLength(0);
+    expect(agent.mode).toBe('online');
+  });
+
+  test('an agent older than ADR-0011 still wants the PIN: the PIN window opens and the grant goes with the one retry', async () => {
     const pin = newPin();
     agent.pin = pin;
     agent.mode = 'survival';
+    agent.leaveSurvivalNeedsPin = true;
     run = await launch({ token: agent.token, env: NO_TRAY });
     const bar = (await waitForContents(run.app, isTopBar)).id;
     await waitForContents(run.app, isAgentUrl);
