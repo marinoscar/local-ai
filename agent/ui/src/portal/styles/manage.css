@@ -379,3 +379,43 @@
 .health-drill-warn .health-drill-outcome {
   color: var(--warn);
 }
+
+/* ---- System screen (issue #500, dashboard.md 4.6) ---- */
+.sys-item {
+  margin: 0 0 18px;
+}
+.sys-item-title {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+}
+.sys-versions {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.sys-version {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.sys-version dt {
+  font-weight: 700;
+  min-width: 10rem;
+}
+.sys-version dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.sys-services {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sys-service {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.sys-service-name {
+  font-weight: 700;
+  min-width: 9rem;
+}
