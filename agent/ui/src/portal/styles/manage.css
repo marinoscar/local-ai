@@ -284,3 +284,98 @@
   margin: 8px 0 16px;
 }
 /* ---- end AI models screen ---- */
+/* ---- Health screen (#499, dashboard.md section 4.5) ---- */
+.health-working {
+  margin: 8px 0 12px;
+}
+.health-progress {
+  width: 100%;
+  max-width: 28rem;
+  height: 18px;
+  accent-color: var(--primary);
+}
+.health-ok {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--ok);
+}
+.health-bad {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--bad);
+}
+.health-h3 {
+  margin: 14px 0 6px;
+  font-size: 1.1rem;
+}
+.health-problem-title {
+  font-weight: 700;
+}
+.health-unit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.health-select {
+  font: inherit;
+  min-height: 48px;
+  padding: 4px 10px;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--fg);
+}
+.health-events {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 28rem;
+  overflow: auto;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+}
+.health-event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.health-event:last-child {
+  border-bottom: 0;
+}
+.health-event .mark {
+  font-weight: 700;
+  min-width: 1.2em;
+  text-align: center;
+}
+.health-event-error {
+  background: var(--bad-bg);
+}
+.health-event-warning {
+  background: var(--warn-bg);
+}
+.health-event-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.health-event-text {
+  flex: 1 1 16rem;
+  overflow-wrap: anywhere;
+}
+.health-drill-outcome {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+.health-drill-pass .health-drill-outcome,
+.health-drill-manual_pass .health-drill-outcome {
+  color: var(--ok);
+}
+.health-drill-fail .health-drill-outcome,
+.health-drill-manual_fail .health-drill-outcome {
+  color: var(--bad);
+}
+.health-drill-warn .health-drill-outcome {
+  color: var(--warn);
+}

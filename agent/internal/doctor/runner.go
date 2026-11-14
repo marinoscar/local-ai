@@ -232,7 +232,7 @@ func firstLine(s string) string {
 // normalize turns what a check returned into the problem results of the report: ok results are
 // dropped; the check id is set; a code outside the table (or retired) becomes LAI-AGT-099; the
 // severity defaults to the code's; title and fix come from the table in lang unless the check set
-// its own; the details map is copied.
+// its own; the action is the code's (doctor-codes.md section 1.7); the details map is copied.
 func normalize(check string, in []Result, lang string) []Result {
 	var out []Result
 	for _, r := range in {
@@ -253,6 +253,7 @@ func normalize(check string, in []Result, lang string) []Result {
 		if r.Fix == "" {
 			r.Fix = c.Fix.In(lang)
 		}
+		r.Action = c.Action
 		if len(r.Details) > 0 {
 			d := make(map[string]any, len(r.Details))
 			for k, v := range r.Details {
