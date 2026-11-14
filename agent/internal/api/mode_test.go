@@ -133,7 +133,7 @@ func TestModeGetShape(t *testing.T) {
 
 	r = newModeRig(t, modes.Survival, true)
 	m := decodeMap(t, r.get(nil))
-	if m["mode"] != "survival" || m["leave_requires_admin"] != true || m["since"] != "2026-11-02T14:00:00Z" {
+	if m["mode"] != "survival" || m["leave_requires_admin"] != false || m["since"] != "2026-11-02T14:00:00Z" {
 		t.Fatalf("survival: %v", m)
 	}
 	if got := m["allowed_targets"].([]any); len(got) != 2 || got[0] != "online" || got[1] != "offline" {
@@ -324,14 +324,16 @@ func TestModePostWaitOfAPreemptedTransitionIsConflict(t *testing.T) {
 
 // ---- leaving survival ------------------------------------------------------------------------------
 
-func TestLeavingSurvivalNeedsAdminStar(t *testing.T) {
+// ADR-0011: every operator leaves survival without the PIN (the desktop app uses a bearer token or a
+// session made from it). The route itself refuses anyone who is not an operator.
+func TestLeavingSurvivalNeedsOnlyAnOperator(t *testing.T) {
 	cases := []struct {
 		name      string
 		principal string
 		want      int
 	}{
-		{"operator over TCP with a bearer token", "bearer", 403},
-		{"operator over TCP with a session", "session", 403},
+		{"operator over TCP with a bearer token (the desktop app)", "bearer", 200},
+		{"operator over TCP with a session", "session", 200},
 		{"operator on the socket", "socket", 200},
 		{"admin", "admin", 200},
 	}
@@ -524,5 +526,20 @@ func TestSurvivalPreemptsARunningTransitionThroughTheRoute(t *testing.T) {
 	r.idle()
 	if r.eng.Current() != modes.Survival || r.env.Rec.Count("prober.start") != 0 {
 		t.Fatalf("mode %s effects %v", r.eng.Current(), r.env.Effects())
+	}
+}
+
+// ADR-0011: a browser with only the Portal session (no agent token) cannot leave survival mode, and
+// nothing changes. Only an operator can.
+func TestPortalSessionCannotLeaveSurvival(t *testing.T) {
+	for _, target := range []string{"offline", "online"} {
+		r := newModeRig(t, modes.Survival, true)
+		rec := r.post("/mode", `{"target":"`+target+`","wait":true}`, map[string]string{"X-Test-Principal": "portal", "Origin": "http://127.0.0.1:7070"})
+		if rec.Code < 400 || rec.Code >= 500 {
+			t.Fatalf("to %s: status %d, want a 4xx refusal: %s", target, rec.Code, rec.Body)
+		}
+		if r.eng.Current() != modes.Survival || len(r.env.Effects()) != 0 {
+			t.Fatalf("to %s: a refused request changed something", target)
+		}
 	}
 }

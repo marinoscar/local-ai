@@ -165,48 +165,62 @@ describe('mode switch against the fake agent', () => {
   });
 });
 
-describe('leaving survival (PIN)', () => {
+describe('leaving survival (ADR-0011: no PIN; an older agent may still ask for it)', () => {
   const grant = 'grant-for-this-test';
 
-  it('without a PIN prompt (DSK-08 not landed) the tray cannot leave survival and does not even ask the agent', async () => {
+  it('leaves survival from the tray with no PIN and no PIN window, in one request', async () => {
     agent.mode = 'survival';
-    const t = trayOver(client());
+    const requestGrant = vi.fn(async () => ({ ok: true as const, grant }));
+    const t = trayOver(client(), { pin: { requestGrant } });
     t.feed.seed({ mode: { value: 'survival' } });
     await t.feed.refresh();
     expect(t.last().colour).toBe('orange');
-    expect(JSON.stringify(t.last().menu)).toContain('Leave survival in the Survival Portal');
+    expect(JSON.stringify(t.last().menu)).not.toContain('Leave survival in the Survival Portal');
     await t.tray.invoke('mode:online');
-    expect(agent.modeRequests).toEqual([]);
-    expect(t.alerts[0]!.detail).toContain('LAI-SEC-002');
+    expect(requestGrant).not.toHaveBeenCalled();
+    expect(agent.modeRequests).toHaveLength(1);
+    expect(agent.modeRequests[0]).toMatchObject({ body: { target: 'online', wait: false }, pinGrant: undefined });
+    expect(agent.mode).toBe('online');
+    expect(t.alerts).toEqual([]);
   });
 
-  it('with a PIN prompt: asks for a grant first (the mode is known), sends it as X-LocalAI-Pin-Grant, and the node leaves survival', async () => {
+  it('also without any PIN prompt in this build', async () => {
     agent.mode = 'survival';
+    const t = trayOver(client());
+    await t.feed.refresh();
+    await t.tray.invoke('mode:offline');
+    expect(agent.mode).toBe('offline');
+    expect(t.alerts).toEqual([]);
+  });
+
+  it('an older agent that still wants the PIN: the refusal makes the tray ask once, then it retries with the grant', async () => {
+    agent.mode = 'survival';
+    agent.leaveSurvivalNeedsPin = true;
     agent.validPinGrant = grant;
     const requestGrant = vi.fn(async () => ({ ok: true as const, grant }));
     const t = trayOver(client(), { pin: { requestGrant } });
     await t.feed.refresh();
     await t.tray.invoke('mode:online');
-    expect(requestGrant).toHaveBeenCalledTimes(1);
     expect(requestGrant).toHaveBeenCalledWith('leave-survival');
-    // One request, with the grant, and no refusal for the agent to audit.
-    expect(agent.modeRequests).toHaveLength(1);
-    expect(agent.modeRequests[0]).toMatchObject({ body: { target: 'online', wait: false }, pinGrant: grant });
+    expect(agent.modeRequests.map((r) => r.pinGrant)).toEqual([undefined, grant]);
     expect(agent.mode).toBe('online');
     expect(t.alerts).toEqual([]);
   });
 
-  it('a cancelled PIN window sends nothing and shows nothing', async () => {
+  it('an older agent and a cancelled PIN window: nothing more is sent and nothing is shown', async () => {
     agent.mode = 'survival';
+    agent.leaveSurvivalNeedsPin = true;
     const t = trayOver(client(), { pin: { requestGrant: async () => ({ ok: false, cancelled: true }) } });
     await t.feed.refresh();
     await t.tray.invoke('mode:offline');
-    expect(agent.modeRequests).toEqual([]);
+    expect(agent.modeRequests).toHaveLength(1);
+    expect(agent.mode).toBe('survival');
     expect(t.alerts).toEqual([]);
   });
 
   it('a wrong or locked PIN shows the agent\'s code', async () => {
     agent.mode = 'survival';
+    agent.leaveSurvivalNeedsPin = true;
     const t = trayOver(client(), { pin: { requestGrant: async () => ({ ok: false, code: 'LAI-SEC-004' }) } });
     await t.feed.refresh();
     await t.tray.invoke('mode:offline');
@@ -215,6 +229,7 @@ describe('leaving survival (PIN)', () => {
 
   it('a stale mode: the agent says pin_required, the tray asks for the grant and retries once with it', async () => {
     agent.mode = 'survival';
+    agent.leaveSurvivalNeedsPin = true;
     agent.validPinGrant = grant;
     const requestGrant = vi.fn(async () => ({ ok: true as const, grant }));
     // No refresh: the tray still believes the node is online.
@@ -226,6 +241,7 @@ describe('leaving survival (PIN)', () => {
 
   it('the grant is never kept: a second change asks again', async () => {
     agent.mode = 'survival';
+    agent.leaveSurvivalNeedsPin = true;
     agent.validPinGrant = grant;
     const requestGrant = vi.fn(async () => ({ ok: true as const, grant }));
     const modes = new ModeController({ api: createModeApi(client()), pin: { requestGrant }, currentMode: () => 'survival' });
@@ -240,6 +256,7 @@ describe('leaving survival (PIN)', () => {
     const requestGrant = vi.fn(() => new Promise<{ ok: true; grant: string }>((resolve) => (release = () => resolve({ ok: true, grant }))));
     agent.validPinGrant = grant;
     agent.mode = 'survival';
+    agent.leaveSurvivalNeedsPin = true;
     const modes = new ModeController({ api: createModeApi(client()), pin: { requestGrant }, currentMode: () => 'survival' });
     const first = modes.setMode('online');
     const second = await modes.setMode('offline');

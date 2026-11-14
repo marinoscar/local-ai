@@ -67,6 +67,8 @@ export interface FakeAgent {
   failNextModeChange: { status: number; code: string; details?: Record<string, unknown> } | null;
   /** The PIN grant the fake accepts for leaving survival. Default: none is valid. */
   validPinGrant: string | null;
+  /** An agent older than ADR-0011: leaving survival needs a PIN grant. Default false (the current agent). */
+  leaveSurvivalNeedsPin: boolean;
   /** Mode reported by /health and /status. */
   mode: string;
   /** Health `version`. */
@@ -158,6 +160,7 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     models: { default: null, loaded: [] } as FakeAgent['models'],
     failNextModeChange: null as FakeAgent['failNextModeChange'],
     validPinGrant: null as string | null,
+    leaveSurvivalNeedsPin: false,
     apiKey: randomBytes(32).toString('hex'),
     pin: null as string | null,
     pinFailures: 0,
@@ -345,7 +348,7 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
         since: null,
         transition: null,
         allowed_targets: ['online', 'offline', 'survival'].filter((m) => m !== state.mode),
-        leave_requires_admin: state.mode === 'survival',
+        leave_requires_admin: state.leaveSurvivalNeedsPin && state.mode === 'survival',
         connectivity: state.connectivity.value,
         suggest_survival: state.suggestSurvival,
       });
@@ -391,7 +394,7 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
           return;
         }
         const pin = req.headers['x-localai-pin-grant'];
-        if (path === '/api/v1/mode' && state.mode === 'survival' && (state.validPinGrant === null || pin !== state.validPinGrant)) {
+        if (path === '/api/v1/mode' && state.mode === 'survival' && state.leaveSurvivalNeedsPin && (state.validPinGrant === null || pin !== state.validPinGrant)) {
           json(res, 403, { error: { code: 'LAI-SEC-002', message: 'This action needs the admin PIN', fix: 'Enter the admin PIN when asked.', details: { pin_required: true } } });
           return;
         }
@@ -655,6 +658,12 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     },
     set validPinGrant(value: string | null) {
       state.validPinGrant = value;
+    },
+    get leaveSurvivalNeedsPin() {
+      return state.leaveSurvivalNeedsPin;
+    },
+    set leaveSurvivalNeedsPin(value: boolean) {
+      state.leaveSurvivalNeedsPin = value;
     },
     get token() {
       return state.token;
