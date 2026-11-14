@@ -24,7 +24,8 @@ import { LIBRARY_URL, createSystemActions } from './system-actions';
 import { CHANNELS, type SettingsStore, type StartupPhase, buildDesktopStatus, createHostHandlers, createSettingsStore, createShellHandlers, isAllowedOrigin, registerHandlers } from './ipc';
 import { type LogEntry, type Logger, createFileLogger } from './log';
 import { ABOUT, buildMenuTemplate } from './menu';
-import { hardenedWebPreferences, installPermissionHandlers, installWebContentsHardening } from './navigation';
+import { hardenedWebPreferences, installPermissionHandlers, installWebContentsHardening, viewOf } from './navigation';
+import { MusicProbe, installDownloadHandler } from './music';
 import { Notifier } from './notify';
 import { createEnsureActions, createEnsureApi } from './ensure';
 import { PinService, createPinApi } from './pin';
@@ -120,6 +121,8 @@ async function resolveTrayAvailability(): Promise<TrayAvailability> {
 
 /** Status changes that make the top bar re-read `/status` (mode, alerts, the cloud link). */
 const REFRESH_EVENTS: ReadonlySet<string> = new Set(['mode.changed', 'alert.raised', 'alert.cleared', 'cloud.state']);
+/** Events after which music may have become installed (issue #515): a finished sync, a loaded model, a finished workload switch. */
+const MUSIC_REFRESH_EVENTS: ReadonlySet<string> = new Set(['sync.done', 'model.loaded', 'workload.done']);
 
 /** The start-up sequence and its wiring (desktop.md 4.1). Replaced by a stub in the start-up order test. */
 export async function bootstrap(ctx: BootContext): Promise<void> {
@@ -146,6 +149,15 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   });
   const systemActions = createSystemActions({ binaries, exec: execFileRunner, log });
   const feed = new AgentFeed(client);
+  // Issue #515: is music installed here? Read again whenever /status is (start-up, reconnect, resync, mode and alert events).
+  const music = new MusicProbe({ request: (path, options) => client.request(path, options), log });
+  feed.subscribe((message) => {
+    if (message.kind === 'status' || (message.kind === 'connection' && message.state === 'connected')) void music.refresh();
+    // A sync run or an install pass may have just put the music model or runtime on disk.
+    else if (message.kind === 'event' && MUSIC_REFRESH_EVENTS.has(message.event.type)) void music.refresh();
+  });
+  // A song from the Music window asks where to save it; other downloads from that window are refused.
+  installDownloadHandler(sessions.agent, { viewOf, lang: () => lang, downloadsDir: () => app.getPath('downloads'), log });
 
   // -- survival UX (DSK-09): the full-screen Portal and the 32 px strip ---------------------------------------------
   const survival = new SurvivalController({
@@ -277,6 +289,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
       cloud: cloud(),
       tab: windows.tab(),
       survival: survival.state((code) => errorText(code, lang).title),
+      music: music.value,
     }),
     connected: cloudSession.connectedModeActive(),
   });
@@ -307,6 +320,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     if (patch.lang !== undefined) void survival.languageChanged().catch(() => undefined);
   });
   cloudSession.onChange(push);
+  music.onChange(push);
 
   // -- the Lab tab's cloud proxy and its cache (DSK-11) ---------------------------------------------------------------
   const labProxy = createCloudProxy({ session: cloudSession, cache: createLabCacheStore({ dir: configDir(), log }), log });
