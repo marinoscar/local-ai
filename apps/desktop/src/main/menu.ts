@@ -16,6 +16,10 @@ export interface MenuState {
 }
 
 export interface MenuActions {
+  /** dashboard.md 3.3: the guide (`/portal/help`) in the main window. */
+  help(): void;
+  /** dashboard.md 3.3: the Manage screens (`/portal/manage/mode`) in the main window. */
+  manage(): void;
   connectionInfo(): void;
   /** "Install what's missing" (issue #480): opens the ensure window. */
   ensure(): void;
@@ -37,6 +41,8 @@ export interface MenuTemplateItem {
 }
 
 const STRINGS = {
+  help: { en: 'Help', es: 'Ayuda' },
+  manage: { en: 'Manage this computer', es: 'Administrar esta computadora' },
   connectionInfo: { en: 'Connection info', es: 'Información de conexión' },
   ensure: { en: "Install what's missing", es: 'Instalar lo que falta' },
   connect: { en: 'Connect to the lab', es: 'Conectar con el laboratorio' },
@@ -61,6 +67,9 @@ export const ABOUT = {
 export function buildMenuTemplate(state: MenuState, actions: MenuActions): MenuTemplateItem[] {
   const { lang } = state;
   return [
+    { label: pick(STRINGS.help, lang), click: actions.help },
+    { label: pick(STRINGS.manage, lang), click: actions.manage },
+    { type: 'separator' },
     { label: pick(STRINGS.connectionInfo, lang), click: actions.connectionInfo },
     { label: pick(STRINGS.ensure, lang), click: actions.ensure },
     state.linked ? { label: pick(STRINGS.disconnect, lang), click: actions.disconnect } : { label: pick(STRINGS.connect, lang), click: actions.connect },

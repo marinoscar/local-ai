@@ -13,7 +13,7 @@ import {
 import { TRAY_COLOURS } from '../../src/main/i18n';
 
 const model = (over: Partial<MenuModel> = {}): MenuModel => ({ colour: 'green', link: 'up', mode: 'online', model: 'qwen3.5-9b-q4km', features: NO_FEATURES, ...over });
-const ALL: MenuFeatures = { windows: true, copyKey: true, connectionInfo: true, lab: true, startAgent: true, autostart: true, pin: true };
+const ALL: MenuFeatures = { windows: true, copyKey: true, connectionInfo: true, lab: true, startAgent: true, autostart: true, pin: true, help: false };
 
 /** The menu as the plain lines a person reads, so a table can compare it with the spec. */
 function lines(items: readonly MenuItemSpec[], indent = ''): string[] {
@@ -36,6 +36,22 @@ function lines(items: readonly MenuItemSpec[], indent = ''): string[] {
 }
 
 describe('tray menu (desktop.md 4.3)', () => {
+  it('dashboard.md 3.3: Help under Open, and in survival Leave survival mode… above Mode', () => {
+    const help = { ...ALL, help: true };
+    const online = lines(buildTrayMenu(model({ features: help }), 'en'));
+    expect(online.slice(2, 7)).toEqual(['Open Local AI', 'Chat', 'Library', 'Maps', 'Help']);
+    expect(online).not.toContain('Leave survival mode…');
+    const survival = lines(buildTrayMenu(model({ mode: 'survival', features: help }), 'en'));
+    expect(survival.slice(survival.indexOf('Help') + 1, survival.indexOf('Help') + 4)).toEqual(['--', 'Leave survival mode…', 'Mode ▸']);
+    const es = lines(buildTrayMenu(model({ mode: 'survival', features: help }), 'es'));
+    expect(es).toContain('Ayuda');
+    expect(es).toContain('Salir del modo supervivencia…');
+    // The agent is down: both are greyed out (the guide is part of the agent's UI).
+    const down = lines(buildTrayMenu(model({ mode: 'survival', link: 'down', features: help }), 'en'));
+    expect(down).toContain('Help (disabled)');
+    expect(down).toContain('Leave survival mode… (disabled)');
+  });
+
   it('online with every optional item: the menu of the spec, line by line', () => {
     expect(lines(buildTrayMenu(model({ features: ALL }), 'en'))).toEqual([
       '● Local AI: ready (online) · qwen3.5-9b-q4km',

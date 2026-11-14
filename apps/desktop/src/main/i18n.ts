@@ -377,10 +377,8 @@ export const TRAY_TEXT = {
   online: { en: 'Online', es: 'En línea' },
   offline: { en: 'Offline', es: 'Sin conexión' },
   survival: { en: '⚠ Survival mode', es: '⚠ Modo supervivencia' },
-  leaveSurvival: {
-    en: 'Leave survival in the Survival Portal',
-    es: 'Para salir de supervivencia usa el Portal de Supervivencia',
-  },
+  leaveSurvival: { en: 'Leave survival mode…', es: 'Salir del modo supervivencia…' },
+  help: { en: 'Help', es: 'Ayuda' },
   copyKey: { en: 'Copy API key', es: 'Copiar la clave de la API' },
   connectionInfo: { en: 'Show connection info', es: 'Mostrar datos de conexión' },
   lab: { en: 'Lab (ai.marin.cr)', es: 'Laboratorio (ai.marin.cr)' },

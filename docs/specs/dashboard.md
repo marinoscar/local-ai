@@ -123,6 +123,8 @@ Embedded in the bundle (works offline), both languages, reachable from Home, the
 4. **Manuals**: the rendered runbooks at `/docs/` (survival-portal.md §4.1.7).
 Never a terminal command in steps 1 to 3; a command may appear only in a closed "For an expert" box.
 
+**As built (#495).** `screens/Help.tsx` is the guide, at `/portal/help` for every session and with the agent down: In an emergency (four steps, the emergency number, the last resort), What this app can do (one line per Home and Manage button), Step by step (one closed card per task: start and leave survival mode, go offline, update the content, copy from and eject the AI-ARK drive, check health, update Local AI, what the colours mean), Manuals (a button when they are installed) and the closed **For an expert** box with the typed commands and the library address `http://127.0.0.1:7070/library/` (the old tip pointed at port 8888, which the app blocks). The order of lines is `manage/guide.ts`; `guide.test.ts` fails if a terminal command, `sudo` or the old address appears outside that box, or if the button names drift from the screens' labels. The desktop's ⋮ menu has **Help** and **Manage this computer**, the tray has **Help** (they load `/portal/help` and `/portal/manage/mode` in the main window).
+
 ### 4.8 Language
 English by default for the app and the Portal unless the person chose a language; Spanish one tap away; the choice is remembered (desktop `settings.lang`, Portal `prefs`).
 
@@ -257,6 +259,75 @@ Every string of the Manage screens, Home's additions and the guide lives in `age
 | Key | English | Español |
 |---|---|---|
 | `system.title` | System | Sistema |
+<!-- /copy -->
+
+### 9.7 Help and the guide
+<!-- copy:guide -->
+| Key | English | Español |
+|---|---|---|
+| `guide.lead` | Everything this app can do, and how, step by step. It works without internet. | Todo lo que esta aplicación puede hacer, y cómo, paso a paso. Funciona sin internet. |
+| `guide.nav` | Help sections | Secciones de la ayuda |
+| `guide.emergency.title` | In an emergency | En una emergencia |
+| `guide.emergency.1` | **Plug in the charger** if you can. Keep the computer plugged in when possible. | **Conecte el cargador** si puede. Mantenga la computadora conectada cuando sea posible. |
+| `guide.emergency.2` | Press **Start survival mode** (at the top of Home, or in **Mode**). The emergency screen opens with the basics. | Presione **Iniciar modo supervivencia** (arriba en el inicio, o en **Modo**). Se abre la pantalla de emergencia con lo básico. |
+| `guide.emergency.3` | Use **Chat**, **Library**, **Maps** and **First aid** (press **F** on Home). Everything works without internet. | Use **Conversar**, **Biblioteca**, **Mapas** y **Primeros auxilios** (presione **F** en el inicio). Todo funciona sin internet. |
+| `guide.emergency.4` | If something says it has a problem, press the button next to it. Every problem has a code like **LAI-SVC-001** and one sentence that says what to do. | Si algo dice que tiene un problema, presione el botón que está al lado. Cada problema tiene un código como **LAI-SVC-001** y una frase que dice qué hacer. |
+| `guide.can.title` | What this app can do | Lo que esta aplicación puede hacer |
+| `guide.can.chat` | **Chat**: type a question and the AI answers. It knows a lot about health, repairs, food and water. | **Conversar**: escriba una pregunta y la IA responde. Sabe mucho de salud, reparaciones, comida y agua. |
+| `guide.can.photo` | **Ask about a photo**: take or choose a photo and ask about it (a plant, a wound, a label). | **Preguntar por una foto**: tome o elija una foto y pregunte sobre ella (una planta, una herida, una etiqueta). |
+| `guide.can.talk` | **Talk**: speak your question and hear the answer read aloud. | **Hablar**: diga su pregunta en voz alta y escuche la respuesta. |
+| `guide.can.library` | **Library**: Wikipedia, medical books and how-to guides, all on this computer. | **Biblioteca**: Wikipedia, libros de medicina y guías prácticas, todo en esta computadora. |
+| `guide.can.maps` | **Maps**: an offline map with place search. | **Mapas**: un mapa sin conexión con búsqueda de lugares. |
+| `guide.can.manuals` | **Manuals**: the printable instructions for this computer, including the Survival card. | **Manuales**: las instrucciones para imprimir de esta computadora, incluida la Tarjeta de supervivencia. |
+| `guide.can.status` | **Status and battery**: is everything working, how much battery is left, and what is wrong. | **Estado y batería**: si todo funciona, cuánta batería queda y qué está mal. |
+| `guide.can.brain` | **Switch brain**: choose another AI model, for example a faster one or one that understands photos. | **Cambiar cerebro**: elija otro modelo de IA, por ejemplo uno más rápido o uno que entiende fotos. |
+| `guide.can.firstaid` | **First aid**: CPR, choking, bleeding, burns and more. It is not a doctor: if any phone works, call the emergency number. | **Primeros auxilios**: RCP, atragantamiento, sangrado, quemaduras y más. No es un médico: si algún teléfono funciona, llame al número de emergencias. |
+| `guide.can.mode` | **Mode**: Online (uses the internet), Offline (no internet) or Survival (the emergency screen). Leaving survival mode needs no PIN. | **Modo**: En línea (usa internet), Sin conexión (sin internet) o Supervivencia (la pantalla de emergencia). Salir del modo supervivencia no necesita PIN. |
+| `guide.can.content` | **Offline content**: what is on this computer, updating it from the internet, copying from the AI-ARK drive, and removing the drive safely. | **Contenido sin conexión**: qué hay en esta computadora, actualizarlo desde internet, copiar desde el disco AI-ARK y retirar el disco con seguridad. |
+| `guide.can.models` | **AI models**: which AI models are on this computer, which one is in use, and downloading or removing them. | **Modelos de IA**: qué modelos de IA hay en esta computadora, cuál está en uso, y descargarlos o quitarlos. |
+| `guide.can.health` | **Health**: a full check of the computer, recent events, and a practice drill. | **Salud**: una revisión completa de la computadora, los eventos recientes y un simulacro de práctica. |
+| `guide.can.system` | **System**: versions, restarting a part that is stuck, updating Local AI, and the rebuild kit. | **Sistema**: versiones, reiniciar una parte que se trabó, actualizar Local AI y el kit de reconstrucción. |
+| `guide.can.pin` | Only removing content or AI models asks for the **admin PIN**. Everything else works without it. | Solo quitar contenido o modelos de IA pide el **PIN de administrador**. Todo lo demás funciona sin él. |
+| `guide.tasks.title` | Step by step | Paso a paso |
+| `guide.task.survivalOn.title` | Start survival mode | Iniciar el modo supervivencia |
+| `guide.task.survivalOn.1` | On Home, press **Start survival mode** (in the blue band at the top). | En el inicio, presione **Iniciar modo supervivencia** (en la franja azul de arriba). |
+| `guide.task.survivalOn.2` | Wait a moment. The emergency screen opens full screen. | Espere un momento. La pantalla de emergencia se abre en pantalla completa. |
+| `guide.task.survivalOff.title` | Leave survival mode (when the emergency is over) | Salir del modo supervivencia (cuando pase la emergencia) |
+| `guide.task.survivalOff.1` | At the top right, press **Leave survival mode**. | Arriba a la derecha, presione **Salir del modo supervivencia**. |
+| `guide.task.survivalOff.2` | Choose **Online** if there is internet, or **Offline** if there is not. | Elija **En línea** si hay internet, o **Sin conexión** si no hay. |
+| `guide.task.survivalOff.3` | Press **Leave survival mode**. No PIN is needed. The normal screen comes back. | Presione **Salir del modo supervivencia**. No necesita PIN. Vuelve la pantalla normal. |
+| `guide.task.offline.title` | Stop using the internet (go offline) | Dejar de usar internet (pasar a sin conexión) |
+| `guide.task.offline.1` | On Home, press **Mode**. | En el inicio, presione **Modo**. |
+| `guide.task.offline.2` | Press **Use Offline**, read what changes, and press **Use Offline** again. | Presione **Usar Sin conexión**, lea qué cambia y presione otra vez **Usar Sin conexión**. |
+| `guide.task.update.title` | Update the content (needs internet) | Actualizar el contenido (necesita internet) |
+| `guide.task.update.1` | On Home, press **Offline content**. | En el inicio, presione **Contenido sin conexión**. |
+| `guide.task.update.2` | Press **Sync now**. The list shows what is downloading. You can keep using the computer. | Presione **Sincronizar ahora**. La lista muestra lo que se está descargando. Puede seguir usando la computadora. |
+| `guide.task.update.3` | It also happens by itself every night while the computer is Online. | También ocurre solo cada noche mientras la computadora está En línea. |
+| `guide.task.import.title` | Copy everything from the AI-ARK drive | Copiar todo desde el disco AI-ARK |
+| `guide.task.import.1` | Plug in the AI-ARK drive and wait one minute. | Conecte el disco AI-ARK y espere un minuto. |
+| `guide.task.import.2` | On Home, press **Offline content**. The drive appears under **Drives**. | En el inicio, presione **Contenido sin conexión**. El disco aparece en **Discos**. |
+| `guide.task.import.3` | Press **Copy from this drive**. Nothing on this computer is deleted. | Presione **Copiar desde este disco**. No se borra nada de esta computadora. |
+| `guide.task.eject.title` | Remove the AI-ARK drive safely | Retirar el disco AI-ARK con seguridad |
+| `guide.task.eject.1` | On Home, press **Offline content**. | En el inicio, presione **Contenido sin conexión**. |
+| `guide.task.eject.2` | Next to the drive, press **Eject safely**. | Junto al disco, presione **Expulsar con seguridad**. |
+| `guide.task.eject.3` | Unplug it only when the screen says it is safe. | Desconéctelo solo cuando la pantalla diga que es seguro. |
+| `guide.task.health.title` | Check that everything works | Revisar que todo funcione |
+| `guide.task.health.1` | On Home, press **Health**, then **Run a full check**. | En el inicio, presione **Salud** y luego **Hacer una revisión completa**. |
+| `guide.task.health.2` | Each problem shows a code, one sentence that says what to do, and often a button that does it. | Cada problema muestra un código, una frase que dice qué hacer y muchas veces un botón que lo hace. |
+| `guide.task.appUpdate.title` | Update Local AI (needs internet) | Actualizar Local AI (necesita internet) |
+| `guide.task.appUpdate.1` | On Home, press **System**, then **Update Local AI**. | En el inicio, presione **Sistema** y luego **Actualizar Local AI**. |
+| `guide.task.appUpdate.2` | The computer asks for its login password. Type it and wait until it says it is done. | La computadora pide su contraseña de inicio de sesión. Escríbala y espere hasta que diga que terminó. |
+| `guide.task.colors.title` | What the colours at the top mean | Qué significan los colores de arriba |
+| `guide.task.colors.1` | **Green ✓ Ready**: everything works. | **Verde ✓ Listo**: todo funciona. |
+| `guide.task.colors.2` | **Amber ! Ready, with problems**: the basics work; **Next step** says what to do. | **Ámbar ! Listo, con problemas**: lo básico funciona; **Siguiente paso** dice qué hacer. |
+| `guide.task.colors.3` | **Red ✗ Not ready**: chat or the library does not work. Press the button under **Next step**, or restart the computer and wait 2 minutes. | **Rojo ✗ No está listo**: el chat o la biblioteca no funcionan. Presione el botón de **Siguiente paso**, o reinicie la computadora y espere 2 minutos. |
+| `guide.manuals.title` | Manuals | Manuales |
+| `guide.manuals.lead` | The full printed instructions for this computer, in English and Spanish. | Las instrucciones completas para imprimir de esta computadora, en inglés y español. |
+| `guide.manuals.open` | Open the manuals | Abrir los manuales |
+| `guide.expert.title` | For an expert | Para un experto |
+| `guide.expert.lead` | The same tasks typed in a terminal (Ctrl + Alt + T). Nobody else needs this. | Las mismas tareas escritas en una terminal (Ctrl + Alt + T). Nadie más necesita esto. |
+| `guide.expert.library` | If the app cannot open, the library is also at http://127.0.0.1:7070/library/ in a web browser on this computer. | Si la aplicación no abre, la biblioteca también está en http://127.0.0.1:7070/library/ en un navegador de esta computadora. |
+| `guide.back` | Back to Home | Volver al inicio |
 <!-- /copy -->
 
 ## 10. Open questions

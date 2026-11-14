@@ -432,7 +432,7 @@ Photo system prompt:
 The prompt language follows the detected transcript language (Talk) or the UI language (Photo).
 
 ### 4.8 Built-in emergency page
-If `/docs/` is missing, the Manuals button opens `/portal/help`, embedded in the SPA (so it exists even with no content at all). It contains, in both languages: how to start survival mode, how to plug in and import from the AI-ARK drive, how to reach Kiwix directly, how to read a doctor code, the emergency number, and "If nothing works: restart the computer and wait 2 minutes." The text is part of the i18n files (`help.*` keys, §4.9). The page fetches nothing, so it works with no content roots and with the agent API down. The Manuals button opens it directly when `capabilities.manuals.state == "unavailable"`, and every unavailable-capability screen links to it.
+If `/docs/` is missing, the Manuals button opens `/portal/help`, embedded in the SPA (so it exists even with no content at all). It is the Help screen and guide of [dashboard.md](dashboard.md) §4.7, in both languages: what to do in an emergency, what each button does, the common tasks step by step with the exact button names (start and leave survival mode, copy from and eject the AI-ARK drive, check health, …), how to read a doctor code, the emergency number, and "If nothing works: restart the computer and wait 2 minutes." Typed commands and the direct library address appear only in a closed **For an expert** box. The text is part of the i18n files (`help.*` keys, §4.9, and `guide.*` keys, [dashboard.md](dashboard.md) §9.7). The page fetches nothing, so it works with no content roots and with the agent API down. The Manuals button opens it directly when `capabilities.manuals.state == "unavailable"`, and every unavailable-capability screen links to it.
 
 ### 4.9 Copy (all user-visible strings)
 
@@ -595,10 +595,7 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `brain.speed.slow` | Slow | Lento |
 | `unavailable.title` | This isn't available right now | Esto no está disponible ahora |
 | `unavailable.manual` | Open the manual page | Abrir la página del manual |
-| `help.title` | Emergency help | Ayuda de emergencia |
-| `help.survival` | To start survival mode, press **Start survival mode** on the home screen, or open a terminal and type `aictl mode survival`. | Para iniciar el modo supervivencia, presione **Iniciar modo supervivencia** en la pantalla de inicio, o abra una terminal y escriba `aictl mode survival`. |
-| `help.drive` | Plug in the AI-ARK drive, then press **Import from drive** in the app, or type `aictl ark import`. | Conecte el disco AI-ARK y presione **Importar desde el disco** en la aplicación, o escriba `aictl ark import`. |
-| `help.library` | If the library button doesn't work, open `http://127.0.0.1:8888/library/` in the browser. | Si el botón de la biblioteca no funciona, abra `http://127.0.0.1:8888/library/` en el navegador. |
+| `help.title` | Help | Ayuda |
 | `help.codes` | A code like `LAI-SVC-001` comes with a one-sentence fix. Do what it says. The manual *Troubleshooting* has more. | Un código como `LAI-SVC-001` viene con una solución de una frase. Haga lo que dice. El manual *Solución de problemas* tiene más. |
 | `help.emergency` | Emergency number: {n} | Número de emergencias: {n} |
 | `help.lastResort` | If nothing works: restart the computer and wait 2 minutes. | Si nada funciona: reinicie la computadora y espere 2 minutos. |

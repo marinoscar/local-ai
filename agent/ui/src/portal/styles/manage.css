@@ -150,3 +150,42 @@
   width: 1.4rem;
   height: 1.4rem;
 }
+/* Help and the guide (#495) */
+.guide-h {
+  font-size: 1.35rem;
+  margin: 28px 0 10px;
+}
+.guide-can {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.guide-can li {
+  margin: 6px 0;
+}
+.guide-tasks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 12px;
+}
+.guide-task {
+  margin: 0;
+  padding: 10px 16px;
+}
+.guide-task-title {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 40px;
+  display: list-item;
+}
+.guide-task ol {
+  margin: 8px 0 4px;
+}
+.guide-task li {
+  margin: 6px 0;
+}
+.guide-expert div {
+  margin: 8px 0;
+}
+.guide-expert dd {
+  margin: 0;
+}

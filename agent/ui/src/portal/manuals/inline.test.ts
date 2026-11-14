@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import en from "../i18n/en.json";
+import guideEn from "../i18n/manage/guide.en.json";
+import guideEs from "../i18n/manage/guide.es.json";
 import es from "../i18n/es.json";
 import { parseInline } from "./inline";
 
@@ -17,12 +19,15 @@ describe("parseInline", () => {
   it("leaves plain text alone", () => {
     expect(parseInline("plain")).toEqual([{ kind: "text", text: "plain" }]);
   });
-  it("handles every help string in both languages with no mark left over", () => {
-    for (const table of [en, es] as Record<string, string>[]) {
-      for (const key of ["help.survival", "help.drive", "help.library", "help.codes"]) {
-        const segs = parseInline(table[key]);
-        expect(segs.some((s) => s.kind !== "text"), key).toBe(true);
-        for (const s of segs) expect(s.text, key).not.toMatch(/[*`]/);
+  it("handles every help and guide string in both languages with no mark left over", () => {
+    for (const table of [
+      { ...en, ...guideEn },
+      { ...es, ...guideEs },
+    ] as Record<string, string>[]) {
+      const keys = Object.keys(table).filter((k) => k === "help.codes" || k.startsWith("guide."));
+      expect(keys.length).toBeGreaterThan(40);
+      for (const key of keys) {
+        for (const s of parseInline(table[key])) expect(s.text, key).not.toMatch(/[*`]/);
       }
     }
   });
