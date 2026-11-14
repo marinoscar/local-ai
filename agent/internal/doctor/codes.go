@@ -316,7 +316,7 @@ const (
 	SVC116 = "LAI-SVC-116"
 	SVC117 = "LAI-SVC-117"
 	SVC118 = "LAI-SVC-118"
-	// LAI-SVC-151..158: music (E11, docs/specs/music.md section 8).
+	// Music (E11, docs/specs/music.md section 8).
 	SVC151 = "LAI-SVC-151"
 	SVC152 = "LAI-SVC-152"
 	SVC153 = "LAI-SVC-153"
