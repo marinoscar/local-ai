@@ -2,7 +2,7 @@
 
 > **Status:** approved design · **Epic:** E11 (#504) · **Code:** `engines/acestep/` (the Python shim, package `localai_music_shim`), `agent/internal/music/` (queue, store, routes, cloud command), `agent/internal/music/engine` (the `acestep` engine adapter), `agent/ui/src/music/` · **Doctor area:** `LAI-SVC` (codes 150–179; 001–099 belong to [companion-services.md](companion-services.md), 100–149 to [survival-portal.md](survival-portal.md))
 > Canonical names: [overview.md](../architecture/overview.md) §3. Decisions: [ADR-0012](../decisions/0012-python-inference-engines.md) (Python engines on nodes), [ADR-0013](../decisions/0013-on-demand-engines-one-gpu-budget.md) (one GPU budget, workloads). Load and unload: [llama-router.md](llama-router.md) §4.15. Routes: [agent.md](agent.md) §3.8.35, §3.8.36.
-> **The spike (#505) has not run yet.** Every fact that depends on the real ACE-Step program (its Python call, measured memory, timings, file names, hashes) is marked `TODO(#505)` and lives in one module of the shim (`backend.py`) and one catalog entry. Nothing here invents a measured number.
+> **The spike (#505) ran on ai-n2** (12 GB CUDA): findings, measurements, file sizes and licenses in [acestep-spike.md](../source/acestep-spike.md), the sha256 of every weight file in the issue's findings comment. The ACE-Step call lives in one module of the shim (`backend.py`). What only the catalog entry and the kit bundle can pin (hashes, `min_*` requirements, the wheel lock) is marked `TODO(#511)`. ai-n3 (8 GB) is not measured.
 
 ---
 
@@ -38,7 +38,7 @@ Non-goals:
 | **Request / operation** | One `POST /music/generate`; it has an `op_id` and produces `variations` songs. In the shim it is one **task** |
 | **Variation** | One of up to 4 songs made from the same request with different seeds |
 | **Sample** | An optional audio file the person adds. **"Sounds like this"** (`sample_mode: sounds_like`) borrows its style; **"Same song, my lyrics"** (`same_song`) keeps its melody and arrangement and sings the new lyrics over it |
-| **Strength** | 0 to 1: how closely the song follows the sample |
+| **Strength** | 0 to 1: how closely a **"Same song"** follows the sample (ACE-Step's `audio_cover_strength`). "Sounds like" has no strength in ACE-Step 1.5 and ignores it (#505) |
 | **Song store** | `/var/lib/localai/music/songs/<song-id>/`: the audio and its `meta.json` |
 | **Workload `music`** | A workload whose set is a music model (catalog.md §4). Activating it unloads the coding or chat models to make room |
 
@@ -61,7 +61,7 @@ MUSIC_DEVICE=cuda
 MUSIC_DTYPE=auto
 MUSIC_MAX_QUEUE=4
 ```
-- `MUSIC_PORT` is `node.yaml` `ports.music` (agent.md §3.4). `MUSIC_MODEL_DIR` is the best verified copy of the model ([ark-sync.md](ark-sync.md) BestCopy): `<root>/music/<model-id>`, on the internal root or the ark drive. `MUSIC_DEVICE` is `cuda` (the only runtime today). `MUSIC_DTYPE` is `auto` (the shim picks the dtype the spike validates, `TODO(#505)`); `fp16`, `bf16` and `fp32` exist for tests. `MUSIC_MAX_QUEUE` is 4. There are no `node.yaml` keys for these in v1.
+- `MUSIC_PORT` is `node.yaml` `ports.music` (agent.md §3.4). `MUSIC_MODEL_DIR` is the best verified copy of the model ([ark-sync.md](ark-sync.md) BestCopy): `<root>/music/<model-id>`, on the internal root or the ark drive. `MUSIC_DEVICE` is `cuda` (the only runtime today). `MUSIC_DTYPE` is `auto`: ACE-Step picks bf16 on Ampere and newer and fp16 before (it has no switch on CUDA, so the real engine refuses any other value at load); `fp16`, `bf16` and `fp32` exist for the fake backend in tests. `MUSIC_MAX_QUEUE` is 4. There are no `node.yaml` keys for these in v1.
 
 `/etc/systemd/system/localai-music.service` (written by the agent and `aiagent setup units`, root 0644, followed by `daemon-reload`; **never enabled**):
 ```ini
@@ -126,10 +126,12 @@ JSON over HTTP/1.1; every body is UTF-8 JSON; unknown fields in a request are re
 - `seed` null means random. The agent always sends a concrete seed (it draws one when the person gave none) so it can record it; variation `i` uses `seed + i`.
 - `sample_path` is an absolute path inside `MUSIC_WORK_DIR` (the shim refuses any other path, `400`); `sample_mode` is required when `sample_path` is set and must be null otherwise.
 - `output_dir` must be inside `MUSIC_WORK_DIR` and must not exist yet; the shim creates it and writes `out-<i>.wav` there.
-- Format: **WAV by default** (48 kHz unless the model says otherwise, `TODO(#505)`); the shim may add MP3 later, announced by `mime`.
+- Format: **WAV, 48 kHz, stereo, 16-bit PCM** (measured, #505); the shim may add MP3 later, announced by `mime`. A `same_song` output is as long as the sample, whatever `duration_s` says.
 - The queue holds at most `MUSIC_MAX_QUEUE` tasks (running plus queued); the next is `429`. One task runs at a time.
 - `/health` `error` carries a short English reason for the agent's logs (for example `out of graphics memory`); it never carries lyrics.
-- The ACE-Step call itself sits in **one** module, `engines/acestep/localai_music_shim/backend.py`, behind an interface with a fake backend for tests (it writes a short tone of the requested length). The real call is marked `TODO(#505)`.
+- The ACE-Step call itself sits in **one** module, `engines/acestep/localai_music_shim/backend.py`, behind an interface with a fake backend for tests (it writes a short tone of the requested length). The real backend uses ACE-Step's Python API (`acestep.inference.generate_music`), loads with both CPU offloads (a 12 GB card needs them, #505), and cancels at the next progress call (a few seconds).
+- **Model overlay.** ACE-Step rewrites the model's `.py` files at every load, and `MUSIC_MODEL_DIR` is read-only, so at load the shim builds `MUSIC_WORK_DIR/_model/`: a symlink to every file of the model, except the `.py` files, which are copied. It is rebuilt at each load and also holds ACE-Step's small caches (`ACESTEP_PROJECT_ROOT`); the verified files are never written.
+- **Engine log.** ACE-Step logs the whole prompt at INFO and prints tracebacks with local variables; the shim keeps its log at WARNING, one line per record, without tracebacks, and drops any line that carries a lyric line or the tags of the running song (§6).
 
 ### 3.5 Catalog entry (example)
 No real entry ships until #505 provides the hashes (catalog.md §2.2). The complete example, also in the agent's catalog testdata:
@@ -141,7 +143,7 @@ No real entry ships until #505 provides the hashes (catalog.md §2.2). The compl
     engine: acestep
     roles: [music]
     languages: [en, es, multi]
-    license: apache-2.0                     # TODO(#505): confirm the upstream license
+    license: mit                            # code and weights (#505); the bundled Qwen3-Embedding-0.6B is Apache-2.0
     survival_tier: 3
     source:
       type: huggingface
@@ -158,8 +160,8 @@ No real entry ships until #505 provides the hashes (catalog.md §2.2). The compl
         sha256: "<sha256-from-spike>"
     requirements:
       backends: [cuda]
-      min_vram_mib: <measured-by-spike>     # TODO(#505)
-      min_ram_mib: <measured-by-spike>      # TODO(#505)
+      min_vram_mib: <from-spike>            # TODO(#511): 10900 proposed (240 s peak 10833 MiB on ai-n2)
+      min_ram_mib: <from-spike>             # TODO(#511): measure (8192 proposed)
       min_disk_bytes: <sum-of-sizes>
 ```
 The files land in `<root>/music/acestep-v15-turbo/acestep-v15-turbo/...` (catalog.md §2.2, overview §3.3). A node gets music by including the id in its profile or `profile_overrides.add_models`, and a workload in `node.yaml`:
@@ -213,7 +215,7 @@ The `acestep` engine adapter (llama-router.md §4.15) owns the engine's life: wr
 
 ### 4.4 Generating a song
 For each operation, in order:
-1. **Disk guard.** Free space on the filesystem of `/var/lib/localai/music` minus the expected size of the songs (`duration_s × variations × 192000` bytes for 48 kHz 16-bit stereo WAV, `TODO(#505)` if the model's format differs) must stay at or above the profile's `storage.min_free_bytes` ([catalog.md](catalog.md) §4). Otherwise `507 LAI-SVC-155` before anything is written; checked again before each song is moved into the store.
+1. **Disk guard.** Free space on the filesystem of `/var/lib/localai/music` minus the expected size of the songs (`duration_s × variations × 192000` bytes for 48 kHz 16-bit stereo WAV, the format measured in #505) must stay at or above the profile's `storage.min_free_bytes` ([catalog.md](catalog.md) §4). Otherwise `507 LAI-SVC-155` before anything is written; checked again before each song is moved into the store.
 2. **Work directory.** `/var/lib/localai/music/work/<task-id>/` (localai 0750). The sample, if any, is written there as `sample.<ext>` (the agent counts its bytes while streaming the upload and stops at 20 MiB, `413 LAI-SVC-154`).
 3. **Submit** `POST /v1/tasks`. `429` from the shim (it should not happen, the agent's queue is the same size) is retried after 2 s, five times, then `LAI-SVC-153`. `400` is `LAI-SVC-154` with the shim's reason in `details.reason`.
 4. **Follow** `GET /v1/tasks/{id}` every 1 s; publish `music.progress {op_id, state, progress, song_ids}` at most once per second. `failed` → `LAI-SVC-152` (`details.engine_error`); the engine crashing (unit exits, `/health` gone) → `LAI-SVC-152`; `cancelled` → `LAI-SVC-158`.
@@ -222,7 +224,7 @@ For each operation, in order:
 
 **Cancel** (`POST /music/ops/{op_id}/cancel`): a queued operation is removed; a running one is cancelled in the shim (`POST /v1/tasks/{id}/cancel`); the operation ends `cancelled` with `LAI-SVC-158` (severity info). Songs already stored for it stay.
 
-**Timings.** How long a song takes depends on the GPU and the length; the spike measures it (`TODO(#505)`). The UI says "This usually takes a few minutes" until the measured figure replaces it.
+**Timings.** Measured on ai-n2 (12 GB, #505): about 20 s to start the engine, about 20 s per 60 s song (with or without a sample; 43 s for 240 s), 6 to 8 s for a `same_song` from a 20 s sample. The UI says "This usually takes a few minutes" (true on any card) until a per-card figure replaces it; slower cards are measured when they get the model.
 
 ### 4.5 Song store and retention
 ```
@@ -243,7 +245,7 @@ For each operation, in order:
 - The song id is chosen by the agent, sortable by time, and matches `^[A-Za-z0-9_-]{8,64}$`; clients treat it as opaque.
 - **Retention: a song is kept until a person deletes it.** Nothing expires, sync never touches the store, and the store is not part of the ark drive. `DELETE /music/songs/{id}` (admin, agent.md §3.8.36) removes the directory.
 - The sample itself is **not kept**: only its hash and size are recorded. The person's audio stays only as long as the song needs it.
-- At agent start, a `work/` directory older than 24 h is removed (an interrupted operation), and a song directory without a valid `meta.json` is listed as damaged in `aictl doctor` (no code of its own: `LAI-AGT-099` details) and never deleted automatically.
+- At agent start, a `work/` directory older than 24 h is removed (an interrupted operation; `work/_model`, the engine's model overlay of §3.4, is left alone), and a song directory without a valid `meta.json` is listed as damaged in `aictl doctor` (no code of its own: `LAI-AGT-099` details) and never deleted automatically.
 - `GET /music/songs` reads the `meta.json` files (cached, refreshed when the directory changes). Lyrics are in `meta.json` for the person; the list and every log omit them.
 
 ### 4.6 Survival mode
@@ -343,7 +345,7 @@ Load and unload failures of the engine are `LAI-LLM-040` to `LAI-LLM-043` ([llam
 - `systemd-analyze verify` on the rendered unit (`scripts/verify-units.sh`).
 
 ### 9.3 Manual on a CUDA node (after #505)
-1. `aictl workloads activate music` → the coding model is stopped, the engine starts (time recorded, `TODO(#505)`).
+1. `aictl workloads activate music` → the coding model is stopped, the engine starts (about 20 s on ai-n2, #505).
 2. Make a 60 s song from invented lyrics, two variations; listen; download; delete (PIN asked in the desktop).
 3. Add a 20 s sample of your own in each mode; the `same_song` result follows the sample's melody.
 4. Pull the network cable; repeat step 2; it works.
@@ -362,5 +364,5 @@ Load and unload failures of the engine are `LAI-LLM-040` to `LAI-LLM-043` ([llam
 
 ## 11. Open questions (with proposed defaults)
 1. **MP3 output.** Smaller files for the cloud. Default: WAV only until the shim can encode MP3 offline from the bundle.
-2. **A song length cap per node.** A long song on a small GPU may not fit. Default: the global 240 s cap; the spike decides whether small cards need less (`TODO(#505)`).
+2. **A song length cap per node.** A long song on a small GPU may not fit. Default: the global 240 s cap. On 12 GB it fits (240 s peaked at 10.8 GiB, #505); an 8 GB card is measured before it gets the model.
 3. **Keeping the sample.** Default: not kept (privacy and disk). Revisit if people ask to re-run a request.

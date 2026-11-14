@@ -31,8 +31,13 @@ counts only.
 
 ## ACE-Step
 
-All engine calls are in `localai_music_shim/backend.py`. The exact ACE-Step 1.5 API is confirmed by the
-spike (#505); until then every assumption there is marked `TODO(#505)`.
+All engine calls are in `localai_music_shim/backend.py`: ACE-Step 1.5's Python API
+(`acestep.inference.generate_music`), the turbo DiT with the 1.7B LM, both CPU offloads, a writable model
+overlay in `MUSIC_WORK_DIR/_model`, and ACE-Step's own log kept free of lyrics. Why, and the measurements:
+[`docs/source/acestep-spike.md`](../../docs/source/acestep-spike.md) (spike #505).
+
+`MUSIC_BACKEND=acestep` (the default) is the real engine and needs the runtime venv and the weights in
+`MUSIC_MODEL_DIR`; its unit tests (`tests/test_backend.py`) use a fake ACE-Step API and need neither.
 
 ## Tests
 
