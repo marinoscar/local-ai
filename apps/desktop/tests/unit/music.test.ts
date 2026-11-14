@@ -174,7 +174,7 @@ describe('suggestedSongName', () => {
   it.each([
     ['song-01.wav', 'audio/wav', 'song-01.wav'],
     ['My song.MP3', 'audio/mpeg', 'My song.MP3'],
-    ['../../etc/passwd', 'audio/wav', 'song.wav'],
+    ['../../etc/hosts', 'audio/wav', 'song.wav'],
     ['..\\..\\evil.wav', 'audio/wav', 'evil.wav'],
     ['.hidden.wav', 'audio/wav', 'hidden.wav'],
     ['audio', 'audio/mpeg', 'song.mp3'],
