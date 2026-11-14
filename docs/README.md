@@ -19,6 +19,7 @@
 | [ark-sync.md](specs/ark-sync.md) | Scheduled sync, ark drive, readiness | E3 |
 | [companion-services.md](specs/companion-services.md) | Kiwix, whisper, piper, maps, vision | E4 |
 | [survival-portal.md](specs/survival-portal.md) | Offline big-button UI | E4 |
+| [dashboard.md](specs/dashboard.md) | Manage this computer from the app (the Dashboard in the Portal) and in-app help | E10 |
 | [installer.md](specs/installer.md) | `install-node.sh` (online/offline), laptop hardening | E5 |
 | [rebuild-kit.md](specs/rebuild-kit.md) | Offline rebuild materials | E5 |
 | [cloud-app.md](specs/cloud-app.md) | ai.marin.cr (EAB) | E6 |

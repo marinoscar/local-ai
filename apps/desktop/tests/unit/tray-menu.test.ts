@@ -134,12 +134,12 @@ describe('tray menu (desktop.md 4.3)', () => {
     expect(menu.join('\n')).not.toContain('Survival Portal');
   });
 
-  it('survival without a PIN prompt: the mode items are disabled and the menu says to leave it in the Survival Portal', () => {
+  it('survival: Online and Offline are enabled with no PIN prompt in the build (ADR-0011)', () => {
     const menu = lines(buildTrayMenu(model({ colour: 'orange', mode: 'survival' }), 'en'));
-    expect(menu).toContain('  ( ) Online (disabled)');
-    expect(menu).toContain('  ( ) Offline (disabled)');
-    expect(menu).toContain('  Leave survival in the Survival Portal');
-    expect(buildTrayMenu(model({ colour: 'orange', mode: 'survival' }), 'es').flatMap((i) => (i.type === 'submenu' ? i.items : [])).some((i) => i.type === 'label' && i.label.includes('Portal de Supervivencia'))).toBe(true);
+    expect(menu).toContain('  ( ) Online');
+    expect(menu).toContain('  ( ) Offline');
+    expect(menu).not.toContain('  ( ) Online (disabled)');
+    expect(menu).not.toContain('  Leave survival in the Survival Portal');
   });
 
   it('the Survival item is enabled in every state, with no PIN', () => {

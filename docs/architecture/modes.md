@@ -77,7 +77,7 @@ Survival entry must **never** fail as a whole. Each sub-step that fails is repor
 5. If the last successful sync is older than 24 h, schedule a sync to start in 5 minutes. The operator may cancel it.
 
 ### 2.4 Permissions
-- CLI: `aictl mode …` requires the agent token, which members of `localai-operators` can read. Switching to `survival` **never** requires the PIN; anyone at the keyboard must be able to do it. Switching *out of* survival requires the PIN in the desktop/UI. The CLI accepts it from members of `localai-operators` without a PIN.
+- CLI: `aictl mode …` requires the agent token, which members of `localai-operators` can read. Switching to `survival` **never** requires the PIN; anyone at the keyboard must be able to do it. Switching *out of* survival needs **no PIN for an operator**: the CLI, the ai-desktop app (its agent token or a session made from it) and a socket peer in `localai-operators` may do it ([ADR-0011](../decisions/0011-full-control-from-the-app.md), which supersedes the earlier rule that the desktop/UI needs the PIN). A browser with only the Portal session, and the cloud, still need the PIN.
 - Cloud: an operator can switch a node to `offline`. The node then drops the link, so returning it to `online` must happen locally. The cloud UI warns about this. The cloud cannot command `survival`. Survival is a local decision.
 
 ## 3. Profile survival block

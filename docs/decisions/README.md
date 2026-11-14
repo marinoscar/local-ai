@@ -14,5 +14,6 @@ Each ADR records one decision, its context and the alternatives rejected. To cha
 | [0008](0008-cloud-on-eab.md) | The cloud app is built on EnterpriseAppBase packages | Accepted |
 | [0009](0009-optimized-for-humans.md) | Everything is optimized for humans: nothing to memorize, menus over flags, state first | Accepted |
 | [0010](0010-the-agent-keeps-the-node-complete.md) | The agent keeps the node complete: it installs what the kit holds, safely, and one button does it on demand | Accepted |
+| [0011](0011-full-control-from-the-app.md) | Full control from the app (the Dashboard in the Portal, built-in help); no PIN to leave survival mode at the computer, the PIN guards deletes | Accepted |
 
 Template: copy [0000-template.md](0000-template.md).

@@ -22,7 +22,7 @@ In scope:
 
 Non-goals:
 - Replacing the llama WebUI. **Chat** opens it (through `/chat/`); the Portal's own screens only cover Photo and Talk, which need big-button simplicity.
-- Admin tasks (keys, profile, deletes, cloud). Those live in the Dashboard and need a session and the PIN.
+- Admin tasks. They live in the **Manage this computer** area of the same SPA ([dashboard.md](dashboard.md), [ADR-0011](../decisions/0011-full-control-from-the-app.md)) and need an operator session; deletes also need the PIN.
 - Network features of any kind.
 - Medical advice beyond linking to library articles and a disclaimer.
 

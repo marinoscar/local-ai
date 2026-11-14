@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { type FakeAgent, newFakeToken, startFakeAgent } from '../fixtures/fake-agent';
-import { type Launched, evaluateIn, isAgentUrl, isPinWindow, launch, waitForContents, waitForWindowPage } from './helpers';
+import { type Launched, evaluateIn, isAgentUrl, launch, waitForContents } from './helpers';
 
 let agent: FakeAgent;
 let run: Launched | undefined;
@@ -38,14 +38,12 @@ test('the shell bridge switches the mode through the agent; agent pages have no 
 
   // A target the bridge does not know never reaches the agent.
   expect(await evaluateIn<unknown>(run.app, shell.id, "window.localaiDesktop.setMode('reboot')")).toEqual({ ok: false });
-  // Leaving survival needs the PIN: the PIN window opens (DSK-08), and cancelling it asks the agent for nothing more.
+  // Leaving survival needs no PIN from the app (ADR-0011): one request, no grant, no PIN window.
   const before = agent.modeRequests.length;
-  const leaving = evaluateIn<unknown>(run.app, shell.id, "window.localaiDesktop.setMode('online')");
-  const pinPage = await waitForWindowPage(run.app, isPinWindow);
-  await pinPage.getByTestId('pin-cancel').click();
-  expect(await leaving).toEqual({ ok: false, code: 'LAI-SEC-002' });
-  expect(agent.modeRequests.slice(before).every((r) => r.pinGrant === undefined)).toBe(true);
-  expect(agent.mode).toBe('survival');
+  expect(await evaluateIn<unknown>(run.app, shell.id, "window.localaiDesktop.setMode('online')")).toEqual({ ok: true });
+  expect(agent.modeRequests.slice(before)).toHaveLength(1);
+  expect(agent.modeRequests[before]).toMatchObject({ path: '/api/v1/mode', body: { target: 'online', wait: false }, pinGrant: undefined });
+  expect(agent.mode).toBe('online');
 });
 
 test('with no tray, LAI-DSK-013 is logged and remembered once, and closing the window quits the app', async () => {
