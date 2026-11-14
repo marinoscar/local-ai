@@ -1,5 +1,7 @@
 # local-ai
 
+<p align="center"><img src="packages/ui/brand/banner.png" alt="Local AI: private AI, a library, maps and voice that keep working when the internet is gone" width="100%"></p>
+
 🇬🇧 **English** · 🇪🇸 [Español](README.es.md)
 
 **Run local AI for a home lab, and keep it working when the internet is gone.**
