@@ -196,10 +196,150 @@ async function readBody(req) {
   return s;
 }
 
+// Music and workloads (E11, issue #512): the state the music tests set with POST /__music; a switch and a song
+// finish by themselves a moment later and announce it on the event stream, like the real agent.
+function defaultMusic() {
+  return {
+    installed: true,
+    engine_state: "stopped",
+    loaded_model: null,
+    active: "coding",
+    songs: [],
+    ops: {},
+    // The next answers: 0 is success, else an HTTP status with the error below.
+    activateAnswer: 0,
+    generateAnswer: 0,
+    deleteAnswer: 0,
+  };
+}
+let music = defaultMusic();
+const MUSIC_ERRORS = {
+  activate: { 422: { code: "LAI-LLM-051", message: "Music does not fit this computer's graphics memory.", fix: "Use it on a computer with a bigger graphics card." } },
+  generate: { 429: { code: "LAI-SVC-153", message: "Too many songs are waiting.", fix: "Wait for a song to finish, then press Generate again." } },
+  delete: { 403: { code: "LAI-SEC-002", message: "This needs the admin PIN.", fix: "Enter the admin PIN." } },
+};
+
+function emit(type, data) {
+  const frame = `event: ${type}\ndata: ${JSON.stringify({ type, data })}\n\n`;
+  for (const r of streams) r.write(frame);
+}
+
+/** A valid, silent, one-second wav: what /music/songs/{id}/audio answers. */
+function silentWav() {
+  const rate = 8000;
+  const data = Buffer.alloc(rate);
+  const h = Buffer.alloc(44);
+  h.write("RIFF", 0);
+  h.writeUInt32LE(36 + data.length, 4);
+  h.write("WAVEfmt ", 8);
+  h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20);
+  h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(rate, 24);
+  h.writeUInt32LE(rate, 28);
+  h.writeUInt16LE(1, 32);
+  h.writeUInt16LE(8, 34);
+  h.write("data", 36);
+  h.writeUInt32LE(data.length, 40);
+  data.fill(128);
+  return Buffer.concat([h, data]);
+}
+
+function musicWorkloads() {
+  const w = (name, en, es, models) => ({ name, label: { en, es }, models, active: music.active === name, fits: true, missing: [] });
+  return {
+    workloads: [w("coding", "Coding", "Programación", ["coder-a"]), w("music", "Music", "Música", ["song-model"])],
+    active: music.active,
+  };
+}
+
+async function handleMusic(req, res, p) {
+  const json = { "Content-Type": "application/json" };
+  const ok = (code, body) => send(res, code, JSON.stringify(body), json);
+  const fail = (code, error) => send(res, code, JSON.stringify({ error }), json);
+  if (p === "/api/v1/workloads" && req.method === "GET") return ok(200, musicWorkloads()), true;
+  if (p === "/api/v1/workloads/music/activate" && req.method === "POST") {
+    seen.push({ path: p, body: await readBody(req) });
+    if (music.activateAnswer) return fail(music.activateAnswer, MUSIC_ERRORS.activate[music.activateAnswer]), true;
+    music.engine_state = "starting";
+    setTimeout(() => emit("workload.progress", { op_id: "op_w1", progress: 0.5, step: "loading" }), 150);
+    setTimeout(() => {
+      music = { ...music, engine_state: "ready", loaded_model: "song-model", active: "music" };
+      emit("workload.done", { op_id: "op_w1", state: "done" });
+    }, 600);
+    return ok(202, { op_id: "op_w1" }), true;
+  }
+  if (p === "/api/v1/music/status" && req.method === "GET")
+    return ok(200, { installed: music.installed, loaded_model: music.loaded_model, engine_state: music.engine_state, queue: { running: 0, queued: 0, max: 4 } }), true;
+  if (p === "/api/v1/music/generate" && req.method === "POST") {
+    const body = await readBody(req);
+    seen.push({ path: p, type: req.headers["content-type"] ?? "", body });
+    if (music.generateAnswer) return fail(music.generateAnswer, MUSIC_ERRORS.generate[music.generateAnswer]), true;
+    const n = Object.keys(music.ops).length + 1;
+    const opId = `op_m${n}`;
+    const songId = `song-${n}`;
+    music.ops[opId] = { state: "queued", progress: null, song_ids: [songId], error: null };
+    setTimeout(() => {
+      if (!music.ops[opId] || music.ops[opId].state !== "queued") return;
+      music.ops[opId] = { ...music.ops[opId], state: "running", progress: 0.5 };
+      emit("music.progress", { op_id: opId, state: "running", progress: 0.5, song_ids: [songId] });
+    }, 300);
+    setTimeout(() => {
+      if (!music.ops[opId] || music.ops[opId].state === "cancelled") return;
+      music.ops[opId] = { ...music.ops[opId], state: "done", progress: 1 };
+      // The title is the first lyric line that is not a section tag (like the real agent), else a placeholder.
+      const lyrics = /name="lyrics"\r\n\r\n([\s\S]*?)\r\n--/.exec(body)?.[1] ?? "";
+      const title = lyrics.split("\n").map((l) => l.trim()).find((l) => l !== "" && !/^\[\w+\]$/.test(l)) || "My song";
+      music.songs.unshift({ id: songId, created_at: "2026-11-14T10:00:00Z", title, tags: "calm", language: "en", duration_s: 60, model_id: "song-model", seed: 7, mime: "audio/wav", size_bytes: 8044, origin: "local" });
+      emit("music.done", { op_id: opId, state: "done", progress: 1, song_ids: [songId] });
+    }, 1500);
+    return ok(202, { op_id: opId, song_ids: [songId] }), true;
+  }
+  let m = /^\/api\/v1\/music\/ops\/([^/]+)$/.exec(p);
+  if (m && req.method === "GET") return ok(music.ops[m[1]] ? 200 : 404, music.ops[m[1]] ?? { error: { code: "LAI-AGT-021" } }), true;
+  m = /^\/api\/v1\/music\/ops\/([^/]+)\/cancel$/.exec(p);
+  if (m && req.method === "POST") {
+    seen.push({ path: p });
+    if (music.ops[m[1]]) {
+      music.ops[m[1]] = { ...music.ops[m[1]], state: "cancelled" };
+      setTimeout(() => emit("music.done", { op_id: m[1], state: "cancelled", progress: null, song_ids: [] }), 100);
+    }
+    return ok(200, {}), true;
+  }
+  if (p === "/api/v1/music/songs" && req.method === "GET") return ok(200, { songs: music.songs, next_cursor: null }), true;
+  m = /^\/api\/v1\/music\/songs\/([^/]+)\/audio$/.exec(p);
+  if (m && req.method === "GET") return send(res, 200, silentWav(), { "Content-Type": "audio/wav" }), true;
+  m = /^\/api\/v1\/music\/songs\/([^/]+)$/.exec(p);
+  if (m && req.method === "DELETE") {
+    seen.push({ path: p, method: "DELETE", grant: req.headers["x-localai-pin-grant"] ?? null });
+    if (music.deleteAnswer && !req.headers["x-localai-pin-grant"]) return fail(music.deleteAnswer, MUSIC_ERRORS.delete[music.deleteAnswer]), true;
+    music.songs = music.songs.filter((s) => s.id !== decodeURIComponent(m[1]));
+    return ok(200, {}), true;
+  }
+  if (p === "/api/v1/pin/verify" && req.method === "POST") {
+    const { pin } = JSON.parse((await readBody(req)) || "{}");
+    if (pin !== "4821") return fail(401, { code: "LAI-SEC-003", message: "That PIN is not right." }), true;
+    return ok(200, { grant: "pg_fake", expires_at: "2026-11-14T10:05:00Z" }), true;
+  }
+  return false;
+}
+
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
   const p = url.pathname;
   if (await handleMaps(req, res, url, CSP)) return;
+  if (p === "/__music" && req.method === "POST") {
+    const body = JSON.parse(await readBody(req));
+    music = body.reset ? { ...defaultMusic(), ...body } : { ...music, ...body };
+    return send(res, 200, "ok");
+  }
+  if (await handleMusic(req, res, p)) return;
+  // The music page is the Portal served at /music/ (agent.md section 3.11), with the Portal CSP.
+  if (p === "/music/" || p === "/music") {
+    return file(res, join(dist, "portal.html"), TYPES[".html"], {
+      "Content-Security-Policy": CSP,
+    });
+  }
   if (p.startsWith("/__")) {
     if (p === "/__reset") {
       status = defaultStatus();
@@ -209,6 +349,7 @@ createServer(async (req, res) => {
       fixAnswer = 0;
       ensure = ensureView("needs_you", [piperStep("pending")]);
       ensureAnswer = 0;
+      music = defaultMusic();
       return send(res, 200, "ok");
     }
     if (p === "/__ensure" && req.method === "POST") {
