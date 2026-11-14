@@ -1,5 +1,5 @@
 // The privileged fixes of the error pages (docs/specs/desktop.md 4.2, "Buttons instead of commands"): "Allow this user"
-// (LAI-DSK-001), "Make a new token" (LAI-DSK-007) and "Restart the computer" (the agent-down pages), plus "Open the
+// (LAI-DSK-001), "Fix access" (LAI-DSK-017), "Make a new token" (LAI-DSK-007) and "Restart the computer" (the agent-down pages), plus "Open the
 // library only" (kiwix-serve on 127.0.0.1:8888, which does not need the agent).
 //
 // The rules, the same as "Start agent" in agent-supervisor.ts:
@@ -18,6 +18,10 @@ export const MODULE = 'system-actions' as const;
 
 /** The binaries the fixed argvs name (overview.md canonical names; usermod is the distribution's). */
 export const USERMOD = '/usr/sbin/usermod';
+/** The distribution's chmod (Ubuntu's /bin is a link to /usr/bin). */
+export const CHMOD = '/usr/bin/chmod';
+/** The configuration folder that holds agent-token (overview.md canonical names). */
+export const ETC_DIR = '/etc/localai';
 /** The multi-call binary itself, so the fix works even when the `/usr/local/bin/aictl` symlink is missing (aictl.md 3.1). */
 export const AIAGENT = '/opt/localai/bin/aiagent';
 /** Kiwix-serve, the library program: a separate unit that keeps running when the agent is down (companion-services.md). */
@@ -45,6 +49,15 @@ export function allowUserArgv(pkexec: string, username: string): Argv | null {
   return { file: pkexec, args: [USERMOD, '-aG', OPERATORS_GROUP, username] };
 }
 
+/**
+ * `pkexec /usr/bin/chmod o+x /etc/localai` (issue #483): the pass-through bit only, so an operator reaches agent-token
+ * (root:localai-operators 0640) without being able to list the folder. A direct chmod rather than `aiagent setup dirs`,
+ * because an agent older than the fix would set the folder back to 0750.
+ */
+export function repairAccessArgv(pkexec: string): Argv {
+  return { file: pkexec, args: [CHMOD, 'o+x', ETC_DIR] };
+}
+
 /** `pkexec /opt/localai/bin/aiagent ctl token rotate` (aictl.md 4.21, a [local] [root] command: no agent needed). */
 export function rotateTokenArgv(pkexec: string): Argv {
   return { file: pkexec, args: [AIAGENT, 'ctl', 'token', 'rotate'] };
@@ -66,6 +79,7 @@ export type SystemResult = { ok: true } | { ok: false; reason: SystemFailure };
 
 export interface SystemActions {
   allowUser(): Promise<SystemResult>;
+  repairAccess(): Promise<SystemResult>;
   rotateToken(): Promise<SystemResult>;
   reboot(): Promise<SystemResult>;
 }
@@ -110,6 +124,10 @@ export function createSystemActions(deps: SystemActionDeps): SystemActions {
     allowUser: () => {
       if (pkexec === null) return Promise.resolve({ ok: false, reason: 'unavailable' });
       return run('allow this user', allowUserArgv(pkexec, username()), PRIVILEGED_TIMEOUT_MS);
+    },
+    repairAccess: () => {
+      if (pkexec === null) return Promise.resolve({ ok: false, reason: 'unavailable' });
+      return run('fix access', repairAccessArgv(pkexec), PRIVILEGED_TIMEOUT_MS);
     },
     rotateToken: () => {
       if (pkexec === null) return Promise.resolve({ ok: false, reason: 'unavailable' });

@@ -468,6 +468,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-DSK-014 | warning | Couldn't turn on "Start at login" | Check that `~/.config/autostart` is writable, then try again |
 | LAI-DSK-015 | critical | The app's security sandbox couldn't start | Reinstall ai-desktop from the .deb (`sudo apt install ./ai-desktop_<version>_amd64.deb`) |
 | LAI-DSK-016 | warning | Couldn't check or download an update | Try later, or install the update from the rebuild kit |
+| LAI-DSK-017 | error | You're allowed, but this computer's settings block the agent's key file | Press "Fix access" and enter the administrator password (in a terminal: `sudo chmod o+x /etc/localai`) |
 
 ### `LAI-INS` — owner: [installer.md](installer.md)
 > Copied from [installer.md](installer.md) §8 (authoritative; installer output is terminal-only, English and Spanish).

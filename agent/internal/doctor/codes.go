@@ -362,6 +362,7 @@ const (
 	DSK014 = "LAI-DSK-014"
 	DSK015 = "LAI-DSK-015"
 	DSK016 = "LAI-DSK-016"
+	DSK017 = "LAI-DSK-017"
 
 	// LAI-INS
 	INS001 = "LAI-INS-001"
@@ -2355,6 +2356,12 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "Couldn't check or download an update", ES: "No se pudo buscar o descargar una actualización"},
 		Fix:      Msg{EN: "Try later, or install the update from the rebuild kit", ES: "Inténtelo más tarde, o instale la actualización desde el kit de reconstrucción"},
+	},
+	{
+		ID:       DSK017,
+		Severity: Error,
+		Title:    Msg{EN: "You're allowed, but this computer's settings block the agent's key file", ES: "Tiene permiso, pero la configuración de este equipo bloquea el archivo de clave del agente"},
+		Fix:      Msg{EN: "Press \"Fix access\" and enter the administrator password (in a terminal: `sudo chmod o+x /etc/localai`)", ES: "Pulse «Reparar el acceso» e introduzca la contraseña de administrador (en una terminal: `sudo chmod o+x /etc/localai`)"},
 	},
 	{
 		ID:       INS001,

@@ -182,6 +182,19 @@ export function ErrorPage({ code, lang, unit, act }: ErrorPageProps): ReactEleme
         if (message) say(result?.reason === 'cancelled' ? 'warning' : 'error', message);
         return;
       }
+      case 'repair-access': {
+        setBusy(action);
+        const result = await run(action);
+        if (result?.ok) {
+          // The main process runs the start-up sequence again, which replaces this page.
+          say('success', PAGE_STRINGS.repairDone);
+          return;
+        }
+        setBusy(null);
+        const message = result ? fixFailureNote(result) : PAGE_STRINGS.fixFailed;
+        if (message) say(result?.reason === 'cancelled' ? 'warning' : 'error', message);
+        return;
+      }
       case 'rotate-token': {
         setBusy(action);
         const result = await run(action);

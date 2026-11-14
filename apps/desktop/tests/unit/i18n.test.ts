@@ -38,6 +38,8 @@ describe('error page text', () => {
     expect(ERROR_COPY['LAI-DSK-001'].actions[0]).toBe('allow-user');
     expect(ERROR_COPY['LAI-DSK-001'].followUp).toEqual(['logout']);
     expect(ERROR_COPY['LAI-DSK-007'].actions[0]).toBe('rotate-token');
+    expect(ERROR_COPY['LAI-DSK-017'].actions[0]).toBe('repair-access');
+    expect(ERROR_COPY['LAI-DSK-017'].actions).not.toContain('allow-user');
     expect(ERROR_COPY['LAI-DSK-005'].actions[0]).toBe('start-agent');
     for (const code of ['LAI-DSK-003', 'LAI-DSK-004', 'LAI-DSK-005'] as const) {
       expect(ERROR_COPY[code].actions).toContain('open-library');

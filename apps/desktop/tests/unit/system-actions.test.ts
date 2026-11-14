@@ -5,12 +5,15 @@ import type { ExecFn, ExecResult, StartBinaries } from '../../src/main/agent-sup
 import type { Logger } from '../../src/main/log';
 import {
   AIAGENT,
+  CHMOD,
+  ETC_DIR,
   LIBRARY_URL,
   USERMOD,
   allowUserArgv,
   createSystemActions,
   isSafeUsername,
   rebootArgv,
+  repairAccessArgv,
   rotateTokenArgv,
 } from '../../src/main/system-actions';
 
@@ -46,6 +49,11 @@ describe('the fixed argv table', () => {
     expect(AIAGENT).toBe('/opt/localai/bin/aiagent');
   });
 
+  it('Fix access: pkexec chmod o+x /etc/localai (pass through only, never list; issue #483)', () => {
+    expect(repairAccessArgv('/usr/bin/pkexec')).toEqual({ file: '/usr/bin/pkexec', args: ['/usr/bin/chmod', 'o+x', '/etc/localai'] });
+    expect([CHMOD, ETC_DIR]).toEqual(['/usr/bin/chmod', '/etc/localai']);
+  });
+
   it('Restart the computer: systemctl reboot, without pkexec (logind and polkit decide)', () => {
     expect(rebootArgv('/usr/bin/systemctl')).toEqual({ file: '/usr/bin/systemctl', args: ['reboot'] });
   });
@@ -66,10 +74,12 @@ describe('createSystemActions', () => {
     const { exec, calls } = fakeExec();
     const actions = createSystemActions({ binaries: REAL, exec, username: () => 'person_a' });
     expect(await actions.allowUser()).toEqual({ ok: true });
+    expect(await actions.repairAccess()).toEqual({ ok: true });
     expect(await actions.rotateToken()).toEqual({ ok: true });
     expect(await actions.reboot()).toEqual({ ok: true });
     expect(calls.map((c) => [c.file, ...c.args])).toEqual([
       ['/usr/bin/pkexec', '/usr/sbin/usermod', '-aG', 'localai-operators', 'person_a'],
+      ['/usr/bin/pkexec', '/usr/bin/chmod', 'o+x', '/etc/localai'],
       ['/usr/bin/pkexec', '/opt/localai/bin/aiagent', 'ctl', 'token', 'rotate'],
       ['/usr/bin/systemctl', 'reboot'],
     ]);
@@ -87,6 +97,7 @@ describe('createSystemActions', () => {
       const actions = createSystemActions({ binaries: REAL, exec, username: () => 'person_a' });
       expect(await actions.allowUser(), String(code)).toEqual({ ok: false, reason });
       expect(await actions.rotateToken(), String(code)).toEqual({ ok: false, reason });
+      expect(await actions.repairAccess(), String(code)).toEqual({ ok: false, reason });
     }
   });
 
@@ -95,6 +106,7 @@ describe('createSystemActions', () => {
     const actions = createSystemActions({ binaries: { systemctl: '/tmp/stub-systemctl', pkexec: null }, exec, username: () => 'person_a' });
     expect(await actions.allowUser()).toEqual({ ok: false, reason: 'unavailable' });
     expect(await actions.rotateToken()).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await actions.repairAccess()).toEqual({ ok: false, reason: 'unavailable' });
     expect(calls).toEqual([]);
     // Restart uses the systemctl stub, never the real one.
     await actions.reboot();

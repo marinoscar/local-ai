@@ -40,7 +40,7 @@ export type SurvivalReason = 'mode' | 'portal';
 export interface EnterOptions {
   /** Default: `mode` when the node is known to be in survival mode, else `portal`. */
   reason?: SurvivalReason;
-  /** Set when the token file is unreadable (LAI-DSK-001 to 003). */
+  /** Set when the token file is unreadable (LAI-DSK-001 to 003, 017). */
   banner?: DskCode;
   /** False when the caller loads `/portal` itself right after (the start-up sequence). Default true. */
   load?: boolean;

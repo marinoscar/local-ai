@@ -44,9 +44,9 @@ describe('group diagnosis on EACCES (desktop.md 4.2)', () => {
     expect((await diagnoseGroupAccess(deps({ line: `localai-operators:x:${GID}:alice2,malice`, groups: [] }))).kind).toBe('not-member');
   });
 
-  it('an unreadable group that is active but the file still refuses ends on LAI-DSK-001 (the page tells how to fix it)', async () => {
+  it('an active member whose token read is still refused ends on LAI-DSK-017, never on "Allow this user" (issue #483)', async () => {
     const active = await diagnoseGroupAccess(deps({}));
-    expect(await codeForTokenFailure({ ok: false, reason: 'permission-denied' }, { diagnoseTokenAccess: async () => active })).toBe('LAI-DSK-001');
+    expect(await codeForTokenFailure({ ok: false, reason: 'permission-denied' }, { diagnoseTokenAccess: async () => active })).toBe('LAI-DSK-017');
   });
 });
 

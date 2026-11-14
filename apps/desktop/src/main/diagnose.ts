@@ -5,7 +5,7 @@ import { existsSync, openSync, readSync, closeSync, readFileSync, statSync } fro
 import { join } from 'node:path';
 import { app, safeStorage } from 'electron';
 import { createAgentClient, checkApiVersion, resolveTokenPath, testHooksAllowed, type AgentClient } from './agent-client';
-import { createAgentSupervisor, type AgentSupervisor } from './agent-supervisor';
+import { codeForGroupDiagnosis, createAgentSupervisor, type AgentSupervisor } from './agent-supervisor';
 import { autostartPath } from './autostart';
 import { blockedTotal } from './egress-guard';
 import { type DskCode, type Lang, type Severity, ERROR_COPY, resolveLang } from './i18n';
@@ -101,7 +101,7 @@ export async function buildReport(deps: DiagnoseDeps): Promise<DiagnoseReport> {
   const needsRelogin = !token.ok && token.reason === 'permission-denied' && group.kind === 'needs-relogin';
   if (!token.ok) {
     if (token.reason !== 'permission-denied') add('LAI-DSK-003');
-    else add(needsRelogin ? 'LAI-DSK-002' : 'LAI-DSK-001');
+    else add(codeForGroupDiagnosis(group.kind));
   }
 
   let session: DiagnoseReport['session'] = 'skipped';

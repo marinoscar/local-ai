@@ -29,7 +29,7 @@ export const SECONDARY_ACTIONS: readonly ErrorAction[] = ['open-portal', 'open-b
 /** Buttons that stay usable while a privileged call waits for its password window. */
 export const ALWAYS_USABLE: readonly ErrorAction[] = ['open-portal', 'open-browser', 'open-library'];
 
-/** The note a failed privileged button shows (allow-user, rotate-token). Null: nothing to say (another one is running). */
+/** The note a failed privileged button shows (allow-user, repair-access, rotate-token). Null: nothing to say (another one is running). */
 export function fixFailureNote(result: ActionResult): Bilingual | null {
   if (result.busy === true) return null;
   if (result.reason === 'cancelled') return PAGE_STRINGS.fixCancelled;
