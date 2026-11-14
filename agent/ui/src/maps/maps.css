@@ -1,12 +1,21 @@
-/* Map viewer styles. Classes only (the CSP has no 'unsafe-inline' for styles); system fonts only. */
+/* Map viewer styles. Classes only (the CSP has no 'unsafe-inline' for styles); system fonts only.
+   The controls use Corona (ADR-0014, packages/ui/brand/tokens.json); the map itself stays the light
+   Protomaps flavor, whose sprites are the ones in the offline map assets. */
 :root {
-  --bg: #fffdf8;
-  --fg: #1b1b1b;
-  --accent: #0b5cad;
-  --accent-fg: #ffffff;
-  --line: #5a5a5a;
-  --warn-bg: #fff3cd;
-  --warn-fg: #4d3b00;
+  --bg: #07070a;
+  --surface: #111015;
+  --raised: #1f1d26;
+  --field: #0c0b10;
+  --fg: #f5efe3;
+  --muted: #b3acbf;
+  --accent: #f2b544;
+  --accent-fg: #1a1206;
+  --line: #3a3644;
+  --line-field: #4a4656;
+  --warn-bg: #2a1f08;
+  --warn-fg: #f5efe3;
+  --warn-line: #5c4518;
+  color-scheme: dark;
   font-family: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 * {
@@ -22,6 +31,9 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-size: 1.125rem;
+}
+.place-label {
+  color: #1b1b1b;
 }
 .viewer {
   display: flex;
@@ -54,9 +66,9 @@ body {
   padding: 0.5rem 0.75rem;
   font: inherit;
   color: var(--fg);
-  background: #fff;
-  border: 2px solid var(--line);
-  border-radius: 0.5rem;
+  background: var(--field);
+  border: 2px solid var(--line-field);
+  border-radius: 0.75rem;
 }
 .grow {
   flex: 1;
@@ -68,10 +80,14 @@ body {
   font: inherit;
   font-weight: 700;
   color: var(--fg);
-  background: #fff;
-  border: 2px solid var(--line);
-  border-radius: 0.5rem;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
   cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+  background: #27252f;
+  border-color: var(--line-field);
 }
 .btn-primary {
   color: var(--accent-fg);
@@ -90,8 +106,8 @@ body {
 .btn:focus-visible,
 .field:focus-visible,
 .map-host:focus-visible {
-  outline: 4px solid #ff9f1a;
-  outline-offset: 2px;
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
 }
 .search,
 .actions {
@@ -121,8 +137,9 @@ body {
   padding: 0.5rem 0.75rem;
   background: var(--warn-bg);
   color: var(--warn-fg);
-  border: 2px solid #b58900;
-  border-radius: 0.5rem;
+  border: 1px solid var(--warn-line);
+  border-left: 6px solid #f5a524;
+  border-radius: 0.75rem;
 }
 .panel {
   max-width: 40rem;
@@ -136,8 +153,8 @@ body {
   position: relative;
   flex: 1 1 auto;
   min-height: 16rem;
-  border: 2px solid var(--line);
-  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.875rem;
   overflow: hidden;
 }
 .map-host {
@@ -198,6 +215,7 @@ body {
 }
 .foot {
   font-size: 0.875rem;
+  color: var(--muted);
 }
 .sr-only {
   position: absolute;

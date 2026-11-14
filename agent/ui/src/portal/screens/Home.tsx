@@ -146,7 +146,7 @@ function useHomeKeys(enabled: boolean) {
   }, [enabled]);
 }
 
-/** Home: the eight big buttons and the first-aid row. Buttons are never hidden, whatever the status says. */
+/** Home: the eight big buttons, the first-aid row and, for an operator session, the Manage row under it. Buttons are never hidden, whatever the status says. */
 export function Home({
   status,
   dialogOpen,
@@ -189,8 +189,8 @@ export function Home({
           })}
         </ul>
       </nav>
-      {status?.session === "full" ? <ManageRow /> : null}
       <FirstAidRow status={status} />
+      {status?.session === "full" ? <ManageRow /> : null}
     </>
   );
 }
