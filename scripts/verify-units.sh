@@ -56,6 +56,11 @@ for bin in "${bins[@]}"; do
   fi
 done
 
+# host_noise drops what systemd-analyze says about the runner's own unit files (a newer systemd on the
+# CI image warns "Support for option CPUAccounting= has been removed" for units under /usr/lib/systemd),
+# so only what concerns our units counts. Anything about a file under the test folder stays.
+host_noise() { grep -vE '^(/usr/lib|/lib|/etc|/run)/systemd/[^ ]*:[0-9]+: ' || true; }
+
 fail=0
 check() { # name, unit file, optional drop-in file, optional unit name (default localai-llama.service)
   local name="$1" unit="$2" dropin="${3:-}" uname="${4:-localai-llama.service}"
@@ -66,8 +71,10 @@ check() { # name, unit file, optional drop-in file, optional unit name (default 
     mkdir -p "$dir/$uname.d"
     cp "$dropin" "$dir/$uname.d/50-env.conf"
   fi
-  local out
-  if out="$(systemd-analyze verify "$dir/$uname" 2>&1)" && [[ -z "$out" ]]; then
+  local out rc=0
+  out="$(systemd-analyze verify "$dir/$uname" 2>&1)" || rc=$?
+  out="$(host_noise <<<"$out")"
+  if [[ $rc -eq 0 && -z "$out" ]]; then
     echo "ok   $name"
   else
     echo "FAIL $name" >&2
@@ -93,7 +100,10 @@ check_drill() {
   mkdir -p "$dir"
   cp "$units/localai-drill.service" "$units/localai-drill.timer" "$units/localai-agent.service" "$dir/"
   local out
-  if out="$(systemd-analyze verify "$dir/localai-drill.service" "$dir/localai-drill.timer" 2>&1)" && [[ -z "$out" ]]; then
+  rc=0
+  out="$(systemd-analyze verify "$dir/localai-drill.service" "$dir/localai-drill.timer" 2>&1)" || rc=$?
+  out="$(host_noise <<<"$out")"
+  if [[ $rc -eq 0 && -z "$out" ]]; then
     echo "ok   drill service and timer"
   else
     echo "FAIL drill service and timer" >&2
@@ -110,7 +120,10 @@ check_sync() {
   mkdir -p "$dir"
   cp "$units/localai-sync.service" "$units/localai-sync.timer" "$units/localai-agent.service" "$dir/"
   local out
-  if out="$(systemd-analyze verify "$dir/localai-sync.service" "$dir/localai-sync.timer" 2>&1)" && [[ -z "$out" ]]; then
+  rc=0
+  out="$(systemd-analyze verify "$dir/localai-sync.service" "$dir/localai-sync.timer" 2>&1)" || rc=$?
+  out="$(host_noise <<<"$out")"
+  if [[ $rc -eq 0 && -z "$out" ]]; then
     echo "ok   sync service and timer"
   else
     echo "FAIL sync service and timer" >&2

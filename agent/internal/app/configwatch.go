@@ -86,9 +86,10 @@ func (d *Daemon) applyLlamaMode(ctx context.Context) <-chan struct{} {
 	return done
 }
 
-// writeKiwixUnit rewrites localai-kiwix.service for threads and reloads systemd. The writer never
-// starts, stops or restarts the unit; the new thread count applies at its next start.
-func (d *Daemon) writeKiwixUnit(ctx context.Context, threads int) {
+// writeKiwixUnit rewrites localai-kiwix.service for threads and reloads systemd, and reports whether
+// the file changed. The writer never starts, stops or restarts the unit; the new thread count applies
+// at its next start (the start-up step restarts a running kiwix whose unit changed, see start.go).
+func (d *Daemon) writeKiwixUnit(ctx context.Context, threads int) bool {
 	w := &kiwix.UnitWriter{Path: d.c.Paths.KiwixUnit(), Systemd: d.c.Systemd}
 	if d.env.Unprivileged || !d.haveLocalAI {
 		w.UID, w.GID = -1, -1
@@ -96,9 +97,10 @@ func (d *Daemon) writeKiwixUnit(ctx context.Context, threads int) {
 	res, err := w.Write(ctx, threads)
 	if err != nil {
 		d.log.Error("the kiwix unit could not be rewritten", "threads", threads, "error", err.Error())
-		return
+		return false
 	}
 	d.log.Info("the kiwix unit was rewritten", "threads", threads, "written", res.Written)
+	return res.Written
 }
 
 func hasPath(paths []string, p string) bool {
@@ -117,4 +119,21 @@ func hasPrefix(paths []string, prefix string) bool {
 		}
 	}
 	return false
+}
+
+// restartKiwixIfRunning restarts localai-kiwix.service when it is active, in the background (a restart
+// takes a few seconds and must not hold start-up), so a unit rewritten at start takes effect.
+func (d *Daemon) restartKiwixIfRunning() {
+	ctx := d.rootCtx
+	go func() {
+		st, err := d.c.Systemd.State(ctx, kiwix.UnitName)
+		if err != nil || st.ActiveState != "active" {
+			return
+		}
+		if err := d.c.Systemd.Restart(ctx, kiwix.UnitName); err != nil {
+			d.log.Warn("kiwix could not be restarted after its unit changed; the new unit applies at its next start", "error", err.Error())
+			return
+		}
+		d.log.Info("kiwix was restarted so its rewritten unit applies")
+	}()
 }
