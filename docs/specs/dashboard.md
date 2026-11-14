@@ -97,6 +97,8 @@ Auth levels are those of [agent.md](agent.md) §3.8 (route table). "PIN" means t
 ### 4.2 Mode
 Three large choices with one sentence each: **Online** ("Uses the internet to update content and talk to the lab"), **Offline** ("No internet. Everything here keeps working"), **Survival** ("Emergency screen with the basics. Starts at once"). The current one is marked. Choosing one opens a confirmation that says what changes (modes.md §1) and, for leaving survival, the destination (Online or Offline). No PIN for an operator session.
 
+**As built (#494).** `manage/ModeScreen.tsx` reads `GET /mode` every 10 s, every 2 s while `transition` is set (then the choices wait and a line says "Changing to … This can take a few minutes"); `suggest_survival` shows the no-internet hint. Survival uses `POST /mode/survival {}`, the others `POST /mode {target}` (`manage/mode.ts`). Leaving survival, from this screen or from the status line's **Leave survival mode** button (survival mode, operator session only), opens one dialog (`manage/LeaveSurvival.tsx`) with Online / Offline preselected from `connectivity` (Online only when it is `full`); a Portal session gets no button. A refusal shows its code and fix (`409 LAI-AGT-022` while another change runs).
+
 ### 4.3 Offline content
 Top: the readiness of each mounted root in one line ("Internal disk: ready" / "98 % ready, 1 item missing") and the last sync. Then:
 - A list grouped by kind (Maps, Library, AI models, Speech, Rebuild kit), each item with its status in plain words (`verified` → "Ready", `missing` → "Not downloaded yet", `quarantined` → "Damaged copy set aside; it will be downloaded again", `blocked` → "Skipped until a new version is published"), its size, and its doctor code when there is one.
@@ -202,6 +204,31 @@ Every string of the Manage screens, Home's additions and the guide lives in `age
 | Key | English | Español |
 |---|---|---|
 | `mode.title` | Mode | Modo |
+| `mode.lead` | Choose how this computer works. You can change it again at any time. | Elija cómo funciona esta computadora. Puede cambiarlo otra vez cuando quiera. |
+| `mode.online` | Online | En línea |
+| `mode.online.what` | Uses the internet to update content and talk to the lab. | Usa internet para actualizar el contenido y hablar con el laboratorio. |
+| `mode.offline` | Offline | Sin conexión |
+| `mode.offline.what` | No internet. Everything on this computer keeps working. | Sin internet. Todo lo que hay en esta computadora sigue funcionando. |
+| `mode.survival` | Survival | Supervivencia |
+| `mode.survival.what` | Emergency screen with the basics. Starts at once. | Pantalla de emergencia con lo básico. Empieza de inmediato. |
+| `mode.current` | In use now | En uso ahora |
+| `mode.choose` | Use {mode} | Usar {mode} |
+| `mode.changing` | Changing to {mode} … This can take a few minutes. You can keep using the computer. | Cambiando a {mode} … Puede tardar unos minutos. Puede seguir usando la computadora. |
+| `mode.changed` | Done. The computer is now {mode}. | Listo. La computadora ahora está en {mode}. |
+| `mode.warnings` | Finished with notes: | Terminó con notas: |
+| `mode.suggest` | There has been no internet for more than 30 minutes. Survival mode keeps the basics ready. | No hay internet desde hace más de 30 minutos. El modo supervivencia deja lo básico listo. |
+| `mode.confirm.title` | Change to {mode}? | ¿Cambiar a {mode}? |
+| `mode.confirm.online` | The computer will use the internet again: content updates at night, and the lab can see it. | La computadora vuelve a usar internet: el contenido se actualiza de noche y el laboratorio puede verla. |
+| `mode.confirm.offline` | The computer stops using the internet. Chat, library, maps and voice keep working. | La computadora deja de usar internet. El chat, la biblioteca, los mapas y la voz siguen funcionando. |
+| `mode.confirm.survival` | The emergency screen opens full screen with the basics: chat, library, maps, first aid. The survival brain is loaded. | La pantalla de emergencia se abre en pantalla completa con lo básico: chat, biblioteca, mapas, primeros auxilios. Se carga el cerebro de supervivencia. |
+| `mode.leave.title` | Leave survival mode? | ¿Salir del modo supervivencia? |
+| `mode.leave.lead` | The emergency screen closes and the normal screen comes back. Nothing is deleted. | La pantalla de emergencia se cierra y vuelve la pantalla normal. No se borra nada. |
+| `mode.leave.where` | Change to: | Cambiar a: |
+| `mode.leave.online` | Online (there is internet) | En línea (hay internet) |
+| `mode.leave.offline` | Offline (no internet yet) | Sin conexión (todavía no hay internet) |
+| `mode.leave.go` | Leave survival mode | Salir del modo supervivencia |
+| `mode.busy` | Another change is still running. Wait for it to finish, then try again. | Todavía hay otro cambio en curso. Espere a que termine y vuelva a intentarlo. |
+| `mode.portalOnly` | To leave survival mode, use the Local AI app on this computer. | Para salir del modo supervivencia, use la aplicación Local AI de esta computadora. |
 <!-- /copy -->
 
 ### 9.3 Offline content
