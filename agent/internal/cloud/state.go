@@ -682,6 +682,9 @@ func (sb *SnapshotBuilder) snapEnsure(ctx context.Context) *SnapEnsure {
 	return out
 }
 
+// snapModelIDRe is ModelId of the cloud's schema; an id that breaks it is left out of the block.
+var snapModelIDRe = regexp.MustCompile(`^[a-z0-9][a-z0-9.\-]{2,63}$`)
+
 // workloadNameRe is the name rule of WorkloadsBlockV1.
 var workloadNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
 
@@ -702,7 +705,9 @@ func (sb *SnapshotBuilder) snapWorkloads(ctx context.Context) *SnapWorkloads {
 			if len(out) == 8 {
 				break
 			}
-			out = append(out, cut(id, 64))
+			if snapModelIDRe.MatchString(id) {
+				out = append(out, id)
+			}
 		}
 		return out
 	}
