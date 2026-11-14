@@ -79,3 +79,19 @@ test("Help: the guide opens from Home, the tasks unfold, and Back returns Home",
   await page.getByRole("button", { name: "Back to Home" }).click();
   await expect(page).toHaveURL(/\/portal$/);
 });
+
+test("with the node's real, long first-aid names Home keeps first aid on one line and Manage on screen", async ({ page }) => {
+  const names = ["CPR (heart not beating)", "Choking", "Severe bleeding", "Shock", "Burns", "Broken bone", "Snake bite"];
+  await setStatus(page, {
+    mode: "survival",
+    session: "full",
+    first_aid: names.map((title, i) => ({ key: `k${i}`, title, url: `/library/content/x/${i}`, available: true })),
+  });
+  await page.goto("/portal");
+  const chips = page.locator(".firstaid-row .chip");
+  await expect(chips).toHaveCount(6); // five entries and More
+  const tops = await chips.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+  expect(new Set(tops).size).toBe(1);
+  const m = await page.evaluate(() => ({ sh: document.documentElement.scrollHeight, ih: window.innerHeight }));
+  expect(m.sh).toBeLessThanOrEqual(m.ih);
+});

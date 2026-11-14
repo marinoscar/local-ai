@@ -86,7 +86,7 @@ Auth levels are those of [agent.md](agent.md) §3.8 (route table). "PIN" means t
 ├──────────────────────────────────────────────────────────────────────────────────────────────┤
 │   (the eight big buttons of survival-portal.md §4.1.1)                                          │
 ├──────────────────────────────────────────────────────────────────────────────────────────────┤
-│ FIRST AID  [CPR] [Choking] [Severe bleeding] [Burns] [Broken bone] [Snake bite] [More …]  (F) │
+│ FIRST AID  [CPR (heart not beating)] [Choking] [Severe bleeding] [Shock] [Burns]   [More …]  (F) │
 │ MANAGE THIS COMPUTER   [Mode] [Offline content] [AI models] [Health] [System]                 │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
