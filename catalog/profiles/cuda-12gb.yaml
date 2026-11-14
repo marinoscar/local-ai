@@ -14,7 +14,7 @@ storage:
   budget_bytes: 500000000000
   min_free_bytes: 40000000000
 include:
-  models: [qwen3.5-9b-q4km, qwen3.6-35b-a3b-q4km, whisper-medium, piper-en-medium, piper-es-medium, qwen3.5-4b-q4km, embeddinggemma-300m-q8]
+  models: [qwen3.5-9b-q4km, qwen3.6-35b-a3b-q4km, whisper-medium, piper-en-medium, piper-es-medium, qwen3.5-4b-q4km, embeddinggemma-300m-q8, acestep-v15-turbo]
   content:
     # tier 1
     - docs-bundle
@@ -81,3 +81,7 @@ workloads:
   speech:
     label: {en: "Speech", es: "Voz"}
     models: [qwen3.5-4b-q4km]
+  # E11: ACE-Step needs about 10.9 GB, so music runs alone (spike #505 on ai-n2).
+  music:
+    label: {en: "Music", es: "Música"}
+    models: [acestep-v15-turbo]

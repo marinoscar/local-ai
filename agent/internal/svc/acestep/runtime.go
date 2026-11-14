@@ -83,8 +83,9 @@ func (r Runtime) Installed() error {
 }
 
 // MinDriverMajor is the oldest NVIDIA driver branch the music runtime's CUDA wheels run on.
-// TODO(#505): the spike measures the bundle's CUDA version; until then this is the CUDA 12.4 floor.
-const MinDriverMajor = 550
+// The bundle uses the cu128 wheels (CUDA runtime 12.8, spike #505), whose documented driver floor is
+// 570; the spike ran on 595.
+const MinDriverMajor = 570
 
 // DriverTooOld reports whether an NVIDIA driver version ("595.45.04") is older than MinDriverMajor. A
 // version that cannot be read is not judged (false).

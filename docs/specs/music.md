@@ -134,7 +134,7 @@ JSON over HTTP/1.1; every body is UTF-8 JSON; unknown fields in a request are re
 - **Engine log.** ACE-Step logs the whole prompt at INFO and prints tracebacks with local variables; the shim keeps its log at WARNING, one line per record, without tracebacks, and drops any line that carries a lyric line or the tags of the running song (§6).
 
 ### 3.5 Catalog entry (example)
-No real entry ships until #505 provides the hashes (catalog.md §2.2). The complete example, also in the agent's catalog testdata:
+The real entry, `acestep-v15-turbo` in `catalog/models.yaml`, carries the 26 weight files the spike (#505) hashed at revision `19671f406d603126926c1b7e2adc169acbcade22` (#511); the profile `cuda-12gb` includes it with a `music` workload, and `ark-drive-full` carries it. The shape, as in the agent's catalog testdata:
 ```yaml
   - id: acestep-v15-turbo
     display_name: "ACE-Step 1.5 (music)"

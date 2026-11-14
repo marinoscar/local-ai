@@ -6,7 +6,7 @@ Use this when you want a node to **make music** from your lyrics, or to switch a
 > - You need: a computer with an NVIDIA graphics card that has the **Music** workload (ask the lab owner, or look for a **Music** button; Part 1 shows where).
 > - For the website way: internet, the node in **online** mode, and an account on `https://ai.marin.cr` that may use music.
 > - Deleting a song needs the **admin PIN** on the node or in the desktop app.
-> - **Time:** switching to Music takes about 1 to 2 minutes; one 1-minute song takes a few minutes. These times are approximately; to be confirmed by #505.
+> - **Time:** switching to Music takes about 1 minute (the music engine itself starts in about 20 seconds); a 1-minute song takes about 20 seconds on a 12 GB graphics card.
 
 > 🛠 Verify when implemented (Epic E11: #509 workloads, #510 music API, #512 local page, #514 website page, #515 desktop app).
 
@@ -33,7 +33,7 @@ Choose **one** of the four ways below. They all do the same thing.
    - **What you should see:** at the top of the node page, a line "This computer is set for: **Coding**" and one button per workload: **Coding**, **Chat and photos**, **Music**, and so on. The current one looks pressed.
    - **If it doesn't work:** the buttons are missing when the node is in **Offline** or **Survival** mode, or was not seen for a while: use one of the other ways, on the computer itself. A greyed-out button says why (for example "does not fit"): see [07-troubleshooting.md](07-troubleshooting.md#music-or-switching-doesnt-work).
 2. Press **Music**.
-   - **What you should see:** "Running command: Switch to Music", then after about 1 to 2 minutes (approximately; to be confirmed by #505) the **Music** button looks pressed.
+   - **What you should see:** "Running command: Switch to Music", then after about 1 minute the **Music** button looks pressed.
    - **If it doesn't work:** the page shows a code and its fix. `LAI-LLM-052`: the switch failed and the previous AI was started again; try once more. `LAI-LLM-051`: Music does not fit this computer's graphics card. `LAI-LLM-043`: the music program is not installed; press **Install what's missing** on the node page. More in [07-troubleshooting.md](07-troubleshooting.md#music-or-switching-doesnt-work).
 3. When you are done with music, press **Coding**.
    - **What you should see:** the **Coding** button looks pressed again after about a minute.
@@ -100,7 +100,7 @@ The song is made on the node. You can ask for it on the node itself (the **Music
     - **What you should see:** the file name next to **Add a sample**, and one of the two choices marked.
     - **If it doesn't work:** `LAI-SVC-154`: the file is not audio, is bigger than 20 MB, or longer than 60 seconds. Cut it to 15 to 30 seconds and try again.
 15. Press **Make the song**.
-    - **What you should see:** a progress bar under **Requests** (on the website: "running"), then the new songs at the top of **My songs**. A 1-minute song takes a few minutes (approximately; to be confirmed by #505).
+    - **What you should see:** a progress bar under **Requests** (on the website: "running"), then the new songs at the top of **My songs**. A 1-minute song takes about 20 seconds on a 12 GB graphics card, a little more on the website.
     - **If it doesn't work:** `LAI-SVC-153`: four songs are already waiting; wait for one to finish. `LAI-SVC-155`: the disk is almost full; delete old songs (step 18). `LAI-SVC-152`: the music program stopped in the middle; press **Switch to Music** again and retry. On the website also `LAI-SVC-156` (the sample did not reach the node: send it again) and `LAI-SVC-157` (the song could not be sent back; it is kept on the node). To stop a song, press **Cancel**; it shows `LAI-SVC-158`, which is not an error.
 16. Press **▶** on a song to listen.
     - **What you should see:** the song plays. The title is the first line of your lyrics.
@@ -139,7 +139,7 @@ Use esta página cuando quiera que un nodo **haga música** con su letra, o para
 > - Necesita: una computadora con tarjeta gráfica NVIDIA que tenga la tarea **Música** (pregunte al dueño del laboratorio, o busque un botón **Música**; la Parte 1 muestra dónde).
 > - Por el sitio web: internet, el nodo en modo **online** y una cuenta en `https://ai.marin.cr` que pueda usar música.
 > - Borrar una canción pide el **PIN de administrador** en el nodo o en la app de escritorio.
-> - **Tiempo:** cambiar a Música toma de 1 a 2 minutos; una canción de 1 minuto toma unos minutos. Son tiempos aproximados; a confirmar en #505.
+> - **Tiempo:** cambiar a Música toma alrededor de 1 minuto (el motor de música arranca en unos 20 segundos); una canción de 1 minuto toma unos 20 segundos con una tarjeta gráfica de 12 GB.
 
 > 🛠 Verify when implemented (Epic E11: #509, #510, #512, #514, #515).
 
@@ -166,7 +166,7 @@ Elija **una** de las cuatro formas. Todas hacen lo mismo.
    - **Lo que debería ver:** arriba en la página del nodo, una línea "Esta computadora está en: **Programación**" y un botón por tarea: **Programación**, **Conversar y fotos**, **Música**, etc. La actual se ve presionada.
    - **Si no funciona:** los botones no aparecen si el nodo está en modo **Offline** o **Supervivencia**, o no se ha visto hace rato: use otra forma, en la computadora misma. Un botón gris dice por qué (por ejemplo "no cabe"): vea [07-troubleshooting.md](07-troubleshooting.md#music-or-switching-doesnt-work).
 2. Presione **Música**.
-   - **Lo que debería ver:** "Ejecutando: Cambiar a Música" y, después de 1 a 2 minutos (aproximado; a confirmar en #505), el botón **Música** se ve presionado.
+   - **Lo que debería ver:** "Ejecutando: Cambiar a Música" y, después de alrededor de 1 minuto, el botón **Música** se ve presionado.
    - **Si no funciona:** la página muestra un código y su solución. `LAI-LLM-052`: el cambio falló y se volvió a iniciar la IA anterior; intente otra vez. `LAI-LLM-051`: Música no cabe en la tarjeta gráfica de esta computadora. `LAI-LLM-043`: el programa de música no está instalado; presione **Instalar lo que falta** en la página del nodo. Más en [07-troubleshooting.md](07-troubleshooting.md#music-or-switching-doesnt-work).
 3. Cuando termine con la música, presione **Programación**.
    - **Lo que debería ver:** el botón **Programación** presionado otra vez en más o menos un minuto.
@@ -233,7 +233,7 @@ La canción se hace en el nodo. Puede pedirla en el nodo mismo (la página **Mú
     - **Lo que debería ver:** el nombre del archivo junto a **Agregar una muestra**, y una de las dos opciones marcada.
     - **Si no funciona:** `LAI-SVC-154`: el archivo no es audio, pesa más de 20 MB o dura más de 60 segundos. Córtelo a 15 o 30 segundos e intente otra vez.
 15. Presione **Hacer la canción**.
-    - **Lo que debería ver:** una barra de progreso en **Solicitudes** (en el sitio web: "en curso") y luego las canciones nuevas arriba en **Mis canciones**. Una canción de 1 minuto toma unos minutos (aproximado; a confirmar en #505).
+    - **Lo que debería ver:** una barra de progreso en **Solicitudes** (en el sitio web: "en curso") y luego las canciones nuevas arriba en **Mis canciones**. Una canción de 1 minuto toma unos 20 segundos con una tarjeta gráfica de 12 GB, un poco más en el sitio web.
     - **Si no funciona:** `LAI-SVC-153`: ya hay cuatro canciones esperando; espere a que termine una. `LAI-SVC-155`: el disco está casi lleno; borre canciones viejas (paso 18). `LAI-SVC-152`: el programa de música se detuvo a la mitad; presione **Cambiar a Música** otra vez y reintente. En el sitio web también `LAI-SVC-156` (la muestra no llegó al nodo: envíela otra vez) y `LAI-SVC-157` (la canción no se pudo devolver; queda en el nodo). Para detener una canción presione **Cancelar**; muestra `LAI-SVC-158`, que no es un error.
 16. Presione **▶** en una canción para escucharla.
     - **Lo que debería ver:** la canción suena. El título es la primera línea de su letra.
