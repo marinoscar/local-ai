@@ -57,7 +57,8 @@ func DefaultUnitPath(root string) string {
 // from music.env. It has no [Install] section on purpose: the unit is never enabled, so it never
 // starts at boot and never takes graphics memory a survival model needs; only the engine adapter
 // starts it when an acestep model is loaded. Restart=no: a crash is the agent's to report (and the
-// next load starts it again), never a loop that holds the GPU. The network is loopback only.
+// next load starts it again), never a loop that holds the GPU. The shim binds 127.0.0.1 itself and
+// reads MUSIC_PORT from music.env; IPAddressDeny keeps the network loopback only.
 const unitText = `[Unit]
 Description=Local AI music engine (ACE-Step shim)
 Documentation=https://github.com/marinoscar/local-ai/blob/main/docs/specs/music.md
@@ -72,7 +73,7 @@ Group=localai
 SupplementaryGroups=video render
 EnvironmentFile=/etc/localai/music.env
 Environment=HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
-ExecStart=/opt/localai/acestep/current/venv/bin/python -m localai_music_shim --host 127.0.0.1 --port ${MUSIC_PORT}
+ExecStart=/opt/localai/acestep/current/venv/bin/python -m localai_music_shim
 WorkingDirectory=/var/lib/localai/music
 Restart=no
 TimeoutStartSec=30

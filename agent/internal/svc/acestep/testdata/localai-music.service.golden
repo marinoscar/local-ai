@@ -12,7 +12,7 @@ Group=localai
 SupplementaryGroups=video render
 EnvironmentFile=/etc/localai/music.env
 Environment=HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
-ExecStart=/opt/localai/acestep/current/venv/bin/python -m localai_music_shim --host 127.0.0.1 --port ${MUSIC_PORT}
+ExecStart=/opt/localai/acestep/current/venv/bin/python -m localai_music_shim
 WorkingDirectory=/var/lib/localai/music
 Restart=no
 TimeoutStartSec=30

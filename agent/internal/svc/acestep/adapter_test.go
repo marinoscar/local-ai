@@ -346,7 +346,7 @@ func TestUnitMatchesTheGoldenFile(t *testing.T) {
 	if got != string(want) {
 		t.Errorf("the unit differs from %s", golden)
 	}
-	for _, must := range []string{"User=localai", "--host 127.0.0.1", "IPAddressDeny=any", "NoNewPrivileges=yes", "ProtectSystem=strict", "EnvironmentFile=/etc/localai/music.env"} {
+	for _, must := range []string{"User=localai", "IPAddressAllow=localhost", "IPAddressDeny=any", "NoNewPrivileges=yes", "ProtectSystem=strict", "EnvironmentFile=/etc/localai/music.env"} {
 		if !strings.Contains(got, must) {
 			t.Errorf("the unit lacks %q", must)
 		}
