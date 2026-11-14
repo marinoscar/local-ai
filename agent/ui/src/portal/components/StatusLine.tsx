@@ -1,5 +1,7 @@
 import { useEffect } from "react";
+import { isFixAction } from "../actions";
 import { t } from "../i18n/i18n";
+import { navigate } from "../router";
 import {
   statusLevel,
   type CapName,
@@ -7,6 +9,7 @@ import {
   type Level,
   type PortalStatus,
 } from "../status";
+import { FixButton } from "./FixButton";
 import { announce } from "./LiveRegion";
 
 const LEVEL_KEY = {
@@ -30,8 +33,40 @@ const TICKS: {
   { cap: "talk", label: "btn.talk" },
 ];
 
-/** One sentence from the capabilities: dot and glyph, brain, three ticks, emergency number. */
-export function StatusLine({ status }: { status: PortalStatus }) {
+/**
+ * NextStep is "the one next thing" of a status line that is not green (dashboard.md section 4.1): the
+ * first alert's fix button, else Run a full check (the Health screen) for an operator session.
+ */
+function NextStep({ status }: { status: PortalStatus }) {
+  const first = status.alerts.find((a) => isFixAction(a.action));
+  if (first && isFixAction(first.action))
+    return (
+      <div className="next-step">
+        <strong>{t("home.next")}</strong>
+        <span>{first.title}</span>
+        <FixButton action={first.action} />
+      </div>
+    );
+  if (status.session !== "full") return null;
+  return (
+    <div className="next-step">
+      <strong>{t("home.next")}</strong>
+      <button type="button" className="btn" onClick={() => navigate("manage/health")}>
+        {t("home.runCheck")}
+      </button>
+    </div>
+  );
+}
+
+/** One sentence from the capabilities: dot and glyph, brain, three ticks, emergency number, Help. */
+export function StatusLine({
+  status,
+  home,
+}: {
+  status: PortalStatus;
+  /** On Home the line adds the one next thing to do; other screens have their own fix buttons. */
+  home: boolean;
+}) {
   const level = statusLevel(status.capabilities);
   const brain = status.brain.loaded[0]?.display_name ?? t("status.noBrain");
   const text = t(LEVEL_KEY[level]);
@@ -54,6 +89,12 @@ export function StatusLine({ status }: { status: PortalStatus }) {
       <span className="statusline-end">
         {t("status.emergency", { n: status.emergency_number })}
       </span>
+      <span className="statusline-actions">
+        <button type="button" className="btn" onClick={() => navigate("help")}>
+          {t("manage.help")}
+        </button>
+      </span>
+      {home && level !== "green" ? <NextStep status={status} /> : null}
     </div>
   );
 }

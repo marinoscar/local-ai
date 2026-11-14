@@ -24,10 +24,9 @@ type SPAOptions struct {
 	// FS is the embedded ui/dist (agent/ui/embed.go, created by PORTAL-04), rooted at dist: the
 	// Dashboard entry, the Portal entry and assets/. Tests pass an fstest.MapFS.
 	FS fs.FS
-	// Mode returns the current mode name; "survival" makes "/" answer 302 /portal. Nil means never.
+	// Mode returns the current mode name. Since the Dashboard became the Portal's Home in every mode
+	// (dashboard.md section 1, issue #497) "/" answers 302 /portal whatever it says; it is kept for callers.
 	Mode func() string
-	// IndexFile is the Dashboard entry, default "index.html". Unknown non-API paths fall back to it.
-	IndexFile string
 	// PortalFile is the Portal entry, default "portal.html". Every /portal/* path that is not an
 	// asset serves it, so the SPA's client-side routes survive a reload.
 	PortalFile string
@@ -47,12 +46,9 @@ type spa struct {
 // load needs its own credentials). The routes are plain: add them with Register or Registry.Add; the
 // server never sees the SPA catch-all under /api/, where an unknown path stays 404 LAI-AGT-021.
 //
-// Layout of FS: IndexFile and PortalFile at the top, hashed bundles in assets/. Both pages and
-// /portal/assets/* read assets/ (Vite writes one bundle directory for both entries).
+// Layout of FS: PortalFile and MapsFile at the top, hashed bundles in assets/ (/assets/* and
+// /portal/assets/* both read it).
 func SPARoutes(opts SPAOptions) []Route {
-	if opts.IndexFile == "" {
-		opts.IndexFile = "index.html"
-	}
 	if opts.PortalFile == "" {
 		opts.PortalFile = "portal.html"
 	}
@@ -74,24 +70,17 @@ func SPARoutes(opts SPAOptions) []Route {
 	}
 }
 
-func (s *spa) survival() bool {
-	return s.opts.Mode != nil && s.opts.Mode() == "survival"
-}
-
-// root serves "/" and every GET path no other route claims: the Dashboard SPA with its client-side
-// routes. A file at the top of the dist (favicon, manifest) is served as itself; anything else is
-// index.html. In survival mode "/" itself redirects to the Portal.
+// root serves "/" and every GET path no other route claims. A file at the top of the dist (favicon,
+// manifest) is served as itself; anything else answers 302 /portal: the Portal's Home is the Dashboard
+// in every mode (dashboard.md section 4.1, issue #497), so an old bookmark or a mistyped path lands on
+// Home instead of a dead end.
 func (s *spa) root(w http.ResponseWriter, r *http.Request) error {
-	p := r.URL.Path
-	if p == "/" && s.survival() {
-		http.Redirect(w, r, "/portal", http.StatusFound)
-		return nil
-	}
-	name := strings.TrimPrefix(p, "/")
-	if name != "" && !strings.Contains(name, "/") && name != s.opts.IndexFile && name != s.opts.PortalFile && s.isFile(name) {
+	name := strings.TrimPrefix(r.URL.Path, "/")
+	if name != "" && !strings.Contains(name, "/") && !strings.HasSuffix(name, ".html") && s.isFile(name) {
 		return s.serve(w, r, name, "no-cache")
 	}
-	return s.page(w, r, s.opts.IndexFile, HTMLContentSecurityPolicy)
+	http.Redirect(w, r, "/portal", http.StatusFound)
+	return nil
 }
 
 // portal serves the Portal entry for /portal and every /portal/<client route>.

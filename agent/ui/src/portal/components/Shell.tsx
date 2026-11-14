@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { CODE_LOST_CONTACT } from "../api";
-import { t, useLang } from "../i18n/i18n";
+import { t, useLang, type Key } from "../i18n/i18n";
 import { batteryLevel, type PortalStatus, type StatusState } from "../status";
 import { Banner } from "./Banner";
 import { LangToggle } from "./LangToggle";
@@ -8,6 +8,12 @@ import { LiveRegion } from "./LiveRegion";
 import { StatusLine } from "./StatusLine";
 import { TextScale } from "./TextScale";
 import { useStartSurvival } from "./useStartSurvival";
+
+/** The header names the mode (dashboard.md section 4.1); survival keeps the Portal's own title. */
+const BRAND_KEY: Record<string, Key> = {
+  online: "home.mode.online",
+  offline: "home.mode.offline",
+};
 
 function useClock(): Date {
   const [now, setNow] = useState(() => new Date());
@@ -46,7 +52,7 @@ function Banners({ state }: { state: StatusState }) {
         </Banner>
       ) : null}
       {status && status.mode !== "survival" ? (
-        <Banner kind="warn" text={t("banner.survivalOff")}>
+        <Banner kind="info" text={t("banner.survivalOff")}>
           <button
             type="button"
             className="btn btn-primary"
@@ -98,7 +104,9 @@ export function Shell({
       </a>
       <header className="top">
         <div className="top-row">
-          <Brand className="brand">{t("app.title")}</Brand>
+          <Brand className="brand">
+            {t((status && BRAND_KEY[status.mode]) || "app.title")}
+          </Brand>
           <div className="top-tools">
             <LangToggle />
             <TextScale />
@@ -108,9 +116,7 @@ export function Shell({
             {status ? <Battery power={status.power} /> : null}
           </div>
         </div>
-        {status && status.mode === "survival" ? (
-          <StatusLine status={status} />
-        ) : null}
+        {status ? <StatusLine status={status} home={home} /> : null}
         {!status ? (
           <div className="statusline">{t("common.loading")}</div>
         ) : null}

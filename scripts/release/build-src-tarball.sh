@@ -14,7 +14,7 @@
 #
 # Before packaging it fails (never warns) when:
 #   - the committed agent/vendor/ (or go.mod, go.sum) is not what `go mod vendor` produces now;
-#   - agent/ui/package.json exists at <ref> but <ui-dist> (default agent/ui/dist) is missing, empty or has no index.html;
+#   - agent/ui/package.json exists at <ref> but <ui-dist> (default agent/ui/dist) is missing, empty or has no portal.html;
 #   - scripts/check-redaction.sh flags anything in the assembled tree (vendor/ is skipped, as in the repo scan).
 # When agent/ui does not exist yet at <ref> (the UI epic has not landed) a notice is printed and the UI part is skipped.
 #
@@ -84,7 +84,7 @@ echo "== local UI"
 if [[ -f "$stage/agent/ui/package.json" ]]; then
   [[ -d "$ui_dist" && -n "$(ls -A "$ui_dist" 2>/dev/null)" ]] \
     || die "agent/ui exists at $ref but $ui_dist is missing or empty: build it first (cd agent/ui && npm ci && npm run build)"
-  [[ -f "$ui_dist/index.html" ]] || die "$ui_dist has no index.html: is it a UI build?"
+  [[ -f "$ui_dist/portal.html" ]] || die "$ui_dist has no portal.html: is it a UI build?"
   rm -rf "$stage/agent/ui/dist"
   cp -a "$ui_dist" "$stage/agent/ui/dist"
   echo "  ok  agent/ui/dist ($(find "$stage/agent/ui/dist" -type f | wc -l) files)"
@@ -117,7 +117,7 @@ if [[ -f "$stage/agent/vendor/modules.txt" ]]; then
   grep -qxF agent/vendor/modules.txt <<<"$listing" || { rm -f "$out/$name"; die "the tarball does not contain agent/vendor/modules.txt"; }
 fi
 if [[ -f "$stage/agent/ui/package.json" ]]; then
-  grep -qxF agent/ui/dist/index.html <<<"$listing" || { rm -f "$out/$name"; die "the tarball does not contain agent/ui/dist/index.html"; }
+  grep -qxF agent/ui/dist/portal.html <<<"$listing" || { rm -f "$out/$name"; die "the tarball does not contain agent/ui/dist/portal.html"; }
 fi
 echo "✓ $out/$name"
 (cd "$out" && sha256sum "$name")

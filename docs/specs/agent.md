@@ -1068,7 +1068,7 @@ data: {"id":1042,"type":"model.loaded","at":"2026-11-02T15:04:05Z","node":"ai-n3
 
 | Path | Auth | Target | Details |
 |---|---|---|---|
-| `/` , `/assets/*` | none (data needs session) | embedded `ui/dist` | SPA; unknown non-API paths fall back to `index.html`. In survival mode `/` answers `302 /portal` |
+| `/` , `/assets/*` | none (data needs session) | embedded `ui/dist` | `/` and every non-API path no other route claims answer `302 /portal` in every mode: the Portal's Home is the Dashboard ([dashboard.md](dashboard.md) §1, issue #497). A file at the top of the dist (not `.html`) is served as itself; `/assets/*` are the hashed bundles |
 | `/portal`, `/portal/*` | none | embedded `ui/dist` (portal entry); in survival mode `GET /portal` also sets the Portal session cookie `lai_portal` | [survival-portal.md](survival-portal.md) §3.1, §3.3 |
 | `/chat/` | session or Portal session, **or** none while mode = survival | `http://127.0.0.1:<ports.llama>/` | key injection, §3.11.1 |
 | `/library/` | none | `http://127.0.0.1:<ports.kiwix>/library/` | §3.11.2 |
