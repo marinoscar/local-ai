@@ -9,6 +9,7 @@ import {
   type Level,
   type PortalStatus,
 } from "../status";
+import { LeaveSurvivalButton } from "../manage/LeaveSurvival";
 import { FixButton } from "./FixButton";
 import { announce } from "./LiveRegion";
 
@@ -90,6 +91,7 @@ export function StatusLine({
         {t("status.emergency", { n: status.emergency_number })}
       </span>
       <span className="statusline-actions">
+        <LeaveSurvivalButton status={status} />
         <button type="button" className="btn" onClick={() => navigate("help")}>
           {t("manage.help")}
         </button>

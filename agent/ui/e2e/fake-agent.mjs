@@ -307,7 +307,9 @@ createServer(async (req, res) => {
     return send(res, 405, "no");
   }
   if (p === "/api/v1/mode/survival" && req.method === "POST") {
-    status = { ...status, mode: "survival", session: "portal" };
+    seen.push({ path: p, method: "POST" });
+    // The app's operator session stays; a browser gets the Portal session (survival-portal.md section 3.3).
+    status = { ...status, mode: "survival", session: status.session === "full" ? "full" : "portal" };
     return send(res, 200, "{}", { "Content-Type": "application/json" });
   }
   if (/^\/api\/v1\/models\/[^/]+\/load$/.test(p) && req.method === "POST") {

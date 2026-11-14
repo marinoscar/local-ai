@@ -212,7 +212,7 @@ The **AI-ARK drive** is the portable copy of everything. It is **not encrypted**
 
 ## Part 7. Leaving Survival mode (when the emergency is over)
 
-38. Leaving Survival mode needs **no PIN** on this computer. Click the **Local AI** icon at the top right of the screen, choose **Mode**, then **Online** (or **Offline** if there is still no internet). Or, in a terminal:
+38. Leaving Survival mode needs **no PIN** on this computer. In the Local AI window, press **Leave survival mode** at the top right, next to **Help**. Choose **Online** (or **Offline** if there is still no internet) and press **Leave survival mode** again. The **Local AI** icon at the top right of the screen does the same: **Mode**, then **Online**. Or, in a terminal:
 
    ```
    aictl mode online
@@ -401,7 +401,7 @@ B15. **Rebuild check (optional, about 30 minutes, needs the admin):** type `sudo
    - **What you should see:** it finishes with a `✓` line, with no internet.
    - **If it doesn't work:** `LAI-DRL-071` or the code shown: [runbook 06](06-rebuild-a-node-offline.md).
 
-B16. **Plug the charger and the network back in.** Leave Survival mode: the **Local AI** icon → **Mode** → **Online** (no PIN), or `aictl mode online` ([Part 7](#part-7-leaving-survival-mode-when-the-emergency-is-over)).
+B16. **Plug the charger and the network back in.** Leave Survival mode: **Leave survival mode** at the top of the Local AI window, or the **Local AI** icon → **Mode** → **Online** (no PIN), or `aictl mode online` ([Part 7](#part-7-leaving-survival-mode-when-the-emergency-is-over)).
    - **What you should see:** the mode shows **online**, and the cloud shows this computer again within a minute.
    - **If it doesn't work:** [Part 7](#part-7-leaving-survival-mode-when-the-emergency-is-over). See [07, Cloud shows node offline](07-troubleshooting.md).
 
@@ -633,7 +633,7 @@ El **disco AI-ARK** es la copia portátil de todo. **No está cifrado**, así qu
 
 ## Parte 7. Salir del modo supervivencia (cuando pase la emergencia)
 
-38. Salir del modo supervivencia **no necesita PIN** en esta computadora. Haga clic en el ícono de **Local AI** arriba a la derecha de la pantalla, elija **Modo** y luego **En línea** (o **Sin conexión** si todavía no hay internet). O en una terminal:
+38. Salir del modo supervivencia **no necesita PIN** en esta computadora. En la ventana de Local AI, presione **Salir del modo supervivencia** arriba a la derecha, junto a **Ayuda**. Elija **En línea** (o **Sin conexión** si todavía no hay internet) y presione otra vez **Salir del modo supervivencia**. El ícono de **Local AI** arriba a la derecha de la pantalla hace lo mismo: **Modo** y luego **En línea**. O en una terminal:
 
    ```
    aictl mode online
@@ -822,7 +822,7 @@ B15. **Prueba de reconstrucción (opcional, unos 30 minutos, requiere al adminis
    - **Lo que debería ver:** termina con una línea `✓`, sin internet.
    - **Si no funciona:** `LAI-DRL-071` o el código que aparezca: [manual 06](06-rebuild-a-node-offline.md).
 
-B16. **Conecte otra vez el cargador y la red.** Salga del modo supervivencia: el ícono de **Local AI** → **Modo** → **En línea** (sin PIN), o `aictl mode online` ([Parte 7](#parte-7-salir-del-modo-supervivencia-cuando-pase-la-emergencia)).
+B16. **Conecte otra vez el cargador y la red.** Salga del modo supervivencia: **Salir del modo supervivencia** arriba en la ventana de Local AI, o el ícono de **Local AI** → **Modo** → **En línea** (sin PIN), o `aictl mode online` ([Parte 7](#parte-7-salir-del-modo-supervivencia-cuando-pase-la-emergencia)).
    - **Lo que debería ver:** el modo muestra **online**, y la nube muestra de nuevo esta computadora en un minuto.
    - **Si no funciona:** [Parte 7](#parte-7-salir-del-modo-supervivencia-cuando-pase-la-emergencia). Vea [07, Cloud shows node offline](07-troubleshooting.md).
 

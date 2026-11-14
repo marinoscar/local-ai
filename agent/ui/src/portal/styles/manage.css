@@ -114,3 +114,39 @@
   gap: 8px 14px;
   padding: 8px 0;
 }
+/* Mode screen (#494) */
+.mode-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 16px;
+}
+.mode-card {
+  margin: 0;
+}
+.mode-on {
+  border-width: 5px;
+  border-color: var(--ok);
+}
+.mode-badge {
+  color: var(--ok);
+  font-size: 1rem;
+}
+.choice {
+  border: none;
+  margin: 12px 0;
+  padding: 0;
+}
+.choice-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  font-weight: 700;
+}
+.choice-row input {
+  width: 1.4rem;
+  height: 1.4rem;
+}
