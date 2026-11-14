@@ -99,6 +99,15 @@ const (
 	LLM029 = "LAI-LLM-029"
 	LLM030 = "LAI-LLM-030"
 	LLM031 = "LAI-LLM-031"
+	// E11: engines and workloads (go-core)
+	LLM040 = "LAI-LLM-040"
+	LLM041 = "LAI-LLM-041"
+	LLM042 = "LAI-LLM-042"
+	LLM043 = "LAI-LLM-043"
+	LLM050 = "LAI-LLM-050"
+	LLM051 = "LAI-LLM-051"
+	LLM052 = "LAI-LLM-052"
+	LLM053 = "LAI-LLM-053"
 
 	// LAI-CAT
 	CAT001 = "LAI-CAT-001"
@@ -119,6 +128,9 @@ const (
 	CAT017 = "LAI-CAT-017"
 	CAT018 = "LAI-CAT-018"
 	CAT019 = "LAI-CAT-019"
+	// E11: workloads and the acestep file layout (go-core)
+	CAT020 = "LAI-CAT-020"
+	CAT021 = "LAI-CAT-021"
 
 	// LAI-NET
 	NET001 = "LAI-NET-001"
@@ -316,6 +328,9 @@ const (
 	SVC116 = "LAI-SVC-116"
 	SVC117 = "LAI-SVC-117"
 	SVC118 = "LAI-SVC-118"
+	// E11: music runtime (go-core: 150, 159; go-music: 151..158)
+	SVC150 = "LAI-SVC-150"
+	SVC159 = "LAI-SVC-159"
 
 	// LAI-GW
 	GW001 = "LAI-GW-001"
@@ -883,6 +898,54 @@ var table = []Code{
 		Fix:      Msg{EN: "Nothing to do", ES: "No hay que hacer nada"},
 	},
 	{
+		ID:       LLM040,
+		Severity: Error,
+		Title:    Msg{EN: "Engine failed to start (unit start failed)", ES: "El motor no pudo arrancar (falló el inicio de la unidad)"},
+		Fix:      Msg{EN: "Run `aictl doctor`, then `aictl logs music` to see why it did not start", ES: "Ejecute `aictl doctor` y luego `aictl logs music` para ver por qué no arrancó"},
+	},
+	{
+		ID:       LLM041,
+		Severity: Error,
+		Title:    Msg{EN: "Engine did not become ready in time", ES: "El motor no estuvo listo a tiempo"},
+		Fix:      Msg{EN: "Try again; if it keeps failing, run `aictl logs music` and `aictl doctor`", ES: "Inténtelo otra vez; si sigue fallando, ejecute `aictl logs music` y `aictl doctor`"},
+	},
+	{
+		ID:       LLM042,
+		Severity: Warning,
+		Title:    Msg{EN: "Engine did not free GPU memory / stop cleanly", ES: "El motor no liberó la memoria gráfica o no se detuvo bien"},
+		Fix:      Msg{EN: "Nothing to do now; if models fail to load, restart the computer", ES: "Por ahora no hay que hacer nada; si los modelos no cargan, reinicie el equipo"},
+	},
+	{
+		ID:       LLM043,
+		Severity: Error,
+		Title:    Msg{EN: "Model's engine is not installed on this node", ES: "El motor del modelo no está instalado en este nodo"},
+		Fix:      Msg{EN: "Run `aictl ensure` to install it from the kit", ES: "Ejecute `aictl ensure` para instalarlo desde el kit"},
+	},
+	{
+		ID:       LLM050,
+		Severity: Error,
+		Title:    Msg{EN: "Unknown workload", ES: "Uso desconocido"},
+		Fix:      Msg{EN: "Run `aictl workloads` to see the names you can use", ES: "Ejecute `aictl workloads` para ver los nombres que puede usar"},
+	},
+	{
+		ID:       LLM051,
+		Severity: Warning,
+		Title:    Msg{EN: "Workload does not fit this node's GPU", ES: "Este uso no cabe en la tarjeta gráfica de este nodo"},
+		Fix:      Msg{EN: "Choose a smaller workload with `aictl workloads`", ES: "Elija un uso más pequeño con `aictl workloads`"},
+	},
+	{
+		ID:       LLM052,
+		Severity: Error,
+		Title:    Msg{EN: "Workload activation failed; previous models restored", ES: "No se pudo activar el uso; se restauraron los modelos anteriores"},
+		Fix:      Msg{EN: "Run `aictl doctor` and try again", ES: "Ejecute `aictl doctor` e inténtelo otra vez"},
+	},
+	{
+		ID:       LLM053,
+		Severity: Warning,
+		Title:    Msg{EN: "Workload change refused in survival mode (use force)", ES: "Cambio de uso rechazado en modo supervivencia (use forzar)"},
+		Fix:      Msg{EN: "Stay on the survival models, or run `aictl workloads activate <name> --force`", ES: "Quédese con los modelos de supervivencia, o ejecute `aictl workloads activate <name> --force`"},
+	},
+	{
 		ID:       CAT001,
 		Severity: Error,
 		Title:    Msg{EN: "Catalog file can't be parsed", ES: "No se puede analizar el archivo del catálogo"},
@@ -988,6 +1051,18 @@ var table = []Code{
 		ID:       CAT019,
 		Severity: Error,
 		Title:    Msg{EN: "Lint: `CATALOG_VERSION` missing or not `YYYY.MM.DD-N`, or wrong file layout", ES: "Lint: falta `CATALOG_VERSION` o no es `AAAA.MM.DD-N`, o la estructura de archivos es incorrecta"},
+		Fix:      Msg{EN: "Fix the YAML at the reported path", ES: "Corrija el YAML en la ruta indicada"},
+	},
+	{
+		ID:       CAT020,
+		Severity: Error,
+		Title:    Msg{EN: "Workload references an unknown model id", ES: "Un uso hace referencia a un id de modelo desconocido"},
+		Fix:      Msg{EN: "Fix the model id in the workload, or remove it", ES: "Corrija el id del modelo en el uso, o quítelo"},
+	},
+	{
+		ID:       CAT021,
+		Severity: Error,
+		Title:    Msg{EN: "`acestep` model has an invalid file layout", ES: "El modelo `acestep` tiene una estructura de archivos no válida"},
 		Fix:      Msg{EN: "Fix the YAML at the reported path", ES: "Corrija el YAML en la ruta indicada"},
 	},
 	{
@@ -2104,6 +2179,18 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "No usable AI-ARK drive is connected to copy from", ES: "No hay una unidad AI-ARK utilizable conectada para copiar"},
 		Fix:      Msg{EN: "Plug in the AI-ARK drive, wait a minute, then press **Copy from the AI-ARK drive** again.", ES: "Conecte la unidad AI-ARK, espere un minuto y presione otra vez **Copiar desde la unidad AI-ARK**."},
+	},
+	{
+		ID:       SVC150,
+		Severity: Error,
+		Title:    Msg{EN: "Music runtime not installed", ES: "El programa de música no está instalado"},
+		Fix:      Msg{EN: "Run `aictl ensure` to install it from the kit", ES: "Ejecute `aictl ensure` para instalarlo desde el kit"},
+	},
+	{
+		ID:       SVC159,
+		Severity: Error,
+		Title:    Msg{EN: "GPU driver/CUDA too old for the music runtime", ES: "El controlador de la tarjeta gráfica o CUDA es demasiado antiguo para el programa de música"},
+		Fix:      Msg{EN: "Update the NVIDIA driver from the kit, then restart the computer", ES: "Actualice el controlador de NVIDIA desde el kit y luego reinicie el equipo"},
 	},
 	{
 		ID:       GW001,
