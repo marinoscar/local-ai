@@ -342,6 +342,10 @@ createServer(async (req, res) => {
   }
   if (p.startsWith("/__")) {
     if (p === "/__reset") {
+      // A stream left by an earlier test's page would make /__streams count it, so a test could emit before its
+      // own page listens: end them all (every spec resets before it opens its page).
+      for (const r of streams) r.end();
+      streams = [];
       status = defaultStatus();
       down = false;
       seen = [];
@@ -379,8 +383,13 @@ createServer(async (req, res) => {
       fixAnswer = Number(url.searchParams.get("status") || 0);
       return send(res, 200, "ok");
     }
-    if (p === "/__streams")
-      return send(res, 200, String(streams.length));
+    if (p === "/__streams") {
+      // ?types=<exact list> counts only the streams opened with that filter (a screen's own stream, not the
+      // Portal's status stream), so a test can wait for the listener it is about to emit to.
+      const types = url.searchParams.get("types");
+      const n = types === null ? streams.length : streams.filter((r) => r.types === types).length;
+      return send(res, 200, String(n));
+    }
     if (p === "/__down") {
       down = url.searchParams.get("on") === "1";
       return send(res, 200, "ok");
@@ -472,6 +481,7 @@ createServer(async (req, res) => {
       "Cache-Control": "no-cache",
     });
     res.write(": open\n\n");
+    res.types = url.searchParams.get("types");
     streams.push(res);
     req.on("close", () => {
       streams = streams.filter((r) => r !== res);

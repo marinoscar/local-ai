@@ -12,9 +12,19 @@ async function emit(page: Page, type: string, data: Record<string, unknown>) {
   await page.request.post("/__emit", { data: { type, data } });
 }
 
+// The Switch brain screen listens on its own stream (useBrainSwitch.ts); the Portal's status stream is open too, so
+// waiting for "any stream" could emit before the screen listens.
+const BRAIN_TYPES = "model.*,mode.*,service.state,alert.*";
+
 async function streamOpen(page: Page) {
   await expect
-    .poll(async () => (await page.request.get("/__streams")).text())
+    .poll(async () =>
+      (
+        await page.request.get(
+          `/__streams?types=${encodeURIComponent(BRAIN_TYPES)}`,
+        )
+      ).text(),
+    )
     .not.toBe("0");
 }
 
