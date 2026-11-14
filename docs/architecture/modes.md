@@ -25,6 +25,8 @@ Mode is about **policy**, not about whether the internet actually exists. An `on
 | Manual `aictl ark sync` | allowed | allowed with `--allow-offline-mode` confirmation (uses whatever network exists) | refused (`LAI-SYN-010`) |
 | kiwix-serve | on if content present | on if content present | **on** (required; `LAI-SVC-001` if no ZIMs) |
 | whisper server | on if model present | on if model present | **on** |
+| Music engine (`localai-music`) | on while a music model is loaded (the Music workload) | same | **off**: stopped first on entry, never started ([music.md](../specs/music.md) §4.6) |
+| Workload switch | allowed | allowed | refused unless forced at the machine (`LAI-LLM-053`); never unloads a survival model; music refused even when forced |
 | Piper TTS | available | available | available |
 | Local UI home page | Dashboard | Dashboard | **Survival Portal** (`/portal`) |
 | ai-desktop on launch | Dashboard | Dashboard | Portal full screen |
@@ -62,6 +64,7 @@ All transitions are allowed in every direction. Each transition is an **ordered,
 
 ### 2.2 → `survival`
 1–4. Same as `offline`.
+4a. **Stop music first** (step `engines_stop`, [agent.md](../specs/agent.md) §4.2.1): stop `localai-music` and unload any `acestep` model **before** loading the survival models, so the survival models get the GPU ([ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md), [llama-router.md](../specs/llama-router.md) §4.15.4). Running songs end `cancelled`; finished songs stay. A stop that fails or hangs is the warning `LAI-LLM-042` and survival goes on: music **never** makes survival entry fail.
 5. Apply the profile's `survival` block (§3). Load the models in order and wait for `ready`, with a timeout of 300 s per model. A failure to load the preferred model falls back down the list (`LAI-LLM-020` warning, not fatal).
 6. Ensure `localai-kiwix` and `localai-whisper` are started. A missing content root produces a warning, shown in the Portal as "Library not available, see manual page X".
 7. Persist `mode: survival` and clear `mode_transition`.
@@ -72,7 +75,7 @@ Survival entry must **never** fail as a whole. Each sub-step that fails is repor
 ### 2.3 → `online`
 1. Re-enable Tailscale Serve per `node.yaml`. If `tailscaled` is not logged in, warn `LAI-NET-003` and continue.
 2. Start the cloud link loop (if `/etc/localai/cloud-credential` exists).
-3. Leave the models as they are. Do not unload the survival set, because the operator decides.
+3. Leave the models as they are. Do not unload the survival set, because the operator decides. Music is not restarted either: a person switches back to the Music workload when they want it.
 4. Persist `mode: online` and emit `mode.changed`.
 5. If the last successful sync is older than 24 h, schedule a sync to start in 5 minutes. The operator may cancel it.
 

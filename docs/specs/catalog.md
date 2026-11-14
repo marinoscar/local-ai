@@ -54,8 +54,8 @@ models:
     display_name: "Qwen 3.5 9B"          # short, shown in UIs
     summary: "Fast general assistant. Good for chat, writing and simple code."   # plain language, ≤ 120 chars
     summary_es: "Asistente general rápido. Bueno para conversar, escribir y código simple."   # optional translations: summary_<lang>
-    engine: llama                        # llama | whisper | piper
-    roles: [chat, reasoning, coder]      # chat | reasoning | coder | vision | embedding | stt | tts
+    engine: llama                        # llama | whisper | piper | acestep   (acestep: §2.2)
+    roles: [chat, reasoning, coder]      # chat | reasoning | coder | vision | embedding | stt | tts | music
     languages: [en, es, multi]
     license: apache-2.0                  # SPDX id or "custom:<url>"
     survival_tier: 1                     # 1 = essential, 2 = useful, 3 = nice-to-have (sync priority & portal ordering)
@@ -64,14 +64,14 @@ models:
       repo: ggml-org/Qwen3.5-9B-GGUF     # huggingface only
       revision: 0123456789abcdef0123456789abcdef01234567   # REQUIRED: pinned 40-hex commit; never "main"
     files:
-      - kind: weights                    # weights | mmproj | draft | chat_template | whisper | piper_onnx | piper_config
+      - kind: weights                    # weights | mmproj | draft | chat_template | whisper | piper_onnx | piper_config | acestep
         name: Qwen3.5-9B-Q4_K_M.gguf     # path within repo (huggingface) or URL basename
         url: null                        # required when source.type == url
         size_bytes: 5870000000
         sha256: "<64 lowercase hex>"     # REQUIRED; for HF this equals the LFS oid
     requirements:
       backends: [cuda, vulkan, cpu]      # where it is allowed to run
-      min_vram_mib: 6400                 # full offload at llama.ctx; 0 for cpu-only/whisper/piper
+      min_vram_mib: 6400                 # full offload at llama.ctx; 0 for cpu-only/whisper/piper; > 0 for acestep (§2.2)
       min_ram_mib: 8192                  # system RAM needed (cpu path or unified memory)
       min_disk_bytes: 5900000000         # usually sum(files.size_bytes)
     llama:                               # engine == llama only; becomes the router preset (llama-router.md §4.2)
@@ -118,6 +118,48 @@ models:
 | `piper-en-medium`, `piper-es-medium` | piper | tts | all | One English and one Spanish voice minimum. The upstream voice (e.g. `en_US-lessac-medium`, `es_MX-<voice>-medium` or `es_ES-…`) is only in the file names |
 
 **Speech model ids** are lowercase slugs like every model id: `whisper-<size>` (`whisper-small`, `whisper-medium`, `whisper-large-v3-turbo`) and `piper-<lang>-<quality>` (`piper-en-medium`, `piper-es-medium`). The id stays stable when the voice behind it changes. An `engine: piper` model must have exactly one `piper_onnx` file and one `piper_config` file (the `.onnx` and its `.onnx.json`); there is no speaker field, because the initial voices are single-speaker ([companion-services.md](companion-services.md) §4.3.2). An `engine: whisper` model has exactly one `whisper` file.
+
+### 2.2 Music models (`engine: acestep`)
+A music model is a set of PyTorch weights run by the ACE-Step engine ([music.md](music.md), [ADR-0011](../decisions/0011-python-inference-engines.md)), not by the llama router. It is a normal catalog model: pinned, verified, synced and counted in the profile budget like any other.
+
+```yaml
+  - id: acestep-v15-turbo                 # example only; the real entry lands with #511 after the spike (#505)
+    display_name: "ACE-Step 1.5 (music)"
+    summary: "Makes songs from lyrics and a style. Can follow a short sample."
+    summary_es: "Crea canciones a partir de una letra y un estilo. Puede seguir una muestra corta."
+    engine: acestep
+    roles: [music]
+    languages: [en, es, multi]
+    license: apache-2.0
+    survival_tier: 3
+    source:
+      type: huggingface
+      repo: <acestep-hf-repo-from-spike>
+      revision: <40-hex-commit-from-spike>
+    files:
+      - kind: acestep
+        name: acestep-v15-turbo/model.safetensors   # one sub-directory level is allowed for acestep files
+        size_bytes: <size-from-spike>
+        sha256: "<sha256-from-spike>"
+      - kind: acestep
+        name: acestep-v15-turbo/config.json
+        size_bytes: <size-from-spike>
+        sha256: "<sha256-from-spike>"
+    requirements:
+      backends: [cuda]                    # CUDA only until #517 (ROCm)
+      min_vram_mib: <measured-by-spike>   # > 0; counted in the one GPU budget (llama-router.md §4.15)
+      min_ram_mib: <measured-by-spike>
+      min_disk_bytes: <sum-of-sizes>
+```
+
+**Rules (lint-enforced):**
+- `engine: acestep` requires `roles` to contain `music`, at least one `files[kind=acestep]` entry, and only files of kind `acestep`. It has no `llama` block and no `client_hints`.
+- An `acestep` file `name` is a relative path with **at most one** directory level (`<dir>/<file>`); no `..`, no leading `/`, no deeper nesting. The files are stored under `music/<model-id>/<name>` in the content root ([overview.md](../architecture/overview.md) §3.3), not under `models/`.
+- `requirements.min_vram_mib` must be greater than 0 and `requirements.backends` must be `[cuda]` (the only backend with a wheel bundle, ADR-0011).
+- A breach of these rules is `LAI-CAT-021` (the layout of an `acestep` model is invalid). The agent raises the same code at run time when the files present in `music/<model-id>/` do not match the entry (a file missing or an extra directory level), and refuses to load the model.
+- `min_vram_mib` is measured as for any model (§2): on the target node while a song of the default length is generated, plus 10 %.
+
+**No `acestep` entry ships in `catalog/models.yaml` yet**: its sha256 values are unknown until the spike (#505) runs. The complete example above lives in the agent's catalog testdata and in [music.md](music.md) §3.5. When the entry lands, profiles may include it like any model (it is optional per profile, §4).
 
 ## 3. `ark.yaml`
 
@@ -337,6 +379,28 @@ survival:                    # see architecture/modes.md §3
   portal_language: auto
 ```
 
+**Workloads** (optional key `workloads:`, [ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md)): a map of named sets of model ids that a person switches between with one button ("Switch what this computer does", [llama-router.md](llama-router.md) §4.16).
+
+```yaml
+workloads:
+  coding:
+    label: {en: "Coding", es: "Programación"}
+    models: [qwen3.5-9b-q4km]
+  chat:
+    label: {en: "Chat and photos", es: "Conversar y fotos"}
+    models: [qwen3.5-9b-q4km, <small-vlm-id>]
+  speech:
+    label: {en: "Chat with voice", es: "Conversar con voz"}
+    models: [qwen3.5-9b-q4km, whisper-small]
+```
+
+- The name is a slug (`[a-z][a-z0-9-]{1,31}`); `label` needs `en` and `es`; `models` is a non-empty list of catalog model ids of any engine, in load order.
+- **Validation:** a workload that names an id the catalog does not have is `LAI-CAT-020`, in lint (with the yaml path) and when the agent resolves workloads at start, at each catalog refresh and on a `node.yaml` change. A workload with an unknown id is left out of `GET /workloads`; the others still work.
+- A workload may name a model that is not in `include.models`: it is then listed with that id in `missing` until the model is present (`GET /api/v1/workloads`, agent.md §3.8.38).
+- **The shipped profiles carry only `coding`, `chat` and `speech`**, each made of existing catalog ids that fit that profile. A `music` workload is added in `node.yaml` (below) once an `acestep` entry exists (§2.2).
+- **Node override:** `node.yaml` `workloads:` has the same shape. A name that exists in the profile **replaces** the profile's workload of that name as a whole; a new name **adds** one. There is no way to delete a profile workload from `node.yaml` (it can be replaced by a set the person never uses).
+- Music models are **optional per profile**: a profile that wants music on its nodes, and the ark drive, add the model id to `include.models` like any other; nothing else in the profile changes.
+
 **Profile selection** (installer and `aictl profile suggest`): node profiles (every profile with a `match`) are evaluated in lexical order of profile id, with `cpu-only` always last; the first whose `match` holds wins. Lint (`LAI-CAT-018`) rejects two node profiles whose `match` ranges overlap (same backend and intersecting `vram_mib` and `ram_mib` ranges), so the order only matters for `cpu-only`. `match.vram_mib` compares the same memory figure as the fit rules' `G_total` ([llama-router.md](llama-router.md) §4.3.1): dedicated VRAM on discrete GPUs, usable GTT (unified memory) on unified-memory nodes.
 
 **How selection is computed** (CAT-05, `catalog.Suggest`, `Catalog.Suggest`; pure, the hardware snapshot is passed in):
@@ -376,6 +440,7 @@ profile_overrides:
 - The agent loads and validates the catalog at start and at each refresh. The **effective plan** for a content root is: profile include + overrides, filtered by `requirements.backends`/VRAM fit (for loadability) and by the budget.
 - Models that don't fit this node's VRAM may still be **stored** (when the profile includes them, so the drive or node can hand them on). They are marked `loadable: false` with a reason in the API.
 - `loadable` for every catalog model comes from `router.Env.Loadable` / `LoadableAll` (`agent/internal/router/loadable.go`), which wrap the static fit rules ([llama-router.md](llama-router.md) §4.3.2) and return the reason (`LAI-CAT-005` for backend, graphics memory or RAM, `LAI-LLM-008` for missing files) with the plain-language message. It lives in the router package, not here, because `router` imports `catalog`. Every engine is judged; for `whisper` and `piper` the graphics-memory rule is skipped (their `min_vram_mib` is 0 by the catalog rules, and a stray value is ignored), so the backend and memory rules apply.
+- **Engines.** `engine: acestep` models are judged by the same static rules with the graphics-memory rule applied (their `min_vram_mib` is above 0). In addition, a model whose engine runtime is not installed on this node is `loadable: false` with `LAI-LLM-043` (for `acestep`: `/opt/localai/acestep/current` missing or built for another backend; [llama-router.md](llama-router.md) §4.15).
 - `GET /api/v1/catalog` returns the merged view, with state per item (agent.md §3.8).
 
 ## 6. Lint (`aictl catalog lint <dir>`)
@@ -406,6 +471,8 @@ profile_overrides:
 | LAI-CAT-017 | error | Lint: `portal_links` rule broken | Fix the YAML at the reported path |
 | LAI-CAT-018 | error | Lint: profile rule broken (`router.models_max` ≥ 1, `router.autoload` false, `default_model`/`survival.*` inside `include`, `ark-drive-full` has no `match`, overlapping `match` ranges) | Fix the YAML at the reported path |
 | LAI-CAT-019 | error | Lint: `CATALOG_VERSION` missing or not `YYYY.MM.DD-N`, or wrong file layout | Fix the YAML at the reported path |
+| LAI-CAT-020 | error | Workload references an unknown model id | Fix the workload in the profile or in `node.yaml` `workloads:`; `aictl models` lists the valid ids |
+| LAI-CAT-021 | error | `acestep` model has an invalid file layout | Run `aictl ark verify --item <model id>` to fetch it again; if the catalog entry is wrong, fix it in the repo |
 
 Cross-reference failures (a profile includes an unknown id) are `LAI-CAT-004` in lint too.
 
@@ -414,6 +481,7 @@ The constants live in `agent/internal/catalog/codes.go` until AGENT-11 creates `
 ## 9. Test plan
 - **Unit (table-driven, `agent/internal/catalog`):** every lint rule has a failing case with its code and `<file>:<yaml-path>` (`LAI-CAT-010`…`019`, `004`), built by editing one valid placeholder catalog (`testdata/valid`) so the table shows exactly what each rule rejects and asserts the number of problems (no cascades); a second table lists edits that must stay valid. Strict decoding rejects an unknown key (`LAI-CAT-010`) in all three file kinds; the issue's fixtures (`models_max: 0`, `autoload: true`, overlapping `match` ranges, a piper model with only `piper_onnx`, a `portal_links` entry with `article_es`) are cases. The CLI tests hold the golden human lines and the exact `--json` bytes ([aictl.md](aictl.md) §4.11.1). Profile selection, the effective plan and `loadable` are CAT-05's tests (below); here only the overlap rule is covered.
 - **Profile match, plan and loadable (CAT-05, table-driven, no I/O):** `testdata/hw/{ai-n1,ai-n2,ai-n3,cpu}.json` are `GET /hardware` bodies of the three lab node classes and a no-GPU box; each suggests its documented profile with the exact reasons (ai-n1 matches on its GTT, and the same card seen with only 2 GiB of dedicated VRAM falls to `cpu-only`). Cases: both bounds of every range (min, min-1, max, max+1), `cpu-only` last even when its own match would hold for a GPU node, `ark-drive-full` never chosen, overlapping profiles in any list order giving the lexical first, missing hardware data (unknown RAM, a GPU with unknown memory, the zero snapshot), a GPU too small for any profile landing on `cpu-only`. The plan: add, remove, add-and-remove of one id, duplicates, budget at the boundary, one byte over, every tier boundary of the drop order, a budget override, an unknown profile (`LAI-CAT-003`) and unknown ids in each list (`LAI-CAT-004`), `GET /profile` JSON keys. `loadable`: the three lab nodes plus cpu with llama, whisper and piper models, the exact message of the spec example, unified-memory reserve, missing files, an empty snapshot.
+- **Engines and workloads (E11, #508/#509):** an `acestep` model with no `acestep` file, a file of another kind, two directory levels, `..`, `min_vram_mib: 0`, a backend other than `cuda` (each `LAI-CAT-021`); the complete example of §2.2 (with placeholder hashes replaced by test values) is valid; a workload with an unknown id (`LAI-CAT-020`), a missing `es` label, an empty list; the `node.yaml` override replacing and adding by name.
 - **Install:** a rejected catalog leaves `/etc/localai/catalog/` byte-identical (`LAI-CAT-002`); the install is killed at every filesystem operation and, after `Recover`, the live directory loads and is the old or the new catalog; a damaged file at startup falls back to `<root>/kit/catalog/` (`source: kit`); a tampered bundle is skipped.
 - **Online:** an `httptest` server answers HEAD like Hugging Face (redirect with `X-Linked-Size` and `X-Linked-Etag`), with size mismatch, oid mismatch, 404 and a network failure.
 - **GitHub source (CAT-04, `httptest` TLS fake of the API and raw hosts, table-driven, no sleeps):** `stable` with several tags (`catalog-stable` ignored wherever it sits, `-10` > `-9`, day 10 > day 09, a year beating month and day, stray, malformed and foreign refs ignored, several API pages); every listing failure (403 with no quota, 429, 403 with `Retry-After`, plain 403, 404, 500, 503, not JSON, an object, no catalog tag, no API configured, an `http` API, a `Link` to another host, an endless listing, a hung server on an injected transport) ends in `catalog-stable`; a stale `catalog-stable` is used as it is while the listing is down and loses to the highest tag while it is up; a pin never lists; malformed channels make no request; profile discovery (an extra profile, a stray file, the listing down, a documented profile missing); the fetch failures (404 of the tag, 404 of one file, 429, 502, truncated body, declared and undeclared oversize, a `CATALOG_VERSION` that differs from the tag, hung server, caller cancel) each with its code and reason and no bundle; `http` base URLs and redirects refused, https redirects followed, the proxy variables ignored, no `Authorization` or `Cookie` header; through `Fetcher.Refresh` the previous catalog stays byte-identical (and no staging or `catalog.prev` is left) after every failure, lint failure is `LAI-CAT-002`, and the bundle digest equals the cloud's rule.
