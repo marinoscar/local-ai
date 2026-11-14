@@ -69,7 +69,7 @@ describe("viewer strings", () => {
   it("picks the language: query, stored, browser, English", () => {
     expect(pickLang("es", "en", "en-US")).toBe("es");
     expect(pickLang(null, "es", "en-US")).toBe("es");
-    expect(pickLang(null, null, "es-MX")).toBe("es");
+    expect(pickLang(null, null, "es-MX")).toBe("en"); // #501: never the browser language
     expect(pickLang("fr", "de", "fr-FR")).toBe("en");
   });
 });

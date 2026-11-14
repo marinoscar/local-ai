@@ -2,8 +2,8 @@ import { useSyncExternalStore } from "react";
 import en from "./i18n/en.json";
 import es from "./i18n/es.json";
 
-// Language of the map viewer. It follows the Portal's choice (the same localStorage key, the viewer
-// is same-origin), then ?lang=, then the browser language, then English.
+// Language of the map viewer. It follows ?lang=, then the Portal's choice (the same localStorage
+// key, the viewer is same-origin), then English (the browser language is not used, issue #501).
 
 export type Lang = "en" | "es";
 export type Key = keyof typeof en;
@@ -27,16 +27,16 @@ export function translate(
   );
 }
 
-/** pickLang: query value, stored value, browser language, English. */
+/** pickLang: query value, stored value, English. `nav` (the browser language) is ignored since #501. */
 export function pickLang(
   query: string | null,
   stored: string | null,
   nav: string | null,
 ): Lang {
+  void nav;
   if (isLang(query)) return query;
   if (isLang(stored)) return stored;
-  const n = (nav ?? "").toLowerCase().split("-")[0];
-  return isLang(n) ? n : "en";
+  return "en";
 }
 
 let current: Lang = "en";

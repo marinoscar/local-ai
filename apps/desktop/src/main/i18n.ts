@@ -12,10 +12,14 @@ export interface Bilingual {
   es: string;
 }
 
-/** `auto` follows the operating system: any `es` locale (`es`, `es-CR`, `es_MX.UTF-8`) is Spanish, everything else English. */
-export function resolveLang(setting: LangSetting | string | undefined, osLocale: string | undefined): Lang {
-  if (setting === 'en' || setting === 'es') return setting;
-  return /^es([_-]|\.|$)/i.test((osLocale ?? '').trim()) ? 'es' : 'en';
+/**
+ * The app starts in English unless the person chose a language (dashboard.md 4.8, issue #501): `auto` (nothing chosen
+ * yet) is English whatever the operating system's locale; Spanish is one tap away and remembered as `es`. `osLocale` is
+ * kept for the callers and ignored.
+ */
+export function resolveLang(setting: LangSetting | string | undefined, osLocale?: string | undefined): Lang {
+  void osLocale;
+  return setting === 'es' ? 'es' : 'en';
 }
 
 export const pick = (text: Bilingual, lang: Lang): string => text[lang];

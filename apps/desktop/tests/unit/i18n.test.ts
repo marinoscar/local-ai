@@ -8,8 +8,10 @@ const registry = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..'
 
 describe('language', () => {
   it('auto follows the OS locale: any es_* is Spanish', () => {
-    for (const locale of ['es', 'es-CR', 'es_MX.UTF-8', 'ES_ES']) expect(resolveLang('auto', locale), locale).toBe('es');
-    for (const locale of ['en-US', 'en_GB.UTF-8', 'fr', 'esperanto', '', undefined]) expect(resolveLang('auto', locale), String(locale)).toBe('en');
+    // Issue #501: English unless the person chose Spanish, whatever the operating system's locale.
+    for (const locale of ['es', 'es-CR', 'es_MX.UTF-8', 'ES_ES', 'en-US', 'fr', '', undefined]) expect(resolveLang('auto', locale), String(locale)).toBe('en');
+    expect(resolveLang('es', 'en-US')).toBe('es');
+    expect(resolveLang('en', 'es-CR')).toBe('en');
   });
   it('an explicit setting wins over the locale', () => {
     expect(resolveLang('en', 'es_CR')).toBe('en');

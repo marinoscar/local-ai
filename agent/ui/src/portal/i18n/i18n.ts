@@ -26,19 +26,18 @@ export interface LangSources {
   stored?: string | null;
   /** status.language: the agent applied portal.language / the profile. */
   status?: string | null;
-  /** navigator.language, e.g. "es-MX". */
+  /** navigator.language, e.g. "es-MX". Ignored since issue #501; kept for callers. */
   navigator?: string | null;
 }
 
 /**
- * resolveLang is the initial language, in order: the stored choice, the language the agent reports,
- * the browser language, then English.
+ * resolveLang is the initial language, in order: the stored choice, the language the agent reports
+ * (the node's portal.language or profile setting), then English. The browser's language is not used:
+ * the app starts in English unless someone chose (dashboard.md section 4.8, issue #501).
  */
 export function resolveLang(src: LangSources): Lang {
   if (isLang(src.stored)) return src.stored;
   if (isLang(src.status)) return src.status;
-  const nav = (src.navigator ?? "").toLowerCase().split("-")[0];
-  if (isLang(nav)) return nav;
   return "en";
 }
 
