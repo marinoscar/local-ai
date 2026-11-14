@@ -40,6 +40,10 @@ describe('decide: content view (the agent UI)', () => {
     ['http://127.0.0.1:7070/maps/', 'open-child:maps', 'open-child:maps'],
     ['http://localhost:7070/maps/', 'open-child:maps', 'open-child:maps'],
     ['http://127.0.0.1:7070/maps/catalog.json', 'open-child:maps', 'open-child:maps'],
+    ['http://127.0.0.1:7070/music/', 'open-child:music', 'open-child:music'],
+    ['http://127.0.0.1:7070/music', 'open-child:music', 'open-child:music'],
+    ['http://localhost:7070/music/songs', 'open-child:music', 'open-child:music'],
+    ['http://127.0.0.1:7070/musical', 'allow', 'allow'],
     // prefix is on a segment boundary and case-sensitive
     ['http://127.0.0.1:7070/chatter', 'allow', 'allow'],
     ['http://127.0.0.1:7070/Chat/', 'allow', 'allow'],
@@ -120,6 +124,31 @@ describe('decide: child windows', () => {
     ['maps', 'http://127.0.0.1:7070/maps/assets/a.js', 'allow'],
     ['maps', 'http://127.0.0.1:7070/library/', 'block'],
     ['maps', 'http://[::1]:7070/maps/', 'block'],
+    // Music (issue #515): confined to /music/ exactly as Chat is to /chat/
+    ['music', 'http://127.0.0.1:7070/music/', 'allow'],
+    ['music', 'http://127.0.0.1:7070/music', 'allow'],
+    ['music', 'http://127.0.0.1:7070/music/songs/abc', 'allow'],
+    ['music', 'http://localhost:7070/music/', 'allow'],
+    ['music', 'http://127.0.0.1:7070/api/v1/music/songs/abc/audio', 'allow'],
+    ['music', 'http://127.0.0.1:7070/api/v1/music/generate', 'allow'],
+    ['music', 'http://127.0.0.1:7070/assets/app.js', 'allow'],
+    ['music', 'http://127.0.0.1:7070/', 'block'],
+    ['music', 'http://127.0.0.1:7070/chat/', 'block'],
+    ['music', 'http://127.0.0.1:7070/library/', 'block'],
+    ['music', 'http://127.0.0.1:7070/portal', 'block'],
+    ['music', 'http://127.0.0.1:7070/musicx', 'block'],
+    ['music', 'http://127.0.0.1:7070/Music/', 'block'],
+    ['music', 'http://127.0.0.1:7070/music/../chat/', 'block'],
+    ['music', 'http://127.0.0.1:7070/music/%2e%2e/settings', 'block'],
+    ['music', 'http://127.0.0.1:7070/music%2f..%2fsettings', 'block'],
+    ['music', 'http://127.0.0.1:8082/v1/tasks', 'block'],
+    ['music', 'http://[::1]:7070/music/', 'block'],
+    ['music', 'https://ai.marin.cr/music', 'block'],
+    ['music', 'https://example.com/song.wav', 'block'],
+    ['music', 'blob:http://127.0.0.1:7070/6f1c', 'block'],
+    ['music', 'file:///home/person/song.wav', 'block'],
+    ['music', 'javascript:alert(1)', 'block'],
+    ['chat', 'http://127.0.0.1:7070/music/', 'block'],
     ['chat', 'javascript:alert(1)', 'block'],
     ['chat', 'file:///etc/passwd', 'block'],
     ['chat', 'data:text/html,hi', 'block'],
@@ -214,6 +243,14 @@ describe('decidePermission', () => {
     ['microphone, shell page', { permission: 'media', requestingUrl: 'localai://app/lab/', mediaTypes: ['audio'] }, false],
     ['microphone, other port', { permission: 'media', requestingUrl: 'http://127.0.0.1:8080/', mediaTypes: ['audio'] }, false],
     ['microphone, internet page', { permission: 'media', requestingUrl: 'https://example.com/', mediaTypes: ['audio'] }, false],
+    // Music (issue #515): never the microphone, by URL or by the window it is asked from
+    ['microphone, music page', { permission: 'media', requestingUrl: 'http://127.0.0.1:7070/music/', mediaTypes: ['audio'] }, false],
+    ['microphone, music page without slash', { permission: 'media', requestingUrl: 'http://127.0.0.1:7070/music', mediaTypes: ['audio'] }, false],
+    ['microphone, music window at the origin', { permission: 'media', requestingUrl: 'http://127.0.0.1:7070/', mediaTypes: ['audio'], view: 'music' }, false],
+    ['microphone, chat window', { permission: 'media', requestingUrl: 'http://127.0.0.1:7070/chat/', mediaTypes: ['audio'], view: 'chat' }, true],
+    ['microphone, /musical is not music', { permission: 'media', requestingUrl: 'http://127.0.0.1:7070/musical', mediaTypes: ['audio'] }, true],
+    ['clipboard write, music page', { permission: 'clipboard-sanitized-write', requestingUrl: 'http://127.0.0.1:7070/music/', view: 'music' }, false],
+    ['file system, music page', { permission: 'fileSystem', requestingUrl: 'http://127.0.0.1:7070/music/', view: 'music' }, false],
     ['notifications', { permission: 'notifications', requestingUrl: agent }, false],
     ['geolocation', { permission: 'geolocation', requestingUrl: agent }, false],
     ['openExternal', { permission: 'openExternal', requestingUrl: agent }, false],
@@ -256,6 +293,29 @@ describe('decidePermission', () => {
     expect(check!(null, 'clipboard-sanitized-write', 'localai://app', { requestingUrl: 'localai://app/topbar/' })).toBe(true);
     expect(check!(null, 'notifications', 'localai://app', {})).toBe(false);
     expect(device!()).toBe(false);
+  });
+
+  it('the Music window gets no microphone even when the frame URL alone would pass (issue #515)', () => {
+    let request: ((c: unknown, p: string, cb: (g: boolean) => void, d: unknown) => void) | undefined;
+    let check: ((c: unknown, p: string, o: string, d: unknown) => boolean) | undefined;
+    installPermissionHandlers({
+      setPermissionRequestHandler: (h: never) => (request = h),
+      setPermissionCheckHandler: (h: never) => (check = h),
+      setDevicePermissionHandler: () => undefined,
+    });
+    const musicWindow = {};
+    const chatWindow = {};
+    registerView(musicWindow as never, 'music');
+    registerView(chatWindow as never, 'chat');
+    const ask = (contents: object): boolean => {
+      let granted: boolean | undefined;
+      request!(contents, 'media', (g) => (granted = g), { requestingUrl: 'http://127.0.0.1:7070/', mediaTypes: ['audio'] });
+      return granted!;
+    };
+    expect(ask(musicWindow)).toBe(false);
+    expect(ask(chatWindow)).toBe(true);
+    expect(check!(musicWindow, 'media', 'http://127.0.0.1:7070', { mediaType: 'audio' })).toBe(false);
+    expect(check!(chatWindow, 'media', 'http://127.0.0.1:7070', { mediaType: 'audio' })).toBe(true);
   });
 });
 

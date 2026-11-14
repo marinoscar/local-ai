@@ -1,7 +1,8 @@
 // Allowlisted cloud API proxy for the Lab view, and the offline cache behind it (docs/specs/desktop.md 4.8, "As built (DSK-11)").
 //
 //   decideCloudRequest(raw)   the allowlist: a strict table of (method, path) pairs, read-only plus the seven everyday command
-//                             types. Pure. Anything else is refused BEFORE any network call.
+//                             types, a node's workload switch and a music request (issue #515). Pure. Anything else is refused
+//                             BEFORE any network call.
 //   createCloudProxy(...)     `request()` for the IPC handler: allowlist, 10 s limit, then `CloudSession.request` (which adds the
 //                             PAT, registers the call with the abort registry of DSK-10, and refuses unless connected mode is active).
 //   createLabCacheStore(...)  `~/.config/ai-desktop/lab-cache.json` (0600): the node cards of the last good load, no secrets.
@@ -43,8 +44,28 @@ export interface CloudCommandBody {
   params: Record<string, unknown>;
 }
 
+/** The body of `POST /api/localai/nodes/:nodeId/workloads/:name/activate` (contract §6): `force` only. */
+export interface WorkloadActivateBody {
+  force?: boolean;
+}
+
+/**
+ * The text fields of `POST /api/localai/music/requests`, sent as `multipart/form-data` (contract §6). The Lab sends no
+ * sample file: a sample goes through the Music window on this computer or the cloud's own Music page.
+ */
+export type MusicRequestForm = Readonly<Record<string, string>>;
+
 export type CloudDecision =
-  | { allow: true; method: 'GET' | 'POST'; /** The path as it will be sent (identical to the raw text). */ path: string; body?: CloudCommandBody }
+  | {
+      allow: true;
+      method: 'GET' | 'POST';
+      /** The path as it will be sent (identical to the raw text). */
+      path: string;
+      /** A JSON body, rebuilt from what the page sent. */
+      body?: CloudCommandBody | WorkloadActivateBody;
+      /** Form fields instead of a JSON body (the music request). */
+      form?: MusicRequestForm;
+    }
   | { allow: false; reason: CloudDeny };
 
 const deny = (reason: CloudDeny): CloudDecision => ({ allow: false, reason });
@@ -58,18 +79,25 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 const SAFE_RAW = /^\/[A-Za-z0-9\-_./?=&]*$/;
 const NODE = 'ai-n[1-9][0-9]{0,3}';
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+/** A workload's name as profiles and `node.yaml` spell it (`coding`, `chat`, `speech`, `music`). */
+const WORKLOAD = '[a-z][a-z0-9_-]{0,31}';
 
 type QueryRule = ((pairs: ReadonlyMap<string, string>) => boolean) | null;
+
+/** What a route's body must be. Absent: no body at all. */
+type BodyRule = 'command' | 'activate' | 'music';
 
 interface Route {
   method: 'GET' | 'POST';
   pattern: RegExp;
   /** `null`: no query string at all. */
   query: QueryRule;
-  command?: true;
+  body?: BodyRule;
 }
 
 const alertsQuery: QueryRule = (pairs) => [...pairs.keys()].every((key) => key === 'state') && (pairs.get('state') ?? 'active') === 'active';
+/** `?page=N` and nothing else (the music request and song lists). */
+const pageQuery: QueryRule = (pairs) => [...pairs].every(([key, value]) => key === 'page' && /^[1-9][0-9]{0,4}$/.test(value));
 const commandsQuery: QueryRule = (pairs) => {
   for (const [key, value] of pairs) {
     if (key === 'status') {
@@ -87,9 +115,20 @@ const ROUTES: readonly Route[] = [
   { method: 'GET', pattern: /^\/api\/localai\/alerts$/, query: alertsQuery },
   { method: 'GET', pattern: new RegExp(`^/api/localai/commands/${UUID}$`), query: null },
   { method: 'GET', pattern: new RegExp(`^/api/localai/nodes/${NODE}/commands$`), query: commandsQuery },
-  { method: 'POST', pattern: new RegExp(`^/api/localai/nodes/${NODE}/commands$`), query: null, command: true },
+  { method: 'POST', pattern: new RegExp(`^/api/localai/nodes/${NODE}/commands$`), query: null, body: 'command' },
   { method: 'GET', pattern: /^\/api\/auth\/me$/, query: null },
+  // Issue #515 (E11): switch a node's workload, ask a node for music, and read the requests and songs. A node's workloads
+  // are read from the node itself (`GET /api/localai/nodes/:nodeId`, above): the cloud has no separate list route.
+  { method: 'POST', pattern: new RegExp(`^/api/localai/nodes/${NODE}/workloads/${WORKLOAD}/activate$`), query: null, body: 'activate' },
+  { method: 'POST', pattern: /^\/api\/localai\/music\/requests$/, query: null, body: 'music' },
+  { method: 'GET', pattern: /^\/api\/localai\/music\/requests$/, query: pageQuery },
+  { method: 'GET', pattern: new RegExp(`^/api/localai/music/requests/${UUID}$`), query: null },
+  { method: 'GET', pattern: /^\/api\/localai\/music\/songs$/, query: pageQuery },
+  { method: 'GET', pattern: new RegExp(`^/api/localai/music/songs/${UUID}/audio$`), query: null },
 ];
+
+/** The table as text (`METHOD pattern`), so a test pins exactly which pairs exist. */
+export const ROUTE_TABLE: readonly string[] = ROUTES.map((route) => `${route.method} ${route.pattern.source.replace(/\\\//g, '/')}`);
 
 /** `a=1&b=2` -> a map; null for an empty pair, a pair without exactly one `=`, or a repeated key. */
 function parseQuery(search: string): Map<string, string> | null {
@@ -119,6 +158,50 @@ function commandBody(raw: unknown): CloudCommandBody | CloudDeny {
   }
   if (json.length > MAX_PARAMS_JSON) return 'body';
   return { type: type as CommandType, params: JSON.parse(json) as Record<string, unknown> };
+}
+
+/** `{ force? }` and nothing else; rebuilt. An absent body is `{}`. */
+function activateBody(raw: unknown): WorkloadActivateBody | CloudDeny {
+  if (raw === undefined) return {};
+  if (!isPlainObject(raw)) return 'body';
+  if (Object.keys(raw).some((key) => key !== 'force')) return 'body';
+  const force = raw['force'];
+  if (force === undefined) return {};
+  return typeof force === 'boolean' ? { force } : 'body';
+}
+
+/** Byte limits of the music request's text (contract §3: lyrics ≤ 8 KiB, tags ≤ 512 B). */
+export const MUSIC_LIMITS = { lyricsBytes: 8 * 1024, tagsBytes: 512, minDuration: 10, maxDuration: 240, minVariations: 1, maxVariations: 4 } as const;
+const MUSIC_KEYS = ['nodeId', 'lyrics', 'tags', 'duration_s', 'language', 'seed', 'variations'] as const;
+const LANGUAGE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/;
+const isInt = (value: unknown, min: number, max: number): value is number => typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
+const bytes = (text: string): number => new TextEncoder().encode(text).length;
+
+/**
+ * The music request's fields: the shape and the size bounds, so a page cannot make the proxy carry something else. What a
+ * good song request is stays the cloud's and the agent's decision. Rebuilt as form fields (all text).
+ */
+function musicForm(raw: unknown): MusicRequestForm | CloudDeny {
+  if (!isPlainObject(raw)) return 'body';
+  if (Object.keys(raw).some((key) => !(MUSIC_KEYS as readonly string[]).includes(key))) return 'body';
+  const { nodeId, lyrics, tags, duration_s: duration, language, seed, variations } = raw;
+  if (typeof nodeId !== 'string' || !NODE_ID_PATTERN.test(nodeId)) return 'body';
+  if (typeof lyrics !== 'string' || bytes(lyrics) > MUSIC_LIMITS.lyricsBytes) return 'body';
+  if (typeof tags !== 'string' || bytes(tags) > MUSIC_LIMITS.tagsBytes) return 'body';
+  if (lyrics.trim() === '' && tags.trim() === '') return 'body';
+  if (!isInt(duration, MUSIC_LIMITS.minDuration, MUSIC_LIMITS.maxDuration)) return 'body';
+  if (typeof language !== 'string' || !LANGUAGE.test(language)) return 'body';
+  if (seed !== undefined && seed !== null && !isInt(seed, 0, 4_294_967_295)) return 'body';
+  if (!isInt(variations, MUSIC_LIMITS.minVariations, MUSIC_LIMITS.maxVariations)) return 'body';
+  return {
+    nodeId,
+    lyrics,
+    tags,
+    duration_s: String(duration),
+    language,
+    ...(typeof seed === 'number' ? { seed: String(seed) } : {}),
+    variations: String(variations),
+  };
 }
 
 /**
@@ -159,10 +242,20 @@ export function decideCloudRequest(raw: unknown): CloudDecision {
   }
   if (normalised !== path) return deny('path');
 
-  if (route.command) {
+  if (route.body === 'command') {
     const checked = commandBody(body);
     if (typeof checked === 'string') return deny(checked);
     return { allow: true, method: 'POST', path: normalised, body: checked };
+  }
+  if (route.body === 'activate') {
+    const checked = activateBody(body);
+    if (typeof checked === 'string') return deny(checked);
+    return { allow: true, method: 'POST', path: normalised, body: checked };
+  }
+  if (route.body === 'music') {
+    const checked = musicForm(body);
+    if (typeof checked === 'string') return deny(checked);
+    return { allow: true, method: 'POST', path: normalised, form: checked };
   }
   if (body !== undefined) return deny('body');
   return { allow: true, method: 'GET', path: normalised };
@@ -281,7 +374,7 @@ export function createLabCacheStore(options: LabCacheOptions): LabCacheStore {
 
 /** What the proxy needs from `CloudSession` (cloud-link.ts). */
 export interface CloudCaller {
-  request(req: { method: 'GET' | 'POST' | 'DELETE'; path: string; body?: unknown; signal?: AbortSignal }): Promise<CloudResponse>;
+  request(req: { method: 'GET' | 'POST' | 'DELETE'; path: string; body?: unknown; form?: Readonly<Record<string, string>>; signal?: AbortSignal }): Promise<CloudResponse>;
 }
 
 export interface TimerPort {
@@ -333,6 +426,7 @@ export function createCloudProxy(deps: CloudProxyDeps): CloudProxy {
           method: decision.method,
           path: decision.path,
           ...(decision.body !== undefined ? { body: decision.body } : {}),
+          ...(decision.form !== undefined ? { form: decision.form } : {}),
           signal: controller.signal,
         });
         if (response.ok && isNodeList(decision)) await deps.cache.save(response.body).catch(() => false);

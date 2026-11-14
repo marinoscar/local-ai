@@ -439,6 +439,17 @@ describe('child windows', () => {
     expect(made.children[0]!.webContents.loads).toHaveLength(1);
   });
 
+  it('Music (issue #515): one window at /music/, its own view class, titled in the language', () => {
+    const { manager, made } = setup({ lang: 'es' });
+    const first = manager.openChild('music');
+    const second = manager.openChild('music');
+    expect(second).toBe(first);
+    expect(made.children).toHaveLength(1);
+    expect(made.children[0]!.webContents.loads).toEqual(['http://127.0.0.1:7070/music/']);
+    expect(made.children[0]!.init.title).toBe('Local AI: Música');
+    expect(viewOf(made.children[0]!.webContents as never)).toBe('music');
+  });
+
   it('after the window is closed a new request opens a new one', () => {
     const { manager, made } = setup();
     const first = manager.openChild('maps') as FakeChild;

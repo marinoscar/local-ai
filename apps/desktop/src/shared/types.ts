@@ -8,8 +8,14 @@ export type Lang = 'en' | 'es';
 export type LangSetting = 'auto' | Lang;
 /** The node's mode (modes.md). */
 export type NodeMode = 'online' | 'offline' | 'survival';
-/** The three companion apps that open in their own window. */
-export type ChildWindowName = 'chat' | 'library' | 'maps';
+/** The companion apps that open in their own window (`music` added by issue #515). */
+export type ChildWindowName = 'chat' | 'library' | 'maps' | 'music';
+/**
+ * Is music installed on this computer (issue #515)? From the agent's `GET /api/v1/music/status`: `installed` when it
+ * answers `installed: true`; `not-installed` when it answers `installed: false` or the route does not exist (404, an agent
+ * without music); `unknown` while it was not read or the agent is not reachable.
+ */
+export type MusicAvailability = 'installed' | 'not-installed' | 'unknown';
 /** The two content tabs of the top bar. */
 export type Tab = 'local' | 'lab';
 
@@ -107,6 +113,8 @@ export interface DesktopStatus {
   tab: Tab;
   /** Absent in snapshots older than DSK-09; the top bar treats absent as "not in survival form". */
   survival?: SurvivalState;
+  /** Issue #515: whether the top bar's Music button works. Absent means `unknown`. */
+  music?: MusicAvailability;
 }
 
 /** A refusal of a key or PIN call: the code is a doctor code (or the agent's), `fix` the one-sentence remedy when there is one. */

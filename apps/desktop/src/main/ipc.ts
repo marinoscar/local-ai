@@ -33,6 +33,7 @@ import type {
   ShellSettings,
   ShellSettingsPatch,
   SurvivalState,
+  MusicAvailability,
   Tab,
   WindowBounds,
 } from '../shared/types';
@@ -364,6 +365,8 @@ export interface StatusInputs {
   tab: Tab;
   /** The survival strip's state (DSK-09); absent: not in survival form. */
   survival?: SurvivalState;
+  /** Issue #515: the last answer of `GET /api/v1/music/status` (src/main/music.ts); absent: not read. */
+  music?: MusicAvailability;
 }
 
 const MODES: readonly string[] = ['online', 'offline', 'survival'];
@@ -402,6 +405,8 @@ export function buildDesktopStatus(input: StatusInputs): DesktopStatus {
     connected: input.cloud.linked && input.cloud.tokenHeld && mode === 'online',
     tab: input.tab,
     ...(input.survival !== undefined ? { survival: input.survival } : {}),
+    // Only what an agent that is up said counts: a stale "installed" must not survive the agent going down.
+    music: agentReach(input.phase, input.connection) === 'up' ? (input.music ?? 'unknown') : 'unknown',
   };
 }
 
@@ -410,7 +415,7 @@ export function buildDesktopStatus(input: StatusInputs): DesktopStatus {
 // ---------------------------------------------------------------------------------------------------------------------
 
 const NOT_IMPLEMENTED: NotImplemented = { ok: false, code: 'not_implemented' };
-const CHILD_NAMES: readonly string[] = ['chat', 'library', 'maps'];
+const CHILD_NAMES: readonly string[] = ['chat', 'library', 'maps', 'music'];
 const TABS: readonly string[] = ['local', 'lab'];
 const SET_MODE_TARGETS: readonly string[] = ['online', 'offline', 'survival'];
 
