@@ -61,7 +61,7 @@ func Table() []Spec {
 		root(p, 0o755)
 	}
 	t = append(t,
-		Spec{"/etc/localai", "root", "localai", 0o750},
+		Spec{"/etc/localai", "root", "localai", 0o751}, // others may pass through to agent-token (root:localai-operators 0640), never list
 		Spec{"/etc/localai/catalog", "root", "localai", 0o750},
 		Spec{Home, "localai", "localai", 0o750},
 	)

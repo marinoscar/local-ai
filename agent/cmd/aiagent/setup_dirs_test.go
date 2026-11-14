@@ -37,7 +37,7 @@ func TestSetupDirsDryRunAndCheck(t *testing.T) {
 	t.Cleanup(func() { newDirsSystem = old })
 
 	code, out, e := runSetupArgs(t, "dirs", "--dry-run", "--desktop-user", "alice")
-	if code != 0 || !strings.Contains(out, "[dry-run] would create folder /etc/localai (root:localai 0750)") || e != "" {
+	if code != 0 || !strings.Contains(out, "[dry-run] would create folder /etc/localai (root:localai 0751)") || e != "" {
 		t.Fatalf("code %d out %q err %q", code, out, e)
 	}
 	if code, _, _ := runSetupArgs(t, "dirs", "--check", "--desktop-user", "alice"); code != 1 {

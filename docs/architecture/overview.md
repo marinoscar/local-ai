@@ -98,7 +98,7 @@
 | `/opt/localai/piper/{<version>,current}` | root 0755 | Piper TTS binary + its libs |
 | `/opt/localai/kiwix-tools/{<version>,current}` | root 0755 | `kiwix-serve`, `kiwix-manage` (static release binaries) |
 | `/opt/localai/pmtiles/{<version>,current}` | root 0755 | `pmtiles` CLI (go-pmtiles static release binary), used by sync for map extracts and `pmtiles verify` ([ark-sync.md](../specs/ark-sync.md) §4.9) |
-| `/etc/localai/` | root:localai 0750 | Configuration |
+| `/etc/localai/` | root:localai 0751 | Configuration. Others may pass through (never list) so `localai-operators` members reach `agent-token`; every file inside has its own owner and mode (issue #483). The agent adds the pass-through bit at start if it is missing |
 | `/etc/localai/node.yaml` | root:localai 0640 | Node identity and settings ([agent.md](../specs/agent.md) §3.4). The previous version is kept as `node.yaml.bak` on every agent write |
 | `/etc/localai/hf-token` | root:root 0600 | Optional Hugging Face token, used by sync only for `huggingface.co` ([ark-sync.md](../specs/ark-sync.md) §4.9.1) |
 | `/etc/localai/api-key` | root:root 0600 | llama-server API key (64 hex). Injected with systemd `LoadCredential`. **Legacy path** `/etc/llama-qwen/api-key` becomes a symlink to it after migration |
