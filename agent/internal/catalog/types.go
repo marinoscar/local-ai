@@ -51,6 +51,7 @@ var (
 
 // The music engine (E11, catalog.md section 2): engine acestep, role music, file kind acestep.
 const (
+	EngineLlama     = "llama"
 	EngineAcestep   = "acestep"
 	RoleMusic       = "music"
 	FileKindAcestep = "acestep"

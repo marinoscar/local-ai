@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/audit"
+	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 )
@@ -50,7 +51,10 @@ func (o *Orchestrator) UnloadWith(ctx context.Context, req UnloadRequest) (Unloa
 	}
 	in := o.opt.Inputs()
 	m, inCatalog := findModel(in.Catalog, req.ID)
-	if inCatalog && m.Engine != "llama" {
+	if inCatalog && m.Engine != catalog.EngineLlama {
+		if a, ok := o.adapter(m.Engine); ok {
+			return o.unloadEngine(ctx, req, a)
+		}
 		err := errNotLlama(req.ID, m.Engine)
 		o.auditWrite(ctx, audit.ActionModelUnload, req.Actor, req.ID, "", err)
 		return UnloadResult{}, err

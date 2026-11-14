@@ -101,7 +101,9 @@ func (e Env) modelsMax() int {
 // Candidate is the model whose fit is asked: its catalog requirements and whether a complete,
 // verified copy is on disk (llama-router.md section 4.1 step 2).
 type Candidate struct {
-	ID           string
+	ID string
+	// Engine is the model's catalog engine; "" means llama.
+	Engine       string
 	Requirements catalog.Requirements
 	Present      bool
 }
