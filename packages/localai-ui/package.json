@@ -31,6 +31,8 @@
     "./lab/types": "./src/lab/types.ts",
     "./music": "./src/music/index.ts",
     "./workloads": "./src/workloads/index.ts",
-    "./creative.css": "./src/creative.css"
+    "./creative.css": "./src/creative.css",
+    "./brand/tokens.json": "./brand/tokens.json",
+    "./brand/mark.svg": "./brand/mark.svg"
   }
 }
