@@ -185,7 +185,7 @@ func (v *validator) cloud(c CloudBlock) {
 	}
 	for i, name := range c.Allow {
 		if !known[name] {
-			v.errf(fmt.Sprintf("cloud.allow[%d]", i), "unknown job name %q (see agent.md 4.8.6 for the 14 names)", name)
+			v.errf(fmt.Sprintf("cloud.allow[%d]", i), "unknown job name %q (see agent.md 4.8.6 for the 17 names)", name)
 		}
 	}
 	rng("cloud.concurrency", v, c.Concurrency, 1, 4)
