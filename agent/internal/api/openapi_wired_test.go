@@ -18,6 +18,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
 	hwfake "github.com/marinoscar/local-ai/agent/internal/hardware/fake"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
+	"github.com/marinoscar/local-ai/agent/internal/music"
 	"github.com/marinoscar/local-ai/agent/internal/portal"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
 	"github.com/marinoscar/local-ai/agent/internal/svc/piper"
@@ -109,6 +110,8 @@ func implementedRoutes(t *testing.T) []api.Route {
 	routes = append(routes, api.EnsureRoutes(api.EnsureDeps{})...)
 	// GET /docs/index (AGENT-16); /docs/ itself is outside the API prefix and not in the document.
 	routes = append(routes, api.DocsRoutes(api.DocsOptions{})...)
+	// The /music routes (E11, #510); the handlers are not called, so the service has no dependencies.
+	routes = append(routes, music.Routes()...)
 	return routes
 }
 

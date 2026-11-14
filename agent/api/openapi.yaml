@@ -56,6 +56,7 @@ tags:
   - {name: drill, description: "The offline-readiness drill (owned by drill.md)."}
   - {name: docs, description: "The rendered manuals index."}
   - {name: ensure, description: "Keeping the node complete: installing what the kit holds (ADR-0010)."}
+  - {name: music, description: "Songs from lyrics and a sample (owned by music.md)."}
 
 paths:
   /health:
@@ -2374,6 +2375,253 @@ paths:
         "500": {$ref: "#/components/responses/Internal"}
         "503": {$ref: "#/components/responses/Starting"}
 
+  /music/status:
+    get:
+      tags: [music]
+      operationId: getMusicStatus
+      summary: Music runtime, engine and queue
+      description: |
+        Owned by music.md. `installed` is the music runtime (`/opt/localai/acestep/current`); `engine_state` and
+        `loaded_model` come from the acestep engine; `queue` counts the songs of this agent (`max` is
+        `MUSIC_MAX_QUEUE`, the songs that may wait behind the running one). agent.md section 3.8.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      responses:
+        "200":
+          description: The music status.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MusicStatus"}
+              examples:
+                ready: {value: {installed: true, loaded_model: music-example, engine_state: ready, queue: {running: 1, queued: 0, max: 4}}}
+                stopped: {value: {installed: true, loaded_model: null, engine_state: stopped, queue: {running: 0, queued: 0, max: 4}}}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /music/generate:
+    post:
+      tags: [music]
+      operationId: generateMusic
+      summary: Make a song from lyrics and an optional sample
+      description: |
+        Owned by music.md. The upload is `multipart/form-data` (limit 21 MiB). Text fields: `lyrics` (at most
+        8 KiB, `[verse]`/`[chorus]` tags allowed), `tags` (at most 512 bytes), `duration_s` (10 to 240, default
+        60), `language` (default `en`), `seed` (optional, 0 to 4294967295), `variations` (1 to 4, default 1).
+        An optional `sample` file (WAV, MP3, FLAC or Ogg by content, at most 20 MiB and 60 s) with
+        `sample_mode` (`sounds_like` default, or `same_song`) and `strength` (0 to 1; default 0.5 for
+        `sounds_like`, 1.0 for `same_song`). Lyrics or tags must be given. Unknown fields are refused.
+
+        Answers at once with the operation and the ids its songs will have; progress arrives on `/events` as
+        `music.progress` and `music.done`, and on `GET /music/ops/{op_id}`. Lyrics and sample bytes are never
+        logged. agent.md section 3.8.
+      x-localai-auth: op
+      x-localai-timeout: "60 s"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: {$ref: "#/components/schemas/MusicGenerateRequest"}
+      responses:
+        "202":
+          description: The song is queued.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MusicAccepted"}
+              examples:
+                two: {value: {op_id: op_7k2m9q4r8t1c, song_ids: [sng_a2b3c4d5e6f7, sng_b2c3d4e5f6g7]}}
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+          description: "LAI-SVC-154: a field or the sample is refused (details.field; details.reason: too_long, empty, out_of_range, invalid, not_an_integer, not_a_number, needs_sample, duplicate, unknown_field, unsupported_type, unknown_duration); LAI-AGT-020 a malformed multipart body."
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-SVC-151: music is not loaded (details.engine_state); switch to the Music workload or load the music model."
+        "413":
+          $ref: "#/components/responses/TooLarge"
+          description: "LAI-SVC-154 (details.reason too_large): the body is over 21 MiB or the sample over 20 MiB."
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "429":
+          $ref: "#/components/responses/RateLimited"
+          description: "LAI-SVC-153: the music queue is full."
+        "500": {$ref: "#/components/responses/Internal"}
+        "502":
+          $ref: "#/components/responses/BadGateway"
+          description: "LAI-SVC-152: the music engine refused the task."
+        "503": {$ref: "#/components/responses/Starting"}
+        "507":
+          description: "LAI-SVC-155: not enough disk space to save the songs (details.free_bytes, details.needed_bytes)."
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}
+
+  /music/ops/{op_id}:
+    parameters:
+      - {$ref: "#/components/parameters/MusicOpId"}
+    get:
+      tags: [music]
+      operationId: getMusicOp
+      summary: The state of a song operation
+      description: |
+        `error` is set for a failed operation (LAI-SVC-152 the engine failed or stopped, LAI-SVC-155 no disk
+        space, LAI-AGT-024 the agent stopped) and a cancelled one (LAI-SVC-158). `song_ids` are the songs saved
+        when `done`, the planned ids while it runs and empty otherwise. Finished operations are remembered
+        until the agent restarts (the last 128). agent.md section 3.8.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      responses:
+        "200":
+          description: The operation.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MusicOp"}
+              examples:
+                running: {value: {state: running, progress: 0.4, song_ids: [sng_a2b3c4d5e6f7], error: null}}
+                failed: {value: {state: failed, progress: null, song_ids: [], error: {code: LAI-SVC-152, message: "The music engine crashed during a song"}}}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /music/ops/{op_id}/cancel:
+    parameters:
+      - {$ref: "#/components/parameters/MusicOpId"}
+    post:
+      tags: [music]
+      operationId: cancelMusicOp
+      summary: Cancel a song operation
+      description: |
+        Cancels a queued or running operation; it ends `cancelled` with LAI-SVC-158 and leaves no files.
+        Cancelling a finished operation changes nothing and answers its state. The body is `{}`. agent.md section 3.8.
+      x-localai-auth: op
+      x-localai-timeout: "10 s"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EmptyRequest"}
+      responses:
+        "200":
+          description: The operation after the cancel request.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MusicOp"}
+              examples:
+                cancelled: {value: {state: cancelled, progress: 0.2, song_ids: [], error: {code: LAI-SVC-158, message: "The song was cancelled"}}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /music/songs:
+    get:
+      tags: [music]
+      operationId: listSongs
+      summary: The songs on this node, newest first
+      description: |
+        Query `limit` (1 to 200, default 50) and `cursor` (the `next_cursor` of the previous page). `title` is
+        the first lyric line that is not a section tag, else the tags. agent.md section 3.8.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: One page of songs.
+          headers: {X-Request-Id: {$ref: "#/components/headers/XRequestId"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SongList"}
+              examples:
+                one: {value: {songs: [{id: sng_a2b3c4d5e6f7, created_at: "2026-11-14T18:00:00Z", title: "Under the evening sky", tags: "latin pop", language: es, duration_s: 60.0, model_id: music-example, seed: 7, mime: audio/wav, size_bytes: 11520044, origin: local}], next_cursor: null}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+
+  /music/songs/{id}:
+    parameters:
+      - {$ref: "#/components/parameters/SongId"}
+    delete:
+      tags: [music]
+      operationId: deleteSong
+      summary: Delete a song
+      description: |
+        Destructive: needs admin (the PIN), like `DELETE /models/{id}`. Removes the song's directory (audio and
+        meta.json). Audit `music.delete`. agent.md section 3.8.
+      x-localai-auth: admin
+      x-localai-timeout: "10 s"
+      responses:
+        "200":
+          description: The song is gone.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DeletedSong"}
+              examples:
+                deleted: {value: {id: sng_a2b3c4d5e6f7, deleted: true}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "500": {$ref: "#/components/responses/Internal"}
+        "503": {$ref: "#/components/responses/Starting"}
+
+  /music/songs/{id}/audio:
+    parameters:
+      - {$ref: "#/components/parameters/SongId"}
+    get:
+      tags: [music]
+      operationId: getSongAudio
+      summary: The audio of a song
+      description: |
+        The file as stored (`audio/wav` today). `Range` requests are answered `206`, so a player can seek.
+        agent.md section 3.8.
+      x-localai-auth: op
+      x-localai-timeout: "10 min"
+      responses:
+        "200":
+          description: The whole file.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            Accept-Ranges: {description: "bytes", schema: {type: string}}
+          content:
+            audio/wav: {schema: {type: string, format: binary}}
+            audio/mpeg: {schema: {type: string, format: binary}}
+            audio/flac: {schema: {type: string, format: binary}}
+            audio/ogg: {schema: {type: string, format: binary}}
+        "206":
+          description: The requested range.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            Content-Range: {description: "bytes <first>-<last>/<size>", schema: {type: string}}
+          content:
+            audio/wav: {schema: {type: string, format: binary}}
+            audio/mpeg: {schema: {type: string, format: binary}}
+            audio/flac: {schema: {type: string, format: binary}}
+            audio/ogg: {schema: {type: string, format: binary}}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/Internal"}
+
 components:
   securitySchemes:
     bearerToken:
@@ -2433,6 +2681,18 @@ components:
       in: path
       required: true
       schema: {type: string, enum: [start, stop, restart]}
+    MusicOpId:
+      name: op_id
+      in: path
+      required: true
+      description: "The op_ id POST /music/generate returned."
+      schema: {type: string}
+    SongId:
+      name: id
+      in: path
+      required: true
+      description: "A song id, sng_ plus 12 base32 characters."
+      schema: {type: string}
 
   responses:
     SessionCookie:
@@ -4220,3 +4480,93 @@ components:
             add_content: {type: array, items: {type: string}}
             remove_content: {type: array, items: {type: string}}
             budget_bytes: {type: [integer, "null"], minimum: 1}
+
+    MusicStatus:
+      description: "GET /music/status (owned by music.md)."
+      type: object
+      required: [installed, loaded_model, engine_state, queue]
+      additionalProperties: false
+      properties:
+        installed: {type: boolean}
+        loaded_model: {type: [string, "null"]}
+        engine_state: {type: string, enum: [stopped, starting, ready, stopping, failed]}
+        queue:
+          type: object
+          required: [running, queued, max]
+          additionalProperties: false
+          properties:
+            running: {type: integer, minimum: 0}
+            queued: {type: integer, minimum: 0}
+            max: {type: integer, minimum: 1}
+
+    MusicGenerateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        lyrics: {type: string, description: "At most 8 KiB of UTF-8. Never logged."}
+        tags: {type: string, maxLength: 512}
+        duration_s: {type: integer, minimum: 10, maximum: 240, default: 60}
+        language: {type: string, default: en}
+        seed: {type: integer, minimum: 0, maximum: 4294967295}
+        variations: {type: integer, minimum: 1, maximum: 4, default: 1}
+        sample: {type: string, format: binary, description: "WAV, MP3, FLAC or Ogg, at most 20 MiB and 60 s."}
+        sample_mode: {type: string, enum: [sounds_like, same_song], default: sounds_like}
+        strength: {type: number, minimum: 0, maximum: 1}
+
+    MusicAccepted:
+      type: object
+      required: [op_id, song_ids]
+      additionalProperties: false
+      properties:
+        op_id: {type: string}
+        song_ids: {type: array, minItems: 1, maxItems: 4, items: {type: string, pattern: "^sng_[a-z2-7]{12}$"}}
+
+    MusicOp:
+      description: "GET /music/ops/{op_id}; the data of the music.progress and music.done events has the same fields plus op_id."
+      type: object
+      required: [state, progress, song_ids, error]
+      additionalProperties: false
+      properties:
+        state: {type: string, enum: [queued, running, done, failed, cancelled]}
+        progress: {type: [number, "null"], minimum: 0, maximum: 1}
+        song_ids: {type: array, maxItems: 4, items: {type: string, pattern: "^sng_[a-z2-7]{12}$"}}
+        error:
+          type: [object, "null"]
+          required: [code, message]
+          additionalProperties: false
+          properties:
+            code: {type: string, pattern: "^LAI-[A-Z]{2,3}-[0-9]{3}$"}
+            message: {type: string}
+
+    Song:
+      type: object
+      required: [id, created_at, title, tags, language, duration_s, model_id, seed, mime, size_bytes, origin]
+      additionalProperties: false
+      properties:
+        id: {type: string, pattern: "^sng_[a-z2-7]{12}$"}
+        created_at: {type: string, format: date-time}
+        title: {type: string}
+        tags: {type: string}
+        language: {type: string}
+        duration_s: {type: number, minimum: 0}
+        model_id: {type: string}
+        seed: {type: [integer, "null"]}
+        mime: {type: string, enum: [audio/wav, audio/mpeg, audio/flac, audio/ogg]}
+        size_bytes: {type: integer, minimum: 0}
+        origin: {type: string, enum: [local, cloud]}
+
+    SongList:
+      type: object
+      required: [songs, next_cursor]
+      additionalProperties: false
+      properties:
+        songs: {type: array, items: {$ref: "#/components/schemas/Song"}}
+        next_cursor: {type: [string, "null"]}
+
+    DeletedSong:
+      type: object
+      required: [id, deleted]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        deleted: {type: boolean, const: true}

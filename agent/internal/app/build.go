@@ -170,6 +170,7 @@ func (d *Daemon) build(ctx context.Context) error {
 		ModelID: func() string { return whisper.EnvModelID(d.c.Paths.Join(whisper.EnvPath), nil) },
 		Now:     clock.Now, Metrics: metrics, Logger: log,
 	})
+	d.buildMusic()
 	d.maps = maps.New(d.mapsDeps(metrics))
 	d.maps.SetGPS(lazyGPS{d})
 	d.places = &places.Manager{Copies: d.c.ArkIndex, Log: d.log}
@@ -619,6 +620,12 @@ func (d *Daemon) buildServer() error {
 			return reg.Add(kiwix.Routes(kiwix.NewProxy(kiwix.ProxyOptions{Port: c.Config.Get().Ports.Kiwix, Logger: d.log}))...)
 		}},
 		{"speech stt", func() error { return reg.Add(d.whisperSTT.Routes()...) }},
+		{"music", func() error {
+			if d.music == nil { // the service could not be built: the routes answer 404, the log says why
+				return nil
+			}
+			return d.music.Register(reg)
+		}},
 		{"maps", func() error { return reg.Add(d.maps.Routes()...) }},
 		{"chat", func() error { return reg.Add(d.chatRoutes()...) }},
 		{"docs", func() error { return reg.Add(d.docsRoutes()...) }},
