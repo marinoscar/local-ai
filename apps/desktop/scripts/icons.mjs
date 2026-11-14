@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // `npm run icons`: render the app icon and the tray icons as PNG, offline.
-//   source: packages/ui/brand/icon.svg  (the single source image, desktop.md section 3.1)
+//   source: packages/ui/brand/icon.svg  (the Corona eclipse, ADR-0012; desktop.md section 3.1)
+//           packages/ui/brand/tray.svg  (the eclipse ring; STATUS is replaced by each tray colour)
+//           packages/ui/brand/tokens.json (the tray colours)
 //   out:    build/linux/icons/<n>x<n>.png (16..512), build/linux/icon.png (512, the extraResource),
 //           build/linux/tray/tray-<colour>.png (22 px) and tray-<colour>@2x.png (44 px)
 // The generated PNGs are committed, so a build needs no tool and no download. Run this after changing the source image.
@@ -10,23 +12,24 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const source = join(root, '..', '..', 'packages', 'ui', 'brand', 'icon.svg');
+const brand = join(root, '..', '..', 'packages', 'ui', 'brand');
+const source = join(brand, 'icon.svg');
 const linux = join(root, 'build', 'linux');
 
 export const ICON_SIZES = [16, 24, 32, 48, 64, 128, 256, 512];
+/** The tray colours of packages/ui/brand/tokens.json (`tray`), by the names tray.ts uses. */
 export const TRAY_COLOURS = {
-  green: '#2e9e4f',
-  blue: '#1e6fd9',
-  orange: '#f08a00',
-  amber: '#f2c200',
-  red: '#d63031',
-  grey: '#8a8f98',
+  green: '#4ADE80',
+  blue: '#60A5FA',
+  orange: '#FF8A3D',
+  amber: '#FBBF24',
+  red: '#F87171',
+  grey: '#9CA3AF',
 };
 export const TRAY_SIZES = { '': 22, '@2x': 44 };
 
-const trayShape = (fill) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">` +
-  `<circle cx="256" cy="256" r="224" fill="${fill}" stroke="#14213d" stroke-width="48"/></svg>`;
+let trayTemplate = '';
+const trayShape = (fill) => trayTemplate.replaceAll('STATUS', fill);
 
 async function png(svg, size, file) {
   await sharp(Buffer.from(svg), { density: 288 })
@@ -37,6 +40,7 @@ async function png(svg, size, file) {
 
 async function main() {
   const svg = await readFile(source, 'utf8');
+  trayTemplate = await readFile(join(brand, 'tray.svg'), 'utf8');
   await mkdir(join(linux, 'icons'), { recursive: true });
   await mkdir(join(linux, 'tray'), { recursive: true });
   for (const size of ICON_SIZES) await png(svg, size, join(linux, 'icons', `${size}x${size}.png`));
