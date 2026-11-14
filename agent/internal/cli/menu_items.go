@@ -25,6 +25,7 @@ func menuTree() []menuItem {
 				hintEN: "(admin PIN)", hintES: "(PIN de admin.)"},
 		}},
 		{en: "AI models: load, change, download", es: "Modelos de IA: cargar, cambiar, descargar", sub: []menuItem{
+			{en: "Switch what this computer does", es: "Cambiar lo que hace esta computadora", args: []string{"workloads", "activate"}, pick: workloadPicker()},
 			{en: "List the models", es: "Ver la lista de modelos", args: []string{"models"}},
 			{en: "Load a model", es: "Cargar un modelo", args: []string{"load"}, pick: modelPicker(modelLoadable,
 				"Which model do you want to load?", "¿Qué modelo quiere cargar?",
@@ -164,6 +165,34 @@ func modelPicker(keep modelFilter, titleEN, titleES, emptyEN, emptyES string) *m
 					label += pick(l, ", starts with the computer", ", arranca con la computadora")
 				}
 				cs = append(cs, menuChoice{label: label, value: m.ID})
+			}
+			return cs
+		},
+	}
+}
+
+// workloadPicker lists the workloads of `aictl workloads --json` that can be activated, in the menu's
+// language, with "(now)" after the active one (aictl.md section 3.6).
+func workloadPicker() *menuPicker {
+	return &menuPicker{
+		source:  []string{"workloads"},
+		titleEN: "What should this computer do?", titleES: "¿Qué debe hacer esta computadora?",
+		emptyEN: "This computer has no workloads it can switch to.", emptyES: "Esta computadora no tiene usos a los que pueda cambiar.",
+		choices: func(raw []byte, l Lang) []menuChoice {
+			var a workloadsAnswer
+			if json.Unmarshal(raw, &a) != nil {
+				return nil
+			}
+			var cs []menuChoice
+			for _, w := range a.Workloads {
+				if !w.Fits || len(w.Missing) > 0 {
+					continue
+				}
+				label := w.label(l)
+				if a.Active != nil && *a.Active == w.Name {
+					label += pick(l, " (now)", " (ahora)")
+				}
+				cs = append(cs, menuChoice{label: label, value: w.Name})
 			}
 			return cs
 		},

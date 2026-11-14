@@ -38,7 +38,8 @@ cloud:
   dev_insecure: false
   allow:                            # node-side job allowlist, names WITHOUT the "localai." prefix (security-model.md §4)
     [status.refresh, model.load, model.unload, model.set_default, model.download, model.delete,
-     ark.sync, ark.verify, mode.offline, key.rotate, service.restart, logs.tail, catalog.refresh, agent.update, ensure.run]
+     ark.sync, ark.verify, mode.offline, key.rotate, service.restart, logs.tail, catalog.refresh, agent.update, ensure.run,
+     workload.activate, music.generate]
   concurrency: 1                    # EAB concurrency (1..4); local ops serialize anyway (§4.12)
   poll:                             # the cloud's handshake (GET …/localai/config) overrides these when present
     heartbeat_seconds: 15           # 5..60

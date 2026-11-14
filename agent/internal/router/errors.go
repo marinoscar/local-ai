@@ -159,6 +159,9 @@ func errLoadFailed(id string, f *loadFailure, rolledBack bool, restored []string
 		d["unloading"] = f.victim
 	}
 	switch {
+	case f.kind == kindEngineStop:
+		return opErr(CodeEngineNotFreed, http.StatusInternalServerError,
+			"A model in the way did not stop or free its graphics memory. The previous model was started again.", d, f.err)
 	case nothing:
 		return opErr(CodeNothingLoaded, http.StatusInternalServerError,
 			"No model could be started, not even the previous one.", d, f.err)

@@ -48,12 +48,14 @@ const (
 // The fixed audited actions of agent.md section 4.11. The families agent.update.*, service.* and
 // migration.* are built by the caller (for example "service.restart").
 const (
-	ActionKeyShow          = "key.show"
-	ActionKeyRotate        = "key.rotate"
-	ActionModelLoad        = "model.load"
-	ActionModelUnload      = "model.unload"
-	ActionModelDelete      = "model.delete"
-	ActionModelSetDefault  = "model.set_default"
+	ActionKeyShow         = "key.show"
+	ActionKeyRotate       = "key.rotate"
+	ActionModelLoad       = "model.load"
+	ActionModelUnload     = "model.unload"
+	ActionModelDelete     = "model.delete"
+	ActionModelSetDefault = "model.set_default"
+	// ActionWorkloadActivate is POST /workloads/{name}/activate (agent.md section 3.8.34).
+	ActionWorkloadActivate = "workload.activate"
 	ActionModeChange       = "mode.change"
 	ActionPINVerifyOK      = "pin.verify.ok"
 	ActionPINVerifyFail    = "pin.verify.fail"

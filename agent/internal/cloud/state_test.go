@@ -588,6 +588,7 @@ func TestStatePushIsDebouncedToTheMinimumInterval(t *testing.T) {
 	r.enroll()
 	r.waitCount("state", 1)
 	r.waitTimers(2)
+	r.waitEventLoop()
 	// Three relevant events inside the debounce window cost one push, five seconds after the last one.
 	_ = r.bus.Publish("model.loaded", "", modelLoaded("qwen3.5-9b-q4km"))
 	_ = r.bus.Publish("model.loaded", "", modelLoaded("qwen3.5-9b-q4km"))
@@ -635,6 +636,7 @@ func TestState400LogsThePathNeverTheValue(t *testing.T) {
 	r.enroll()
 	r.waitCount("state", 1)
 	r.waitTimers(2)
+	r.waitEventLoop()
 	// The builder keeps running: the next change sends a fresh snapshot.
 	_ = r.bus.Publish("model.loaded", "", modelLoaded("qwen3.5-9b-q4km"))
 	r.step(5 * time.Second)

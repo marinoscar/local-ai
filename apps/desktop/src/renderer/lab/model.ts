@@ -7,7 +7,24 @@
 //     Then the cached cards (main process, `lab-cache.json`) are shown with a banner, command buttons are off, and the retry
 //     delay grows 10 s, 20 s, 40 s ... up to 5 min.
 //   * A command is polled every 2 s until it settles.
-import { type CommandInfo, type ModelInfo, isSettled, projectCommand, projectLabNodes, projectModels, readRefusal } from '../../shared/lab-data';
+//   * Issue #515: a node's workload switch and a music request are sent the same way, and a music request is polled every
+//     2 s too. What a workload or a song is stays the cloud's and the node's business: the controller only carries the ask.
+import {
+  type CommandInfo,
+  type ModelInfo,
+  type MusicRequestInfo,
+  type SongInfo,
+  type WorkloadInfo,
+  WORKLOAD_NAME_PATTERN,
+  isSettled,
+  projectCommand,
+  projectLabNodes,
+  projectModels,
+  projectMusicRequest,
+  projectSongs,
+  projectWorkloads,
+  readRefusal,
+} from '../../shared/lab-data';
 import type { CloudResult, DesktopStatus, Lang, LocalaiDesktop } from '../../shared/types';
 import type { LabSummaryDto, NodeCardDto } from '@localai/ui/lab/types';
 import { STRINGS, fill, pick } from './strings';
@@ -40,8 +57,8 @@ export function clockLabel(iso: string, lang: Lang, now: Date = new Date(), time
 // State
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** What the card's buttons ask for. `param` is a model id or a service name. */
-export type CommandKind = 'status.refresh' | 'model.load' | 'model.unload' | 'model.set_default' | 'ark.sync' | 'ark.verify' | 'service.restart';
+/** What the card's buttons ask for. `param` is a model id, a service name or a workload name. */
+export type CommandKind = 'status.refresh' | 'model.load' | 'model.unload' | 'model.set_default' | 'ark.sync' | 'ark.verify' | 'service.restart' | 'workload.activate';
 
 export interface CommandSpec {
   type: CommandKind;
@@ -53,8 +70,11 @@ export interface CommandSpec {
 /** The sentence under a card after a command. `text` is already in the display language. */
 export interface CommandLine {
   spec: CommandSpec;
-  /** `sending`: the POST is on its way. `refused`: the cloud (or the allowlist) did not take it. */
-  status: 'sending' | 'refused' | CommandInfo['status'];
+  /**
+   * `sending`: the POST is on its way. `refused`: the cloud (or the allowlist) did not take it. `sent`: the cloud took it
+   * but answered no command to follow (nothing to poll; the cards are read again shortly).
+   */
+  status: 'sending' | 'refused' | 'sent' | CommandInfo['status'];
   id: string | null;
   text: string;
   /** The poll could not reach the cloud; it resumes when the cloud answers again. */
@@ -62,6 +82,29 @@ export interface CommandLine {
 }
 
 export type ModelsPanel = { open: boolean; state: 'loading' | 'ready' | 'error'; models: ModelInfo[] };
+export type WorkloadsPanel = { open: boolean; state: 'loading' | 'ready' | 'error'; workloads: WorkloadInfo[] };
+export type SongsPanel = { state: 'loading' | 'ready' | 'error'; songs: SongInfo[] };
+
+/** What "Make music on this node" sends (contract §6, the text fields; the Lab sends no sample). */
+export interface MusicInput {
+  lyrics: string;
+  tags: string;
+  durationS: number;
+  language: 'en' | 'es';
+  variations: number;
+  seed?: number;
+}
+
+/** The sentence under a card after a music request; like `CommandLine`, for the request instead of a command. */
+export interface MusicLine {
+  status: 'sending' | 'refused' | 'sent' | MusicRequestInfo['status'];
+  id: string | null;
+  text: string;
+  stalled: boolean;
+}
+
+/** How many of a node's songs the Lab lists. */
+export const SONGS_SHOWN = 5;
 
 export type Problem = 'forbidden' | 'removed' | 'unexpected' | null;
 
@@ -82,6 +125,9 @@ export interface LabState {
   user: string | null;
   commands: Record<string, CommandLine>;
   models: Record<string, ModelsPanel>;
+  workloads: Record<string, WorkloadsPanel>;
+  music: Record<string, MusicLine>;
+  songs: Record<string, SongsPanel>;
 }
 
 /** Everything the controller needs from the outside: the preload bridge, a clock and timers. */
@@ -104,6 +150,10 @@ export const realClock: Clock = {
 };
 
 const NODES = '/api/localai/nodes';
+const MUSIC_REQUESTS = '/api/localai/music/requests';
+const SONGS = '/api/localai/music/songs';
+/** After a `sent` answer (nothing to poll), the cards are read again this much later. */
+export const SENT_REFRESH_MS = 5_000;
 const isFailure = (result: CloudResult): result is Extract<CloudResult, { error: unknown }> => 'error' in result;
 
 /** Words for a refused command: the cloud's doctor code and reason, in the display language. */
@@ -117,6 +167,15 @@ export function refusalText(result: CloudResult, lang: Lang): string {
   if (result.status === 409 && refusal.code === 'LAI-CLD-035') return pick(STRINGS.refusedNotEnrolled, lang);
   if (result.status === 422 && refusal.code === 'LAI-CLD-034') return pick(refusal.mode === 'survival' ? STRINGS.refusedSurvival : STRINGS.refusedOffline, lang);
   if (result.status === 422 && refusal.reason === 'model_not_on_node') return pick(STRINGS.refusedModel, lang);
+  // Issue #515: the node's own answers to a workload switch or a song (contract §7), when the cloud passes them on.
+  if (refusal.code === 'LAI-LLM-050') return pick(STRINGS.refusedWorkloadUnknown, lang);
+  if (refusal.code === 'LAI-LLM-051') return pick(STRINGS.refusedWorkloadFit, lang);
+  if (refusal.code === 'LAI-LLM-053') return pick(STRINGS.refusedWorkloadSurvival, lang);
+  if (refusal.code === 'LAI-SVC-151') return pick(STRINGS.refusedMusicNotLoaded, lang);
+  if (refusal.code === 'LAI-SVC-153') return pick(STRINGS.refusedMusicBusy, lang);
+  if (result.status === 400 || result.status === 413 || result.status === 422) {
+    if (refusal.code === 'LAI-SVC-154') return pick(STRINGS.refusedMusicInput, lang);
+  }
   if (result.status >= 500) return pick(STRINGS.refusedUnreachable, lang);
   return pick(STRINGS.refusedGeneric, lang);
 }
@@ -138,6 +197,22 @@ export function statusText(info: Pick<CommandInfo, 'status' | 'errorCode' | 'err
       const detail = [info.errorMessage, info.errorCode !== null ? `(${info.errorCode})` : null].filter((part): part is string => part !== null && part !== '').join(' ');
       return detail === '' ? pick(STRINGS.failed, lang) : `${pick(STRINGS.failed, lang)}: ${detail}`;
     }
+  }
+}
+
+/** The sentence for a music request that settled or is under way. */
+export function musicStatusText(info: Pick<MusicRequestInfo, 'status' | 'errorCode' | 'errorMessage'>, lang: Lang): string {
+  switch (info.status) {
+    case 'queued':
+      return pick(STRINGS.musicQueued, lang);
+    case 'running':
+      return pick(STRINGS.musicRunning, lang);
+    case 'succeeded':
+      return pick(STRINGS.musicDone, lang);
+    case 'cancelled':
+      return `${pick(STRINGS.musicCancelled, lang)} (LAI-SVC-158)`;
+    default:
+      return statusText(info, lang);
   }
 }
 
@@ -165,7 +240,7 @@ export class LabController {
   constructor(bridge: LabBridge, lang: Lang, clock: Clock = realClock) {
     this.#bridge = bridge;
     this.#clock = clock;
-    this.#state = { lang, loaded: false, summary: null, nodes: [], dataAt: null, fromCache: false, unreachable: false, problem: null, connected: false, visible: false, user: null, commands: {}, models: {} };
+    this.#state = { lang, loaded: false, summary: null, nodes: [], dataAt: null, fromCache: false, unreachable: false, problem: null, connected: false, visible: false, user: null, commands: {}, models: {}, workloads: {}, music: {}, songs: {} };
   }
 
   // -- store ---------------------------------------------------------------------------------------------------------
@@ -322,6 +397,12 @@ export class LabController {
     return line !== undefined && (line.status === 'sending' || line.status === 'queued' || line.status === 'running');
   }
 
+  /** A music request of this node is on its way or not settled yet. */
+  isMusicBusy(nodeId: string): boolean {
+    const line = this.#state.music[nodeId];
+    return line !== undefined && (line.status === 'sending' || line.status === 'queued' || line.status === 'running');
+  }
+
   #setLine(nodeId: string, line: CommandLine): void {
     this.#set({ commands: { ...this.#state.commands, [nodeId]: line } });
   }
@@ -329,10 +410,25 @@ export class LabController {
   async send(nodeId: string, spec: CommandSpec): Promise<void> {
     if (!this.canAct() || this.isBusy(nodeId)) return;
     const lang = this.#state.lang;
+    let request: { method: 'POST'; path: string; body: unknown };
+    if (spec.type === 'workload.activate') {
+      // Its own route (contract §6); the name is checked here so a bad one never becomes a path.
+      const name = spec.params['name'];
+      if (typeof name !== 'string' || !WORKLOAD_NAME_PATTERN.test(name)) return;
+      request = { method: 'POST', path: `${NODES}/${nodeId}/workloads/${name}/activate`, body: spec.params['force'] === true ? { force: true } : {} };
+    } else {
+      request = { method: 'POST', path: `${NODES}/${nodeId}/commands`, body: { type: spec.type, params: spec.params } };
+    }
     this.#setLine(nodeId, { spec, status: 'sending', id: null, text: pick(STRINGS.sending, lang), stalled: false });
-    const result = await this.#bridge.cloud.request({ method: 'POST', path: `${NODES}/${nodeId}/commands`, body: { type: spec.type, params: spec.params } });
+    const result = await this.#bridge.cloud.request(request);
     if (this.#stopped) return;
     const command = !isFailure(result) && result.ok ? projectCommand(result.body) : null;
+    if (command === null && spec.type === 'workload.activate' && !isFailure(result) && result.ok) {
+      // Taken, but nothing to follow: say so, and read the cards again shortly.
+      this.#setLine(nodeId, { spec, status: 'sent', id: null, text: pick(STRINGS.sent, lang), stalled: false });
+      this.#scheduleRefresh(SENT_REFRESH_MS);
+      return;
+    }
     if (command === null) {
       this.#setLine(nodeId, { spec, status: 'refused', id: null, text: refusalText(result, lang), stalled: false });
       if (isFailure(result) && result.error === 'unauthorized') this.#set({ problem: 'removed' });
@@ -343,10 +439,11 @@ export class LabController {
     this.#ensurePolling();
   }
 
-  /** Polls every active command of every card, every 2 s, while the tab is shown. */
+  /** Polls every active command and music request of every card, every 2 s, while the tab is shown. */
   #ensurePolling(): void {
     if (this.#pollTimer !== null || !this.#canRun()) return;
-    const active = Object.values(this.#state.commands).some((line) => line.id !== null && !line.stalled && (line.status === 'queued' || line.status === 'running'));
+    const pending = (line: { id: string | null; stalled: boolean; status: string }): boolean => line.id !== null && !line.stalled && (line.status === 'queued' || line.status === 'running');
+    const active = Object.values(this.#state.commands).some(pending) || Object.values(this.#state.music).some(pending);
     if (!active) return;
     this.#pollTimer = this.#clock.set(() => {
       this.#pollTimer = null;
@@ -372,8 +469,21 @@ export class LabController {
       this.#setLine(nodeId, { ...line, status: info.status, text: statusText(info, lang) });
       if (isSettled(info.status)) {
         settledSomething = true;
-        if (this.#state.models[nodeId]?.open) void this.#loadModels(nodeId);
+        if (this.#state.models[nodeId]?.open || this.#state.workloads[nodeId]?.open) void this.#loadDetail(nodeId);
       }
+    }
+    for (const [nodeId, line] of Object.entries(this.#state.music)) {
+      if (line.id === null || line.stalled || (line.status !== 'queued' && line.status !== 'running')) continue;
+      const result = await this.#bridge.cloud.request({ method: 'GET', path: `${MUSIC_REQUESTS}/${line.id}` });
+      if (this.#stopped) return;
+      const info = !isFailure(result) && result.ok ? projectMusicRequest(result.body) : null;
+      if (info === null) {
+        this.#setMusic(nodeId, { ...line, stalled: true });
+        void this.refresh();
+        continue;
+      }
+      this.#setMusic(nodeId, { ...line, status: info.status, text: musicStatusText(info, lang) });
+      if (isSettled(info.status) && this.#state.songs[nodeId] !== undefined) void this.loadSongs(nodeId);
     }
     // A command changes the card (a model loaded, a sync finished): read the cards again at once.
     if (settledSomething && this.#canRun()) {
@@ -383,7 +493,7 @@ export class LabController {
     this.#ensurePolling();
   }
 
-  // -- models of one node --------------------------------------------------------------------------------------------
+  // -- models and workloads of one node (one read: `GET /api/localai/nodes/:nodeId`) ---------------------------------
 
   toggleModels(nodeId: string): void {
     const panel = this.#state.models[nodeId];
@@ -392,16 +502,93 @@ export class LabController {
       return;
     }
     this.#set({ models: { ...this.#state.models, [nodeId]: { open: true, state: panel?.state ?? 'loading', models: panel?.models ?? [] } } });
-    void this.#loadModels(nodeId);
+    void this.#loadDetail(nodeId);
   }
 
-  async #loadModels(nodeId: string): Promise<void> {
+  /** The node's workloads (issue #515): read from the node, switched with `workload.activate`. */
+  toggleWorkloads(nodeId: string): void {
+    const panel = this.#state.workloads[nodeId];
+    if (panel?.open) {
+      this.#set({ workloads: { ...this.#state.workloads, [nodeId]: { ...panel, open: false } } });
+      return;
+    }
+    this.#set({ workloads: { ...this.#state.workloads, [nodeId]: { open: true, state: panel?.state ?? 'loading', workloads: panel?.workloads ?? [] } } });
+    void this.#loadDetail(nodeId);
+  }
+
+  /** Switches the node to a workload; the node does the work and reports back through the command. */
+  activateWorkload(nodeId: string, name: string): Promise<void> {
+    return this.send(nodeId, { type: 'workload.activate', params: { name }, param: name });
+  }
+
+  async #loadDetail(nodeId: string): Promise<void> {
     const result = await this.#bridge.cloud.request({ method: 'GET', path: `${NODES}/${nodeId}` });
     if (this.#stopped) return;
-    const models = !isFailure(result) && result.ok ? projectModels(result.body) : null;
-    const previous = this.#state.models[nodeId];
-    if (!previous) return;
-    this.#set({ models: { ...this.#state.models, [nodeId]: models === null ? { ...previous, state: 'error' } : { open: previous.open, state: 'ready', models } } });
+    const body = !isFailure(result) && result.ok ? result.body : null;
+    const models = body !== null ? projectModels(body) : null;
+    const workloads = body !== null ? projectWorkloads(body) : null;
+    const previousModels = this.#state.models[nodeId];
+    const previousWorkloads = this.#state.workloads[nodeId];
+    const patch: Partial<LabState> = {};
+    if (previousModels) patch.models = { ...this.#state.models, [nodeId]: models === null ? { ...previousModels, state: 'error' } : { open: previousModels.open, state: 'ready', models } };
+    if (previousWorkloads) {
+      patch.workloads = { ...this.#state.workloads, [nodeId]: workloads === null ? { ...previousWorkloads, state: 'error' } : { open: previousWorkloads.open, state: 'ready', workloads } };
+    }
+    if (patch.models !== undefined || patch.workloads !== undefined) this.#set(patch);
+  }
+
+  // -- music on one node (issue #515) ---------------------------------------------------------------------------------
+
+  #setMusic(nodeId: string, line: MusicLine): void {
+    this.#set({ music: { ...this.#state.music, [nodeId]: line } });
+  }
+
+  /** "Make music on this node": `POST /api/localai/music/requests`, then the request is followed every 2 s. */
+  async requestMusic(nodeId: string, input: MusicInput): Promise<void> {
+    if (!this.canAct() || this.isMusicBusy(nodeId)) return;
+    const lang = this.#state.lang;
+    this.#setMusic(nodeId, { status: 'sending', id: null, text: pick(STRINGS.sending, lang), stalled: false });
+    const body = {
+      nodeId,
+      lyrics: input.lyrics,
+      tags: input.tags,
+      duration_s: input.durationS,
+      language: input.language,
+      variations: input.variations,
+      ...(input.seed !== undefined ? { seed: input.seed } : {}),
+    };
+    const result = await this.#bridge.cloud.request({ method: 'POST', path: MUSIC_REQUESTS, body });
+    if (this.#stopped) return;
+    const info = !isFailure(result) && result.ok ? projectMusicRequest(result.body) : null;
+    if (info === null) {
+      if (!isFailure(result) && result.ok) {
+        this.#setMusic(nodeId, { status: 'sent', id: null, text: pick(STRINGS.musicSent, lang), stalled: false });
+        return;
+      }
+      this.#setMusic(nodeId, { status: 'refused', id: null, text: refusalText(result, lang), stalled: false });
+      if (isFailure(result) && result.error === 'unauthorized') this.#set({ problem: 'removed' });
+      else if (isFailure(result) && result.error === 'refused') return;
+      else if (isFailure(result) || result.status >= 500) void this.refresh();
+      return;
+    }
+    this.#setMusic(nodeId, { status: info.status, id: info.id, text: musicStatusText(info, lang), stalled: false });
+    this.#ensurePolling();
+  }
+
+  /** The node's latest songs (`GET /api/localai/music/songs`, filtered to the node here). */
+  async loadSongs(nodeId: string): Promise<void> {
+    const previous = this.#state.songs[nodeId];
+    this.#set({ songs: { ...this.#state.songs, [nodeId]: { state: previous?.songs.length ? previous.state : 'loading', songs: previous?.songs ?? [] } } });
+    const result = await this.#bridge.cloud.request({ method: 'GET', path: SONGS });
+    if (this.#stopped) return;
+    const songs = !isFailure(result) && result.ok ? projectSongs(result.body) : null;
+    const current = this.#state.songs[nodeId] ?? { state: 'loading' as const, songs: [] };
+    this.#set({
+      songs: {
+        ...this.#state.songs,
+        [nodeId]: songs === null ? { ...current, state: 'error' } : { state: 'ready', songs: songs.filter((song) => song.nodeId === null || song.nodeId === nodeId).slice(0, SONGS_SHOWN) },
+      },
+    });
   }
 
   openNode(nodeId: string): void {
@@ -416,4 +603,48 @@ export class LabController {
     const time = dataAt !== null ? clockLabel(dataAt, lang, now, timeZone) : '';
     return time === '' ? pick(STRINGS.unreachableNoData, lang) : fill(pick(STRINGS.unreachable, lang), { time });
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The music form (issue #515)
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** What the form fields hold, as typed. */
+export interface MusicForm {
+  lyrics: string;
+  tags: string;
+  duration: string;
+  language: 'en' | 'es';
+  variations: string;
+}
+
+export const MUSIC_FORM_DEFAULTS: MusicForm = { lyrics: '', tags: '', duration: '60', language: 'en', variations: '1' };
+
+/** Why the form cannot be sent yet: a key of STRINGS. */
+export type MusicFormProblem = 'musicNeedsText' | 'musicTooLong' | 'musicTagsTooLong';
+
+const clampInt = (raw: string, min: number, max: number, fallback: number): number => {
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+};
+
+/**
+ * The form -> what is sent. Only what keeps a person from a refusal they could not understand: some text, the two
+ * size limits; the numbers are brought into range instead of refused (contract §3: 10-240 s, 1-4 versions).
+ */
+export function musicInputFrom(form: MusicForm): { ok: true; input: MusicInput } | { ok: false; problem: MusicFormProblem } {
+  if (form.lyrics.trim() === '' && form.tags.trim() === '') return { ok: false, problem: 'musicNeedsText' };
+  if (new TextEncoder().encode(form.lyrics).length > 8 * 1024) return { ok: false, problem: 'musicTooLong' };
+  if (new TextEncoder().encode(form.tags).length > 512) return { ok: false, problem: 'musicTagsTooLong' };
+  return {
+    ok: true,
+    input: { lyrics: form.lyrics, tags: form.tags.trim(), durationS: clampInt(form.duration, 10, 240, 60), language: form.language, variations: clampInt(form.variations, 1, 4, 1) },
+  };
+}
+
+/** The node is known to be on another workload than `music` (the hint in the dialog). Unknown: false. */
+export function musicWorkloadInactive(panel: WorkloadsPanel | undefined): boolean {
+  if (!panel || panel.state !== 'ready') return false;
+  const music = panel.workloads.find((workload) => workload.name === 'music');
+  return music !== undefined && !music.active;
 }

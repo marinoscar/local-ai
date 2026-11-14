@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // `npm run icons`: render the app icon and the tray icons as PNG, offline.
-//   source: packages/ui/brand/icon.svg  (the Corona eclipse, ADR-0012; desktop.md section 3.1)
+//   source: packages/ui/brand/icon.svg  (the Corona eclipse, ADR-0014; desktop.md section 3.1)
 //           packages/ui/brand/tray.svg  (the eclipse ring; STATUS is replaced by each tray colour)
 //           packages/ui/brand/tokens.json (the tray colours)
 //   out:    build/linux/icons/<n>x<n>.png (16..512), build/linux/icon.png (512, the extraResource),

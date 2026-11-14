@@ -30,6 +30,7 @@ func TestAllowedTable(t *testing.T) {
 		{services.UnitLlama, std},
 		{services.UnitKiwix, std},
 		{services.UnitWhisper, std},
+		{services.UnitMusic, set(services.VerbState, services.VerbSubscribe, services.VerbStart, services.VerbStop, services.VerbRestart)},
 		{services.UnitSync, std},
 		{services.UnitSyncTimer, std},
 		{services.UnitDrill, std},

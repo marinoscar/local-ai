@@ -75,12 +75,13 @@ Non-goals:
 | `models.yaml`, `engine: llama` | `models/<model-id>/` |
 | `models.yaml`, `engine: whisper` | `speech/whisper/<model-id>/` |
 | `models.yaml`, `engine: piper` | `speech/piper/<model-id>/` |
+| `models.yaml`, `engine: acestep` | `music/<model-id>/` (E11, [music.md](music.md) §3.5; a file `name` may add one sub-directory level, [catalog.md](catalog.md) §2.2). **Optional per profile**: synced only when the profile (or `profile_overrides.add_models`) includes the model; `ark-drive-full` includes it once a real entry exists |
 | `ark.yaml`, `kind: kiwix` | `kiwix/<content-id>/` |
 | `ark.yaml`, `kind: maps` | `maps/<content-id>/`, except `map-assets`, which is `maps/assets/` |
 | `ark.yaml`, `kind: kit` | `kit/<subdir>/`, where `<subdir>` comes from [rebuild-kit.md](rebuild-kit.md) §3.2.1 (`kit.LayoutOf`: e.g. `kit/src/`, `kit/git/llama.cpp.git/`, `kit/debs/resolute-amd64/`) |
 | `ark.yaml`, `kind: docs` | `docs/` |
 
-Modes: directories 0755, files 0644, owner root. Directories are created through `internal/fsperm.MkdirAll`, which chmods what it created to the exact mode, because `localai-agent.service` runs with `UMask=0027` and a plain `os.MkdirAll(…, 0o755)` would leave 0750 directories the `localai` services cannot enter (found on a real node, issue #319). Services that read content (`localai-llama`, `localai-kiwix`, `localai-whisper`) run as `localai` and only need read access, so numeric uid differences between machines (the `localai` uid differs per node) never matter. On root init the agent `chown`s only the top directory `<root>` to the local `localai` user, not recursively. `.staging/` and `.trash/` are 0700 root.
+Modes: directories 0755, files 0644, owner root. Directories are created through `internal/fsperm.MkdirAll`, which chmods what it created to the exact mode, because `localai-agent.service` runs with `UMask=0027` and a plain `os.MkdirAll(…, 0o755)` would leave 0750 directories the `localai` services cannot enter (found on a real node, issue #319). Services that read content (`localai-llama`, `localai-kiwix`, `localai-whisper`, `localai-music`) run as `localai` and only need read access, so numeric uid differences between machines (the `localai` uid differs per node) never matter. On root init the agent `chown`s only the top directory `<root>` to the local `localai` user, not recursively. `.staging/` and `.trash/` are 0700 root.
 
 ### 3.2 `ROOT.json`
 
@@ -401,7 +402,7 @@ Other components never walk directories. They call `ark.BestCopy(itemID) (Copy, 
 `BestCopy` is cheap (in-memory index rebuilt after each item swap, mount or unmount) and safe for concurrent use.
 
 How it is built (`agent/internal/ark/bestcopy.go`, `itemdir.go`):
-- `ark.ItemDir` is the one function that maps an item to its directory (§3.1 table); the index scans only those directories (`docs`, `maps/*`, `models/*`, `speech/whisper/*`, `speech/piper/*`, `kiwix/*`, and the directories of `kit/` down to three levels), so `kit/config/`, `kit/MANIFEST.json` (the kit's own index), `.staging` and `.trash` are never items (R9). A manifest that sits in a directory `ItemDir` would not choose for its item is misplaced and counts as missing.
+- `ark.ItemDir` is the one function that maps an item to its directory (§3.1 table); the index scans only those directories (`docs`, `maps/*`, `models/*`, `speech/whisper/*`, `speech/piper/*`, `music/*`, `kiwix/*`, and the directories of `kit/` down to three levels), so `kit/config/`, `kit/MANIFEST.json` (the kit's own index), `.staging` and `.trash` are never items (R9). A manifest that sits in a directory `ItemDir` would not choose for its item is misplaced and counts as missing.
 - A copy exists only if its MANIFEST is valid and every listed file is there with the recorded size (a directory item needs its `SHA256SUMS`). Nothing is hashed. Otherwise the item is left out of the index with `LAI-SYN-052`; a directory without a manifest is just not present (a half-swapped directory looks like this on purpose, §4.5.1).
 - The index is an immutable snapshot swapped atomically. `BestCopy` reads memory only, so it never waits for a slow or unplugged drive. `Rebuild(roots)` (start, mount, unmount) reads the roots concurrently and is bounded by its context; `Refresh(root, dir)` re-reads one item directory after a swap; `SetRootState` excludes an `ejecting` root at once without reading it.
 - Ties: the same sort key with different versions goes to the greater version string, so the order is total. "Drives in mount order" is the mountinfo mount id (`Root.MountID`), then the root id.

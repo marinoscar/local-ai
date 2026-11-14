@@ -1,6 +1,6 @@
 # Spec: Companion services (library, speech-to-text, text-to-speech, maps, vision)
 
-> **Status:** approved design · **Epic:** E4 · **Code:** `agent/internal/svc/kiwix/`, `agent/internal/svc/whisper/`, `agent/internal/svc/piper/`, `agent/internal/maps/`, `agent/internal/svc/health/`, `agent/ui/src/maps/` · **Doctor area:** `LAI-SVC` (codes 001–099; 100–149 belong to [survival-portal.md](survival-portal.md))
+> **Status:** approved design · **Epic:** E4 · **Code:** `agent/internal/svc/kiwix/`, `agent/internal/svc/whisper/`, `agent/internal/svc/piper/`, `agent/internal/maps/`, `agent/internal/svc/health/`, `agent/ui/src/maps/` · **Doctor area:** `LAI-SVC` (codes 001–099; 100–149 belong to [survival-portal.md](survival-portal.md), 150–179 to [music.md](music.md))
 > Canonical names: [overview.md](../architecture/overview.md) §3. Content comes from [ark-sync.md](ark-sync.md) (BestCopy). Router presets: [llama-router.md](llama-router.md). API routes: [agent.md](agent.md) §3.8.
 
 ---
@@ -16,6 +16,8 @@ In scope:
 - Maps: the MapLibre viewer, pmtiles range serving, local style/glyphs/sprites, offline place search, "where am I".
 - Vision: the requirements on the router preset and the photo request format.
 - Health checks and how they are surfaced.
+
+Music generation is **not** a companion service: it is an on-demand GPU engine that loads and unloads like a model. It is specified in [music.md](music.md) (unit `localai-music.service`, port 8082, doctor codes `LAI-SVC-150` to `LAI-SVC-159` in the block 150–179 of this area).
 
 Non-goals:
 - Building a chat UI. The llama WebUI (`/chat/`) and the Portal's small screens ([survival-portal.md](survival-portal.md)) are the UIs.
@@ -637,7 +639,7 @@ Events: `service.state`. Metrics (in `GET /api/v1/status?counters=1` → `node.c
 
 ## 8. Doctor codes
 
-Shown in the desktop and the Portal, so both languages are given. Range 100–149 is reserved for [survival-portal.md](survival-portal.md).
+Shown in the desktop and the Portal, so both languages are given. Range 100–149 is reserved for [survival-portal.md](survival-portal.md), range 150–179 for [music.md](music.md) §8.
 
 | Code | Sev | Meaning | Fix (en) | Fix (es) |
 |---|---|---|---|---|

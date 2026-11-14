@@ -1,4 +1,4 @@
-# ADR-0012: Corona, one dark theme and a solar-eclipse identity everywhere
+# ADR-0014: Corona, one dark theme and a solar-eclipse identity everywhere
 
 - **Status:** Accepted
 - **Date:** 2026-11-14

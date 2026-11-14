@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Renders the README images offline (ADR-0012), with the bundled Atkinson Hyperlegible font:
+// Renders the README images offline (ADR-0014), with the bundled Atkinson Hyperlegible font:
 //   packages/ui/brand/banner.html            -> packages/ui/brand/banner.png (1280x400)
 //   --screens <baseURL>                      -> docs/images/app-*.png: Home, Help and Manage screens of a running
 //                                               agent or of e2e/fake-agent.mjs (Corona theme)

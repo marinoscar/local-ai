@@ -13,6 +13,7 @@ import {
   AUDIT_GATEWAY_KEY_UPDATED,
   AUDIT_GATEWAY_POLICY_UPDATED,
 } from '../gateway/gateway.audit';
+import { AUDIT_MUSIC_REQUEST_CANCELLED, AUDIT_MUSIC_REQUESTED, AUDIT_MUSIC_SONG_DELETED, AUDIT_WORKLOAD_REQUESTED } from '../music/music-audit';
 import { VPS_AUDIT_ACTIONS } from '../vps/vps.constants';
 
 export interface AuditGroup {
@@ -30,6 +31,8 @@ export const AUDIT_GROUPS: readonly AuditGroup[] = [
   { prefix: 'localai.alert.', label: 'Alerts' },
   { prefix: 'localai.vps.', label: 'VPS publishing' },
   { prefix: 'localai.gateway.', label: 'Gateway' },
+  { prefix: 'localai.music.', label: 'Music' },
+  { prefix: 'localai.workload.', label: 'Workloads' },
 ];
 
 export interface AuditActionDef {
@@ -78,6 +81,10 @@ export const KNOWN_AUDIT_ACTIONS: readonly AuditActionDef[] = [
   { action: AUDIT_GATEWAY_KEY_REVOKED, label: 'Gateway key revoked' },
   { action: AUDIT_GATEWAY_KEY_UPDATED, label: 'Gateway key changed' },
   { action: AUDIT_GATEWAY_POLICY_UPDATED, label: 'Gateway policy changed' },
+  { action: AUDIT_MUSIC_REQUESTED, label: 'Music requested' },
+  { action: AUDIT_MUSIC_REQUEST_CANCELLED, label: 'Music request cancelled' },
+  { action: AUDIT_MUSIC_SONG_DELETED, label: 'Song deleted' },
+  { action: AUDIT_WORKLOAD_REQUESTED, label: 'Workload switch requested' },
 ];
 
 /**
@@ -97,3 +104,4 @@ export const AUDIT_TARGET_COMMAND = 'localai_command';
 export const AUDIT_TARGET_CATALOG = 'localai_catalog';
 export const AUDIT_TARGET_ALERT = 'localai_alert';
 export const AUDIT_TARGET_VPS = 'localai_vps';
+export { AUDIT_TARGET_MUSIC_REQUEST, AUDIT_TARGET_MUSIC_SONG } from '../music/music-audit';

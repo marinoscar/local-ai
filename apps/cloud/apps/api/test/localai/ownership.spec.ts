@@ -11,7 +11,7 @@ import '../../src/platform/registrations';
 const localai = readSchemaDatamodel(join(__dirname, '..', '..', 'prisma', 'schema')).filter((model) => model.name.startsWith('Localai'));
 
 describe('Local AI model ownership', () => {
-  it('finds the nine Local AI models in the composed schema', () => {
+  it('finds the eleven Local AI models in the composed schema', () => {
     expect(localai.map((model) => model.name).sort()).toEqual([
       'LocalaiAlert',
       'LocalaiCatalogVersion',
@@ -20,6 +20,8 @@ describe('Local AI model ownership', () => {
       'LocalaiGatewayUsage',
       'LocalaiGatewayUsageDaily',
       'LocalaiModelPolicy',
+      'LocalaiMusicRequest',
+      'LocalaiMusicSong',
       'LocalaiNode',
       'LocalaiNodeModel',
     ]);

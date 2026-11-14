@@ -3,10 +3,10 @@ name: ui
 # keyboard walk-through, offline test) against a fake agent. survival-portal.md sections 4.10 and 4.11.
 on:
   pull_request:
-    paths: ['agent/ui/**', 'docs/specs/survival-portal.md', 'scripts/check-offline-assets.mjs', 'scripts/testdata/offline-assets/**', '.github/workflows/ui.yml']
+    paths: ['agent/ui/**', 'packages/ui/**', 'docs/specs/survival-portal.md', 'scripts/check-offline-assets.mjs', 'scripts/testdata/offline-assets/**', '.github/workflows/ui.yml']
   push:
     branches: [main]
-    paths: ['agent/ui/**', 'docs/specs/survival-portal.md', 'scripts/check-offline-assets.mjs', 'scripts/testdata/offline-assets/**', '.github/workflows/ui.yml']
+    paths: ['agent/ui/**', 'packages/ui/**', 'docs/specs/survival-portal.md', 'scripts/check-offline-assets.mjs', 'scripts/testdata/offline-assets/**', '.github/workflows/ui.yml']
 permissions:
   contents: read
 jobs:
@@ -23,6 +23,12 @@ jobs:
           cache: npm
           cache-dependency-path: agent/ui/package-lock.json
       - run: npm ci --no-audit --no-fund
+      - name: Shared components (packages/ui) typecheck and unit tests
+        working-directory: packages/ui
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm test
       - name: Lint (no JSX text literal, no style attribute under src/portal)
         run: npm run lint
       - name: Unit tests (i18n parity and placeholders, status-line rule, language order)

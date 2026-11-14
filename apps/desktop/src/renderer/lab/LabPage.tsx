@@ -1,12 +1,14 @@
 // The Lab tab (docs/specs/desktop.md 4.8): the same node cards as the cloud overview (`@localai/ui`), a banner when the cloud
 // cannot be reached, and the everyday command buttons. All data comes through `window.localaiDesktop.cloud`; this page makes
 // no network request of its own and never sees the token. What to fetch and when is the controller's (model.ts).
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Menu, MenuItem, Stack, Typography } from '@mui/material';
+// Issue #515: the Workloads panel and "Make music on this node" (the studio over the cloud: text fields only).
+import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Menu, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { NodeCard } from '@localai/ui';
 import type { NodeCardDto } from '@localai/ui/lab/types';
 import { type ReactElement, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { Lang } from '../../shared/types';
 import { LabController, type CommandSpec, type LabBridge, type LabState } from './model';
+import { MusicDialog } from './MusicDialog';
 import { STRINGS, fill, pick } from './strings';
 
 export interface LabPageProps {
@@ -42,6 +44,7 @@ export function LabPage({ bridge, lang }: LabPageProps): ReactElement {
 function LabView({ controller, lang }: { controller: LabController; lang: Lang }): ReactElement {
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
   const [restart, setRestart] = useState<{ nodeId: string; service: string } | null>(null);
+  const [musicNode, setMusicNode] = useState<string | null>(null);
   const banner = controller.bannerText();
   const canAct = controller.canAct();
   const summary = state.summary;
@@ -93,9 +96,38 @@ function LabView({ controller, lang }: { controller: LabController; lang: Lang }
 
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', alignItems: 'start' }}>
         {state.nodes.map((node) => (
-          <NodeCard key={node.nodeId} node={node} actions={<NodeActions controller={controller} state={state} node={node} lang={lang} canAct={canAct} onRestart={(service) => setRestart({ nodeId: node.nodeId, service })} />} />
+          <NodeCard
+            key={node.nodeId}
+            node={node}
+            actions={
+              <NodeActions
+                controller={controller}
+                state={state}
+                node={node}
+                lang={lang}
+                canAct={canAct}
+                onRestart={(service) => setRestart({ nodeId: node.nodeId, service })}
+                onMusic={() => {
+                  setMusicNode(node.nodeId);
+                  void controller.loadSongs(node.nodeId);
+                }}
+              />
+            }
+          />
         ))}
       </Box>
+
+      <MusicDialog
+        nodeId={musicNode}
+        lang={lang}
+        workloads={musicNode !== null ? state.workloads[musicNode] : undefined}
+        canSend={musicNode !== null && canAct && !controller.isMusicBusy(musicNode)}
+        onClose={() => setMusicNode(null)}
+        onSend={(input) => {
+          if (musicNode !== null) void controller.requestMusic(musicNode, input);
+          setMusicNode(null);
+        }}
+      />
 
       <Dialog open={restart !== null} onClose={() => setRestart(null)} aria-labelledby="restart-title">
         <DialogTitle id="restart-title">{restart ? fill(pick(STRINGS.restartTitle, lang), { service: restart.service, node: restart.nodeId }) : ''}</DialogTitle>
@@ -127,15 +159,19 @@ interface NodeActionsProps {
   lang: Lang;
   canAct: boolean;
   onRestart(service: string): void;
+  onMusic(): void;
 }
 
 /** The footer of one card: Open in browser, the command buttons, the command's line and the models panel. */
-function NodeActions({ controller, state, node, lang, canAct, onRestart }: NodeActionsProps): ReactElement {
+function NodeActions({ controller, state, node, lang, canAct, onRestart, onMusic }: NodeActionsProps): ReactElement {
   const id = node.nodeId;
   const busy = controller.isBusy(id);
   const enabled = canAct && !busy && node.phase === 'enrolled';
   const line = state.commands[id];
   const panel = state.models[id];
+  const workloads = state.workloads[id];
+  const music = state.music[id];
+  const songs = state.songs[id];
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const send = (spec: CommandSpec): void => void controller.send(id, spec);
 
@@ -150,6 +186,12 @@ function NodeActions({ controller, state, node, lang, canAct, onRestart }: NodeA
         </Button>
         <Button size="small" variant="outlined" disabled={!canAct || node.phase !== 'enrolled'} onClick={() => controller.toggleModels(id)} data-testid={`models-${id}`}>
           {pick(panel?.open ? STRINGS.hideModels : STRINGS.models, lang)}
+        </Button>
+        <Button size="small" variant="outlined" disabled={!canAct || node.phase !== 'enrolled'} onClick={() => controller.toggleWorkloads(id)} data-testid={`workloads-${id}`}>
+          {pick(workloads?.open ? STRINGS.hideWorkloads : STRINGS.workloads, lang)}
+        </Button>
+        <Button size="small" variant="outlined" disabled={!canAct || node.phase !== 'enrolled' || controller.isMusicBusy(id)} onClick={onMusic} data-testid={`music-${id}`}>
+          {pick(STRINGS.makeMusic, lang)}
         </Button>
         <Button size="small" variant="outlined" disabled={!enabled} onClick={() => send({ type: 'ark.sync', params: {} })} data-testid={`sync-${id}`}>
           {pick(STRINGS.syncNow, lang)}
@@ -180,6 +222,64 @@ function NodeActions({ controller, state, node, lang, canAct, onRestart }: NodeA
         <Typography variant="body2" role="status" aria-live="polite" data-testid={`command-${id}`} data-status={line.status}>
           {line.text}
         </Typography>
+      ) : null}
+
+      {music !== undefined ? (
+        <Typography variant="body2" role="status" aria-live="polite" data-testid={`music-line-${id}`} data-status={music.status}>
+          {music.text}
+        </Typography>
+      ) : null}
+
+      {workloads?.open ? (
+        <Box data-testid={`workloads-panel-${id}`}>
+          {workloads.state === 'loading' && workloads.workloads.length === 0 ? <Typography variant="body2">{pick(STRINGS.workloadsLoading, lang)}</Typography> : null}
+          {workloads.state === 'error' ? <Typography variant="body2">{pick(STRINGS.workloadsError, lang)}</Typography> : null}
+          {workloads.state === 'ready' && workloads.workloads.length === 0 ? <Typography variant="body2">{pick(STRINGS.workloadsNone, lang)}</Typography> : null}
+          {workloads.workloads.length > 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+              {pick(STRINGS.workloadsHelp, lang)}
+            </Typography>
+          ) : null}
+          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+            {workloads.workloads.map((workload) => (
+              <Stack key={workload.name} direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+                <Button
+                  size="small"
+                  variant={workload.active ? 'contained' : 'outlined'}
+                  disabled={!enabled || workload.active}
+                  aria-pressed={workload.active}
+                  onClick={() => void controller.activateWorkload(id, workload.name)}
+                  data-testid={`workload-${id}-${workload.name}`}
+                >
+                  {workload.label[lang]}
+                </Button>
+                {workload.active ? <Chip size="small" color="primary" label={pick(STRINGS.workloadActive, lang)} /> : null}
+                {!workload.fits ? <Chip size="small" color="warning" label={pick(STRINGS.workloadDoesNotFit, lang)} /> : null}
+                {workload.missing > 0 ? <Chip size="small" label={fill(pick(STRINGS.workloadMissing, lang), { count: String(workload.missing) })} /> : null}
+              </Stack>
+            ))}
+          </Stack>
+        </Box>
+      ) : null}
+
+      {songs !== undefined ? (
+        <Box data-testid={`songs-${id}`}>
+          <Typography variant="subtitle2">{pick(STRINGS.songs, lang)}</Typography>
+          {songs.state === 'loading' && songs.songs.length === 0 ? <Typography variant="body2">{pick(STRINGS.songsLoading, lang)}</Typography> : null}
+          {songs.state === 'error' ? <Typography variant="body2">{pick(STRINGS.songsError, lang)}</Typography> : null}
+          {songs.state === 'ready' && songs.songs.length === 0 ? <Typography variant="body2">{pick(STRINGS.songsNone, lang)}</Typography> : null}
+          {songs.songs.map((song) => (
+            <Typography key={song.id} variant="body2" data-testid={`song-${song.id}`} sx={{ overflowWrap: 'anywhere' }}>
+              {song.title !== '' ? song.title : pick(STRINGS.untitled, lang)}
+              {song.durationS !== null ? ` · ${Math.floor(song.durationS / 60)}:${String(song.durationS % 60).padStart(2, '0')}` : ''}
+            </Typography>
+          ))}
+          {songs.songs.length > 0 ? (
+            <Typography variant="caption" color="text.secondary">
+              {pick(STRINGS.songsListen, lang)}
+            </Typography>
+          ) : null}
+        </Box>
       ) : null}
 
       {panel?.open ? (

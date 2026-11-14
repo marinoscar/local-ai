@@ -170,6 +170,9 @@ type Inputs struct {
 	// StateDefault is state.models.default ("" when unset); Survival is true in survival mode.
 	StateDefault string
 	Survival     bool
+	// Workloads are the node's resolved workloads (ResolveWorkloads); only the workload routes read
+	// them.
+	Workloads []Workload
 }
 
 // PresetFinding is a doctor code Generate raised, with the model or setting it concerns.

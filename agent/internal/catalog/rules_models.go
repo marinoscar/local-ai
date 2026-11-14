@@ -176,6 +176,48 @@ func (s *lintState) lintModelFileRules(p string, m *Model, count map[string]int)
 	case "piper":
 		exactlyOne("piper_onnx", "piper")
 		exactlyOne("piper_config", "piper")
+	case EngineAcestep:
+		s.lintAcestep(p, m, count)
+	}
+	if m.Engine != EngineAcestep && count[FileKindAcestep] > 0 {
+		s.add(f, CodeAcestepLayout, fp, "files of kind %s belong to engine %s only", FileKindAcestep, EngineAcestep)
+	}
+}
+
+// lintAcestep is the file layout rule of an engine acestep model (LAI-CAT-021, catalog.md section 2):
+// one or more files, every one of kind acestep, each name a file or one sub-directory and a file
+// ("acestep-v15-turbo/model.safetensors"); the music role; a graphics-memory requirement greater
+// than 0 (it is counted in the GPU fit next to the llama models); the cuda backend only; no llama
+// block.
+func (s *lintState) lintAcestep(p string, m *Model, count map[string]int) {
+	const f = FileModels
+	fp := joinPath(p, "files")
+	add := func(path, format string, args ...any) { s.add(f, CodeAcestepLayout, path, format, args...) }
+	if count[FileKindAcestep] == 0 {
+		add(fp, "engine acestep requires at least one files entry of kind acestep")
+	}
+	for i, file := range m.Files {
+		ep := indexPath(fp, i)
+		if file.Kind != FileKindAcestep {
+			add(joinPath(ep, "kind"), "engine acestep allows only files of kind acestep, got %q", truncate(file.Kind, 40))
+		}
+		if !unsafeName(file.Name) && strings.Count(file.Name, "/") > 1 {
+			add(joinPath(ep, "name"), "name %q may have at most one sub-directory level", truncate(file.Name, 60))
+		}
+	}
+	if !contains(m.Roles, "music") {
+		add(joinPath(p, "roles"), "engine acestep requires the role music")
+	}
+	if m.Requirements.MinVRAMMiB <= 0 {
+		add(joinPath(p, "requirements.min_vram_mib"), "engine acestep requires min_vram_mib greater than 0")
+	}
+	for i, b := range m.Requirements.Backends {
+		if !oneOf(b, AcestepBackends) {
+			add(indexPath(joinPath(p, "requirements.backends"), i), "engine acestep runs on %s only, got %q", quoted(AcestepBackends), truncate(b, 40))
+		}
+	}
+	if m.Llama != nil {
+		add(joinPath(p, "llama"), "engine acestep takes no llama block")
 	}
 }
 

@@ -227,4 +227,5 @@ func (d *Daemon) startWhisper(ctx context.Context) {
 		d.applyWhisperAsync(d.rootCtx)
 	}
 	d.startWorker(&whisperWorker{d: d})
+	d.writeMusicUnit(ctx)
 }

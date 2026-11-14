@@ -18,9 +18,12 @@ import (
 // The units the agent knows (overview.md section 3.5). The allowlist of allowlist.go says which verbs
 // each one accepts.
 const (
-	UnitLlama            = "localai-llama.service"
-	UnitKiwix            = "localai-kiwix.service"
-	UnitWhisper          = "localai-whisper.service"
+	UnitLlama   = "localai-llama.service"
+	UnitKiwix   = "localai-kiwix.service"
+	UnitWhisper = "localai-whisper.service"
+	// UnitMusic is the music engine (E11): never enabled at boot, started and stopped by the agent
+	// when an acestep model is loaded or unloaded.
+	UnitMusic            = "localai-music.service"
 	UnitSync             = "localai-sync.service"
 	UnitSyncTimer        = "localai-sync.timer"
 	UnitDrill            = "localai-drill.service"
@@ -224,6 +227,7 @@ var logUnits = map[string]string{
 	"llama":   UnitLlama,
 	"kiwix":   UnitKiwix,
 	"whisper": UnitWhisper,
+	"music":   UnitMusic,
 	"sync":    UnitSync,
 	"drill":   UnitDrill,
 }

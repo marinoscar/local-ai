@@ -11,6 +11,8 @@ import {
   AUDIT_TARGET_CATALOG,
   AUDIT_TARGET_COMMAND,
   AUDIT_TARGET_NODE,
+  AUDIT_TARGET_MUSIC_REQUEST,
+  AUDIT_TARGET_MUSIC_SONG,
   AUDIT_TARGET_VPS,
   NODE_ACTOR_ACTIONS,
 } from './audit-actions';
@@ -57,7 +59,7 @@ const CATALOG_SOURCES = new Set(['github_release', 'upload', 'editor']);
 /** The node fields whose NAMES an update row may list. Values are never printed (the tailnet IP is a field here). */
 const NODE_FIELDS = new Set(['displayName', 'publicHost', 'servePattern', 'tailnetMachine', 'tailnetIp', 'gatewayEnabled', 'gatewayPriority', 'catalogPin']);
 /** The params of a command that name its subject, in preference order. */
-const SUBJECT_PARAMS = ['model_id', 'service', 'unit'] as const;
+const SUBJECT_PARAMS = ['model_id', 'service', 'unit', 'name'] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -127,6 +129,7 @@ function rowNode(src: AuditRowSource, meta: Record<string, unknown>, ids: NodeLa
   if (src.action === 'localai.node.binding_refused') return labId(meta.claimedNodeId, ids) ?? labId(src.targetId, ids);
   if (src.targetType === AUDIT_TARGET_NODE) return labId(src.targetId, ids);
   if (src.targetType === AUDIT_TARGET_COMMAND || src.targetType === AUDIT_TARGET_ALERT) return labId(meta.nodeId, ids);
+  if (src.targetType === AUDIT_TARGET_MUSIC_REQUEST || src.targetType === AUDIT_TARGET_MUSIC_SONG) return labId(meta.nodeId, ids);
   return null;
 }
 
@@ -142,6 +145,7 @@ function linkOf(src: AuditRowSource, node: string | null): string | null {
     return version === null ? '/lab/catalog' : `/lab/catalog?version=${encodeURIComponent(version)}`;
   }
   if (src.targetType === AUDIT_TARGET_ALERT) return '/lab/alerts';
+  if (src.targetType === AUDIT_TARGET_MUSIC_REQUEST || src.targetType === AUDIT_TARGET_MUSIC_SONG) return '/music';
   // The Route53 key rows target the VPS slice itself: its admin card is the page to open.
   if (src.targetType === AUDIT_TARGET_VPS) return '/admin/settings/vps-publishing';
   return null;
@@ -254,6 +258,21 @@ function summaryOf(src: AuditRowSource, meta: Record<string, unknown>, node: str
     }
     case 'localai.gateway.policy_updated':
       return 'Gateway model policy changed';
+    case 'localai.music.requested': {
+      // { nodeId, variations, durationS, hasSample, sampleMode }: counts and flags, never the lyrics or tags.
+      const count = typeof meta.variations === 'number' && Number.isInteger(meta.variations) && meta.variations >= 1 && meta.variations <= 4 ? meta.variations : null;
+      const seconds = typeof meta.durationS === 'number' && Number.isInteger(meta.durationS) && meta.durationS > 0 && meta.durationS <= 600 ? meta.durationS : null;
+      const detail = [count === null ? null : `${count} ${count === 1 ? 'song' : 'songs'}`, seconds === null ? null : `${seconds} s`, meta.hasSample === true ? 'with a sample' : null].filter((part) => part !== null);
+      return join(['Music requested', on(node), detail.length > 0 ? `(${detail.join(', ')})` : null]);
+    }
+    case 'localai.music.request_cancelled':
+      return join(['Music request cancelled', on(node)]);
+    case 'localai.workload.requested': {
+      const name = safe(meta.name, /^[a-z][a-z0-9-]{1,31}$/, 32);
+      return join([name === null ? 'Workload switch' : `Switch to ${name}`, 'requested', on(node)]);
+    }
+    case 'localai.music.song_deleted':
+      return join(['Deleted a song', node === null ? null : `made on ${node}`]);
     default:
       // A new or unknown action never breaks the page: its name is the summary.
       return scrubText(src.action.slice(0, 120));

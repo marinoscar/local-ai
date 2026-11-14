@@ -1,5 +1,5 @@
 // What the top bar shows for a status: pure functions, unit-tested (tests/unit/topbar-model.test.ts).
-import type { DesktopStatus, Lang, NodeMode, Tab } from '../../shared/types';
+import type { DesktopStatus, Lang, MusicAvailability, NodeMode, Tab } from '../../shared/types';
 import { STRINGS, pick } from './strings';
 
 export type PillTone = 'ok' | 'busy' | 'bad' | 'warn';
@@ -52,4 +52,15 @@ export function stripFor(status: DesktopStatus | null, lang: Lang): { active: bo
     showBack: active && s?.portalOnly === true,
     banner: s?.banner ? `${s.banner.code} · ${s.banner.text}` : null,
   };
+}
+
+/**
+ * The Music button (issue #515). It is always there, so a person learns where music lives; it opens the Music window only
+ * when the agent says music is installed. Otherwise it looks disabled (`aria-disabled`, still focusable) and a click
+ * explains why in the top bar's notice line.
+ */
+export function musicButtonFor(status: DesktopStatus | null, lang: Lang): { state: MusicAvailability; enabled: boolean; hint: string | null } {
+  const state: MusicAvailability = status?.agent === 'up' ? (status.music ?? 'unknown') : 'unknown';
+  if (state === 'installed') return { state, enabled: true, hint: null };
+  return { state, enabled: false, hint: pick(state === 'not-installed' ? STRINGS.musicNotInstalled : STRINGS.musicUnknown, lang) };
 }

@@ -33,6 +33,7 @@ The mode is remembered after a restart. Leaving Survival mode needs the **admin 
 | Is the ark **green**? What runs at night? | [08-scheduled-sync.md](08-scheduled-sync.md) |
 | A **laptop** must work as a server (lid closed)? | [09-laptop-as-server.md](09-laptop-as-server.md) |
 | You run the **whole lab**? | [10-lab-operations.md](10-lab-operations.md) |
+| Want to **make a song**, or switch a computer between **Coding** and **Music**? | [12-make-music-and-switch-workloads.md](12-make-music-and-switch-workloads.md) |
 
 ## Three things to remember
 

@@ -25,6 +25,11 @@ export interface NodeCommands {
   latest: (type: string) => CommandView | undefined;
   /** Queues a command. A refusal is also shown in the page's notice unless `silent` (a dialog shows it itself). */
   send: (type: string, params?: Record<string, unknown>, options?: { silent?: boolean }) => Promise<SendOutcome>;
+  /**
+   * Queues a command through a feature route of its own (the workload switch, `POST /nodes/:id/workloads/:name/activate`)
+   * and tracks it like `send`: polled, shown, its refusal in the notice.
+   */
+  run: (queue: () => Promise<CommandView>, options?: { silent?: boolean }) => Promise<SendOutcome>;
   /** The latest refusal not yet closed (plain language, with the doctor code), or null. */
   notice: string | null;
   clearNotice: () => void;
@@ -149,10 +154,10 @@ export function NodeCommandsProvider({ nodeId, onSettled, onQueued, pollMs = COM
     };
   }, [hasActive, pollMs, track]);
 
-  const send = useCallback(
-    async (type: string, params: Record<string, unknown> = {}, options: { silent?: boolean } = {}): Promise<SendOutcome> => {
+  const run = useCallback(
+    async (queue: () => Promise<CommandView>, options: { silent?: boolean } = {}): Promise<SendOutcome> => {
       try {
-        const command = await sendCommand(nodeId, stripPrefix(type), params);
+        const command = await queue();
         track(command);
         setNotice(null);
         onQueuedRef.current?.(command);
@@ -164,6 +169,12 @@ export function NodeCommandsProvider({ nodeId, onSettled, onQueued, pollMs = COM
       }
     },
     [nodeId, track],
+  );
+
+  const send = useCallback(
+    (type: string, params: Record<string, unknown> = {}, options: { silent?: boolean } = {}): Promise<SendOutcome> =>
+      run(() => sendCommand(nodeId, stripPrefix(type), params), options),
+    [nodeId, run],
   );
 
   const cancel = useCallback(
@@ -198,16 +209,17 @@ export function NodeCommandsProvider({ nodeId, onSettled, onQueued, pollMs = COM
           if (!isActive(command) || stripPrefix(command.type) !== stripPrefix(type)) return false;
           if (subject === undefined) return true;
           const p = command.params;
-          return p.model_id === subject || p.service === subject || p.unit === subject;
+          return p.model_id === subject || p.service === subject || p.unit === subject || p.name === subject;
         }),
       latest: (type) => commands.find((command) => stripPrefix(command.type) === stripPrefix(type)),
       send,
+      run,
       notice,
       clearNotice: () => setNotice(null),
       cancel,
       dismiss,
     }),
-    [commands, send, notice, cancel, dismiss],
+    [commands, send, run, notice, cancel, dismiss],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

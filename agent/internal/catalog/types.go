@@ -11,6 +11,7 @@ package catalog
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -32,10 +33,10 @@ const (
 
 // Enumerations of the schema. They are plain slices so the lint rules and the tests share them.
 var (
-	engines        = []string{"llama", "whisper", "piper"}
-	roles          = []string{"chat", "reasoning", "coder", "vision", "embedding", "stt", "tts"}
+	engines        = []string{"llama", "whisper", "piper", "acestep"}
+	roles          = []string{"chat", "reasoning", "coder", "vision", "embedding", "stt", "tts", "music"}
 	modelSrcTypes  = []string{"huggingface", "url"}
-	fileKinds      = []string{"weights", "mmproj", "draft", "chat_template", "whisper", "piper_onnx", "piper_config"}
+	fileKinds      = []string{"weights", "mmproj", "draft", "chat_template", "whisper", "piper_onnx", "piper_config", "acestep"}
 	backends       = []string{"cuda", "vulkan", "cpu"}
 	flashAttn      = []string{"on", "off", "auto"}
 	specTypes      = []string{"draft-mtp", "draft"}
@@ -47,6 +48,18 @@ var (
 	storageTargets = []string{"internal", "ark_drive"}
 	archs          = []string{"amd64", "arm64"}
 )
+
+// The music engine (E11, catalog.md section 2): engine acestep, role music, file kind acestep.
+const (
+	EngineLlama     = "llama"
+	EngineAcestep   = "acestep"
+	RoleMusic       = "music"
+	FileKindAcestep = "acestep"
+)
+
+// AcestepBackends are the backends an acestep model may declare. Only cuda is supported until the
+// ACE-Step spike measures the others (TODO(#505)).
+var AcestepBackends = []string{"cuda"}
 
 // EmbeddedKeyrings are the keyring file names embedded in the agent (rebuild-kit.md section 3.4).
 // An `extra_repos[].key` must be one of them; the sync engine uses the same list, so adding a
@@ -318,6 +331,24 @@ type Profile struct {
 	Include       Include  `yaml:"include" catalog:"required"`
 	DefaultModel  string   `yaml:"default_model" catalog:"required"`
 	Survival      Survival `yaml:"survival" catalog:"required"`
+	// Workloads are the named model sets a person can switch the node to with one action
+	// (catalog.md section 4, "Workloads"): name -> label and models. Optional.
+	Workloads map[string]Workload `yaml:"workloads"`
+}
+
+// Workload is one named set of models (agent.md section 3.8, POST /workloads/{name}/activate).
+type Workload struct {
+	Label  WorkloadLabel `yaml:"label" catalog:"required"`
+	Models []string      `yaml:"models" catalog:"required"`
+}
+
+// WorkloadNameRe is the form of a workload name ("coding", "music", "voice-chat").
+var WorkloadNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
+
+// WorkloadLabel is the bilingual name of a workload.
+type WorkloadLabel struct {
+	EN string `yaml:"en" catalog:"required"`
+	ES string `yaml:"es" catalog:"required"`
 }
 
 // Match says which hardware a node profile is for.

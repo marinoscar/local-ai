@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Local AI">
-  <!-- The header mark (ADR-0012): the eclipse without its tile, for dark surfaces. -->
+  <!-- The header mark (ADR-0014): the eclipse without its tile, for dark surfaces. -->
   <defs>
     <radialGradient id="c" cx="50%" cy="50%" r="50%">
       <stop offset="55%" stop-color="#F2B544" stop-opacity="0"/>

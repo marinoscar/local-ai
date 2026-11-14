@@ -94,6 +94,11 @@ export function cloudApiPath(raw: unknown): string | null {
 export interface CloudHttpInit {
   method: 'GET' | 'POST' | 'DELETE';
   body?: unknown;
+  /**
+   * Text fields sent as `multipart/form-data` instead of a JSON `body` (issue #515: `POST /api/localai/music/requests`).
+   * Only the allowlist (cloud-api.ts) builds one; `body` and `form` are never sent together.
+   */
+  form?: Readonly<Record<string, string>>;
   /** The PAT. It goes into the Authorization header and nowhere else. */
   bearer?: string;
   signal?: AbortSignal;
@@ -121,14 +126,22 @@ export function createCloudHttp(options: CloudHttpOptions = {}): CloudHttp {
   return async (path, init) => {
     const url = new URL(path, origin);
     if (url.origin !== origin) throw new Error('refusing a request to another origin');
+    if (init.body !== undefined && init.form !== undefined) throw new Error('a request has a JSON body or a form, not both');
     const headers: Record<string, string> = { accept: 'application/json' };
+    // A form sets its own content type (with the boundary).
     if (init.body !== undefined) headers['content-type'] = 'application/json';
     if (init.bearer !== undefined) headers['authorization'] = `Bearer ${init.bearer}`;
+    let form: FormData | undefined;
+    if (init.form !== undefined) {
+      form = new FormData();
+      for (const [name, value] of Object.entries(init.form)) form.append(name, value);
+    }
     const doFetch = options.fetch ?? globalThis.fetch;
     const response = await doFetch(url, {
       method: init.method,
       headers,
       ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+      ...(form !== undefined ? { body: form } : {}),
       // A redirect would carry the bearer somewhere else: the cloud API never redirects.
       redirect: 'error',
       ...(init.signal ? { signal: init.signal } : {}),
@@ -576,14 +589,14 @@ export class CloudSession {
    * Refused with `offline` before any network call when connected mode is not active. The PAT is added here and
    * never returned. A `401` deletes the token (LAI-DSK-011). The body is the cloud's JSON as it came (EAB wraps it in `{ data }`).
    */
-  async request(req: { method: 'GET' | 'POST' | 'DELETE'; path: string; body?: unknown; signal?: AbortSignal }): Promise<CloudResponse> {
+  async request(req: { method: 'GET' | 'POST' | 'DELETE'; path: string; body?: unknown; form?: Readonly<Record<string, string>>; signal?: AbortSignal }): Promise<CloudResponse> {
     const secret = this.#secret;
     if (!secret || !this.connectedModeActive()) throw new CloudRequestError('offline');
     const path = cloudApiPath(req.path);
     if (path === null) throw new CloudRequestError('bad_request');
     let result: CloudHttpResult;
     try {
-      result = await this.#call(path, { method: req.method, ...(req.body !== undefined ? { body: req.body } : {}), bearer: secret.token }, req.signal);
+      result = await this.#call(path, { method: req.method, ...(req.body !== undefined ? { body: req.body } : {}), ...(req.form !== undefined ? { form: req.form } : {}), bearer: secret.token }, req.signal);
     } catch {
       throw new CloudRequestError(req.signal?.aborted || !this.egressOpen() ? 'aborted' : 'unreachable');
     }
