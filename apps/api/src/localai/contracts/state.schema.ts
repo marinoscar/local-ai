@@ -175,6 +175,31 @@ export const EnsureBlockV1 = z
   .strict();
 export type EnsureBlockV1 = z.infer<typeof EnsureBlockV1>;
 
+/**
+ * E11 (#513): the node's workloads (agent `GET /workloads`, agent.md section 3.8.34), names and labels only, for the
+ * workload buttons and the music page's node picker. Sent like `ensure`: OPTIONAL, and only to a cloud whose handshake
+ * lists `workloads.v1` (which also says the cloud knows `localai.workload.activate` and `localai.music.generate`).
+ */
+export const WorkloadsBlockV1 = z
+  .object({
+    active: z.string().max(32).nullable(),
+    items: z
+      .array(
+        z
+          .object({
+            name: z.string().regex(/^[a-z][a-z0-9-]{1,31}$/),
+            label: z.object({ en: z.string().max(64), es: z.string().max(64) }).strict(),
+            models: z.array(ModelId).max(8),
+            fits: z.boolean(),
+            missing: z.array(ModelId).max(8),
+          })
+          .strict(),
+      )
+      .max(16),
+  })
+  .strict();
+export type WorkloadsBlockV1 = z.infer<typeof WorkloadsBlockV1>;
+
 export const LocalaiStateSnapshotV1 = z
   .object({
     schema_version: z.literal(1),
@@ -334,6 +359,7 @@ export const LocalaiStateSnapshotV1 = z
       .max(50),
     /** Absent from an agent that predates "Install what's missing" (issue #480). */
     ensure: EnsureBlockV1.optional(),
+    workloads: WorkloadsBlockV1.optional(),
   })
   .strict();
 export type LocalaiStateSnapshotV1 = z.infer<typeof LocalaiStateSnapshotV1>;

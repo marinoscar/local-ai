@@ -1,15 +1,21 @@
 {
-  // Standalone (agent.yml: `npm ci && npm run typecheck`) this package has no React or MUI installed, so it type-checks
-  // only the generated agent API types. The components under src/lab are type-checked by the host that installs React and
+  // Standalone (agent.yml: `npm ci && npm run typecheck`) this package has React (a devDependency, for the component
+  // tests) but no MUI, so it type-checks the generated agent API types and the MUI-free parts: the E11 music and
+  // workload components and their tests. The MUI components under src/lab are type-checked by the host that installs
   // MUI and imports them (apps/cloud/apps/web: `npm run typecheck --workspace=web`, with preserveSymlinks).
   "compilerOptions": {
     "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["src/api"]
+  "include": ["src/api", "src/common", "src/music", "src/workloads", "src/lang.tsx", "src/test", "vitest.config.ts"]
 }

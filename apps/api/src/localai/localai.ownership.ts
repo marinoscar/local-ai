@@ -24,6 +24,8 @@ type LocalaiModelName = Extract<
   | 'LocalaiGatewayUsage'
   | 'LocalaiGatewayUsageDaily'
   | 'LocalaiModelPolicy'
+  | 'LocalaiMusicRequest'
+  | 'LocalaiMusicSong'
 >;
 
 export const LOCALAI_MODEL_OWNERSHIP: readonly ModelOwnershipDef<LocalaiModelName>[] = [
@@ -73,6 +75,16 @@ export const LOCALAI_MODEL_OWNERSHIP: readonly ModelOwnershipDef<LocalaiModelNam
     kind: 'system',
     rationale: 'The lab-wide routing policy of one catalog model; updated_by_id only records who changed it.',
   },
+  {
+    model: 'LocalaiMusicRequest',
+    kind: 'system',
+    rationale: 'A music request sent to a lab node; the songs form the lab-wide library and requested_by_id only records who asked.',
+  },
+  {
+    model: 'LocalaiMusicSong',
+    kind: 'system',
+    rationale: 'One song of a music request in the lab-wide library; it follows its request and has no owner column.',
+  },
 ];
 
 export const LOCALAI_USER_OWNED_MODELS: readonly UserOwnedModelDef<LocalaiModelName>[] = [
@@ -96,6 +108,13 @@ export const LOCALAI_USER_OWNED_MODELS: readonly UserOwnedModelDef<LocalaiModelN
     purge: 'detach',
     export: 'exclude',
     rationale: 'A command history row for a node; it records who asked and outlives that user (SetNull).',
+  },
+  {
+    model: 'LocalaiMusicRequest',
+    actorFields: ['requestedById'],
+    purge: 'detach',
+    export: 'exclude',
+    rationale: 'A request in the lab music library; it records who asked and outlives that user (SetNull). The lyrics are never stored in it.',
   },
   ...GATEWAY_USER_OWNED_MODELS,
 ];

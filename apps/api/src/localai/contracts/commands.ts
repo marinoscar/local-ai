@@ -1,4 +1,4 @@
-// The command registry (docs/specs/cloud-app.md section 3.7): a CLOSED set of 15 command types, each with a strict
+// The command registry (docs/specs/cloud-app.md section 3.7): a CLOSED set of 17 command types, each with a strict
 // Zod schema for its params (what the cloud may ask) and its result (what the agent may answer). Unknown keys are
 // rejected on both sides (`.strict()` here, `DisallowUnknownFields` in the Go agent), so the cloud can queue exactly
 // these and nothing else. The Go agent mirrors it in `agent/internal/cloud/jobs`; both load the shared examples in
@@ -13,6 +13,27 @@ const Iso = z.string().datetime({ offset: true });
 const KeyHint = z.string().regex(/^[0-9a-f]{4}…[0-9a-f]{4}$/);
 const RunId = z.string().min(1).max(64);
 const Semver = z.string().regex(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
+/** UTF-8 byte length (the agent's limits are in bytes, not characters). */
+const UTF8 = new TextEncoder();
+export const utf8Bytes = (value: string): number => UTF8.encode(value).length;
+
+// E11 (docs/specs/music.md, the E11 contract section 6). The limits are the agent's `POST /music/generate` limits.
+/** Lyrics: at most 8 KiB of UTF-8. */
+export const MUSIC_LYRICS_MAX_BYTES = 8 * 1024;
+/** Style tags: at most 512 bytes of UTF-8. */
+export const MUSIC_TAGS_MAX_BYTES = 512;
+/** A reference sample: at most 20 MiB (and 60 s, which only the agent can measure). */
+export const MUSIC_SAMPLE_MAX_BYTES = 20 * 1024 * 1024;
+export const MUSIC_DURATION_MIN_S = 10;
+export const MUSIC_DURATION_MAX_S = 240;
+export const MUSIC_VARIATIONS_MAX = 4;
+/** The sample types the agent accepts (wav, mp3, flac, ogg). */
+export const MUSIC_SAMPLE_MIMES = ['audio/wav', 'audio/mpeg', 'audio/flac', 'audio/ogg'] as const;
+export const MusicSampleMode = z.enum(['sounds_like', 'same_song']);
+/** A workload name of a profile or node.yaml (`coding`, `chat`, `speech`, `music`). */
+export const WorkloadName = z.string().regex(/^[a-z][a-z0-9-]{1,31}$/);
+/** A two-letter language code the music engine takes (`en`, `es`). */
+export const MusicLanguage = z.string().regex(/^[a-z]{2}$/);
 
 export const COMMANDS = {
   'localai.status.refresh': {
@@ -190,6 +211,63 @@ export const COMMANDS = {
       })
       .strict(),
   },
+  'localai.workload.activate': {
+    // POST /workloads/{name}/activate with wait: true (agent.md section 3.8.34, llama-router.md section 4.16)
+    params: z
+      .object({
+        name: WorkloadName,
+        force: z.boolean().optional(), // the UI never sends true: survival is a decision made at the node
+      })
+      .strict(),
+    result: z.object({ active: z.string() }).strict(),
+  },
+  'localai.music.generate': {
+    // music.md section 4.7: sample pulled by the node, songs pushed to signed PUT URLs. The stored params carry
+    // placeholder URLs; the real signed ones are minted at claim time (`music/music-claim.ts`), so no signed URL is
+    // ever stored, logged or audited. The command history redacts the lyrics (`command-view.ts`).
+    params: z
+      .object({
+        request_id: z.string().uuid(),
+        lyrics: z.string().max(8192), // bytes checked again on the node (UTF-8, <= 8 KiB) and by the cloud's form
+        tags: z.string().max(512),
+        duration_s: z.number().int().min(10).max(240),
+        language: MusicLanguage,
+        seed: z.number().int().min(0).max(2147483647).optional(),
+        variations: z.number().int().min(1).max(4),
+        sample: z
+          .object({
+            url: z.string().url().startsWith('https://'), // signed GET, short-lived
+            sha256: z.string().regex(/^[0-9a-f]{64}$/),
+            mime: z.enum(MUSIC_SAMPLE_MIMES),
+            size_bytes: z.number().int().min(1).max(20 * 1024 * 1024),
+          })
+          .strict()
+          .optional(),
+        sample_mode: MusicSampleMode.optional(), // only with sample
+        strength: z.number().min(0).max(1).optional(), // only with sample
+        results: z.array(z.object({ put_url: z.string().url().startsWith('https://') }).strict()).min(1).max(4),
+      })
+      .strict()
+      .refine((p) => p.results.length === p.variations, 'results must have one entry per variation')
+      .refine((p) => p.sample !== undefined || (p.sample_mode === undefined && p.strength === undefined), 'sample_mode and strength need a sample'),
+    result: z
+      .object({
+        songs: z
+          .array(
+            z
+              .object({
+                index: z.number().int().min(0).max(3),
+                sha256: z.string().regex(/^[0-9a-f]{64}$/),
+                size_bytes: z.number().int().min(1),
+                mime: z.string(),
+                duration_s: z.number().positive(),
+              })
+              .strict(),
+          )
+          .max(4),
+      })
+      .strict(),
+  },
 } as const;
 
 export type CommandType = keyof typeof COMMANDS;
@@ -200,7 +278,7 @@ export const COMMAND_TYPES = Object.keys(COMMANDS) as CommandType[];
 /** The prefix the cloud prepends to the names an agent sends (`model.load` -> `localai.model.load`). */
 export const COMMAND_TYPE_PREFIX = 'localai.';
 
-/** Whether `value` is one of the 15 command types (with the `localai.` prefix). */
+/** Whether `value` is one of the 17 command types (with the `localai.` prefix). */
 export function isCommandType(value: unknown): value is CommandType {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(COMMANDS, value);
 }

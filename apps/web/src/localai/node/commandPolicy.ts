@@ -7,7 +7,10 @@ import type { NodeDetail } from '../api/types';
 /** Types that need lab:admin (`commands/command-policy.ts` on the API). */
 export const ADMIN_COMMAND_TYPES: ReadonlySet<string> = new Set(['model.delete', 'mode.offline', 'key.rotate', 'agent.update']);
 
-export const requiredPermission = (type: string): 'lab:admin' | 'lab:operate' => (ADMIN_COMMAND_TYPES.has(stripPrefix(type)) ? 'lab:admin' : 'lab:operate');
+/** The E11 types, which need their own permission (`localai_workloads:write`, `localai_music:use`). */
+const FEATURE_PERMISSIONS: Readonly<Record<string, string>> = { 'workload.activate': 'localai_workloads:write', 'music.generate': 'localai_music:use' };
+
+export const requiredPermission = (type: string): string => FEATURE_PERMISSIONS[stripPrefix(type)] ?? (ADMIN_COMMAND_TYPES.has(stripPrefix(type)) ? 'lab:admin' : 'lab:operate');
 
 /** `localai.model.load` -> `model.load`. */
 export const stripPrefix = (type: string): string => type.replace(/^localai\./, '');
