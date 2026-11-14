@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
+// The header mark (ADR-0014), bundled and hashed by Vite into assets/: never fetched from elsewhere.
+import markUrl from "../../../../../packages/ui/brand/mark.svg";
 import { CODE_LOST_CONTACT } from "../api";
 import { t, useLang, type Key } from "../i18n/i18n";
 import { batteryLevel, type PortalStatus, type StatusState } from "../status";
@@ -14,6 +16,19 @@ const BRAND_KEY: Record<string, Key> = {
   online: "home.mode.online",
   offline: "home.mode.offline",
 };
+
+/** The title with its middle dot in gold ("Local AI · Online"); the text itself is unchanged. */
+function BrandText({ text }: { text: string }) {
+  const i = text.indexOf(" · ");
+  if (i < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, i)}
+      <span className="brand-dot">{text.slice(i, i + 3)}</span>
+      {text.slice(i + 3)}
+    </>
+  );
+}
 
 function useClock(): Date {
   const [now, setNow] = useState(() => new Date());
@@ -52,7 +67,7 @@ function Banners({ state }: { state: StatusState }) {
         </Banner>
       ) : null}
       {status && status.mode !== "survival" ? (
-        <Banner kind="info" text={t("banner.survivalOff")}>
+        <Banner kind="info" tone="survival" text={t("banner.survivalOff")}>
           <button
             type="button"
             className="btn btn-primary"
@@ -104,9 +119,12 @@ export function Shell({
       </a>
       <header className="top">
         <div className="top-row">
-          <Brand className="brand">
-            {t((status && BRAND_KEY[status.mode]) || "app.title")}
-          </Brand>
+          <div className="brand-wrap">
+            <img className="brand-mark" src={markUrl} alt="" width="42" height="42" />
+            <Brand className="brand">
+              <BrandText text={t((status && BRAND_KEY[status.mode]) || "app.title")} />
+            </Brand>
+          </div>
           <div className="top-tools">
             <LangToggle />
             <TextScale />

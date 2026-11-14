@@ -83,7 +83,7 @@ export function StatusLine({
         const st = status.capabilities[cap]?.state ?? "unavailable";
         return (
           <span key={cap} className="tick">
-            {t(label)} <span>{CAP_GLYPH[st]}</span>
+            {t(label)} <span className={`tick-mark tick-${st}`}>{CAP_GLYPH[st]}</span>
           </span>
         );
       })}
@@ -92,7 +92,7 @@ export function StatusLine({
       </span>
       <span className="statusline-actions">
         <LeaveSurvivalButton status={status} />
-        <button type="button" className="btn" onClick={() => navigate("help")}>
+        <button type="button" className="btn btn-outline" onClick={() => navigate("help")}>
           {t("manage.help")}
         </button>
       </span>

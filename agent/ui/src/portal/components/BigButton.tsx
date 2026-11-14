@@ -37,7 +37,7 @@ export function BigButton({
         onClick={onActivate}
       >
         <span className="big-top">
-          {icon}
+          <span className="big-icon">{icon}</span>
           <span className="big-num" aria-hidden="true">
             {num}
           </span>
