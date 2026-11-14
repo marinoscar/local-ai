@@ -259,6 +259,8 @@ describe('leaving survival (ADR-0011: no PIN; an older agent may still ask for i
     agent.leaveSurvivalNeedsPin = true;
     const modes = new ModeController({ api: createModeApi(client()), pin: { requestGrant }, currentMode: () => 'survival' });
     const first = modes.setMode('online');
+    // The first change is refused by the older agent, then opens the PIN prompt: wait for it to be open.
+    await until(() => requestGrant.mock.calls.length === 1);
     const second = await modes.setMode('offline');
     expect(second).toMatchObject({ ok: false, cancelled: true });
     release();
