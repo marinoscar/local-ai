@@ -275,7 +275,7 @@ function CatalogRefreshRow({ online, reload }: { online: boolean; reload: () => 
       <div className="card-row">
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn"
           disabled={!online || busy}
           aria-describedby={online ? undefined : "sys-catalog-offline"}
           onClick={() => void refresh()}
@@ -393,7 +393,7 @@ function Privileged({
       <div className="card-row">
         <button
           type="button"
-          className="btn btn-primary"
+          className={name === "update-agent" ? "btn btn-primary" : "btn"}
           disabled={busy || !!disabledReason}
           aria-describedby={disabledReason ? reasonId : undefined}
           onClick={press}
