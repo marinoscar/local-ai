@@ -23,6 +23,7 @@
   "models.tag.default": "Predeterminado",
   "models.tag.survival": "Cerebro de supervivencia",
   "models.tag.speech": "Voz",
+  "models.tag.helper": "Ayudante de búsqueda",
   "models.use": "Usar este cerebro",
   "models.unload": "Detener",
   "models.makeDefault": "Hacer predeterminado",

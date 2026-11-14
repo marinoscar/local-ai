@@ -23,6 +23,7 @@
   "models.tag.default": "Default",
   "models.tag.survival": "Survival brain",
   "models.tag.speech": "Speech",
+  "models.tag.helper": "Search helper",
   "models.use": "Use this brain",
   "models.unload": "Unload",
   "models.makeDefault": "Make default",

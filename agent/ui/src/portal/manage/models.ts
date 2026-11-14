@@ -26,6 +26,8 @@ export interface ModelRow {
   display_name: string;
   summary?: string;
   engine: string;
+  /** The catalog roles (chat, vision, coder, embedding, stt, tts …); absent on an older agent. */
+  roles?: string[];
   survival_tier?: number;
   in_profile: boolean;
   size_bytes: number;
@@ -81,9 +83,17 @@ export const STATE_KEY: Record<RowState, Key> = {
   absent: "models.state.absent",
 };
 
-/** isBrain: a llama model, the only kind that can be used, unloaded or made the default. */
+/**
+ * isHelper: a llama model that does not chat (an embedding model for search). It is listed with the
+ * brains but can only be downloaded or deleted: "Use this brain" would leave Chat with no answer.
+ */
+export function isHelper(m: ModelRow): boolean {
+  return m.engine === "llama" && Array.isArray(m.roles) && !m.roles.includes("chat");
+}
+
+/** isBrain: a llama model that chats, the only kind that can be used, unloaded or made the default. */
 export function isBrain(m: ModelRow): boolean {
-  return m.engine === "llama";
+  return m.engine === "llama" && !isHelper(m);
 }
 
 /** fits is false only when the agent said the model does not fit this computer. */
@@ -184,7 +194,7 @@ export function groups(list: ModelRow[]): {
   const more: ModelRow[] = [];
   const speech: ModelRow[] = [];
   for (const m of list) {
-    if (!isBrain(m)) speech.push(m);
+    if (!isBrain(m) && !isHelper(m)) speech.push(m);
     else if (m.present || m.in_profile || m.loaded) brains.push(m);
     else more.push(m);
   }
