@@ -215,7 +215,7 @@ export function checkName(id: string): CheckName {
   return { family: best[1], suffix: id === best[0] ? "" : id.slice(best[0].length + 1) };
 }
 
-export type DrillOutcome = "running" | "pass" | "warn" | "fail" | "aborted" | "skipped" | "manual_pass" | "manual_fail";
+export type DrillOutcome = "running" | "pass" | "warn" | "fail" | "empty" | "aborted" | "skipped" | "manual_pass" | "manual_fail";
 
 export interface DrillView {
   outcome: DrillOutcome;
@@ -247,6 +247,14 @@ export function drillView(doc: DrillDoc): DrillView {
   else if (doc.trigger === "manual_plug") outcome = doc.overall === "pass" ? "manual_pass" : "manual_fail";
   else if (doc.overall === "pass" || doc.overall === "warn" || doc.overall === "fail") outcome = doc.overall;
   else outcome = "fail";
+  const counts0 = doc.counts ?? { pass: 0, warn: 0, fail: 0, skip: 0 };
+  // A finished drill that checked nothing (an old or development build) says nothing about this computer: never "Passed".
+  if (
+    (outcome === "pass" || outcome === "warn" || outcome === "fail") &&
+    checks.length === 0 &&
+    counts0.pass + counts0.warn + counts0.fail + counts0.skip === 0
+  )
+    outcome = "empty";
   const rank = { fail: 0, warn: 1 } as Record<string, number>;
   const attention = checks
     .filter((c) => c.result === "fail" || c.result === "warn")

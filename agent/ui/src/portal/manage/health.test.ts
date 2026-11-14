@@ -103,6 +103,22 @@ const doc = (extra: Partial<DrillDoc>): DrillDoc => ({
 });
 
 describe("drillView (drill.md section 3.4)", () => {
+  it("a finished drill that checked nothing is 'empty', never 'Passed'", () => {
+    const v = drillView({
+      schema_version: 1,
+      run_id: "drl-x",
+      trigger: "manual",
+      quick: false,
+      started_at: "2026-11-04T05:32:53Z",
+      finished_at: "2026-11-04T05:32:53Z",
+      overall: "pass",
+      survival_ready: false,
+      counts: { pass: 0, warn: 0, fail: 0, skip: 0 },
+      checks: [],
+    } as unknown as Parameters<typeof drillView>[0]);
+    expect(v.outcome).toBe("empty");
+  });
+
   it("a finished run: outcome, counts, and the checks to look at, failures first", () => {
     const v = drillView(
       doc({

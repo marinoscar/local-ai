@@ -56,7 +56,7 @@ function Problem({ r }: { r: DoctorResult }) {
   return (
     <li className={`problem problem-${r.severity}`}>
       <span className="mark" aria-hidden="true">
-        {SEV_MARK[r.severity] ?? "!"}
+        {`${SEV_MARK[r.severity] ?? "!"} `}
       </span>
       <span className="sr-only">{t(`health.sev.${r.severity}` as Key)}</span>
       <span className="code">{r.code}</span>
