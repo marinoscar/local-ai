@@ -41,9 +41,11 @@ describe('shell navigation', () => {
   });
 
   // The bottom bar draws four actions at most; with more destinations the platform's shell keeps the first three and
-  // puts the rest behind "More" (ShellBottomNav `maxItems`). Five is the most this app declares: the fifth (API keys,
-  // docs/specs/gateway.md section 3.8) is the first gateway destination.
-  it('are at most five, so the bottom bar overflows into "More" by one', () => {
-    expect(NAVIGATION.destinations.length).toBeLessThanOrEqual(5);
+  // puts the rest behind "More" (ShellBottomNav `maxItems`). Six is the most this app declares: API keys
+  // (docs/specs/gateway.md section 3.8) and Music (E11, cloud-app.md section 3.11). Music is third, so a phone keeps
+  // Home, Lab and Music on the bar.
+  it('are at most six, and Music is among the three a phone keeps on the bottom bar', () => {
+    expect(NAVIGATION.destinations.length).toBeLessThanOrEqual(6);
+    expect(NAVIGATION.destinations.slice(0, 3).map((destination) => destination.key)).toEqual(['home', 'lab', 'music']);
   });
 });
