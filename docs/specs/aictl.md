@@ -106,14 +106,18 @@ Implemented in `agent/internal/cli/out` (printing), `agent/internal/cli/i18n` (t
 
 **Symbols and colours** (colour only on a TTY; the symbol is always printed so meaning never depends on colour):
 
-| Meaning | Symbol | Colour (ANSI) |
+| Meaning | Symbol | Colour: Corona ([ADR-0014](../decisions/0014-corona-identity.md)) · basic ANSI |
 |---|---|---|
-| ok / done | `✓` | green (32) |
-| info | `i` | blue (34) |
-| warning | `!` | yellow (33) |
-| error, critical | `✗` | red (31); critical also bold |
-| in progress | `…` (spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` on a TTY) | cyan (36) |
-| secondary text (ids, paths, times) | — | dim (2) |
+| ok / done | `✓` | green `#4ADE80` · 32 |
+| info | `i` | blue `#7DB6FF` · 34 |
+| warning | `!` | amber `#F5A524` · 33 |
+| error, critical | `✗` | red `#F87171` · 31; critical also bold |
+| in progress | `…` (spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` on a TTY) | gold `#F2B544` · cyan 36 |
+| secondary text (ids, paths, times) | — | dim `#958FA3` · dim 2 |
+| the menu's product name and screen titles | — | gold `#F2B544`, bold · bold yellow (1;33) |
+| the menu's selected entry | `▶` | dark text on gold · reverse video (7) |
+
+**Colour depth** (`internal/cli/theme`): with `COLORTERM` `truecolor` or `24bit` the Corona colours of [`tokens.json`](../../packages/ui/brand/tokens.json) are used as 24-bit colour; with a `TERM` containing `256color` the nearest of the 256 xterm colours; otherwise the 8 basic ANSI colours of the right-hand column, exactly as before Corona. Colour only adds to the symbols and the text, it never replaces them.
 
 When the terminal cannot print UTF-8 (the first of `LC_ALL`, `LC_CTYPE`, `LANG` that is set does not name UTF-8, or none is set), the symbols become `[ok]`, `[i]`, `[!]`, `[x]`, `...`, and the arrow of the fix line becomes `->`. Colour is on only when stdout is a terminal and none of `--no-color`, `NO_COLOR` (set and not empty), `TERM=dumb` and `--json` applies; the symbols are printed either way.
 
@@ -197,7 +201,7 @@ Rules: a `LAI-SEC-004` answer (PIN locked after too many wrong tries, `429`) is 
 | 9 | More › | `drill --quick --wait`, `drill --wait`, `drill show`, `cloud status`, `profile show`, `profile suggest`, `version`, `help` |
 | 0 | Help in an emergency | a text screen: survival mode without a PIN, the Survival Portal address, the doctor, the printed runbook 01 |
 
-**Screen.** Every main screen starts with the state block (ADR-0009 rule 3), read from `status --json`: node name, mode and loaded model on the first line, then either "Everything is working" or the number of problems with the first one's title, code and fix. When the agent does not answer, it says so and points to entry 2. Then the title, the entries numbered 1 to 9 and 0, and one line of keys. Everything fits 80×24 in English and Spanish (pinned by `TestMenuFitsEightyByTwentyFour`). The selected entry has a `▶` marker, and is drawn in reverse video when colour is on.
+**Screen.** Every main screen starts with the state block (ADR-0009 rule 3), read from `status --json`: node name, mode and loaded model on the first line, then either "Everything is working" or the number of problems with the first one's title, code and fix. When the agent does not answer, it says so and points to entry 2. Then the title, the entries numbered 1 to 9 and 0, and one line of keys. Everything fits 80×24 in English and Spanish (pinned by `TestMenuFitsEightyByTwentyFour`). The selected entry has a `▶` marker, and when colour is on it is drawn dark on Corona gold (reverse video on a basic terminal); the product name of the state line and the screen title are gold, the state line's `✓`/`✗` green or red (§3.3).
 
 **Keys.** ↑/↓ or k/j move (wrapping), Home/End, Enter, → or Space choose, a digit chooses that entry directly, Esc, ← or Backspace go back one level, q, Ctrl-C or Ctrl-D quit (exit 0). The cursor stays where it was when the person comes back.
 

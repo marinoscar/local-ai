@@ -16,6 +16,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/marinoscar/local-ai/agent/internal/cli/theme"
 	"io"
 	"strings"
 
@@ -104,8 +105,10 @@ type menu struct {
 	host menuHost
 	lang Lang
 	sym  out.Symbols
-	// color says whether the selected line may be drawn in reverse video.
+	// color says whether the screen may be coloured: the Corona mark and name, the status symbols,
+	// and the selected line (dark on gold, or reverse video on a basic terminal); depth is how.
 	color bool
+	depth theme.Depth
 	root  []menuItem
 }
 
@@ -328,15 +331,36 @@ func (m *menu) header() []string {
 	return lines
 }
 
+// styleHeader colours a header line already cut to width (ADR-0014): the product name in Corona gold
+// on the first line, and the leading ✓ or ✗ of the state line in green or red. Without colour the
+// line is unchanged, so the text alone still says everything.
+func (m *menu) styleHeader(i int, line string) string {
+	if !m.color {
+		return line
+	}
+	if i == 0 && strings.HasPrefix(line, "Local AI") {
+		return theme.Paint(true, m.depth, theme.Accent, "Local AI") + line[len("Local AI"):]
+	}
+	for _, p := range []struct {
+		sym  string
+		role theme.Role
+	}{{m.sym.OK, theme.OK}, {m.sym.Error, theme.Error}} {
+		if p.sym != "" && strings.HasPrefix(line, p.sym) {
+			return theme.Paint(true, m.depth, p.role, p.sym) + line[len(p.sym):]
+		}
+	}
+	return line
+}
+
 // draw renders one screen. It fits 80x24 with the longest menu (ten items).
 func (m *menu) draw(w io.Writer, header []string, f *menuFrame, nested bool) {
-	for _, h := range header {
-		fmt.Fprintln(w, " "+truncate(h, 78))
+	for i, h := range header {
+		fmt.Fprintln(w, " "+m.styleHeader(i, truncate(h, 78)))
 	}
 	if len(header) > 0 {
-		fmt.Fprintln(w, " "+strings.Repeat("─", 60))
+		fmt.Fprintln(w, " "+theme.Paint(m.color, m.depth, theme.Dim, strings.Repeat("─", 60)))
 	}
-	fmt.Fprintf(w, " %s\n\n", f.title)
+	fmt.Fprintf(w, " %s\n\n", theme.Paint(m.color, m.depth, theme.Accent, f.title))
 	for i, it := range f.items {
 		num := " "
 		switch {
@@ -346,8 +370,8 @@ func (m *menu) draw(w io.Writer, header []string, f *menuFrame, nested bool) {
 			num = "0"
 		}
 		line := fmt.Sprintf("%s %s  %s", marker(i == f.cursor), num, it.label(m.lang))
-		if i == f.cursor && m.color {
-			line = "\x1b[7m" + line + "\x1b[0m"
+		if i == f.cursor {
+			line = theme.Paint(m.color, m.depth, theme.Selected, line)
 		}
 		fmt.Fprintln(w, "  "+line)
 	}

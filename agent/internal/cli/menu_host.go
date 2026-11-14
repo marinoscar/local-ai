@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"github.com/marinoscar/local-ai/agent/internal/cli/theme"
 	"io"
 	"os"
 	"os/signal"
@@ -113,6 +114,7 @@ func runMenu(env Env, reg *Registry, g Global) int {
 		lang:  g.Lang,
 		sym:   out.SymbolsFor(out.UTF8Enabled(env.Getenv)),
 		color: !g.NoColor,
+		depth: theme.DetectDepth(env.Getenv),
 		root:  menuTree(),
 	}
 	return m.run()

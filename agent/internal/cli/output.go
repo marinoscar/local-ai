@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"github.com/marinoscar/local-ai/agent/internal/cli/theme"
 	"syscall"
 
 	"github.com/marinoscar/local-ai/agent/internal/cli/out"
@@ -44,7 +45,7 @@ type reporter struct {
 func newPrinter(env Env, g Global) *out.Printer {
 	return out.New(out.Options{
 		Stdout: env.Stdout, Stderr: env.Stderr, Lang: g.Lang,
-		Color: !g.NoColor, UTF8: out.UTF8Enabled(env.Getenv),
+		Color: !g.NoColor, UTF8: out.UTF8Enabled(env.Getenv), Depth: theme.DetectDepth(env.Getenv),
 		Quiet: g.Quiet, Verbose: g.Verbose, JSON: g.JSON,
 	})
 }

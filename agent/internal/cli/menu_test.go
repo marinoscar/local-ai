@@ -6,11 +6,13 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/marinoscar/local-ai/agent/internal/cli/out"
+	"github.com/marinoscar/local-ai/agent/internal/cli/theme"
 )
 
 // fakeHost scripts the keyboard and records what the menu ran.
@@ -397,5 +399,40 @@ func TestMenuWorkloadPicker(t *testing.T) {
 	frames := strings.Join(h.frames, "\n")
 	if !strings.Contains(frames, "Coding (now)") || strings.Contains(frames, "Huge") {
 		t.Errorf("the picker shows the wrong choices:\n%s", frames)
+	}
+}
+
+// ADR-0014: the menu in Corona. With colour, the product name and title are gold, the selected entry
+// is dark on gold (reverse video on a basic terminal) and the state symbol is green; without colour
+// not one escape is printed and the text is the same.
+func TestMenuCoronaColours(t *testing.T) {
+	header := []string{"Local AI · ai-n3 · mode online · model qwen", "✓ Everything is working."}
+	frame := &menuFrame{title: "What do you want to do?", items: menuTree()}
+	draw := func(color bool, d theme.Depth) string {
+		m := &menu{lang: LangEN, sym: out.UTF8Symbols, color: color, depth: d}
+		var b bytes.Buffer
+		m.draw(&b, header, frame, false)
+		return b.String()
+	}
+	plain := draw(false, theme.TrueColor)
+	if strings.Contains(plain, "\x1b[") {
+		t.Fatalf("no colour, yet an escape: %q", plain)
+	}
+	full := draw(true, theme.TrueColor)
+	for _, want := range []string{
+		"\x1b[" + theme.SGR(theme.Accent, theme.TrueColor) + "mLocal AI\x1b[0m",
+		"\x1b[" + theme.SGR(theme.OK, theme.TrueColor) + "m✓\x1b[0m",
+		"\x1b[" + theme.SGR(theme.Selected, theme.TrueColor) + "m▶ 1",
+	} {
+		if !strings.Contains(full, want) {
+			t.Errorf("truecolor screen lacks %q", want)
+		}
+	}
+	if basic := draw(true, theme.Basic); !strings.Contains(basic, "\x1b[7m▶ 1") {
+		t.Errorf("a basic terminal keeps reverse video for the selected entry: %q", basic)
+	}
+	strip := regexp.MustCompile("\x1b\\[[0-9;]*m")
+	if strip.ReplaceAllString(full, "") != plain {
+		t.Error("colour changed the text itself")
 	}
 }
