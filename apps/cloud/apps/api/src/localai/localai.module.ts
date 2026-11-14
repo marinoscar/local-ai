@@ -15,6 +15,7 @@ import { GatewayModelsModule } from './gateway/models/models.module';
 import { GatewayPoliciesModule } from './gateway/policies/policies.module';
 import { GatewayRoutingModule } from './gateway/routing/routing.module';
 import { GatewayUsageModule } from './gateway/usage/usage.module';
+import { MusicModule } from './music/music.module';
 import { LocalaiSettingsModule } from './settings.module';
 import { LabNodesModule } from './nodes/lab-nodes.module';
 import { LocalaiNodesModule } from './nodes/nodes.module';
@@ -43,6 +44,7 @@ import { WizardModule } from './wizard/wizard.module';
     LocalaiSettingsModule,
     KeysModule,
     GatewayPoliciesModule,
+    MusicModule,
   ],
 })
 export class LocalaiModule {}
