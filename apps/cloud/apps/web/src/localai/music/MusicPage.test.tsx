@@ -26,6 +26,27 @@ let songs: LibrarySong[] = [];
 let active: MusicRequest[] = [];
 let requestReads: MusicRequest[] = [];
 let posted: FormData | null = null;
+
+/**
+ * The posted multipart body as a FormData. `request.formData()` is not used: on Node 24 undici's multipart parser
+ * asserts on the body jsdom serialises for a jsdom File, so the parts are split by hand. Text parts keep their value;
+ * a file part is recorded under its name with its file name (the bytes are proven by the API's route and db tests).
+ */
+async function readMultipart(request: Request): Promise<FormData> {
+  const boundary = /boundary=(?:"([^"]+)"|([^;]+))/.exec(request.headers.get('content-type') ?? '');
+  const marker = `--${boundary?.[1] ?? boundary?.[2] ?? ''}`;
+  const out = new FormData();
+  for (const part of (await request.text()).split(marker).slice(1, -1)) {
+    const split = part.indexOf('\r\n\r\n');
+    const head = part.slice(0, split);
+    const body = part.slice(split + 4, part.length - 2);
+    const name = /name="([^"]*)"/.exec(head)?.[1];
+    if (name === undefined) continue;
+    const filename = /filename="([^"]*)"/.exec(head)?.[1];
+    out.append(name, filename ?? body);
+  }
+  return out;
+}
 let postAnswer: () => Response = () => HttpResponse.json({ data: musicRequest() }, { status: 201 });
 let deleted: Array<{ id: string; body: unknown }> = [];
 let commandReads: unknown[] = [];
@@ -35,7 +56,7 @@ const server = setupServer(
   http.get('/api/localai/music/songs', () => HttpResponse.json({ data: page(songs) })),
   http.get('/api/localai/music/requests', () => HttpResponse.json({ data: page(active) })),
   http.post('/api/localai/music/requests', async ({ request }) => {
-    posted = await request.formData();
+    posted = await readMultipart(request);
     return postAnswer();
   }),
   http.get('/api/localai/music/requests/:id', () => HttpResponse.json({ data: requestReads.length > 1 ? requestReads.shift() : requestReads[0] })),
@@ -160,8 +181,8 @@ describe('the form', () => {
       variations: '1',
       sample_mode: 'same_song',
     });
-    // The file travels as the `sample` part. jsdom's File is not Node's Blob, so its bytes and name do not survive the
-    // test transport; the API's handling of the bytes is proven in its own route and db tests.
+    // The file travels as the `sample` part (readMultipart records only that it is there; the API's handling of the
+    // bytes is proven in its own route and db tests).
     expect(form.has('sample')).toBe(true);
     expect(await screen.findByTestId('request-stage')).toHaveTextContent('Waiting for Studio laptop');
   });
