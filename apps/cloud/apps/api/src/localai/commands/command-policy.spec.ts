@@ -25,8 +25,8 @@ describe('the command policy table (spec 3.7)', () => {
     'localai.catalog.refresh': ['lab:operate', 60, 600, 60],
     'localai.agent.update': ['lab:admin', 300, 900, 24 * 60],
     'localai.ensure.run': ['lab:operate', 30, 300, 60],
-    'localai.workload.activate': ['localai_workloads:write', 60, 600, 15],
-    'localai.music.generate': ['localai_music:use', 60, 1800, 15],
+    'localai.workload.activate': ['localai_workloads:write', 60, 900, 15],
+    'localai.music.generate': ['localai_music:use', 60, 3600, 60],
   };
 
   it.each(Object.entries(TABLE))('%s: permission, lease, hard cap and queued TTL match the spec table', (type, [permission, lease, cap, ttl]) => {
@@ -45,11 +45,11 @@ describe('the command policy table (spec 3.7)', () => {
     expect(admin).toEqual(['localai.agent.update', 'localai.key.rotate', 'localai.mode.offline', 'localai.model.delete']);
   });
 
-  it('hard cap is the lease times ten, except model.load (600 s), agent.update (900 s) and music.generate (1800 s)', () => {
+  it('hard cap is the lease times ten, except model.load (600 s), agent.update and workload.activate (900 s) and music.generate (3600 s)', () => {
     for (const type of COMMAND_TYPES) {
       const { leaseMs, hardCapMs } = COMMAND_POLICY[type];
-      if (type === 'localai.agent.update') expect(hardCapMs).toBe(900_000);
-      else if (type === 'localai.music.generate') expect(hardCapMs).toBe(1_800_000);
+      if (type === 'localai.agent.update' || type === 'localai.workload.activate') expect(hardCapMs).toBe(900_000);
+      else if (type === 'localai.music.generate') expect(hardCapMs).toBe(3_600_000);
       else if (type === 'localai.model.load') expect(hardCapMs).toBe(600_000);
       else expect(hardCapMs).toBe(leaseMs * 10);
       expect(hardCapMs).toBeGreaterThan(leaseMs);

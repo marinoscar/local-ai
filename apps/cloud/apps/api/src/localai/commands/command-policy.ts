@@ -72,12 +72,12 @@ export const COMMAND_POLICY = {
   'localai.ensure.run': { permission: OPERATE, leaseMs: 30 * SECOND, renewIntervalMs: 10 * SECOND, hardCapMs: 300 * SECOND, queuedTtlMs: 1 * HOUR, maxAttempts: 1, dedupSubject: null, confirmation: 'none' },
   // A 5-minute lease and a 15-minute cap: the agent restarts itself mid-command and the new process renews (spec 5).
   'localai.agent.update': { permission: ADMIN, leaseMs: 300 * SECOND, renewIntervalMs: 60 * SECOND, hardCapMs: 900 * SECOND, queuedTtlMs: 24 * HOUR, maxAttempts: 1, dedupSubject: null, confirmation: 'show_version_change' },
-  // E11. A workload switch unloads and loads a set of models with `wait: true`: the model.load numbers. One active
-  // switch per node.
-  'localai.workload.activate': { permission: WORKLOADS, leaseMs: 60 * SECOND, renewIntervalMs: 20 * SECOND, hardCapMs: 600 * SECOND, queuedTtlMs: 15 * MINUTE, maxAttempts: 1, dedupSubject: null, confirmation: 'none' },
-  // E11. Download the sample, generate up to four songs of up to 240 s, upload each: a 30-minute cap. The signed URLs
-  // in the params live for the queued TTL plus the hard cap (`music/music-limits.ts`). One command per request.
-  'localai.music.generate': { permission: MUSIC, leaseMs: 60 * SECOND, renewIntervalMs: 20 * SECOND, hardCapMs: 1800 * SECOND, queuedTtlMs: 15 * MINUTE, maxAttempts: 1, dedupSubject: subjectOf<'localai.music.generate'>((p) => p.request_id), confirmation: 'none' },
+  // E11. A workload switch unloads and loads a set of models (several engines) with `wait: true`: a 900 s cap. One
+  // active switch per node.
+  'localai.workload.activate': { permission: WORKLOADS, leaseMs: 60 * SECOND, renewIntervalMs: 20 * SECOND, hardCapMs: 900 * SECOND, queuedTtlMs: 15 * MINUTE, maxAttempts: 1, dedupSubject: null, confirmation: 'none' },
+  // E11. Download the sample, generate up to four songs of up to 240 s, upload each: a one-hour cap. The signed URLs
+  // are minted at claim time and live for the hard cap (`music/music-claim.ts`). One command per request.
+  'localai.music.generate': { permission: MUSIC, leaseMs: 60 * SECOND, renewIntervalMs: 20 * SECOND, hardCapMs: 3600 * SECOND, queuedTtlMs: 1 * HOUR, maxAttempts: 1, dedupSubject: subjectOf<'localai.music.generate'>((p) => p.request_id), confirmation: 'none' },
 } as const satisfies Record<CommandType, CommandPolicy>;
 
 /** The policy of one command type. */

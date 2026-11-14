@@ -113,7 +113,8 @@ describe('the E11 commands: workload.activate and music.generate (E11 contract s
     const { params, result } = COMMANDS['localai.workload.activate'];
     expect(params.parse({ name: 'coding' })).toEqual({ name: 'coding' });
     expect(params.safeParse({ name: 'music', force: true }).success).toBe(true);
-    for (const bad of ['', 'Music', '../music', 'a'.repeat(33), 'music now']) expect(params.safeParse({ name: bad }).success).toBe(false);
+    for (const bad of ['', 'a', 'Music', '../music', 'music_x', 'a'.repeat(33), 'music now']) expect(params.safeParse({ name: bad }).success).toBe(false);
+    expect(params.safeParse({ name: 'chat-photos' }).success).toBe(true);
     expect(params.safeParse({ name: 'music', wait: true }).success).toBe(false);
     expect(result.safeParse({ active: 'music' }).success).toBe(true);
     expect(result.safeParse({ active: null }).success).toBe(false);
@@ -132,19 +133,20 @@ describe('the E11 commands: workload.activate and music.generate (E11 contract s
     expect(music.params.safeParse({ ...example, variations: 0, results: [] }).success).toBe(false);
   });
 
-  it('music.generate: lyrics up to 8 KiB and tags up to 512 bytes, counted in UTF-8 bytes', () => {
+  it('music.generate: lyrics up to 8192 characters and tags up to 512 (the bytes are checked by the form and the node)', () => {
     expect(music.params.safeParse({ ...example, lyrics: 'a'.repeat(8192) }).success).toBe(true);
     expect(music.params.safeParse({ ...example, lyrics: 'a'.repeat(8193) }).success).toBe(false);
-    expect(music.params.safeParse({ ...example, lyrics: 'ñ'.repeat(4097) }).success).toBe(false); // 8194 bytes
     expect(music.params.safeParse({ ...example, tags: 't'.repeat(512) }).success).toBe(true);
     expect(music.params.safeParse({ ...example, tags: 't'.repeat(513) }).success).toBe(false);
   });
 
-  it('music.generate: duration 10 to 240 s, a language tag, a 32-bit seed', () => {
+  it('music.generate: duration 10 to 240 s, a two-letter language, a non-negative 31-bit seed', () => {
     for (const ok of [10, 240]) expect(music.params.safeParse({ ...example, duration_s: ok }).success).toBe(true);
     for (const bad of [9, 241, 60.5]) expect(music.params.safeParse({ ...example, duration_s: bad }).success).toBe(false);
     expect(music.params.safeParse({ ...example, language: 'english' }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, language: 'pt-BR' }).success).toBe(false);
     expect(music.params.safeParse({ ...example, seed: -1 }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, seed: 2147483648 }).success).toBe(false);
     expect(music.params.safeParse(without('seed')).success).toBe(true);
   });
 
@@ -165,11 +167,12 @@ describe('the E11 commands: workload.activate and music.generate (E11 contract s
     expect(music.params.safeParse({ ...example, sample_mode: 'remix' }).success).toBe(false);
   });
 
-  it('music.generate result: 1 to 4 songs, each with its index, sha256, size, an audio mime and a duration', () => {
+  it('music.generate result: at most 4 songs, each with its index 0-3, sha256, size, mime and a positive duration', () => {
     const songs = (examples['localai.music.generate'].result as { songs: Array<Record<string, unknown>> }).songs;
-    expect(music.result.safeParse({ songs: [] }).success).toBe(false);
+    expect(music.result.safeParse({ songs: [] }).success).toBe(true);
     expect(music.result.safeParse({ songs: [{ ...songs[0], index: 4 }] }).success).toBe(false);
-    expect(music.result.safeParse({ songs: [{ ...songs[0], mime: 'text/html' }] }).success).toBe(false);
+    expect(music.result.safeParse({ songs: [{ ...songs[0], duration_s: 0 }] }).success).toBe(false);
+    expect(music.result.safeParse({ songs: [{ ...songs[0], sha256: 'abc' }] }).success).toBe(false);
     expect(music.result.safeParse({ songs: [{ ...songs[0], path: '/var/lib/localai/music/songs/x/audio.wav' }] }).success).toBe(false);
   });
 });

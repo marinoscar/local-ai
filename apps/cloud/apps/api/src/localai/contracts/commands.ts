@@ -13,13 +13,6 @@ const Iso = z.string().datetime({ offset: true });
 const KeyHint = z.string().regex(/^[0-9a-f]{4}…[0-9a-f]{4}$/);
 const RunId = z.string().min(1).max(64);
 const Semver = z.string().regex(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
-const Sha256 = z.string().regex(/^[0-9a-f]{64}$/);
-/** A signed object-storage URL the cloud minted for one request: https only, never a remote party's string. */
-const SignedUrl = z
-  .string()
-  .max(4096)
-  .url()
-  .refine((value) => value.startsWith('https://'), { message: 'must be an https URL' });
 /** UTF-8 byte length (the agent's limits are in bytes, not characters). */
 const UTF8 = new TextEncoder();
 export const utf8Bytes = (value: string): number => UTF8.encode(value).length;
@@ -38,9 +31,9 @@ export const MUSIC_VARIATIONS_MAX = 4;
 export const MUSIC_SAMPLE_MIMES = ['audio/wav', 'audio/mpeg', 'audio/flac', 'audio/ogg'] as const;
 export const MusicSampleMode = z.enum(['sounds_like', 'same_song']);
 /** A workload name of a profile or node.yaml (`coding`, `chat`, `speech`, `music`). */
-export const WorkloadName = z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/);
-/** A language tag the music engine takes (`en`, `es`, `pt-BR`). */
-export const MusicLanguage = z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/);
+export const WorkloadName = z.string().regex(/^[a-z][a-z0-9-]{1,31}$/);
+/** A two-letter language code the music engine takes (`en`, `es`). */
+export const MusicLanguage = z.string().regex(/^[a-z]{2}$/);
 
 export const COMMANDS = {
   'localai.status.refresh': {
@@ -219,58 +212,59 @@ export const COMMANDS = {
       .strict(),
   },
   'localai.workload.activate': {
-    // agent API: POST /workloads/{name}/activate with {wait: true, force}; switches the node's loaded model set
-    params: z.object({ name: WorkloadName, force: z.boolean().optional() }).strict(),
-    result: z.object({ active: WorkloadName }).strict(),
+    // POST /workloads/{name}/activate with wait: true (agent.md section 3.8.34, llama-router.md section 4.16)
+    params: z
+      .object({
+        name: WorkloadName,
+        force: z.boolean().optional(), // the UI never sends true: survival is a decision made at the node
+      })
+      .strict(),
+    result: z.object({ active: z.string() }).strict(),
   },
   'localai.music.generate': {
-    // agent: download the sample through netx and check its sha256 (LAI-SVC-156), POST /music/generate locally,
-    // PUT each song to its signed URL (LAI-SVC-157), keep the local copy with origin "cloud". Lyrics and URLs never
-    // reach a log line, a span or the command history (`command-view.ts` redacts them).
+    // music.md section 4.7: sample pulled by the node, songs pushed to signed PUT URLs. The stored params carry
+    // placeholder URLs; the real signed ones are minted at claim time (`music/music-claim.ts`), so no signed URL is
+    // ever stored, logged or audited. The command history redacts the lyrics (`command-view.ts`).
     params: z
       .object({
         request_id: z.string().uuid(),
-        lyrics: z.string().refine((value) => utf8Bytes(value) <= MUSIC_LYRICS_MAX_BYTES, { message: 'lyrics are longer than 8 KiB' }),
-        tags: z.string().refine((value) => utf8Bytes(value) <= MUSIC_TAGS_MAX_BYTES, { message: 'tags are longer than 512 bytes' }),
-        duration_s: z.number().int().min(MUSIC_DURATION_MIN_S).max(MUSIC_DURATION_MAX_S),
+        lyrics: z.string().max(8192), // bytes checked again on the node (UTF-8, <= 8 KiB) and by the cloud's form
+        tags: z.string().max(512),
+        duration_s: z.number().int().min(10).max(240),
         language: MusicLanguage,
-        seed: z.number().int().min(0).max(4_294_967_295).optional(),
-        variations: z.number().int().min(1).max(MUSIC_VARIATIONS_MAX),
+        seed: z.number().int().min(0).max(2147483647).optional(),
+        variations: z.number().int().min(1).max(4),
         sample: z
           .object({
-            url: SignedUrl,
-            sha256: Sha256,
+            url: z.string().url().startsWith('https://'), // signed GET, short-lived
+            sha256: z.string().regex(/^[0-9a-f]{64}$/),
             mime: z.enum(MUSIC_SAMPLE_MIMES),
-            size_bytes: z.number().int().min(1).max(MUSIC_SAMPLE_MAX_BYTES),
+            size_bytes: z.number().int().min(1).max(20 * 1024 * 1024),
           })
           .strict()
           .optional(),
-        sample_mode: MusicSampleMode.optional(),
-        strength: z.number().min(0).max(1).optional(),
-        results: z.array(z.object({ put_url: SignedUrl }).strict()).min(1).max(MUSIC_VARIATIONS_MAX),
+        sample_mode: MusicSampleMode.optional(), // only with sample
+        strength: z.number().min(0).max(1).optional(), // only with sample
+        results: z.array(z.object({ put_url: z.string().url().startsWith('https://') }).strict()).min(1).max(4),
       })
       .strict()
-      .refine((p) => p.results.length === p.variations, { message: 'results must have one entry per variation', path: ['results'] })
-      .refine((p) => p.sample !== undefined || (p.sample_mode === undefined && p.strength === undefined), {
-        message: 'sample_mode and strength need a sample',
-        path: ['sample_mode'],
-      }),
+      .refine((p) => p.results.length === p.variations, 'results must have one entry per variation')
+      .refine((p) => p.sample !== undefined || (p.sample_mode === undefined && p.strength === undefined), 'sample_mode and strength need a sample'),
     result: z
       .object({
         songs: z
           .array(
             z
               .object({
-                index: z.number().int().min(0).max(MUSIC_VARIATIONS_MAX - 1),
-                sha256: Sha256,
+                index: z.number().int().min(0).max(3),
+                sha256: z.string().regex(/^[0-9a-f]{64}$/),
                 size_bytes: z.number().int().min(1),
-                mime: z.string().regex(/^audio\/[a-z0-9.+-]{1,32}$/),
-                duration_s: z.number().min(0).max(3600),
+                mime: z.string(),
+                duration_s: z.number().positive(),
               })
               .strict(),
           )
-          .min(1)
-          .max(MUSIC_VARIATIONS_MAX),
+          .max(4),
       })
       .strict(),
   },

@@ -10,7 +10,7 @@
 //   * The wake-up subscription is made BEFORE the first attempt, so a command enqueued between the attempt and the
 //     wait is not missed. Every exit (answer, timeout, abort, error) removes the subscription and the timer.
 //   * Shutdown: every held poll is ended when the module is destroyed, before the HTTP server waits for requests.
-import { BeforeApplicationShutdown, Inject, Injectable, Logger } from '@nestjs/common';
+import { BeforeApplicationShutdown, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { LocalaiCommand } from '@prisma/client';
 import { EVENT_BUS, type EventBus } from '@marinoscar/platform-api/host';
 
@@ -20,6 +20,7 @@ import type { ClaimedJob, ClaimRequest, ClaimResponse } from '../contracts/comma
 import { COMMAND_ENQUEUED_CHANNEL, LOCALAI_CLOCK, type CommandEnqueuedEvent, type LocalaiClock } from './command-events';
 import { COMMAND_POLICY } from './command-policy';
 import { CommandClaimRepository } from './claim.sql';
+import { ClaimParamsHooks } from './claim-params.hooks';
 
 /** The upper bound of `waitMs`: what the handshake advertises as `claimWaitMaxMs`. */
 export const CLAIM_WAIT_MAX_MS = LOCALAI_NODE_LINK_TIMING.claimWaitMaxMs;
@@ -37,6 +38,7 @@ export class ClaimService implements BeforeApplicationShutdown {
     private readonly repository: CommandClaimRepository,
     @Inject(EVENT_BUS) private readonly bus: EventBus,
     @Inject(LOCALAI_CLOCK) private readonly clock: LocalaiClock,
+    @Optional() private readonly paramsHooks?: ClaimParamsHooks,
   ) {}
 
   /** The full types a request asks for: the known ones with the prefix prepended; unknown names are dropped with a warning. */
@@ -113,7 +115,10 @@ export class ClaimService implements BeforeApplicationShutdown {
       now: this.clock.now(),
       leaseMsOf: (type) => (isCommandType(type) ? COMMAND_POLICY[type].leaseMs : COMMAND_POLICY['localai.status.refresh'].leaseMs),
     });
-    return row ? toClaimedJob(row) : null;
+    if (!row) return null;
+    const job = toClaimedJob(row);
+    // A type may finish its params now (music.generate mints its signed URLs at the claim; claim-params.hooks.ts).
+    return this.paramsHooks ? { ...job, params: await this.paramsHooks.apply(row.type, job.params, row.id) } : job;
   }
 }
 
