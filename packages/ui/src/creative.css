@@ -1,0 +1,250 @@
+/* A neutral base for the E11 components (MusicStudio, SongLibrary, WorkloadSwitcher, ErrorNotice).
+   Optional: a host may import it (`@localai/ui/creative.css`) and override the custom properties, or style the
+   `lai-*` classes itself. No fonts, no images, no URLs: it works offline and under the Portal CSP. */
+.lai-studio,
+.lai-library,
+.lai-workloads {
+  --lai-gap: 0.75rem;
+  --lai-border: #6b7280;
+  --lai-fg: inherit;
+  --lai-muted: #4b5563;
+  --lai-primary: #1d4ed8;
+  --lai-primary-fg: #ffffff;
+  --lai-danger: #b91c1c;
+  --lai-danger-bg: #fef2f2;
+  --lai-info-bg: #eff6ff;
+  --lai-radius: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lai-gap);
+  max-width: 60rem;
+  min-width: 0;
+}
+
+.lai-studio-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lai-gap);
+}
+
+.lai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.lai-field > label,
+.lai-sample-mode legend {
+  font-weight: 700;
+}
+
+.lai-field textarea,
+.lai-field input[type='text'],
+.lai-field input[type='number'],
+.lai-field select {
+  font: inherit;
+  padding: 0.5rem;
+  border: 1px solid var(--lai-border);
+  border-radius: var(--lai-radius);
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.lai-field textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.lai-field [aria-invalid='true'] {
+  border: 2px solid var(--lai-danger);
+}
+
+.lai-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lai-gap);
+}
+
+.lai-hint {
+  color: var(--lai-muted);
+  margin: 0;
+}
+
+.lai-field-error {
+  color: var(--lai-danger);
+  font-weight: 700;
+  margin: 0;
+}
+
+.lai-tag-buttons,
+.lai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.lai-btn {
+  font: inherit;
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: 2px solid var(--lai-border);
+  border-radius: var(--lai-radius);
+  background: transparent;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.lai-btn-small {
+  padding: 0.25rem 0.6rem;
+}
+
+.lai-btn-primary {
+  background: var(--lai-primary);
+  border-color: var(--lai-primary);
+  color: var(--lai-primary-fg);
+}
+
+.lai-btn-danger {
+  border-color: var(--lai-danger);
+  color: var(--lai-danger);
+}
+
+.lai-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.lai-btn:focus-visible,
+.lai-field :focus-visible,
+.lai-more summary:focus-visible {
+  outline: 3px solid var(--lai-primary);
+  outline-offset: 2px;
+}
+
+.lai-sample-mode {
+  border: 1px solid var(--lai-border);
+  border-radius: var(--lai-radius);
+  padding: 0.5rem 0.75rem;
+}
+
+.lai-radio {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.5rem;
+  align-items: center;
+  margin: 0.25rem 0;
+}
+
+.lai-radio .lai-hint {
+  grid-column: 2;
+}
+
+.lai-more summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0.25rem 0;
+}
+
+.lai-more[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lai-gap);
+}
+
+.lai-studio progress,
+.lai-workloads progress {
+  width: 100%;
+  height: 1.25rem;
+}
+
+.lai-error {
+  border-left: 4px solid var(--lai-danger);
+  background: var(--lai-danger-bg);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--lai-radius);
+}
+
+.lai-error.lai-error-info {
+  border-left-color: var(--lai-primary);
+  background: var(--lai-info-bg);
+}
+
+.lai-error p {
+  margin: 0.15rem 0;
+}
+
+.lai-error-message {
+  font-weight: 700;
+}
+
+.lai-error-code {
+  font-family: monospace;
+}
+
+.lai-songs,
+.lai-workloads-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lai-gap);
+}
+
+.lai-song {
+  border: 1px solid var(--lai-border);
+  border-radius: var(--lai-radius);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.lai-song-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.lai-song-meta {
+  margin: 0;
+  color: var(--lai-muted);
+  overflow-wrap: anywhere;
+}
+
+.lai-song-audio {
+  width: 100%;
+}
+
+.lai-confirm {
+  border: 2px solid var(--lai-danger);
+  border-radius: var(--lai-radius);
+  padding: 0.5rem 0.75rem;
+}
+
+.lai-workload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lai-workloads-now {
+  font-weight: 700;
+  font-size: 1.15em;
+  margin: 0;
+}
+
+.lai-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
