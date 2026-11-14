@@ -54,7 +54,7 @@ Group=localai
 ExecStart=/opt/localai/kiwix-tools/current/kiwix-serve \
   --address=127.0.0.1 --port=8888 \
   --urlRootLocation=/library \
-  --monitorLibrary --skipInvalid --blockexternal \
+  --monitorLibrary --skipInvalid --blockexternal --nodatealiases \
   --threads={{.Threads}} \
   --library /var/lib/localai/kiwix/library.xml
 Restart=on-failure

@@ -147,7 +147,7 @@ func TestUnitInvariants(t *testing.T) {
 		"ExecStart=/opt/localai/kiwix-tools/current/kiwix-serve \\\n",
 		"--address=127.0.0.1 --port=8888",
 		"--urlRootLocation=/library",
-		"--monitorLibrary --skipInvalid --blockexternal",
+		"--monitorLibrary --skipInvalid --blockexternal --nodatealiases",
 		"--library /var/lib/localai/kiwix/library.xml\n",
 		"User=localai\n", "Group=localai\n",
 		"NoNewPrivileges=yes\n", "PrivateDevices=yes\n", "ProtectSystem=strict\n", "ProtectHome=yes\n",

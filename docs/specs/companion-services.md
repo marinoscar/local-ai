@@ -102,7 +102,7 @@ Group=localai
 ExecStart=/opt/localai/kiwix-tools/current/kiwix-serve \
   --address=127.0.0.1 --port=8888 \
   --urlRootLocation=/library \
-  --monitorLibrary --skipInvalid --blockexternal \
+  --monitorLibrary --skipInvalid --blockexternal --nodatealiases \
   --threads=4 \
   --library /var/lib/localai/kiwix/library.xml
 Restart=on-failure
@@ -234,7 +234,7 @@ These live outside `/api/v1`. They are in the unauthenticated survival set (secu
   Any failure removes the temporary directory and leaves `current` as it was. Every failure carries `LAI-SVC-003` (the library program is not (properly) installed; fix: `sudo install-node.sh --repair`).
 - Check (`kiwix.Check(ctx, version)`): `/opt/localai/kiwix-tools/current/kiwix-serve --version` must print the expected version. The release prints `kiwix-tools <upstream version>` as its first line (no packaging revision), so `3.7.0-2` in the file name is satisfied by `3.7.0` or `3.7.0-2`. A missing program, a program that does not run or exits non-zero, and a different version all fail with `LAI-SVC-003`.
 - Doctor: the fast check `svc.kiwix_installed` (`Installer.DoctorCheck`, registered by the agent only while `kiwix.enabled` is true) raises `LAI-SVC-003` when `/opt/localai/kiwix-tools/current/kiwix-serve` is missing.
-- The flags used in §3.3 are checked against the usage text of the pinned release: for kiwix-tools 3.8.2 (`src/server/kiwix-serve.cpp`, docopt) `--address`, `--port`, `--urlRootLocation`, `--monitorLibrary`, `--skipInvalid`, `--blockexternal` and `--threads` are all long options, and the library is the positional argument of `(-l | --library) LIBRARYPATH` (written `--library <path>`, never `--library=<path>`). The issue that pins a new version repeats the check with `kiwix-serve --help` on a node (manual test of SVC-02).
+- The flags used in §3.3 are checked against the usage text of the pinned release: for kiwix-tools 3.8.2 (`src/server/kiwix-serve.cpp`, docopt) `--address`, `--port`, `--urlRootLocation`, `--monitorLibrary`, `--skipInvalid`, `--blockexternal`, `--nodatealiases` and `--threads` are all long options, and the library is the positional argument of `(-l | --library) LIBRARYPATH` (written `--library <path>`, never `--library=<path>`). The issue that pins a new version repeats the check with `kiwix-serve --help` on a node (manual test of SVC-02).
 
 #### 4.1.2 Library regeneration
 Triggered on agent start, on `sync.item_done` for a kiwix item, on `drive.mounted` / `drive.unmounted`, and on `aictl services restart kiwix`. Debounced: at most once per 10 s.
@@ -259,7 +259,7 @@ Per-root libraries are regenerated the same way, but with `cwd=<root>/kiwix` and
 - Health hooks (`Status.Attach` fills the kiwix `health.FuncProbe`): `Content` is `missing_content` once a run found no books; `Readiness` reports `detail` "N books", `books[]` and compares `totalResults` of `GET /library/catalog/v2/entries?count=1` with the number of books in the merged library (mismatch is `degraded`, `LAI-SVC-004`; an unreadable catalog is no finding). The deep check (full-text search per tier-1 book) is not part of SVC-03.
 
 #### 4.1.3 Article URLs
-kiwix-serve exposes each book under its name with the date (`wikipedia_en_all_nopic_2026-10`) and, because date aliases are on by default, also without the date (`wikipedia_en_all_nopic`). Everything that links into the library (Portal first-aid links, the drill) uses the **undated alias**: `/library/content/<book-name-without-date>/<article-path>`. These links keep working across ZIM updates.
+kiwix-serve exposes each book under its name with the date (`wikipedia_en_all_nopic_2026-10`) and, because the unit passes `--nodatealiases`, also without the date (`wikipedia_en_all_nopic`). Despite its name, that flag *creates* the undated aliases in kiwix-tools 3.8.2 (`--help`: "Create URL aliases for each content by removing the date"); without it every undated link answers 404, which hid the Portal's whole first-aid row on a node with the medical book installed. The agent rewrites the unit at every start and restarts a running kiwix once when the text changed (agent.md §4.1), so an upgrade applies the flag at once. Everything that links into the library (Portal first-aid links, the drill) uses the **undated alias**: `/library/content/<book-name-without-date>/<article-path>`. These links keep working across ZIM updates.
 
 The agent exposes the mapping content id → book name in `GET /api/v1/services` (`kiwix.books[]`), so the Portal never hard-codes dates.
 
