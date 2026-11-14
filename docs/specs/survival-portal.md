@@ -355,7 +355,7 @@ Under the button a small line gives the typed command (`fix.orType`, "Or type in
 If the agent's API stops responding while the Portal is open, the SPA shows a full-width banner "Lost contact with the AI service. Trying again …" with one next step that works with the agent down, "If it stays, restart the computer; the printed survival card has the steps." (`banner.lostContactFix`) and the code `LAI-SVC-116`, and retries every 5 s. Its text is the Portal's own, because the agent cannot be asked. Library and Maps links still open (they fail separately if the agent is fully down). The survival runbook explains the direct Kiwix fallback at `http://127.0.0.1:8888/library/`.
 
 ### 4.3 Language
-- `portal.language: auto` resolves: `profile.survival.portal_language` (if `en`/`es`) → the desktop user's locale reported by ai-desktop (`LANG`) → the browser's `navigator.language` → `en`.
+- The first language is the person's stored choice, else `portal.language` / `profile.survival.portal_language` (if `en`/`es`), else **English**. Neither the browser's `navigator.language` nor the OS locale is used: the app starts in English unless someone chose ([dashboard.md](dashboard.md) §4.8, issue #501). The map viewer follows the same rule.
 - The toggle on the home screen switches instantly and is stored in `localStorage`.
 - The chosen language is sent on every API request as `X-LocalAI-UI-Language` (used by TTS fallback and for `title`/`fix` strings).
 - All copy is in `agent/ui/src/portal/i18n/{en,es}.json`. A CI test fails if a key exists in one file and not the other, or if any JSX text literal is not a translation key.

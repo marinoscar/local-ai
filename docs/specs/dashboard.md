@@ -128,6 +128,8 @@ Never a terminal command in steps 1 to 3; a command may appear only in a closed 
 ### 4.8 Language
 English by default for the app and the Portal unless the person chose a language; Spanish one tap away; the choice is remembered (desktop `settings.lang`, Portal `prefs`).
 
+**As built (#501).** ai-desktop's `resolveLang` maps `auto` (the default `settings.lang`) to English whatever the OS locale; the Portal's `resolveLang` and the map viewer's `pickLang` no longer read `navigator.language`. An explicit node setting (`portal.language`, the profile's `survival.portal_language`) still applies until the person taps a language, and a tap is remembered (`settings.lang`, `lai.portal.lang`).
+
 ## 5. Failure handling and edge cases
 | Situation | Behaviour |
 |---|---|

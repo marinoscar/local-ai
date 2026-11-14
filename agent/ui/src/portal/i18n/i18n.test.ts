@@ -106,7 +106,7 @@ describe("translate", () => {
 });
 
 describe("resolveLang", () => {
-  it("prefers the stored choice, then the agent, then the browser, then English", () => {
+  it("prefers the stored choice, then the agent, then English; never the browser (#501)", () => {
     expect(
       resolveLang({ stored: "es", status: "en", navigator: "en-US" }),
     ).toBe("es");
@@ -115,7 +115,7 @@ describe("resolveLang", () => {
     ).toBe("es");
     expect(
       resolveLang({ stored: "xx", status: null, navigator: "es-MX" }),
-    ).toBe("es");
+    ).toBe("en");
     expect(resolveLang({ navigator: "fr-FR" })).toBe("en");
     expect(resolveLang({})).toBe("en");
   });
