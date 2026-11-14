@@ -192,6 +192,26 @@ The five ids are permanent strings. They are exported by `LOCALAI_PERMISSIONS` a
 
 **Environment.** `TENANCY_MODE=single`, `GOOGLE_CALLBACK_URL` and `INITIAL_ADMIN_EMAIL` are already declared once by the platform's `.env.example` (generated, so the committed defaults are the platform's: `single`, a localhost callback and an example address). `app.env.example` therefore declares no second copy, which the deploy wizard would list twice; it documents the values this deployment sets (§3.13 table) as prose, and the wizard writes them into `.env` at deploy time (CLOUD-18). The operator steps (adding a person, which role does what, never a whole domain) are in [runbook 10, Part 8](../runbooks/10-lab-operations.md#part-8-give-someone-access).
 
+**Music and workload permissions (E11, #513).** Three more permanent ids, in the same `LOCALAI_PERMISSIONS` batch, all `scope: 'org'`:
+
+```ts
+  MUSIC_USE:       { id: 'localai_music:use',       scope: 'org', description: 'Ask a node for songs, list and play the cloud copies',
+                     defaultGrants: ['contributor', 'org_admin'] },
+  MUSIC_DELETE:    { id: 'localai_music:delete',    scope: 'org', description: 'Delete cloud copies of songs',
+                     defaultGrants: ['org_admin'] },
+  WORKLOADS_WRITE: { id: 'localai_workloads:write', scope: 'org', description: 'Switch what a node does (activate a workload)',
+                     defaultGrants: ['contributor', 'org_admin'] },
+```
+
+| EAB role | localai_music:use | localai_music:delete | localai_workloads:write |
+|---|---|---|---|
+| `admin` (system) + `org_admin` | ✓ | ✓ | ✓ |
+| `org_admin` only | ✓ | ✓ | ✓ |
+| `contributor` | ✓ | | ✓ |
+| `viewer` (default) | | | |
+
+The permission tests above grow to the 4 role rows by 8 permissions. Every music and workload request is audited (`localai.music.requested`, `localai.music.song_deleted`, `localai.workload.requested`, plus the command audit lines of §3.9).
+
 A `nod_` credential has no org, so it gets none of these (EAB: a node credential gets its owner's **system** grants only). Node routes therefore do not use these permissions; they use the binding guard (§4.2).
 
 ### 3.5 Data model (Prisma fragments)
@@ -434,7 +454,7 @@ Handshake. The agent calls it after `register` and whenever it gets a 404 on ano
 { "data": {
     "nodeId": "ai-n3",
     "apiVersion": 1,
-    "features": ["state.v1", "commands.v1", "catalog.v1", "key.v1", "tailnet.v1", "ensure.v1"],
+    "features": ["state.v1", "commands.v1", "catalog.v1", "key.v1", "tailnet.v1", "ensure.v1", "workloads.v1"],
     "commandPlane": "localai",
     "heartbeatIntervalS": 15,
     "stateMinIntervalS": 5,
@@ -539,6 +559,7 @@ export const LocalaiStateSnapshotV1 = z.object({
   tailscale: z.object({ serve_pattern: z.enum(['A', 'B', 'none']), serve_active: z.boolean(), backend_state: z.string().max(32).nullable() }).strict(),
   alerts: z.array(z.object({ code: Code, severity: z.enum(['info', 'warning', 'critical']), title: z.string().max(200) }).strict()).max(50),
   ensure: EnsureBlockV1.optional(),               // issue #480: absent from an agent that predates "Install what's missing"
+  workloads: WorkloadsBlockV1.optional(),         // E11 (#513): the node's workloads for the buttons; only when the handshake lists workloads.v1
 }).strict();
 export type LocalaiStateSnapshotV1 = z.infer<typeof LocalaiStateSnapshotV1>;
 
@@ -551,6 +572,19 @@ const EnsureBlockV1 = z.object({
   progress: z.object({ done: z.number().int().min(0), total: z.number().int().min(0) }).strict(),
   next_action: z.object({ kind: z.enum(['none', 'wait', 'press_button', 'confirm', 'sync', 'fix']), step: z.string().max(64).nullable() }).strict(),
   steps: z.array(z.object({ id: z.string().max(64), status: z.enum(['ok', 'pending', 'waiting', 'needs_confirm', 'blocked', 'running', 'done', 'failed', 'cancelled']) }).strict()).max(16),
+}).strict();
+
+// E11 (#513): GET /workloads of the agent (agent.md §3.8.34), names and labels only. Sent like `ensure`: optional, and only to a cloud
+// whose handshake lists `workloads.v1` (which also says the cloud knows `localai.workload.activate` and `localai.music.generate`).
+const WorkloadsBlockV1 = z.object({
+  active: z.string().max(32).nullable(),
+  items: z.array(z.object({
+    name: z.string().regex(/^[a-z][a-z0-9-]{1,31}$/),
+    label: z.object({ en: z.string().max(64), es: z.string().max(64) }).strict(),
+    models: z.array(ModelId).max(8),
+    fits: z.boolean(),
+    missing: z.array(ModelId).max(8),
+  }).strict()).max(16),
 }).strict();
 
 // Full READY.json (ark-sync.md §4.12.1, authoritative for its fields) minus root.path
@@ -666,7 +700,7 @@ Wire shapes deliberately mirror EAB's `claim` / `renew` / `result` / `failure` (
             "ark.verify", "mode.offline", "key.rotate", "service.restart", "logs.tail", "catalog.refresh"],
   "limit": 1, "waitMs": 25000 }
 ```
-`types` is `node.yaml: cloud.allow` (names **without** the `localai.` prefix; the server prepends it). The example is an ark laptop whose operator removed `model.delete` and `agent.update`; the default `cloud.allow` is all 15 types, the list in [agent.md](agent.md) §3.4 and [security-model.md](../architecture/security-model.md) §4. `limit` is clamped to 1. `waitMs` is clamped to `[0, claimWaitMaxMs]`; the server holds the request until a matching command is queued for this node or the wait ends (long poll; §4.4). Response:
+`types` is `node.yaml: cloud.allow` (names **without** the `localai.` prefix; the server prepends it). The example is an ark laptop whose operator removed `model.delete` and `agent.update`; the default `cloud.allow` is all 17 types, the list in [agent.md](agent.md) §3.4 and [security-model.md](../architecture/security-model.md) §4. `limit` is clamped to 1. `waitMs` is clamped to `[0, claimWaitMaxMs]`; the server holds the request until a matching command is queued for this node or the wait ends (long poll; §4.4). Response:
 ```json
 { "data": { "jobs": [ {
     "job": { "id": "6b3c…", "type": "localai.model.load", "attempts": 1, "createdAt": "2026-11-02T15:04:00.000Z" },
@@ -799,6 +833,44 @@ export const COMMANDS = {
       pending_steps: z.number().int().min(0).max(16),
     }).strict(),
   },
+  'localai.workload.activate': {         // POST /workloads/{name}/activate with wait: true (agent.md §3.8.34, llama-router.md §4.16)
+    params: z.object({
+      name: z.string().regex(/^[a-z][a-z0-9-]{1,31}$/),
+      force: z.boolean().optional(),     // the UI never sends true: survival is a decision made at the node
+    }).strict(),
+    result: z.object({ active: z.string() }).strict(),
+  },
+  'localai.music.generate': {            // music.md §4.7: sample pulled by the node, songs pushed to signed PUT URLs
+    params: z.object({
+      request_id: z.string().uuid(),
+      lyrics: z.string().max(8192),      // bytes checked again on the node (UTF-8, ≤ 8 KiB)
+      tags: z.string().max(512),
+      duration_s: z.number().int().min(10).max(240),
+      language: z.string().regex(/^[a-z]{2}$/),
+      seed: z.number().int().min(0).max(2147483647).optional(),
+      variations: z.number().int().min(1).max(4),
+      sample: z.object({
+        url: z.string().url().startsWith('https://'),        // signed GET, short-lived
+        sha256: z.string().regex(/^[0-9a-f]{64}$/),
+        mime: z.enum(['audio/wav', 'audio/mpeg', 'audio/flac', 'audio/ogg']),
+        size_bytes: z.number().int().min(1).max(20 * 1024 * 1024),
+      }).strict().optional(),
+      sample_mode: z.enum(['sounds_like', 'same_song']).optional(),   // only with sample
+      strength: z.number().min(0).max(1).optional(),                   // only with sample
+      results: z.array(z.object({ put_url: z.string().url().startsWith('https://') }).strict()).min(1).max(4),
+    }).strict()
+      .refine(p => p.results.length === p.variations, 'results must have one entry per variation')
+      .refine(p => p.sample !== undefined || (p.sample_mode === undefined && p.strength === undefined), 'sample_mode and strength need a sample'),
+    result: z.object({
+      songs: z.array(z.object({
+        index: z.number().int().min(0).max(3),
+        sha256: z.string().regex(/^[0-9a-f]{64}$/),
+        size_bytes: z.number().int().min(1),
+        mime: z.string(),
+        duration_s: z.number().positive(),
+      }).strict()).max(4),
+    }).strict(),
+  },
   'localai.agent.update': {              // agent self-update (agent.md §4.10): GitHub release, sha256 + minisign, rollback
     params: z.object({ version: Semver }).strict(),
     result: z.object({
@@ -829,6 +901,8 @@ Per-type policy (`apps/api/src/localai/commands/command-policy.ts`):
 | `catalog.refresh` | lab:operate | 60 000 | 600 s | 1 h | 1 | `-` | none |
 | `ensure.run` | lab:operate | 30 000 | 300 s | 1 h | 1 | `-` | none (the safe default only; the UI says a person at the node approves compiling or restarting a running service) |
 | `agent.update` | **lab:admin** | 300 000 | 900 s | 24 h | 1 | `-` | shows from → to version |
+| `workload.activate` | **localai_workloads:write** | 60 000 (renewed) | 900 s | 15 min | 1 | `-` (one active per node) | none; the button names what will be stopped ("Coding will stop") |
+| `music.generate` | **localai_music:use** | 60 000 (renewed) | 3600 s | 1 h | 1 | `request_id` | none; the page says the node must be on the Music workload |
 
 **Hard cap** = the longest a claim may be renewed, counted from `claimed_at` (`hardCap` in §4.4 renew): lease × 10 by default, except `model.load` (600 s, a full load at maximum context) and `agent.update` (900 s: download, verify, restart and the 60 s health check). Renewing past the hard cap answers `409` and the sweeper then fails the command with `LAI-CLD-059`.
 
@@ -897,6 +971,12 @@ Session or `pat_` auth via `@Auth({ permissions: [...] })` on every route; bodie
 | POST | `/api/localai/alerts/:id/ack` | lab:operate | Acknowledge (stops repeat notifications; does not clear) |
 | GET | `/api/localai/audit?nodeId=&action=&from=&to=&page=` | lab:admin | `audit_events` where `action LIKE 'localai.%'`, newest first, 50 per page (§3.9 "As built (CLOUD-16)") |
 | GET | `/api/localai/audit/filters` | lab:admin | What the audit page's filters offer: the known actions by group and every node (§3.9 "As built (CLOUD-16)") |
+| POST | `/api/localai/nodes/:nodeId/workloads/:name/activate` | localai_workloads:write | Queue `localai.workload.activate` `{ name }` for the node (§3.7); answers the command view like `POST …/commands`. The node's workloads come from its last snapshot (`workloads` block, agent.md §3.8.34); an unknown name is `422` before anything is queued |
+| POST | `/api/localai/music/requests` | localai_music:use | `multipart/form-data`: `nodeId`, the fields of [music.md](music.md) §3.6 and the optional `sample` file. Stores the sample through the storage slice (key prefix `localai-music/samples/`), creates `variations` result objects (`localai-music/songs/<request id>/<i>`), signs a GET for the sample and a PUT per result, and queues `localai.music.generate`. Refusals: `404` node, `409 LAI-CLD-035`, `422 LAI-CLD-034` (node not online), `400`/`413` with the field for the limits of music.md §3.6 |
+| GET | `/api/localai/music/requests` ; `/api/localai/music/requests/:id` | localai_music:use | The caller's requests (an `org_admin` sees all), newest first, with the command status and, when done, the songs; the lyrics are returned only to their author |
+| GET | `/api/localai/music/songs` | localai_music:use | The cloud copies of songs the caller may see, newest first, paged |
+| GET | `/api/localai/music/songs/:id/audio` | localai_music:use | `302` to a short-lived signed GET of the stored song |
+| DELETE | `/api/localai/music/songs/:id` | localai_music:delete | Deletes the cloud copy (the node keeps its own; the node's copy is deleted only at the node, music.md §4.5). Audited |
 | GET | `/api/localai/settings` ; PUT | lab:read ; per key prefix | The `localai` settings namespace (§3.10). `PUT` checks the permission **per key prefix**: `gateway.*` keys (and gateway model policies, [gateway.md](gateway.md) §3.7) need `gateway:admin`; every other key needs `lab:admin`. A body mixing prefixes needs both. Built in GW-02 ([gateway.md](gateway.md) §10). |
 
 **As built (CLOUD-16, #90).** Code: `apps/cloud/apps/api/src/localai/audit/` (`audit.controller.ts`, `audit.service.ts`, `audit.schemas.ts`, `audit-summary.ts`, `audit-actions.ts`, `audit.module.ts`). Where this differs from the issue's example, this wins.
@@ -1063,6 +1143,27 @@ Step 3 of 3 · Publish it (VPS)                        [Publish automatically] (
   [✔] 7. llama key received by the cloud                  (automatic)
   [ ] 8. Gateway test: /v1/models through ai-n4           [Check]
 ```
+
+**Workload buttons on Node detail** (E11, #514): above the tabs, a row "This computer is set for: **Coding**" with one button per workload of the node's last snapshot (`Coding`, `Chat and photos`, `Music`, ...; the label in the user's language), the active one shown pressed, a workload that does not fit or misses models disabled with the reason. A press (needs `localai_workloads:write`) queues `localai.workload.activate`, shows the command's progress, and on failure the doctor code and fix (`LAI-LLM-052` and the others of agent.md §3.8.34). Hidden for a node in offline or survival mode, with the usual explanation.
+
+**Music** (`/music`, localai_music:use; navigation "Music" / "Música"): the first feature page outside `/lab`.
+```
+┌ Music ─────────────────────────────────────────────── Node: [ai-n2 · Music ✔ ▾] ┐
+│ Lyrics                                   │ Style  [folk, acoustic guitar, warm ] │
+│ ┌──────────────────────────────────────┐ │ Length [■■■■□□□□] 1:00                │
+│ │[verse]                               │ │ Language [English ▾]  Versions [2 ▾] │
+│ │Walking home by the river ...         │ │ Sample (optional) [Choose file]      │
+│ │[chorus]                              │ │  (•) Sounds like this                 │
+│ │...                                   │ │  ( ) Same song, my lyrics             │
+│ └──────────────────────────────────────┘ │            [ Make the song ]          │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│ Requests:  ai-n2 · "Walking home by the river" · running ████░░ 40%   [Cancel]     │
+│ Songs:     ▶ Walking home by the river (1)  1:00  today 18:20  [Download] [Delete] │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+- The node picker lists online nodes with a `music` workload; a node not on it shows **Switch to Music** (needs `localai_workloads:write`), which queues `localai.workload.activate` first.
+- A failed request shows the code and fix of [music.md](music.md) §8 (`LAI-SVC-151` to `LAI-SVC-158`) in the user's language. **Delete** asks for confirmation and needs `localai_music:delete`.
+- The page reminds the person to use only audio and lyrics they own or have rights to.
 
 **Alerts** (`/lab/alerts`, lab:read)
 ```

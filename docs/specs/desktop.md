@@ -160,10 +160,10 @@ Process switches set in `index.ts` before `ready`: `app.commandLine.appendSwitch
 
 ### 3.4 Windows and views
 **Main window:** a `BaseWindow` (1280×860, min 900×600, title "Local AI") with two `WebContentsView`s:
-- **top bar** (48 px high, `localai://app/topbar/`, preload `shell.ts`, default session): tabs **This computer** | **Lab** (Lab only when connected), status pill, mode chip, buttons **Chat**, **Library**, **Maps**, **Copy API key**, menu ⋮ (Connection info, Connect to the lab / Disconnect, Start at login ✓, Check for updates ✓/✗, About, Quit).
+- **top bar** (48 px high, `localai://app/topbar/`, preload `shell.ts`, default session): tabs **This computer** | **Lab** (Lab only when connected), status pill, mode chip, buttons **Chat**, **Library**, **Maps**, **Music** (E11, #515; shown while the node has a music model in its catalog view, hidden in survival mode), **Copy API key**, menu ⋮ (Connection info, Connect to the lab / Disconnect, Start at login ✓, Check for updates ✓/✗, About, Quit).
 - **content**: either agent UI `http://127.0.0.1:7070/` (partition `persist:agent`, preload `agent.ts`), the Lab view `localai://app/lab/` (partition `persist:lab`, preload `shell.ts`), or an error page `localai://app/error/?code=LAI-DSK-00N` (default session).
 
-**Child windows** (`BrowserWindow`, partition `persist:agent`, preload none): Chat → `http://127.0.0.1:7070/chat/`, Library → `/library/`, Maps → `/maps/`. One window each (re-focus if open). Navigation is confined to the window's own path prefix plus `/api/` and asset paths of the agent origin (§3.6).
+**Child windows** (`BrowserWindow`, partition `persist:agent`, preload none): Chat → `http://127.0.0.1:7070/chat/`, Library → `/library/`, Maps → `/maps/`, Music → `/music/` (the agent UI's Music page, [music.md](music.md) §3.7: make a song, play, download, delete; title `Local AI: Music` / `Música`). One window each (re-focus if open). Navigation is confined to the window's own path prefix plus `/api/` and asset paths of the agent origin (§3.6).
 
 All webContents: `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, `webSecurity: true`, `spellcheck: false`, `devTools: !app.isPackaged`. Permission requests (`setPermissionRequestHandler`) are denied except `clipboard-sanitized-write` for shell pages and `media` (microphone) for the agent origin's speech page.
 **As built (DSK-02).** `hardenedWebPreferences(isPackaged)` in `navigation.ts` returns exactly the set above; a window adds only `preload` and `partition`. `installPermissionHandlers` sets the request, check and device handlers (Electron approves everything when none is set) on the default session, `persist:agent`, `persist:lab` and the updater session. `media` is granted only to `http://127.0.0.1:7070` and only when every requested kind is `audio` (never `video`, never an empty list); the spec does not name the speech page's path, so any page of the agent origin may ask for the microphone. `clipboard-sanitized-write` is granted to `localai://app` (and to the Vite dev origin in an unpackaged build). Devices (HID, USB, serial) are always refused.
@@ -237,8 +237,8 @@ interface LocalaiDesktop {
 **Navigation** (`will-navigate`, `will-redirect`, `setWindowOpenHandler`):
 | From | Allowed destinations | Anything else |
 |---|---|---|
-| content (agent) | `http://127.0.0.1:7070/*` (a `localhost:7070` URL is rewritten to `127.0.0.1:7070`) | links to `/chat/`, `/library/`, `/maps/` open the matching child window; `https://ai.marin.cr/*` opens in the default browser **only** in connected mode; everything else is blocked and the top bar shows "Links to the internet are turned off on this computer." / "Los enlaces a internet están desactivados en esta computadora." |
-| child windows | same origin, same path prefix (`/chat/`, `/library/`, `/maps/`) plus `/api/v1/` and static assets | blocked silently (Kiwix articles contain external links; they are offline content) |
+| content (agent) | `http://127.0.0.1:7070/*` (a `localhost:7070` URL is rewritten to `127.0.0.1:7070`) | links to `/chat/`, `/library/`, `/maps/`, `/music/` open the matching child window; `https://ai.marin.cr/*` opens in the default browser **only** in connected mode; everything else is blocked and the top bar shows "Links to the internet are turned off on this computer." / "Los enlaces a internet están desactivados en esta computadora." |
+| child windows | same origin, same path prefix (`/chat/`, `/library/`, `/maps/`, `/music/`) plus `/api/v1/` and static assets (the Music window plays songs from `/api/v1/music/songs/{id}/audio` and saves a download with Electron's download handler into the user's Music or Downloads folder; deleting a song opens the PIN prompt like deleting a model) | blocked silently (Kiwix articles contain external links; they are offline content) |
 | top bar, Lab, error, PIN | `localai://app/*` | blocked |
 `window.open` always returns `{ action: 'deny' }` after routing as above.
 
@@ -486,6 +486,9 @@ On `mode.changed` → `survival` (or start-up in survival, or `--portal`):
 | GET | `/api/localai/nodes`, `/api/localai/nodes/:nodeId`, `/api/localai/alerts` | |
 | GET | `/api/localai/commands/:id`, `/api/localai/nodes/:nodeId/commands` | |
 | POST | `/api/localai/nodes/:nodeId/commands` | only `type` ∈ {`status.refresh`, `model.load`, `model.unload`, `model.set_default`, `ark.sync`, `ark.verify`, `service.restart`} (the cloud still enforces RBAC) |
+| POST | `/api/localai/nodes/:nodeId/workloads/:name/activate` | E11 (#515): the workload buttons on a card (`:name` = `^[a-z][a-z0-9-]{1,31}$`); the cloud checks `localai_workloads:write` |
+| POST | `/api/localai/music/requests` | E11 (#515): **Make a song** on another node, lyrics and settings only (the proxy sends the multipart form; a sample is added only on the node's own Music window); the cloud checks `localai_music:use` |
+| GET | `/api/localai/music/requests/:id`, `/api/localai/music/songs` | the request's progress and the songs list (playing opens **Open in browser**) |
 | GET | `/api/auth/me` | show who is linked |
 Paths are matched against fixed patterns (`:nodeId` = `^ai-n[1-9][0-9]{0,3}$`, `:id` = uuid); anything else is refused in the main process without a network call. Each card has **Open in browser** (`https://ai.marin.cr/lab/nodes/<id>`) for everything else.
 
@@ -671,6 +674,7 @@ Signing note: Linux installers are not code-signed; integrity comes from `SHA256
 10. **DSK-10 Connected mode: device link and token storage** — Scope: §4.8 link/unlink, safeStorage + consent, connected-state egress switch (§4.9). AC: device-flow unit cases; `connected.spec.ts` link part; offline switch aborts cloud requests within 1 s. Deps: DSK-02, DSK-04.
 11. **DSK-11 Lab tab** — Scope: Lab view with `packages/ui` cards, allowlisted cloud proxy, cache + unreachable banner, Open in browser. AC: cloud proxy unit table; `connected.spec.ts` cached-view part. Deps: DSK-10, CLOUD-09.
 12. **DSK-12 Release workflow and updates** — Scope: §4.11 `desktop-release.yml`, SHA256SUMS + minisign, packaged e2e in CI, catalog `kit-desktop` bump PR template, §4.10 opt-in updater. AC: a `desktop-v0.1.0-rc.1` tag produces a draft pre-release with deb, AppImage, `SHA256SUMS`, `SHA256SUMS.minisig`; `sha256sum -c` passes; updater makes zero requests when off (test). Deps: DSK-01, DSK-02, DSK-03, DSK-04, DSK-05, DSK-06, DSK-07, DSK-08, DSK-09.
+13. **DSK-13 Music window and workloads (E11, #515)** — Scope: the top-bar **Music** button and the Music child window `/music/` (§3.4, §3.6), the download handler, the PIN prompt for deleting a song, the Lab allowlist pairs for `workload.activate` and music requests (§4.8). AC: navigation table cases for `/music/`; the proxy table accepts the new pairs and refuses look-alikes; e2e opens the Music window against the fake agent. Deps: DSK-04, DSK-11, the local UI page (#512).
 
 ## 11. Open questions
 
