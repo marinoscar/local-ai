@@ -23,7 +23,7 @@ const (
 )
 
 // logUnits are the units GET /logs accepts (agent.md section 3.8.23).
-var logUnits = []string{"agent", "llama", "kiwix", "whisper", "sync", "drill"}
+var logUnits = []string{"agent", "llama", "kiwix", "whisper", "music", "sync", "drill"}
 
 // Tests change these: the poll interval of -f, the clock for a relative --since and the time zone
 // the HH:MM:SS column is shown in.
@@ -45,7 +45,7 @@ Times are shown in this computer's time zone; with -v they are RFC 3339 in UTC.
 --json prints the agent body; with -f it prints JSON Lines of {"at","priority","message"}.
 The default timeout is 10 s per request; -f has no overall deadline unless --timeout is given.`,
 		Flags: func(fs *flag.FlagSet) {
-			fs.String("unit", "agent", "agent, llama, kiwix, whisper, sync or drill")
+			fs.String("unit", "agent", "agent, llama, kiwix, whisper, music, sync or drill")
 			fs.Int("n", logsDefaultLines, "number of lines (1 to 2000)")
 			fs.String("since", "", "only lines after this time (RFC 3339) or age (15m, 2h)")
 			fs.Bool("f", false, "keep running and print new lines")
