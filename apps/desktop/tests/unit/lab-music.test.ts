@@ -104,6 +104,15 @@ describe('reading the cloud', () => {
     expect(projectWorkloads({ data: { lastState: { workloads: [{ name: 'chat', active: true }] } } })).toEqual([{ name: 'chat', label: { en: 'chat', es: 'chat' }, active: true, fits: true, missing: 0 }]);
     // `active` named at the block level counts too
     expect(projectWorkloads({ data: { lastState: { workloads: { workloads: [{ name: 'music' }], active: 'music' } } } })?.[0]?.active).toBe(true);
+    // The cloud's stored snapshot block (cloud-app.md §3.6 WorkloadsBlockV1): { active, items }.
+    expect(
+      projectWorkloads({
+        data: { lastState: { workloads: { active: 'coding', items: [{ name: 'coding', label: { en: 'Coding', es: 'Programación' }, models: [], fits: true, missing: [] }, { name: 'music', label: { en: 'Music', es: 'Música' }, models: [], fits: false, missing: ['m1'] }] } } },
+      }),
+    ).toEqual([
+      { name: 'coding', label: { en: 'Coding', es: 'Programación' }, active: true, fits: true, missing: 0 },
+      { name: 'music', label: { en: 'Music', es: 'Música' }, active: false, fits: false, missing: 1 },
+    ]);
     expect(projectWorkloads({ data: { lastState: { workloads: [{ name: '../x' }, { name: 'Bad' }, { name: 7 }, null] } } })).toEqual([]);
     expect(projectWorkloads({ data: { lastState: {} } })).toEqual([]);
     expect(projectWorkloads({ data: {} })).toEqual([]);

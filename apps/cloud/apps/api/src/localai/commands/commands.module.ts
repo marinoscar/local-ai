@@ -8,6 +8,7 @@ import { NodeLinkCommandsController } from '../node-link/commands.controller';
 import { NodeLinkModule } from '../node-link/node-link.module';
 import { CommandClaimRepository, PrismaCommandClaimRepository } from './claim.sql';
 import { ClaimService } from './claim.service';
+import { ClaimParamsHooks } from './claim-params.hooks';
 import { LOCALAI_CLOCK, systemLocalaiClock } from './command-events';
 import { CommandsAuditListener } from './commands-audit.listener';
 import { CommandsController } from './commands.controller';
@@ -28,11 +29,13 @@ import { CommandsSweepTask } from './sweeper.task';
     // `localai.command_failed` to the requester, through the notifications slice (CLOUD-15).
     { provide: LOCALAI_COMMAND_NOTIFIER, useClass: NotificationsCommandNotifier },
     ClaimService,
+    // Claim-time params of a type (music.generate mints its signed URLs there).
+    ClaimParamsHooks,
     CommandsSweepHandler,
     CommandsSweepTask,
     { provide: CommandClaimRepository, useClass: PrismaCommandClaimRepository },
     { provide: LOCALAI_CLOCK, useValue: systemLocalaiClock },
   ],
-  exports: [CommandsService, LOCALAI_COMMAND_NOTIFIER],
+  exports: [CommandsService, LOCALAI_COMMAND_NOTIFIER, ClaimParamsHooks],
 })
 export class CommandsModule {}

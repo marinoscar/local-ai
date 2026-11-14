@@ -2,6 +2,7 @@
   "$comment": "THE slice manifest: which optional platform slices this app mounts. `enabled` is the list you edit: remove a line to drop a slice, add an id to turn one on; order does not matter. `catalog` is the fixed list of slices the starter can mount, in mount order, with what each requires: the API (apps/api/src/platform/slices) and the web app (apps/web/src/slices) both read this one file and refuse to start when an enabled slice requires one that is not (the error names both). README, 'Optional slices' has the table.",
   "enabled": [
     "credentials",
+    "storage",
     "email",
     "notifications"
   ],

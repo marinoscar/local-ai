@@ -266,6 +266,11 @@ describe('the flows that write audit rows today', () => {
         { actorUserId: userIds.admin, action: 'localai.gateway.key_revoked', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12' } },
         { actorUserId: userIds.admin, action: 'localai.gateway.key_updated', targetType: 'localai_gateway_key', targetId: 'gw-key-1', meta: { prefix: 'lai_ab12', name: 'Desk' } },
         { actorUserId: null, action: 'localai.gateway.policy_updated', targetType: 'localai_model_policy', targetId: 'gw-policy-1', meta: { allowedModels: 'x' } },
+        // E11: the music and workload rows (their real flows are music.db.spec.ts); here only their listing and summary.
+        { actorUserId: userIds.admin, action: 'localai.music.requested', targetType: 'localai_music_request', targetId: 'music-request-1', meta: { variations: 1, durationS: 60, hasSample: false } },
+        { actorUserId: userIds.admin, action: 'localai.music.request_cancelled', targetType: 'localai_music_request', targetId: 'music-request-1', meta: {} },
+        { actorUserId: userIds.admin, action: 'localai.music.song_deleted', targetType: 'localai_music_song', targetId: 'music-song-1', meta: {} },
+        { actorUserId: userIds.admin, action: 'localai.workload.requested', targetType: 'localai_node', targetId: 'ai-n99', meta: { name: 'music' } },
       ],
     });
   });

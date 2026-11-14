@@ -2,8 +2,6 @@
 // (FIFO, types, expiry, one running command per node, SKIP LOCKED under concurrency), the long poll's wake-up, leases
 // and hard caps, the sweeper, the dedup index and the whole path over HTTP with a real `nod_` credential.
 // Time is the real clock; a test moves a row into the past with SQL when it needs an old claim.
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { NodeCredentialService } from '@marinoscar/platform-api/nodes';
 
@@ -18,12 +16,13 @@ import { COMMAND_TYPES, type CommandType } from '../../src/localai/contracts/com
 import { createApp } from '../../src/main';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { EVENT_BUS, type EventBus } from '@marinoscar/platform-api/host';
+import { readCommandExamples } from '../fixtures/localai/command-examples';
 
 const run = `${Date.now()}`;
 const MODEL = 'qwen3.6-35b-a3b-q4km';
 const OTHER_MODEL = 'gemma-4-26b-q4km';
 const ALL = COMMAND_TYPES.map((type) => type.replace('localai.', ''));
-const examples = JSON.parse(readFileSync(join(__dirname, '../fixtures/localai/commands.examples.json'), 'utf8')) as Record<string, { params: unknown; result: unknown }>;
+const examples = readCommandExamples<Record<string, { params: unknown; result: unknown }>>();
 const loadResult = { model_id: MODEL, status: 'loaded', load_ms: 1000, unloaded: [], vram_used_mib: null, is_default: false };
 
 let app: NestFastifyApplication;

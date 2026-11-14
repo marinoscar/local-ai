@@ -296,8 +296,9 @@ export interface WorkloadInfo {
 }
 
 /**
- * `{ data: { lastState: { workloads } } }` (`GET /api/localai/nodes/:nodeId`) -> the node's workloads, as the agent's
- * `GET /api/v1/workloads` reports them (`{ workloads: [...], active }`, or the bare list). Null when the body is not a
+ * `{ data: { lastState: { workloads } } }` (`GET /api/localai/nodes/:nodeId`) -> the node's workloads. The cloud stores
+ * the snapshot block `WorkloadsBlockV1` (`{ active, items: [...] }`, cloud-app.md §3.6); the agent's own
+ * `GET /api/v1/workloads` shape (`{ workloads: [...], active }`) and a bare list are also accepted. Null when the body is not a
  * node; an empty list when the node has not reported any (an agent from before E11).
  */
 export function projectWorkloads(body: unknown): WorkloadInfo[] | null {
@@ -306,7 +307,13 @@ export function projectWorkloads(body: unknown): WorkloadInfo[] | null {
   const state = isObject(data['lastState']) ? data['lastState'] : null;
   const raw = state ? state['workloads'] : undefined;
   const block = isObject(raw) ? raw : null;
-  const list = Array.isArray(raw) ? raw : block && Array.isArray(block['workloads']) ? block['workloads'] : [];
+  const list = Array.isArray(raw)
+    ? raw
+    : block && Array.isArray(block['items'])
+      ? block['items']
+      : block && Array.isArray(block['workloads'])
+        ? block['workloads']
+        : [];
   const activeName = block && typeof block['active'] === 'string' ? block['active'] : null;
   const out: WorkloadInfo[] = [];
   for (const item of list.slice(0, MAX_WORKLOADS)) {

@@ -43,6 +43,10 @@ export function describeCommand(type: string, params: Record<string, unknown> | 
       return "Install what's missing";
     case 'agent.update':
       return `Update the agent to ${str(p.version)}`;
+    case 'workload.activate':
+      return `Switch to ${str(p.name)}`;
+    case 'music.generate':
+      return 'Make music';
     default:
       return stripPrefix(type);
   }
@@ -89,6 +93,8 @@ export function resultSummary(command: Pick<CommandView, 'type' | 'result'>): st
     }
     case 'model.unload':
       return r.was_loaded === false ? 'it was not loaded' : null;
+    case 'workload.activate':
+      return str(r.active) ? `now set for ${str(r.active)}` : null;
     case 'model.set_default':
       return str(r.previous) ? `the previous default was ${str(r.previous)}` : null;
     case 'model.download':

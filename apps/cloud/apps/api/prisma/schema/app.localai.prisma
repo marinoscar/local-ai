@@ -64,6 +64,8 @@ model LocalaiNode {
   models    LocalaiNodeModel[]
   commands  LocalaiCommand[]
   alerts    LocalaiAlert[]
+  // E11: the music requests sent to this node (localai-music.prisma).
+  musicRequests LocalaiMusicRequest[]
 
   @@map("localai_nodes")
 }
@@ -176,6 +178,8 @@ model LocalaiCommand {
   createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz
   node           LocalaiNode          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   requestedBy    User?                @relation("LocalaiCommandRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  // E11: the music request this command carries, if it is a `localai.music.generate` (localai-music.prisma).
+  musicRequest   LocalaiMusicRequest?
 
   @@index([nodeId, status, createdAt])
   @@index([status, expiresAt])

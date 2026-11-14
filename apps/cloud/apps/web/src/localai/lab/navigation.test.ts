@@ -16,7 +16,7 @@ describe('the Lab destination', () => {
 
 describe('the Alerts page', () => {
   it('is a Lab sub-route (/lab/alerts), not a destination of its own and not a settings card', () => {
-    expect(NAVIGATION.destinations.map((destination) => destination.key)).toEqual(['home', 'lab', 'gateway', 'settings', 'console']);
+    expect(NAVIGATION.destinations.map((destination) => destination.key)).toEqual(['home', 'lab', 'music', 'gateway', 'settings', 'console']);
     const cardPaths = (NAVIGATION.settingsSurfaces ?? []).flatMap((surface) => surface.sections.flatMap((section) => section.cards.map((card) => card.path)));
     expect(cardPaths).not.toContain('/lab/alerts');
   });
