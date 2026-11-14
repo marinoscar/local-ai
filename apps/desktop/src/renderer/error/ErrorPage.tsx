@@ -54,7 +54,7 @@ function LanguageBlock({ code, lang, primary }: { code: string | null; lang: Lan
   );
 }
 
-const PRE_SX = { m: 0, p: 1.5, bgcolor: 'action.hover', borderRadius: 1, overflowX: 'auto', fontFamily: 'ui-monospace, monospace' } as const;
+const PRE_SX = { m: 0, p: 1.5, bgcolor: 'background.default', border: 1, borderColor: 'divider', borderRadius: 1, overflowX: 'auto', fontFamily: 'ui-monospace, monospace' } as const;
 
 /** A native `<details>` disclosure: closed by default, opened with Enter or Space on its summary. */
 function Disclosure({ summary, testId, children }: { summary: string; testId: string; children: ReactNode }): ReactElement {
@@ -64,7 +64,7 @@ function Disclosure({ summary, testId, children }: { summary: string; testId: st
       data-testid={testId}
       sx={{
         '& > summary': { cursor: 'pointer', fontWeight: 600, py: 0.5, borderRadius: 1 },
-        '& > summary:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+        '& > summary:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 },
       }}
     >
       <summary>{summary}</summary>

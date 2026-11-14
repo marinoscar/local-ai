@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // A fake Electron that records the order of the calls that matter.
 const calls: string[] = [];
 const windows: Array<{ options: Record<string, unknown>; children: unknown[] }> = [];
-const views: Array<{ options: Record<string, unknown>; url?: string }> = [];
+const views: Array<{ options: Record<string, unknown>; url?: string; background?: string }> = [];
 const sessionHooks: Record<string, boolean> = {};
 
 vi.mock('electron', () => {
@@ -40,7 +40,7 @@ vi.mock('electron', () => {
     on(): void {}
   }
   class WebContentsView {
-    record: { options: Record<string, unknown>; url?: string };
+    record: { options: Record<string, unknown>; url?: string; background?: string };
     webContents = {
       id: 1,
       loadURL: (url: string) => {
@@ -54,6 +54,9 @@ vi.mock('electron', () => {
       views.push(this.record);
     }
     setBounds(): void {}
+    setBackgroundColor(colour: string): void {
+      this.record.background = colour;
+    }
   }
   return {
     BaseWindow,
@@ -124,11 +127,12 @@ describe('start-up order (desktop.md 3.6, implementation note 1)', () => {
     expect(egressGuard.installed).toBe(true);
 
     // The main window: hidden until the start-up sequence decides what it shows (desktop.md 4.1), default menu removed.
-    expect(windows[0]!.options).toMatchObject({ show: false, width: 1280, height: 860, minWidth: 900, minHeight: 600, title: 'Local AI' });
+    expect(windows[0]!.options).toMatchObject({ show: false, width: 1280, height: 860, minWidth: 900, minHeight: 600, title: 'Local AI', backgroundColor: '#07070A' });
     expect(calls).toContain('removeMenu');
     // Its only view at this point is the top bar, loaded at once: a webContents that never navigated hangs Playwright's launch.
     expect(views).toHaveLength(1);
     expect(views[0]!.url).toBe('localai://app/topbar/');
+    expect(views[0]!.background).toBe('#07070A'); // Corona bg: no white flash (ADR-0014)
     expect(windows[0]!.children).toHaveLength(1);
     expect(views[0]!.options['webPreferences']).toMatchObject({
       contextIsolation: true,

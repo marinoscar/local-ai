@@ -4,6 +4,9 @@ import { STRINGS, pick } from './strings';
 
 export type PillTone = 'ok' | 'busy' | 'bad' | 'warn';
 
+/** The mark beside the pill's colour, so its state never rests on colour alone (ADR-0014), even when the narrow bar hides the word. */
+export const PILL_MARK: Record<PillTone, string> = { ok: '✓', busy: '…', warn: '!', bad: '✕' };
+
 export interface Pill {
   tone: PillTone;
   label: string;

@@ -253,7 +253,7 @@ function NodeActions({ controller, state, node, lang, canAct, onRestart, onMusic
                 >
                   {workload.label[lang]}
                 </Button>
-                {workload.active ? <Chip size="small" color="primary" label={pick(STRINGS.workloadActive, lang)} /> : null}
+                {workload.active ? <Chip size="small" variant="outlined" label={pick(STRINGS.workloadActive, lang)} /> : null}
                 {!workload.fits ? <Chip size="small" color="warning" label={pick(STRINGS.workloadDoesNotFit, lang)} /> : null}
                 {workload.missing > 0 ? <Chip size="small" label={fill(pick(STRINGS.workloadMissing, lang), { count: String(workload.missing) })} /> : null}
               </Stack>
@@ -294,7 +294,7 @@ function NodeActions({ controller, state, node, lang, canAct, onRestart, onMusic
                   {model.id}
                 </Typography>
                 <Chip size="small" label={model.status} />
-                {model.isDefault ? <Chip size="small" color="primary" label={pick(STRINGS.isDefault, lang)} /> : null}
+                {model.isDefault ? <Chip size="small" variant="outlined" label={pick(STRINGS.isDefault, lang)} /> : null}
                 {model.status !== 'loaded' ? (
                   <Button
                     size="small"

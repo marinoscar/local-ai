@@ -14,7 +14,7 @@ type Problem = { text: string; code?: string; fix: string };
 type RotateState = { kind: 'idle' } | { kind: 'running' } | { kind: 'done'; result: Extract<RotateKeyResult, { ok: true }> } | { kind: 'kept'; fingerprint?: string };
 
 const Mono = ({ children, testId }: { children: string; testId?: string }): ReactElement => (
-  <Box component="pre" data-testid={testId} sx={{ m: 0, p: 1.5, bgcolor: 'action.hover', borderRadius: 1, fontFamily: 'ui-monospace, monospace', fontSize: '0.8125rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all', userSelect: 'text' }}>
+  <Box component="pre" data-testid={testId} sx={{ m: 0, p: 1.5, bgcolor: 'background.default', border: 1, borderColor: 'divider', borderRadius: 1, fontFamily: 'ui-monospace, monospace', fontSize: '0.8125rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all', userSelect: 'text' }}>
     {children}
   </Box>
 );
