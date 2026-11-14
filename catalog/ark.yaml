@@ -11,9 +11,8 @@
 # Order matters: the planner drops later list positions first within a tier (catalog.md section 4), and
 # the profiles list items in this order. Kit items (kit-*, rebuild-kit.md section 3.2) follow docs-bundle.
 #
-# No sha256 is written here: Kiwix items use the origin's sidecar and the place files use computed
-# checksums with trust on first use (catalog.md section 3.1). `map-assets` (a github_release item that
-# needs a pinned tag and digest) is added once issue #251 allows a digest in a tracked file.
+# No sha256 is written here except for map-assets: Kiwix items use the origin's sidecar and the place files use computed
+# checksums with trust on first use (catalog.md section 3.1). `map-assets` is pinned by tag and sha256 (issue #487).
 schema_version: 1
 content:
 
@@ -461,6 +460,25 @@ content:
       checksum: computed
     expected_size_bytes: 2500000000
     refresh_days: 180
+
+  - id: map-assets
+    kind: maps
+    display_name: "Map labels: fonts and symbols"
+    summary: "Street, town and place names and map symbols. Needed to read the offline maps."
+    summary_es: "Nombres de calles, pueblos y lugares, y símbolos del mapa. Necesarios para leer los mapas sin internet."
+    survival_tier: 1
+    license: "OFL-1.1 (fonts) and MIT (symbols)"
+    source:
+      # protomaps/basemaps-assets publishes no releases, so this repository publishes the exact files the viewer
+      # reads, built reproducibly from a pinned upstream commit by scripts/release/build-map-assets.sh (issue #487).
+      type: github_release
+      repo: marinoscar/local-ai
+      tag: "map-assets-028c18f"
+      asset: "map-assets-028c18f.tar.gz"
+      sha256: "ef31479169e8b36fecfa153dd01936a55d70d37756e9d8433194ae54c7a9f796"
+      extract: true
+    expected_size_bytes: 6143438
+    refresh_days: 365
 
   - id: places-central-america
     kind: maps

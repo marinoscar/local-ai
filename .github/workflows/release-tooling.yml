@@ -3,13 +3,14 @@ name: release-tooling
 #   scripts/release-sign.sh                                   checksums, signing, verification
 #   scripts/release/{build-src-tarball,stamp-installer,assemble-node-release,offline-build-check}.sh   node release
 #   scripts/release/{check-desktop-tag,assemble-desktop-release,desktop-release-notes,desktop-kit-snippet}.sh   desktop release (DSK-12),
+#   scripts/release/build-map-assets.sh   the map-assets archive (issue #487), against a fake upstream repository
 #   plus a lint of every workflow (YAML parses, desktop-release.yml keeps its safety properties)
 on:
   pull_request:
-    paths: ['scripts/release-sign.sh', 'scripts/release/**', 'scripts/check-redaction.sh', 'scripts/tests/test-release-sign.sh', 'scripts/tests/test-release-node.sh', 'scripts/tests/test-desktop-release.sh', '.github/workflows/release-*.yml', '.github/workflows/desktop-*.yml', '.github/PULL_REQUEST_TEMPLATE/**']
+    paths: ['scripts/release-sign.sh', 'scripts/release/**', 'scripts/check-redaction.sh', 'scripts/tests/test-release-sign.sh', 'scripts/tests/test-release-node.sh', 'scripts/tests/test-desktop-release.sh', 'scripts/tests/test-map-assets.sh', '.github/workflows/release-*.yml', '.github/workflows/desktop-*.yml', '.github/PULL_REQUEST_TEMPLATE/**']
   push:
     branches: [main]
-    paths: ['scripts/release-sign.sh', 'scripts/release/**', 'scripts/check-redaction.sh', 'scripts/tests/test-release-sign.sh', 'scripts/tests/test-release-node.sh', 'scripts/tests/test-desktop-release.sh', '.github/workflows/release-*.yml', '.github/workflows/desktop-*.yml', '.github/PULL_REQUEST_TEMPLATE/**']
+    paths: ['scripts/release-sign.sh', 'scripts/release/**', 'scripts/check-redaction.sh', 'scripts/tests/test-release-sign.sh', 'scripts/tests/test-release-node.sh', 'scripts/tests/test-desktop-release.sh', 'scripts/tests/test-map-assets.sh', '.github/workflows/release-*.yml', '.github/workflows/desktop-*.yml', '.github/PULL_REQUEST_TEMPLATE/**']
 permissions:
   contents: read
 jobs:
@@ -41,3 +42,12 @@ jobs:
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign shellcheck python3-yaml
       - run: python3 -c 'import yaml; print("PyYAML", yaml.__version__)'
       - run: scripts/tests/test-desktop-release.sh
+  map-assets-tests:
+    # The reproducible map-assets archive (fonts and sprites for the offline map viewer, issue #487) built from a fake
+    # upstream git repository: layout, licences, byte-identical rebuilds and the refusals. No network.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+      - run: shellcheck -S style scripts/release/build-map-assets.sh && shellcheck -S warning scripts/tests/test-map-assets.sh
+      - run: scripts/tests/test-map-assets.sh

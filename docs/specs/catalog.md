@@ -160,10 +160,10 @@ content:
     kind: maps
     display_name: "Map styles and fonts"
     source:
-      type: github_release               # assets needed to render maps offline (style json, glyphs, sprites)
-      repo: protomaps/basemaps-assets
-      tag: "<pinned tag>"
-      asset: "<asset name>"
+      type: github_release               # fonts (glyphs) and sprites the offline map viewer reads
+      repo: marinoscar/local-ai          # upstream protomaps/basemaps-assets has no releases: see "map-assets" below
+      tag: "map-assets-<short upstream commit>"
+      asset: "map-assets-<short upstream commit>.tar.gz"
       sha256: "<64 hex>"
       extract: true                      # optional (github_release | url): unpack the verified archive and store it as a directory item (ark-sync.md §4.9.4)
 
@@ -290,14 +290,14 @@ Every Kiwix `book` below was checked on 2026-11-03 against the Kiwix OPDS catalo
 - **WikiMed is `wikipedia_en_medicine` (flavour `maxi`), not `mdwiki_en_all_maxi`.** The Spanish edition exists only as `wikipedia_es_medicine`, and the portal needs an English and a Spanish book of the same kind, so `wikimed-en` and `wikimed-es` are the two WikiMed books. `mdwiki_en_all_maxi` (a different medical wiki, English only) is the extra tier 2 item `mdwiki-en`.
 - **`survival-collection` is five items.** One catalog item is one ZIM, and the survival collections are separate ZIMs (water, first aid, food, post-disaster), so the single id of the first draft became `survival-first-aid`, `survival-water`, `survival-food` and `survival-post-disaster`. There is no Kiwix "power" survival ZIM; `energypedia-en` fills that role.
 - **There is no `stackoverflow` nopic flavour.** The only book is `stackoverflow.com_en_all` (about 115 GB), so `stackexchange-stackoverflow` is tier 3.
-- **`map-assets` is not in the catalog yet.** A `github_release` item needs a pinned tag, an asset name and a 64-hex sha256 (lint rejects anything else), and the redaction check refuses a 64-hex string in a tracked file (issue #251 is open). It is added in the pull request that resolves #251, with the real tag and digest; until then the `map-assets` id is reserved and no profile lists it.
+- **`map-assets` comes from a release of this repository, not from upstream (issue #487).** `protomaps/basemaps-assets` publishes no releases and no tags, and GitHub's generated branch archives are not promised to stay byte-identical, so a sha256 pin cannot point at them (and their top folder `basemaps-assets-<sha>/` would not match the item layout). `scripts/release/build-map-assets.sh --commit <upstream commit>` takes the files at a pinned upstream commit through git and builds a reproducible `map-assets-<short>.tar.gz` holding exactly what the viewer reads: `fonts/{Noto Sans Regular,Noto Sans Medium,Noto Sans Italic}/*.pbf`, `fonts/OFL.txt`, `sprites/v4/*`, `sprites/LICENSE.md` (MIT, tangrams/icons) and `SOURCE.txt`. It is published once as the release `map-assets-<short>` (not marked latest) and pinned here by tag, asset and sha256, with `extract: true`. To move to a newer upstream: run the script on the new commit, publish the release, change the three pins, bump `CATALOG_VERSION`. It is tier 1 and every profile lists it right after `osm-central-america`.
 
 **Sizes and refresh.** `expected_size_bytes` is the OPDS size rounded up to two significant digits after 3 % growth, only for planning; sync uses the real size. `osm-central-america` keeps the 2.5 GB of the issue; `osm-north-america` (`maxzoom: 13`, 15 GB) is an estimate that the first `aictl ark sync --dry-run` replaces with the `pmtiles extract --dry-run` figure. `places-central-america` is about 3.6 MB of GeoNames files (`expected_size_bytes: 5000000`). Static books (the zimgit collections, Gutenberg, LibreTexts, Khan, TED) refresh yearly, Wikipedia and Wikibooks every 90 days, the rest every 180 days.
 
 Maps:
 - `osm-central-america` (tier 1, all profiles)
 - `osm-north-america` (tier 3, ark drive only)
-- `map-assets` (tier 1; pending, see above)
+- `map-assets` (tier 1, all profiles; see above)
 
 Kit: everything in [rebuild-kit.md](rebuild-kit.md), tier 1.
 

@@ -228,7 +228,7 @@ Nothing listens on the LAN interface. Remote access only works in online mode, t
 | Desktop user data | `~/.config/ai-desktop/` | desktop.md §3.8 |
 | Desktop autostart entry | `~/.config/autostart/ai-desktop.desktop` | desktop.md §4.5 |
 | Desktop shell origin | `localai://app` | desktop.md §3.7 |
-| Release tags | `node-v<semver>` (agent, installer, agent source; [agent.md](../specs/agent.md) §4.10), `desktop-v<semver>` (desktop), `catalog-<CATALOG_VERSION>` (catalog and docs together) plus the moving tag `catalog-stable` (always the newest `catalog-*`; the fallback for nodes when the GitHub tags API fails), both created only by the catalog-release workflow ([catalog.md](../specs/catalog.md) §1) | agent.md, desktop.md §4.11, catalog.md |
+| Release tags | `node-v<semver>` (agent, installer, agent source; [agent.md](../specs/agent.md) §4.10), `desktop-v<semver>` (desktop), `map-assets-<short upstream commit>` (the map fonts and sprites archive, pinned in `ark.yaml`; [catalog.md](../specs/catalog.md) §3, issue #487), `catalog-<CATALOG_VERSION>` (catalog and docs together) plus the moving tag `catalog-stable` (always the newest `catalog-*`; the fallback for nodes when the GitHub tags API fails), both created only by the catalog-release workflow ([catalog.md](../specs/catalog.md) §1) | agent.md, desktop.md §4.11, catalog.md |
 | Desktop packages | `ai-desktop_<version>_amd64.deb` / `ai-desktop_<version>_arm64.deb` (electron-builder default), `ai-desktop-<version>-x86_64.AppImage` | desktop.md §4.11 |
 | VPS stack-agent unit (lives in `marin-server-infra`, not on nodes; phase 2) | `localai-vps-agent.service` | cloud-app.md §4.10 |
 
