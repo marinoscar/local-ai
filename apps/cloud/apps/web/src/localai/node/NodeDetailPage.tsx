@@ -12,6 +12,7 @@ import type { NodeDetail } from '../api/types';
 import { usePolledResource } from '../usePolledResource';
 import { CommandStatusLine } from './CommandStatusLine';
 import { NodeHeader } from './NodeHeader';
+import { NodeWorkloads } from './NodeWorkloads';
 import { ArkTab } from './tabs/ArkTab';
 import { KeysTab } from './tabs/KeysTab';
 import { LogsTab } from './tabs/LogsTab';
@@ -117,6 +118,7 @@ function NodeDetailView({ nodeId, now, commandPollMs }: { nodeId: string; now?: 
     <NodeCommandsProvider nodeId={nodeId} onSettled={() => detail.refresh()} pollMs={commandPollMs}>
       <Box component="section" aria-labelledby="node-title" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <NodeHeader node={node} now={clock} />
+        <NodeWorkloads node={node} />
         {detail.error ? (
           <Alert severity="warning" action={<Button color="inherit" size="small" onClick={detail.refresh}>Try again</Button>}>
             Could not refresh the node. Showing the last answer.

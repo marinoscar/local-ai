@@ -1,29 +1,30 @@
 // `CommandsService.request` and `.cancel` (CLOUD-09) over the in-memory command table: the permission matrix per
 // type, every refusal and its order, dedup, the audit rows (exactly one per new or cancelled command) and the cancel
 // race. The same paths over HTTP are `commands-api-routes.spec.ts`; real SQL is `commands-api.db.spec.ts`.
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { ConflictException, ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 
-import { COMMAND_POLICY } from '../../src/localai/commands/command-policy';
+import { COMMAND_POLICY, FEATURE_ONLY_TYPES } from '../../src/localai/commands/command-policy';
 import { CommandsService } from '../../src/localai/commands/commands.service';
 import { COMMAND_TYPES, type CommandType } from '../../src/localai/contracts/commands';
 import { FakeBus, FakeClock, FakeCommandStore } from './support/fake-command-store';
+import { readCommandExamples } from '../fixtures/localai/command-examples';
 
 const NODE_ROW = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1';
 const MODEL = 'qwen3.6-35b-a3b-q4km';
-const OPERATE = ['lab:read', 'lab:operate', 'gateway:use'];
+const OPERATE = ['lab:read', 'lab:operate', 'gateway:use', 'localai_music:use', 'localai_workloads:write'];
+/** The types the generic route queues (music.generate goes through `/api/localai/music/requests` only). */
+const GENERIC_TYPES = COMMAND_TYPES.filter((type) => !FEATURE_ONLY_TYPES.has(type));
 const ADMIN_ONLY_TYPES: CommandType[] = ['localai.model.delete', 'localai.mode.offline', 'localai.key.rotate', 'localai.agent.update'];
 
 /** One valid params object per type: the shared wire fixture (the agent's fake cloud uses the same file). */
-const EXAMPLES = JSON.parse(readFileSync(join(__dirname, '../fixtures/localai/commands.examples.json'), 'utf8')) as Record<CommandType, { params: Record<string, unknown> }>;
+const EXAMPLES = readCommandExamples<Record<CommandType, { params: Record<string, unknown> }>>();
 const PARAMS = Object.fromEntries(COMMAND_TYPES.map((type) => [type, EXAMPLES[type].params])) as Record<CommandType, Record<string, unknown>>;
 const DELETE_PARAMS = PARAMS['localai.model.delete'];
 
 const roles = {
   viewer: { userId: 'user-viewer', permissions: ['lab:read'] },
   contributor: { userId: 'user-contributor', permissions: OPERATE },
-  admin: { userId: 'user-admin', permissions: ['lab:read', 'lab:operate', 'lab:admin', 'gateway:use', 'gateway:admin'] },
+  admin: { userId: 'user-admin', permissions: ['lab:read', 'lab:operate', 'lab:admin', 'gateway:use', 'gateway:admin', 'localai_music:use', 'localai_music:delete', 'localai_workloads:write'] },
 };
 
 describe('CommandsService.request and cancel', () => {
@@ -51,7 +52,7 @@ describe('CommandsService.request and cancel', () => {
   });
 
   describe('the permission matrix (spec 3.7)', () => {
-    it.each(COMMAND_TYPES)('%s: viewer 403, contributor %s, admin 2xx', async (type) => {
+    it.each(GENERIC_TYPES)('%s: viewer 403, contributor %s, admin 2xx', async (type) => {
       const short = type.replace('localai.', '');
       await expect(service.request('ai-n2', short, PARAMS[type], roles.viewer, 'ui')).rejects.toBeInstanceOf(ForbiddenException);
       expect(store.rows).toHaveLength(0);
@@ -69,10 +70,27 @@ describe('CommandsService.request and cancel', () => {
     });
 
     it('the table decides: the permission named in the 403 is the policy table\'s', async () => {
-      for (const type of COMMAND_TYPES) {
+      for (const type of GENERIC_TYPES) {
         const error = (await service.request('ai-n2', type, PARAMS[type], roles.viewer, 'ui').catch((e) => e)) as ForbiddenException;
         expect((error.getResponse() as { details: { permission: string } }).details.permission).toBe(COMMAND_POLICY[type].permission);
       }
+    });
+
+    it('workload.activate needs localai_workloads:write exactly: lab:operate alone is refused', async () => {
+      const error = await service.request('ai-n2', 'workload.activate', { name: 'music' }, { userId: 'u', permissions: ['lab:read', 'lab:operate'] }, 'ui').catch((e) => e);
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect(error.getResponse().details).toMatchObject({ permission: 'localai_workloads:write' });
+      await expect(service.request('ai-n2', 'workload.activate', { name: 'music' }, { userId: 'u', permissions: ['localai_workloads:write'] }, 'ui')).resolves.toMatchObject({ created: true });
+    });
+
+    it('music.generate is refused on the generic route (400 feature_only_command) for everyone, and nothing is queued', async () => {
+      for (const who of [roles.viewer, roles.contributor, roles.admin]) {
+        const error = await service.request('ai-n2', 'music.generate', PARAMS['localai.music.generate'], who, 'ui').catch((e) => e);
+        expect(error.getStatus()).toBe(400);
+        expect(error.getResponse().details).toMatchObject({ reason: 'feature_only_command', route: '/api/localai/music/requests' });
+      }
+      expect(store.rows).toHaveLength(0);
+      expect(audit.record).not.toHaveBeenCalled();
     });
 
     it('lab:admin alone does not stand in for lab:operate on an operate type', async () => {
@@ -129,7 +147,7 @@ describe('CommandsService.request and cancel', () => {
 
     it.each(['offline', 'survival'])('a node in %s mode is 422 LAI-CLD-034 for every type', async (mode) => {
       node = { id: NODE_ROW, nodeId: 'ai-n2', phase: 'enrolled', mode };
-      for (const type of COMMAND_TYPES) {
+      for (const type of GENERIC_TYPES) {
         const error = await service.request('ai-n2', type, PARAMS[type], roles.admin, 'ui').catch((e) => e);
         expect(error).toBeInstanceOf(UnprocessableEntityException);
         expect(error.getResponse().details).toMatchObject({ code: 'LAI-CLD-034' });

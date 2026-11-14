@@ -214,3 +214,25 @@ describe('auditActor', () => {
     expect(auditActor('localai.node.enrolled', null, 'admin@example.test').kind).toBe('user');
   });
 });
+
+describe('describeAudit: the E11 music and workload actions', () => {
+  it('summarises them from counts and flags only, and links to the music page or the node', () => {
+    expect(describeAudit(row('localai.music.requested', 'localai_music_request', 'r1', { nodeId: 'ai-n2', variations: 2, durationS: 60, hasSample: true }))).toEqual({
+      summary: 'Music requested on ai-n2 (2 songs, 60 s, with a sample)',
+      link: '/music',
+      nodeId: 'ai-n2',
+    });
+    expect(describeAudit(row('localai.music.song_deleted', 'localai_music_song', 's1', { nodeId: 'ai-n2' })).summary).toBe('Deleted a song made on ai-n2');
+    expect(describeAudit(row('localai.music.request_cancelled', 'localai_music_request', 'r1', {})).summary).toBe('Music request cancelled');
+    expect(describeAudit(row('localai.workload.requested', 'localai_node', 'ai-n2', { name: 'music' }))).toEqual({
+      summary: 'Switch to music requested on ai-n2',
+      link: '/lab/nodes/ai-n2',
+      nodeId: 'ai-n2',
+    });
+  });
+
+  it('never prints lyrics or a URL a meta might carry', () => {
+    const { summary } = describeAudit(row('localai.music.requested', 'localai_music_request', 'r1', { nodeId: 'ai-n2', lyrics: 'Person A sings', url: 'https://x.example.test' }));
+    expect(summary).toBe('Music requested on ai-n2');
+  });
+});

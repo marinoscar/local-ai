@@ -20,6 +20,7 @@ import { AUDIT_COMMAND_CANCELLED, AUDIT_COMMAND_REQUESTED, AUDIT_COMMAND_TARGET 
 import {
   commandForbidden,
   commandNotCancellable,
+  featureOnlyCommand,
   invalidCommandParams,
   invalidResult,
   leaseLost,
@@ -38,9 +39,9 @@ import {
 import { parseFailureString } from './command-failure';
 import { ACTIVE_STATUSES, isHeld, renewedLeaseExpiry } from './command-lifecycle';
 import { assertModelOnNode, assertNodeTakesCommands, modelRequiredOnNode } from './command-refusals';
-import { dedupKeyFor, maySend, permissionFor, policyOf, type CommandRequester } from './command-policy';
+import { dedupKeyFor, FEATURE_ONLY_TYPES, maySend, permissionFor, policyOf, type CommandRequester } from './command-policy';
 import { scrubJson } from './command-scrub';
-import { toCommandView, type CommandView } from './command-view';
+import { redactParams, toCommandView, type CommandView } from './command-view';
 
 /** Who asked: a person, or the system itself (a cron, a resend-keys fan-out). */
 export interface CommandActor {
@@ -105,6 +106,7 @@ export class CommandsService implements LocalaiCommandEnqueuer {
    */
   async request(nodeId: string, type: string, rawParams: unknown, requester: CommandRequester, source: CommandSource): Promise<RequestResult> {
     const full = this.resolveType(type);
+    if (FEATURE_ONLY_TYPES.has(full)) throw featureOnlyCommand(full);
     if (!maySend(full, requester.permissions)) throw commandForbidden(permissionFor(full));
     const parsed = COMMANDS[full].params.safeParse(rawParams ?? {});
     if (!parsed.success) throw invalidCommandParams(parsed.error, full);
@@ -125,7 +127,7 @@ export class CommandsService implements LocalaiCommandEnqueuer {
         actorUserId: requester.userId,
         targetType: AUDIT_COMMAND_TARGET,
         targetId: command.id,
-        meta: { nodeId: node.nodeId, type: full, params: JSON.stringify(command.params) },
+        meta: { nodeId: node.nodeId, type: full, params: JSON.stringify(redactParams(full, command.params)) },
       });
     }
     return { command: toCommandView(command, node.nodeId), created };
@@ -160,7 +162,7 @@ export class CommandsService implements LocalaiCommandEnqueuer {
       actorUserId: requester.userId,
       targetType: AUDIT_COMMAND_TARGET,
       targetId: commandId,
-      meta: { nodeId: row.node.nodeId, type: row.type, params: JSON.stringify(row.params) },
+      meta: { nodeId: row.node.nodeId, type: row.type, params: JSON.stringify(redactParams(row.type, row.params)) },
     });
     return toCommandView({ ...row, status: 'cancelled', finishedAt: now }, row.node.nodeId);
   }

@@ -76,6 +76,31 @@ describe('LocalaiStateSnapshotV1', () => {
     });
   });
 
+  describe('the workloads block (E11, #513)', () => {
+    const block = () => ({
+      active: 'coding',
+      items: [
+        { name: 'coding', label: { en: 'Coding', es: 'Programación' }, models: ['qwen3.6-35b-a3b-q4km'], fits: true, missing: [] },
+        { name: 'music', label: { en: 'Music', es: 'Música' }, models: ['acestep-v15-turbo'], fits: false, missing: [] },
+      ],
+    });
+
+    it('is optional, and a snapshot that carries it keeps it', () => {
+      expect(ok(ai3())).toBe(true);
+      const snapshot = { ...ai3(), workloads: block() };
+      expect(LocalaiStateSnapshotV1.parse(snapshot)).toEqual(snapshot);
+      expect(ok({ ...ai3(), workloads: { active: null, items: [] } })).toBe(true);
+    });
+
+    it('is strict and bounded: unknown keys, bad names and 17 workloads are refused', () => {
+      expect(ok({ ...ai3(), workloads: { ...block(), extra: 1 } })).toBe(false);
+      expect(ok({ ...ai3(), workloads: { ...block(), items: [{ ...block().items[0], name: 'Coding' }] } })).toBe(false);
+      expect(ok({ ...ai3(), workloads: { ...block(), items: [{ ...block().items[0], label: { en: 'Coding' } }] } })).toBe(false);
+      expect(ok({ ...ai3(), workloads: { ...block(), items: [{ ...block().items[0], path: '/srv' }] } })).toBe(false);
+      expect(ok({ ...ai3(), workloads: { ...block(), items: Array.from({ length: 17 }, (_, i) => ({ ...block().items[0], name: `w${i}x` })) } })).toBe(false);
+    });
+  });
+
   describe('size and shape bounds', () => {
     it('accepts 200 models and refuses 201', () => {
       const snapshot = ai3();

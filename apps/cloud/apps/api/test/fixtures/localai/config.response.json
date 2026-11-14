@@ -2,7 +2,7 @@
   "data": {
     "nodeId": "ai-n3",
     "apiVersion": 1,
-    "features": ["state.v1", "commands.v1", "catalog.v1", "key.v1", "tailnet.v1", "ensure.v1"],
+    "features": ["state.v1", "commands.v1", "catalog.v1", "key.v1", "tailnet.v1", "ensure.v1", "workloads.v1"],
     "commandPlane": "localai",
     "heartbeatIntervalS": 15,
     "stateMinIntervalS": 5,
