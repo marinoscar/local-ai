@@ -13,17 +13,36 @@ This repository is the runbook and the source tree for two jobs:
 
 If a change makes job 2 less reliable, it is wrong, even if it makes job 1 nicer ([AGENTS.md](AGENTS.md)).
 
+
 ---
 
 ## 🚨 In an emergency
 
 1. Plug in the charger, power on the computer and log in.
-2. Open the **Local AI** app and press **Survival mode**.
+2. Open the **Local AI** app and press **Start survival mode** (or **Help** for every step).
 3. If the app will not open, open a web browser and go to `http://127.0.0.1:7070`.
 
 Full guide, printable, English and Spanish: [Survival mode runbook](docs/runbooks/01-survival-mode.md). One page to keep next to the computer: [Survival card](docs/runbooks/00-survival-card.md) (English and Spanish side by side). You do not need the internet or the admin PIN to start.
 
 > 🧪 **Status:** the software for all of this is written and tested in CI, and the agent, the model router, the kit and the speech and library services already run on a real node. The emergency path has **not yet been drilled end to end on real hardware**. See [Status](#10-status-and-roadmap) before you rely on it.
+
+
+### A look at the app
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/app-home.png" alt="Home: the eight big buttons, first aid, and Manage this computer, in the dark Corona theme"><br><sub><b>Home</b>: state first, eight big buttons, first aid one key away.</sub></td>
+<td width="50%"><img src="docs/images/app-survival.png" alt="Survival mode Home with the Leave survival mode button"><br><sub><b>Survival mode</b>: the emergency screen; leaving it needs no PIN.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/images/app-mode.png" alt="The Mode screen: Online, Offline and Survival"><br><sub><b>Manage this computer</b>: mode, offline content, AI models, health, system.</sub></td>
+<td width="50%"><img src="docs/images/app-help.png" alt="The Help guide"><br><sub><b>Help</b>: what to do in an emergency, every button, every task step by step.</sub></td>
+</tr>
+</table>
+
+<p align="center"><img src="docs/images/terminal-menu.png" alt="The aictl menu in the terminal, with the AI-ARK drive screen" width="100%"><br><sub>For experts: the same tasks in the <code>aictl</code> menu, node and AI-ARK drive screens.</sub></p>
+
+<p align="center"><img src="packages/ui/brand/icon.svg" alt="The Local AI icon: a total solar eclipse" width="96"><br><sub>The icon is a total solar eclipse (<a href="docs/decisions/0014-corona-identity.md">ADR-0014</a>).</sub></p>
 
 ---
 

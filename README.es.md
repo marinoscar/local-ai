@@ -13,17 +13,36 @@ Este repositorio es el manual de operación y el código fuente para dos tareas:
 
 Si un cambio hace que la tarea 2 sea menos confiable, ese cambio está mal, aunque mejore la tarea 1 ([AGENTS.md](AGENTS.md), en inglés).
 
+
 ---
 
 ## 🚨 En una emergencia
 
 1. Conecte el cargador, encienda la computadora e inicie sesión.
-2. Abra la aplicación **Local AI** y presione **Modo supervivencia**.
+2. Abra la aplicación **Local AI** y presione **Iniciar modo supervivencia** (o **Ayuda** para ver cada paso).
 3. Si la aplicación no abre, abra un navegador web y vaya a `http://127.0.0.1:7070`.
 
 Guía completa, imprimible, en inglés y español: [Manual del modo supervivencia](docs/runbooks/01-survival-mode.md). Una hoja para tener junto a la computadora: [Tarjeta de supervivencia](docs/runbooks/00-survival-card.md) (inglés y español lado a lado). No necesita internet ni el PIN de administrador para empezar.
 
 > 🧪 **Estado:** el software para todo esto está escrito y probado en la integración continua, y el agente, el enrutador de modelos, el kit y los servicios de voz y biblioteca ya funcionan en un nodo real. La ruta de emergencia **todavía no se ha practicado de principio a fin en equipos reales**. Lea el [Estado](#10-estado-y-hoja-de-ruta) antes de depender de ella.
+
+
+### Así se ve la aplicación
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/app-home.png" alt="Inicio: los ocho botones grandes, primeros auxilios y Administrar esta computadora, en el tema oscuro Corona"><br><sub><b>Inicio</b>: primero el estado, ocho botones grandes, primeros auxilios a una tecla.</sub></td>
+<td width="50%"><img src="docs/images/app-survival.png" alt="Inicio en modo supervivencia con el botón Salir del modo supervivencia"><br><sub><b>Modo supervivencia</b>: la pantalla de emergencia; salir no necesita PIN.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/images/app-mode.png" alt="La pantalla Modo: En línea, Sin conexión y Supervivencia"><br><sub><b>Administrar esta computadora</b>: modo, contenido sin conexión, modelos de IA, salud, sistema.</sub></td>
+<td width="50%"><img src="docs/images/app-help.png" alt="La guía de Ayuda"><br><sub><b>Ayuda</b>: qué hacer en una emergencia, cada botón y cada tarea paso a paso.</sub></td>
+</tr>
+</table>
+
+<p align="center"><img src="docs/images/terminal-menu.png" alt="El menú de aictl en la terminal, con la pantalla del disco AI-ARK" width="100%"><br><sub>Para expertos: las mismas tareas en el menú de <code>aictl</code>, pantallas del nodo y del disco AI-ARK.</sub></p>
+
+<p align="center"><img src="packages/ui/brand/icon.svg" alt="El ícono de Local AI: un eclipse total de sol" width="96"><br><sub>El ícono es un eclipse total de sol (<a href="docs/decisions/0014-corona-identity.md">ADR-0014</a>).</sub></p>
 
 ---
 
