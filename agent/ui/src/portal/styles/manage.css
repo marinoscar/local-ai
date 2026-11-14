@@ -1,0 +1,116 @@
+/* Manage this computer (dashboard.md). Classes only: the Portal CSP has no 'unsafe-inline'. */
+.manage-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.tab {
+  font: inherit;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 6px 16px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--fg);
+  cursor: pointer;
+}
+.tab-on {
+  background: var(--fg);
+  color: var(--panel);
+}
+.btn-danger {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #ffffff;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.field-label {
+  font-weight: 700;
+}
+.field-input {
+  font: inherit;
+  font-size: 1.4rem;
+  min-height: 52px;
+  max-width: 14rem;
+  padding: 4px 12px;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--fg);
+  letter-spacing: 0.3em;
+}
+.card {
+  border: 3px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 16px 20px;
+  margin: 0 0 16px;
+}
+.card-title {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+}
+.card-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+.muted {
+  color: #3d3d3d;
+}
+.expert {
+  margin-top: 12px;
+}
+.expert summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.expert code {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: #ececec;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+/* Home: the Manage row and the next-step line */
+.manage-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 20px 0 0;
+  padding-top: 12px;
+  border-top: 2px solid var(--line);
+}
+.manage-row-title {
+  margin: 0 8px 0 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.statusline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: auto;
+}
+.statusline-actions .btn {
+  min-height: 40px;
+  padding: 4px 16px;
+}
+.next-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 0;
+}

@@ -1,4 +1,4 @@
-import type { Screen } from "./router";
+import { isManage, type ManageScreen, type Screen } from "./router";
 import type { CapName, PortalStatus } from "./status";
 
 const CAP_OF: Partial<Record<Screen, CapName>> = {
@@ -20,6 +20,8 @@ export type View =
   | { kind: "home" }
   | { kind: "lock" }
   | { kind: "unavailable"; cap: CapName }
+  /** A Manage screen without an operator session (dashboard.md section 5). */
+  | { kind: "manage-locked"; screen: ManageScreen }
   | { kind: "screen"; screen: Screen };
 
 /**
@@ -31,6 +33,10 @@ export function viewFor(
   status: PortalStatus | null,
 ): View {
   if (screen === "") return { kind: "home" };
+  if (isManage(screen))
+    return status?.session === "full"
+      ? { kind: "screen", screen }
+      : { kind: "manage-locked", screen };
   if (status && NEEDS_SESSION.has(screen) && status.session === "none")
     return { kind: "lock" };
   const cap = CAP_OF[screen];

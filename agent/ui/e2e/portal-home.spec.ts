@@ -174,7 +174,9 @@ test("keyboard walkthrough of Home: Tab order, 1-8, F and Esc", async ({
   expect(order[1]).toBe("English");
   expect(order[2]).toBe("Español");
   expect(order.slice(3, 6)).toEqual(["A", "A+", "A++"]);
-  const bigs = order.slice(6, 14);
+  // The status line's Help button (dashboard.md section 4.1) comes before the big buttons.
+  expect(order[6]).toBe("Help");
+  const bigs = order.slice(7, 15);
   [
     "Chat",
     "Ask about a photo",
@@ -185,7 +187,7 @@ test("keyboard walkthrough of Home: Tab order, 1-8, F and Esc", async ({
     "Status and battery",
     "Switch brain",
   ].forEach((name, i) => expect(bigs[i]).toContain(name));
-  expect(order[14]).toBe("CPR");
+  expect(order[15]).toBe("CPR");
 
   await page.goto("/portal");
   await page.keyboard.press("f");
@@ -276,7 +278,7 @@ test("the agent language is used until a choice is made", async ({ page }) => {
 });
 
 test.describe("banners", () => {
-  test("survival mode off: banner replaces the status line, Start survival mode works", async ({
+  test("survival mode off: banner under the status line, Start survival mode works", async ({
     page,
   }) => {
     await setStatus(page, { mode: "dashboard", session: "none" });
@@ -284,7 +286,8 @@ test.describe("banners", () => {
     await expect(
       page.locator(".banner-text", { hasText: "Survival mode is off." }),
     ).toBeVisible();
-    await expect(page.locator(".statusline")).toHaveCount(0);
+    // dashboard.md section 4.1: the status line is shown in every mode.
+    await expect(page.locator(".statusline")).toContainText("Ready.");
     await page.getByRole("button", { name: "Start survival mode" }).click();
     await expect(
       page.locator(".banner-text", { hasText: "Survival mode is off." }),

@@ -14,8 +14,28 @@ export const SCREENS = [
   "brain",
   "first-aid",
   "help",
+  // Manage this computer (dashboard.md section 3.1): operator session only.
+  "manage/mode",
+  "manage/content",
+  "manage/models",
+  "manage/health",
+  "manage/system",
 ] as const;
 export type Screen = (typeof SCREENS)[number];
+
+/** The Manage screens, in the order of the Manage row (dashboard.md section 4.1). */
+export const MANAGE_SCREENS = [
+  "manage/mode",
+  "manage/content",
+  "manage/models",
+  "manage/health",
+  "manage/system",
+] as const;
+export type ManageScreen = (typeof MANAGE_SCREENS)[number];
+
+export function isManage(s: Screen | ""): s is ManageScreen {
+  return (MANAGE_SCREENS as readonly string[]).includes(s);
+}
 
 /** screenOf maps a location path to a screen name; '' is Home. Unknown paths are Home. */
 export function screenOf(pathname: string): Screen | "" {

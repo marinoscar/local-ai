@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { handleManage, resetManage } from "./fake-manage.mjs";
 import { handleMaps } from "./fake-maps.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -196,10 +197,27 @@ async function readBody(req) {
   return s;
 }
 
+const manageCtx = {
+  getStatus: () => status,
+  setStatus: (next) => {
+    status = { ...status, ...next };
+  },
+  record: (entry) => seen.push(entry),
+  readBody,
+  json: (res, code, body) =>
+    send(res, code, JSON.stringify(body), { "Content-Type": "application/json" }),
+  emit: (type, data) => {
+    const frame = `event: ${type}\ndata: ${JSON.stringify({ type, data })}\n\n`;
+    for (const r of streams) r.write(frame);
+  },
+};
+
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
   const p = url.pathname;
   if (await handleMaps(req, res, url, CSP)) return;
+  // Before the shared /__ controls: each Manage screen has its own (/__mode, /__pin, …).
+  if (p !== "/__reset" && (await handleManage(req, res, url, manageCtx))) return;
   if (p.startsWith("/__")) {
     if (p === "/__reset") {
       status = defaultStatus();
@@ -209,6 +227,7 @@ createServer(async (req, res) => {
       fixAnswer = 0;
       ensure = ensureView("needs_you", [piperStep("pending")]);
       ensureAnswer = 0;
+      resetManage();
       return send(res, 200, "ok");
     }
     if (p === "/__ensure" && req.method === "POST") {
@@ -355,11 +374,8 @@ createServer(async (req, res) => {
       TYPES[extname(rel)] ?? "application/octet-stream",
     );
   }
-  if (p === "/") {
-    if (status.mode === "survival")
-      return send(res, 302, "", { Location: "/portal" });
-    return file(res, join(dist, "index.html"), TYPES[".html"]);
-  }
+  // Issue #497: "/" is the Portal's Home in every mode (agent/internal/api/spa.go).
+  if (p === "/") return send(res, 302, "", { Location: "/portal" });
   // kiwix-serve search: OpenSearch RSS, or its HTML page when format is not xml.
   if (p === "/library/search") {
     seen.push({

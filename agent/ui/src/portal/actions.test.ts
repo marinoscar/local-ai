@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ACTIONS, isFixAction, runFix } from "./actions";
 import { ApiError } from "./api";
-import en from "./i18n/en.json";
-import es from "./i18n/es.json";
+import { translate } from "./i18n/i18n";
 
 describe("fix actions", () => {
   it("are the closed set of doctor-codes.md section 1.7", () => {
@@ -21,9 +20,9 @@ describe("fix actions", () => {
 
   it("have a label in both languages and never reach llama or a stop", () => {
     for (const a of Object.values(ACTIONS)) {
-      expect(en[a.label]).toBeTruthy();
-      expect(es[a.label]).toBeTruthy();
-      expect(en[a.done]).toBeTruthy();
+      expect(translate("en", a.label)).not.toBe(a.label);
+      expect(translate("es", a.label)).not.toBe(a.label);
+      expect(translate("en", a.done)).not.toBe(a.done);
       if (a.path !== null)
         expect(a.path).toMatch(
           /^\/api\/v1\/(ark\/import|ensure|services\/(kiwix|whisper)\/restart)$/,

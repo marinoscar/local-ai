@@ -1,17 +1,21 @@
 import { useSyncExternalStore } from "react";
 import en from "./en.json";
 import es from "./es.json";
+import { MANAGE_EN, MANAGE_ES } from "./manage";
 
 // Translation helper of the Portal (survival-portal.md sections 4.3 and 4.9). Every user-visible
 // string is a key of en.json / es.json; a lint rule forbids JSX text literals.
 
 export type Lang = "en" | "es";
-export type Key = keyof typeof en;
+export type Key = keyof typeof en | keyof typeof MANAGE_EN;
 export type Vars = Record<string, string | number>;
 
 export const LANG_KEY = "lai.portal.lang";
 
-const tables: Record<Lang, Record<string, string>> = { en, es };
+const tables: Record<Lang, Record<string, string>> = {
+  en: { ...en, ...MANAGE_EN },
+  es: { ...es, ...MANAGE_ES },
+};
 
 export function isLang(v: unknown): v is Lang {
   return v === "en" || v === "es";
