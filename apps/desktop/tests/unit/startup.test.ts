@@ -287,6 +287,7 @@ describe('error-page actions', () => {
       repairAccess: async () => (calls.push('repairAccess'), answers.repairAccess ?? { ok: true }),
       rotateToken: async () => (calls.push('rotateToken'), answers.rotateToken ?? { ok: true }),
       reboot: async () => (calls.push('reboot'), answers.reboot ?? { ok: true }),
+      runNamed: async () => (calls.push('runNamed'), { ok: true }),
     };
     return { system, calls };
   };

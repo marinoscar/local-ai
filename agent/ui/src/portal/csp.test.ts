@@ -25,3 +25,23 @@ describe("Portal CSP", () => {
     });
   }
 });
+
+// A merge once dropped a "}" from manage.css: every rule after it, the fonts included, was lost.
+describe("stylesheets", () => {
+  it("every Portal stylesheet has balanced braces", async () => {
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const dir = join(__dirname, "styles");
+    for (const f of readdirSync(dir).filter((n) => n.endsWith(".css"))) {
+      const css = readFileSync(join(dir, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+      let depth = 0;
+      for (const ch of css) {
+        if (ch === "{") depth++;
+        if (ch === "}") depth--;
+        expect(depth, f).toBeGreaterThanOrEqual(0);
+        expect(depth, f).toBeLessThanOrEqual(2);
+      }
+      expect(depth, f).toBe(0);
+    }
+  });
+});

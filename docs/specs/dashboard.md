@@ -65,10 +65,10 @@ Auth levels are those of [agent.md](agent.md) §3.8 (route table). "PIN" means t
 | Health | **Run a practice drill** / **Stop** | `POST /drill` / `DELETE /drill`; result `GET /drill` | no |
 | System | **Restart** (per service) | `POST /services/{name}/restart` | no |
 | System | **Get the newest catalog** | `POST /catalog/refresh` | no |
-| System | **Update Local AI** | privileged: `pkexec /opt/localai/bin/aiagent ctl update --yes` | no (system password) |
-| System | **Check the rebuild kit** | privileged: `pkexec /opt/localai/bin/aiagent ctl kit verify` | no (system password) |
-| System | **Save settings to a file** / **Restore settings** | privileged: `aiagent ctl backup-config` / `--restore` | restore: PIN |
-| System | **Change the admin PIN** | privileged: `aiagent ctl pin set` | system password |
+| System | **Update Local AI** | privileged: `pkexec /opt/localai/bin/aiagent ctl --json --lang <l> update --yes` (online only) | no (system password) |
+| System | **Check the rebuild kit** | privileged: `pkexec /opt/localai/bin/aiagent ctl --lang <l> kit verify` | no (system password) |
+| System | **Save settings to a file** / **Restore settings** | privileged: `pkexec /opt/localai/bin/aiagent ctl --json --lang <l> backup-config --to-ark --yes` / `… backup-config --restore latest --yes` | restore: PIN, then the system password |
+| System | **Change the admin PIN** | not a button: `sudo aictl pin set` under "For an expert" (it reads the PIN from a terminal; [desktop.md](desktop.md) §4.2) | system password |
 | Help | **What this app can do**, **Emergency steps**, **Manuals** | embedded pages; `/docs/` for the manuals | no |
 
 ### 3.3 Desktop entry points
@@ -123,6 +123,7 @@ A row per model: name, size, state (loaded, downloaded, not downloaded), "surviv
 
 ### 4.6 System
 Versions (app, agent, catalog), services with state and **Restart**, updates (agent, catalog), rebuild kit status and **Check the rebuild kit**, settings backup and restore, and **Change the admin PIN**. Each privileged button explains that the computer will ask for the administrator (login) password.
+- **As built (#500).** Code: `agent/ui/src/portal/manage/SystemScreen.tsx` (the screen) and `manage/system.ts` (the rules, unit-tested in `system.test.ts`); desktop side `apps/desktop/src/main/system-actions.ts` (`runNamed`, `systemActionArgv`, `interpretSystemAction`). Data: `GET /status` (`node.agent_version`, `node.catalog_version`, `services[]` with `name`, `unit`, `active`, `healthy`, `state`; [agent.md](agent.md) §3.8.4) and `GET /catalog` (`content[]` with `kind: "kit"`, `in_profile`, `verified`; §3.8.21): the agent has no kit-status route, so the kit line counts the kit items of the plan and the verified ones ("12 of 14 parts are ready"); the full check is the privileged button. The app version is `window.localaiDesktopHost.version` (shown only inside ai-desktop). Each service row shows its state in plain words (the health `state`, else systemd's `active`); **Restart** is offered for `llama`, `kiwix` and `whisper` only (piper and maps have no unit) and confirms first with what stops for a moment. **Get the newest catalog** and **Update Local AI** are disabled with "Needs the internet" unless the mode is online. The four privileged buttons confirm (what happens, then "The computer will ask for your login password"), **Restore settings** then asks the admin PIN, and they call `runSystemAction(name)` with `update-agent`, `kit-verify`, `backup-config` (to the AI-ARK drive: `--to-ark`, because `pkexec` runs in root's home, where a file would be lost to the person) or `restore-config` (`--restore latest`, this node's newest backup); the exact argv is [desktop.md](desktop.md) §4.2. A failure shows the command's doctor code and fix when it printed one, else the sentence of the reason (password window closed, busy, no password window, too long). In a plain browser, or a desktop older than #500, the button opens the closed "For an expert" box with the `aictl` command and says the button works in the Local AI app. **Change the admin PIN** is not a button: `aictl pin set` reads the new PIN from a terminal (or stdin), and passing a PIN typed in a page to a root process is more than the bridge allows, so it is shown only under "For an expert" (`sudo aictl pin set`). A restore when no admin PIN is set cannot pass the PIN step; the expert command remains.
 
 ### 4.7 Help and the guide
 Embedded in the bundle (works offline), both languages, reachable from Home, the desktop menu and the tray:
@@ -552,6 +553,77 @@ Every string of the Manage screens, Home's additions and the guide lives in `age
 | Key | English | Español |
 |---|---|---|
 | `system.title` | System | Sistema |
+| `system.lead` | The versions, the programs that run in the background, updates, the rebuild kit and the settings backup of this computer. | Las versiones, los programas que funcionan en segundo plano, las actualizaciones, el kit de reconstrucción y la copia de la configuración de esta computadora. |
+| `system.loading` | Reading the state of this computer … | Leyendo el estado de esta computadora … |
+| `system.versions` | Versions | Versiones |
+| `system.version.app` | This app | Esta aplicación |
+| `system.version.agent` | Local AI | Local AI |
+| `system.version.catalog` | Catalog | Catálogo |
+| `system.version.none` | None installed | Ninguno instalado |
+| `system.services` | Services | Servicios |
+| `system.servicesWhy` | The programs that run in the background. Restart one when it is stopped or has problems. | Los programas que funcionan en segundo plano. Reinicie uno cuando esté detenido o tenga problemas. |
+| `system.svc.llama` | AI brain | Cerebro de IA |
+| `system.svc.kiwix` | Library | Biblioteca |
+| `system.svc.whisper` | Speech to text | Voz a texto |
+| `system.svc.piper` | Voice | Voz |
+| `system.svc.maps` | Maps | Mapas |
+| `system.state.ok` | Running | Funcionando |
+| `system.state.starting` | Starting | Iniciando |
+| `system.state.degraded` | Running, with problems | Funcionando, con problemas |
+| `system.state.down` | Stopped | Detenido |
+| `system.state.missing_content` | Waiting for its content | Esperando su contenido |
+| `system.state.disabled` | Turned off | Apagado |
+| `system.state.unknown` | Unknown | Desconocido |
+| `system.restart` | Restart | Reiniciar |
+| `system.restartNamed` | Restart {name} | Reiniciar {name} |
+| `system.restartTitle` | Restart {name}? | ¿Reiniciar {name}? |
+| `system.restartWhy.llama` | The AI brain stops for up to a minute. An answer that is being written is cut off. The models that were loaded are loaded again. | El cerebro de IA se detiene hasta un minuto. Una respuesta que se está escribiendo se corta. Los modelos que estaban cargados se vuelven a cargar. |
+| `system.restartWhy.kiwix` | The library stops for a few seconds. | La biblioteca se detiene unos segundos. |
+| `system.restartWhy.whisper` | Speech to text stops for a few seconds. | Voz a texto se detiene unos segundos. |
+| `system.restarted` | {name} restarted. | {name} se reinició. |
+| `system.updates` | Updates | Actualizaciones |
+| `system.catalogRefresh` | Get the newest catalog | Obtener el catálogo más reciente |
+| `system.catalogWhy` | The catalog is the list of content and AI models this computer can have. It uses the internet. | El catálogo es la lista de contenido y modelos de IA que esta computadora puede tener. Usa internet. |
+| `system.catalogChanged` | The catalog was updated to {version}. | El catálogo se actualizó a {version}. |
+| `system.catalogSame` | You already have the newest catalog ({version}). | Ya tiene el catálogo más reciente ({version}). |
+| `system.update` | Update Local AI | Actualizar Local AI |
+| `system.updateWhy` | Downloads the newest version of Local AI, checks that it is genuine and installs it. Local AI restarts; the AI models keep running. It uses the internet. | Descarga la versión más reciente de Local AI, comprueba que es auténtica y la instala. Local AI se reinicia; los modelos de IA siguen funcionando. Usa internet. |
+| `system.updateTitle` | Update Local AI? | ¿Actualizar Local AI? |
+| `system.updated` | Updated to version {to}. Local AI restarted. | Se actualizó a la versión {to}. Local AI se reinició. |
+| `system.upToDate` | You already have the newest version ({version}). | Ya tiene la versión más reciente ({version}). |
+| `system.password` | The computer will ask for your login password (the administrator password). | La computadora le pedirá su contraseña de inicio de sesión (la contraseña de administrador). |
+| `system.kit` | Rebuild kit | Kit de reconstrucción |
+| `system.kitWhy` | The rebuild kit has what is needed to repair or reinstall Local AI without the internet. | El kit de reconstrucción tiene lo necesario para reparar o reinstalar Local AI sin internet. |
+| `system.kitReady` | Ready: all {n} parts are here and checked. | Listo: las {n} partes están aquí y revisadas. |
+| `system.kitPartial` | {ready} of {n} parts are ready. The others are downloaded with the internet (Offline content, Sync now). | {ready} de {n} partes están listas. Las demás se descargan con internet (Contenido sin conexión, Sincronizar ahora). |
+| `system.kitNone` | This computer's plan has no rebuild kit. | El plan de esta computadora no tiene kit de reconstrucción. |
+| `system.kitCheck` | Check the rebuild kit | Revisar el kit de reconstrucción |
+| `system.kitCheckWhy` | Reads the kit's files again to make sure none is damaged. It can take several minutes. | Vuelve a leer los archivos del kit para asegurarse de que ninguno esté dañado. Puede tardar varios minutos. |
+| `system.kitTitle` | Check the rebuild kit? | ¿Revisar el kit de reconstrucción? |
+| `system.kitGreen` | The rebuild kit is complete and undamaged. | El kit de reconstrucción está completo y sin daños. |
+| `system.kitYellow` | The rebuild kit can be used, with warnings. | El kit de reconstrucción se puede usar, con advertencias. |
+| `system.kitRed` | Parts of the rebuild kit are missing or damaged. Open Health and run a full check to see which. | Faltan partes del kit de reconstrucción o están dañadas. Abra Salud y haga una revisión completa para ver cuáles. |
+| `system.settings` | Settings backup | Copia de la configuración |
+| `system.backup` | Save settings to a file | Guardar la configuración en un archivo |
+| `system.backupWhy` | Saves this computer's settings in a file on the AI-ARK drive. Connect the drive first. The file holds this computer's keys, so keep the drive in a safe place. | Guarda la configuración de esta computadora en un archivo en el disco AI-ARK. Conecte el disco primero. El archivo tiene las claves de esta computadora, así que guarde el disco en un lugar seguro. |
+| `system.backupTitle` | Save the settings on the AI-ARK drive? | ¿Guardar la configuración en el disco AI-ARK? |
+| `system.backedUp` | Saved on the AI-ARK drive ({n} files). Keep the drive in a safe place. | Se guardó en el disco AI-ARK ({n} archivos). Guarde el disco en un lugar seguro. |
+| `system.backedUpPlain` | Saved on the AI-ARK drive. Keep the drive in a safe place. | Se guardó en el disco AI-ARK. Guarde el disco en un lugar seguro. |
+| `system.restore` | Restore settings | Restaurar la configuración |
+| `system.restoreWhy` | Puts back the newest settings backup of this computer, from this computer or the AI-ARK drive. The current files are kept as copies. Local AI restarts. | Vuelve a poner la copia más reciente de la configuración de esta computadora, desde esta computadora o el disco AI-ARK. Los archivos actuales se guardan como copias. Local AI se reinicia. |
+| `system.restoreTitle` | Restore the settings? | ¿Restaurar la configuración? |
+| `system.restorePin` | Restoring replaces this computer's settings, so it needs the admin PIN. | Restaurar reemplaza la configuración de esta computadora, así que necesita el PIN de administrador. |
+| `system.restored` | Restored {n} files. Local AI restarted. | Se restauraron {n} archivos. Local AI se reinició. |
+| `system.restoredPlain` | The settings were restored. Local AI restarted. | Se restauró la configuración. Local AI se reinició. |
+| `system.restoredNothing` | Nothing to restore: the settings are already the same as the backup. | No hay nada que restaurar: la configuración ya es igual a la copia. |
+| `system.pin` | Change the admin PIN | Cambiar el PIN de administrador |
+| `system.pinWhy` | An expert does this at this computer's keyboard: the new PIN is typed twice in a terminal, so this app cannot do it for you. | Un experto lo hace con el teclado de esta computadora: el PIN nuevo se escribe dos veces en una terminal, así que esta aplicación no puede hacerlo por usted. |
+| `system.desktopOnly` | This button works in the Local AI app. In a web browser, give the command below to an expert. | Este botón funciona en la aplicación Local AI. En un navegador web, dele el comando de abajo a un experto. |
+| `system.cancelled` | The password window was closed, or the password was not accepted. Press the button to try again. | Se cerró la ventana de la contraseña, o la contraseña no fue aceptada. Presione el botón para intentarlo de nuevo. |
+| `system.busy` | Another task that needs the password is still running. Wait for it to finish, then try again. | Otra tarea que necesita la contraseña sigue en curso. Espere a que termine y vuelva a intentarlo. |
+| `system.unavailable` | This computer cannot show the password window. Give the command below to an expert. | Esta computadora no puede mostrar la ventana de la contraseña. Dele el comando de abajo a un experto. |
+| `system.timeout` | It took too long and was stopped. Try again, or give the command below to an expert. | Tardó demasiado y se detuvo. Vuelva a intentarlo, o dele el comando de abajo a un experto. |
+| `system.failedPlain` | It stopped with an error. Give the command below to an expert. | Se detuvo con un error. Dele el comando de abajo a un experto. |
 <!-- /copy -->
 
 ### 9.7 Help and the guide

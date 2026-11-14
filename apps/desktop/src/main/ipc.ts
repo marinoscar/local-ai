@@ -12,6 +12,7 @@ import { NULL_LOGGER, type Logger } from './log';
 import { readSettings, updateSettings, type Settings, type SettingsPatch } from './settings';
 import { handleErrorAction, isErrorPageUrl, parseActionRequest, type ActionDeps } from './startup';
 import type { AgentStatus, ConnectionState } from './agent-client';
+import type { SystemActions } from './system-actions';
 import type {
   ActionResult,
   AgentReach,
@@ -33,6 +34,7 @@ import type {
   ShellSettings,
   ShellSettingsPatch,
   SurvivalState,
+  SystemActionResult,
   Tab,
   WindowBounds,
 } from '../shared/types';
@@ -80,6 +82,7 @@ export const CHANNELS = {
   hostOpenWindow: 'localai:host:open-window',
   hostConnectionInfo: 'localai:host:connection-info',
   hostVersion: 'localai:host:version',
+  hostRunSystemAction: 'localai:host:run-system-action',
 } as const;
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -496,6 +499,8 @@ export interface BridgeDeps {
   ensure?: EnsureActions;
   /** The error-page actions (DSK-03); `host`, `supervisor`, `retry`... are wired by index.ts. */
   errorActions: ActionDeps;
+  /** The System screen's privileged buttons (issue #500, system-actions.ts). Absent: `runSystemAction` answers `not_implemented`. */
+  systemActions?: Pick<SystemActions, 'runNamed'>;
   /** Reported when a settings patch was refused (never the values). */
   log?: Logger;
 }
@@ -623,7 +628,7 @@ export function createShellHandlers(deps: BridgeDeps): HandlerTable {
  * `window.localaiDesktopHost`: the agent UI may open the three windows, ask for the version, copy the key to the
  * clipboard (it never receives it) and read the connection info with the key masked.
  */
-export function createHostHandlers(deps: Pick<BridgeDeps, 'version' | 'openChild' | 'keys'>): HandlerTable {
+export function createHostHandlers(deps: Pick<BridgeDeps, 'version' | 'openChild' | 'keys' | 'systemActions'> & { lang?: () => Lang }): HandlerTable {
   return {
     [CHANNELS.hostVersion]: { kind: 'sync', origin: 'host', run: () => deps.version },
     [CHANNELS.hostOpenWindow]: {
@@ -636,5 +641,11 @@ export function createHostHandlers(deps: Pick<BridgeDeps, 'version' | 'openChild
     },
     [CHANNELS.hostCopyApiKey]: { kind: 'invoke', origin: 'host', run: () => (deps.keys ? deps.keys.copy() : NOT_IMPLEMENTED) },
     [CHANNELS.hostConnectionInfo]: { kind: 'invoke', origin: 'host', run: () => (deps.keys ? deps.keys.info() : NOT_IMPLEMENTED) },
+    // Issue #500: the page names one action; system-actions.ts refuses any name outside its list and picks the fixed argv.
+    [CHANNELS.hostRunSystemAction]: {
+      kind: 'invoke',
+      origin: 'host',
+      run: (_event, name) => (deps.systemActions ? deps.systemActions.runNamed(name, deps.lang?.() === 'es' ? 'es' : 'en') : ({ ok: false, reason: 'not_implemented' } satisfies SystemActionResult)),
+    },
   };
 }
