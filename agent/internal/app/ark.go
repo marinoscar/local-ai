@@ -413,10 +413,19 @@ func (l *lateRuns) SyncState() string {
 // from the freshest catalog the node can get (the cloud, then GitHub); a failure is not fatal.
 type catalogRefresh struct{ d *Daemon }
 
-// Refresh implements run.CatalogRefresher.
+// Refresh implements run.CatalogRefresher. The refreshed catalog goes into the store at once, so the plan
+// that follows in the same run sees it (issue #489: it stayed on disk only, and new items were unknown).
 func (c catalogRefresh) Refresh(ctx context.Context) error {
-	_, err := refresher(c).Refresh(ctx)
-	return err
+	res, err := refresher(c).Refresh(ctx)
+	if err != nil {
+		return err
+	}
+	c.d.c.Catalog.Set(res.Loaded, c.d.env.Clock.Now())
+	if res.Changed {
+		c.d.log.Info("the sync run refreshed the catalog", "component", "sync", "version", res.Catalog.Version, "previous", res.Previous)
+		c.d.regenerateRouter(ctx)
+	}
+	return nil
 }
 
 // syncClock is run.Clock over the daemon's clock: AfterFunc waits on a ticker of it, like the step

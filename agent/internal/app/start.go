@@ -596,6 +596,10 @@ func (d *Daemon) stepPeriodic(ctx context.Context) error {
 	}
 	d.startWorker(c.Tailscale)
 	d.startWorker(c.Health)
+	d.startWorker(&catalogWatcher{ // agent.md 3.3: re-read /etc/localai/catalog when CATALOG_VERSION changes
+		r:     newCatalogReloader(c.Paths.Catalog(), c.Catalog, d.regenerateRouter, d.log),
+		clock: d.env.Clock,
+	})
 	d.bg.Add(1)
 	go func() {
 		defer d.bg.Done()
