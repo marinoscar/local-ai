@@ -26,8 +26,8 @@ Mode is about **policy**, not about whether the internet actually exists. An `on
 | kiwix-serve | on if content present | on if content present | **on** (required; `LAI-SVC-001` if no ZIMs) |
 | whisper server | on if model present | on if model present | **on** |
 | Piper TTS | available | available | available |
-| Local UI home page | Dashboard | Dashboard | **Survival Portal** (`/portal`) |
-| ai-desktop on launch | Dashboard | Dashboard | Portal full screen |
+| Local UI home page (`/` → `/portal`) | Home with the Manage row ([dashboard.md](../specs/dashboard.md) §4.1) | same | Home, survival look (**Survival Portal**) |
+| ai-desktop on launch | Home in the window | Home in the window | Portal full screen |
 | Admin PIN required for destructive ops | yes (desktop/UI), CLI requires root | same | same |
 | Power profile | `performance` (installer default) | unchanged | unchanged (laptop: also shows battery % prominently) |
 
