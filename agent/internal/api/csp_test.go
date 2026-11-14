@@ -55,9 +55,15 @@ func TestPortalCSPHeader(t *testing.T) {
 		if got := rec.Header().Values("Content-Security-Policy"); len(got) != 0 {
 			t.Fatalf("/api/v1/open: %q", got)
 		}
-		rec = do(h, req{target: "/portalx"}) // the dashboard fallback, with the global policy
-		if got := rec.Header().Values("Content-Security-Policy"); len(got) != 1 || got[0] != HTMLContentSecurityPolicy {
-			t.Fatalf("/portalx: %q", got)
+		// Not a Portal path: the catch-all redirects it to /portal (issue #497), never with the Portal CSP.
+		rec = do(h, req{target: "/portalx"})
+		if rec.Code != http.StatusFound {
+			t.Fatalf("/portalx: %d", rec.Code)
+		}
+		for _, got := range rec.Header().Values("Content-Security-Policy") {
+			if got == PortalContentSecurityPolicy {
+				t.Fatalf("/portalx carries the Portal CSP")
+			}
 		}
 	})
 }
