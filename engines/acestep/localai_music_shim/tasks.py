@@ -129,7 +129,8 @@ class TaskManager:
         with self._lock:
             if self.status != "ready" or self._stopping:
                 raise NotReady()
-            if len(self._queue) >= self.max_queue:
+            # max_queue counts the running task and the queued ones (music.md section 3.4).
+            if len(self._queue) + (1 if self._running else 0) >= self.max_queue:
                 raise QueueFull()
             task = Task(id=new_task_id(), req=req)
             self._tasks[task.id] = task

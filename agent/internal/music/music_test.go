@@ -42,7 +42,8 @@ func TestGenerateRequests(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if m.Origin != music.OriginLocal || *m.Seed != 8 || m.Variation != 2 || m.Mime != "audio/wav" || m.Lyrics != secretLyrics || m.Sample != nil {
+				if m.Origin != music.OriginLocal || *m.Seed != 8 || m.Variation != 1 || m.Mime != "audio/wav" || m.Lyrics != secretLyrics || m.Sample != nil ||
+					len(m.SHA256) != 64 || m.CloudRequestID != nil || m.Title != "Zebra-marker walks the river" {
 					t.Fatalf("meta = %+v", m)
 				}
 				if got := r.workEntries(); len(got) != 0 {
@@ -63,7 +64,7 @@ func TestGenerateRequests(t *testing.T) {
 					t.Fatalf("task = %+v", req)
 				}
 				m, _, _ := r.svc.Song(v.SongIDs[0])
-				if m.Sample == nil || m.Sample.Mime != "audio/wav" || m.Sample.Seconds != 5 {
+				if m.Sample == nil || m.Sample.Mime != "audio/wav" || m.Sample.Seconds != 5 || len(m.Sample.SHA256) != 64 {
 					t.Fatalf("meta.sample = %+v", m.Sample)
 				}
 				if got := r.workEntries(); len(got) != 0 {
@@ -80,6 +81,28 @@ func TestGenerateRequests(t *testing.T) {
 					t.Fatalf("task = %+v", req)
 				}
 			},
+		},
+		{
+			name: "a seed is drawn when none is given", form: form{fields: baseFields(map[string]string{"seed": "-"})}, status: http.StatusAccepted,
+			check: func(t *testing.T, r *rig, acc music.Accepted) {
+				if s := r.shim.Requests[0].Seed; s == nil || *s < 0 || *s > music.MaxSeed {
+					t.Fatalf("seed %v", s)
+				}
+			},
+		},
+		{
+			name: "fewer songs than asked", form: form{fields: baseFields(nil)}, status: http.StatusAccepted,
+			setup: func(r *rig) { r.shim.AutoComplete, r.shim.Outputs = true, 1 },
+			check: func(t *testing.T, r *rig, acc music.Accepted) {
+				v := r.waitOp(acc.OpID)
+				if v.State != music.StateDone || len(v.SongIDs) != 1 || v.Error == nil || v.Error.Code != doctor.SVC152 {
+					t.Fatalf("op = %+v", v)
+				}
+			},
+		},
+		{
+			name: "the engine rejects the task", form: form{fields: baseFields(nil)}, status: 400, code: doctor.SVC154, reason: "language es is not sung",
+			setup: func(r *rig) { r.shim.Reject = "language es is not sung" },
 		},
 		{
 			name: "music not loaded", form: form{fields: baseFields(nil)}, status: http.StatusConflict, code: doctor.SVC151,
@@ -111,6 +134,7 @@ func TestGenerateRequests(t *testing.T) {
 		{name: "duration not an integer", form: form{fields: baseFields(map[string]string{"duration_s": "1e2"})}, status: 400, code: doctor.SVC154, reason: "not_an_integer"},
 		{name: "five variations", form: form{fields: baseFields(map[string]string{"variations": "5"})}, status: 400, code: doctor.SVC154, reason: "out_of_range"},
 		{name: "bad language", form: form{fields: baseFields(map[string]string{"language": "Spanish"})}, status: 400, code: doctor.SVC154, reason: "invalid"},
+		{name: "seed over 2^31-1", form: form{fields: baseFields(map[string]string{"seed": "2147483648"})}, status: 400, code: doctor.SVC154, reason: "out_of_range"},
 		{name: "negative seed", form: form{fields: baseFields(map[string]string{"seed": "-1"})}, status: 400, code: doctor.SVC154, reason: "out_of_range"},
 		{name: "strength without a sample", form: form{fields: baseFields(map[string]string{"strength": "0.3"})}, status: 400, code: doctor.SVC154, reason: "needs_sample"},
 		{name: "strength out of range", form: form{fields: baseFields(map[string]string{"strength": "1.5"}), sample: wavBytes(1)}, status: 400, code: doctor.SVC154, reason: "out_of_range"},
@@ -328,6 +352,10 @@ func TestSongsListAudioAndDelete(t *testing.T) {
 	if whole.Code != 200 || whole.Header().Get("Content-Type") != "audio/wav" || !bytes.HasPrefix(whole.Body.Bytes(), []byte("RIFF")) {
 		t.Fatalf("audio: %d %v", whole.Code, whole.Header())
 	}
+	dl := r.do(call{target: "/music/songs/" + ids[0] + "/audio?download=1"})
+	if !strings.HasPrefix(dl.Header().Get("Content-Disposition"), "attachment;") {
+		t.Fatalf("download: %v", dl.Header())
+	}
 	part := r.do(call{target: "/music/songs/" + ids[0] + "/audio", header: map[string]string{"Range": "bytes=0-3"}})
 	if part.Code != http.StatusPartialContent || part.Body.String() != "RIFF" || !strings.HasPrefix(part.Header().Get("Content-Range"), "bytes 0-3/") {
 		t.Fatalf("range: %d %q %v", part.Code, part.Body.String(), part.Header())
@@ -343,15 +371,24 @@ func TestSongsListAudioAndDelete(t *testing.T) {
 	}
 	del.principal = "admin"
 	rec := r.do(del)
-	if rec.Code != 200 || decode[music.DeletedSong](t, rec) != (music.DeletedSong{ID: ids[0], Deleted: true}) {
+	if got := decode[music.DeletedSong](t, rec); rec.Code != 200 || !got.Deleted || got.ID != ids[0] || got.Bytes == 0 {
 		t.Fatal(rec.Body.String())
 	}
 	if _, err := os.Stat(filepath.Join(r.songs, ids[0])); !os.IsNotExist(err) {
 		t.Fatal("the song is still there")
 	}
-	expectError(t, r.do(del), 404, "LAI-AGT-021")
-	if len(r.audit.evs) != 2 || r.audit.evs[0].Action != music.ActionDelete || r.audit.evs[0].Target["song"] != ids[0] || r.audit.evs[1].Code != "LAI-AGT-021" {
-		t.Fatalf("audit = %+v", r.audit.evs)
+	again := r.do(del)
+	if again.Code != 200 || decode[music.DeletedSong](t, again) != (music.DeletedSong{ID: ids[0], Deleted: false}) {
+		t.Fatal(again.Body.String())
+	}
+	var deletes []string
+	for _, ev := range r.audit.evs {
+		if ev.Action == music.ActionDelete {
+			deletes = append(deletes, ev.Target["song"]+"/"+ev.Target["bytes"])
+		}
+	}
+	if len(deletes) != 2 || !strings.HasPrefix(deletes[0], ids[0]+"/") || deletes[0] == ids[0]+"/" || deletes[1] != ids[0]+"/" {
+		t.Fatalf("delete audit = %v", deletes)
 	}
 }
 

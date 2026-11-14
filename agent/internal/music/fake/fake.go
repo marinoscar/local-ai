@@ -30,6 +30,10 @@ type Shim struct {
 	FailOnPoll bool
 	// WAVSeconds is the length of the files written (default 0.1 s).
 	WAVSeconds float64
+	// Outputs is how many files a task writes (0: one per variation).
+	Outputs int
+	// Reject makes Submit answer 400 with this reason.
+	Reject string
 
 	tasks     map[string]*task
 	order     []string
@@ -75,6 +79,9 @@ func (f *Shim) Submit(_ context.Context, req music.TaskRequest) (string, error) 
 	}
 	if f.Status != music.HealthReady {
 		return "", music.ErrNotReady
+	}
+	if f.Reject != "" {
+		return "", &music.RejectedError{Reason: f.Reject}
 	}
 	queued := 0
 	for _, t := range f.tasks {
@@ -190,8 +197,12 @@ func (f *Shim) completeLocked(t *task) error {
 		secs = 0.1
 	}
 	var outs []music.TaskOutput
-	for v := 1; v <= t.req.Variations; v++ {
-		p := filepath.Join(t.req.OutputDir, fmt.Sprintf("variation-%d.wav", v))
+	n := t.req.Variations
+	if f.Outputs > 0 {
+		n = f.Outputs
+	}
+	for v := 0; v < n; v++ {
+		p := filepath.Join(t.req.OutputDir, fmt.Sprintf("out-%d.wav", v))
 		if err := os.WriteFile(p, WAV(secs, 8000), 0o640); err != nil {
 			return err
 		}

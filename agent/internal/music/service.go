@@ -16,6 +16,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -46,7 +47,7 @@ const (
 	MaxVariations    = 4
 	DefaultLanguage  = "en"
 	DefaultMaxQueue  = 4
-	maxSeed          = 1<<32 - 1
+	MaxSeed          = 1<<31 - 1
 )
 
 // Sample modes.
@@ -64,8 +65,12 @@ const (
 	StateCancelled = "cancelled"
 )
 
-// ActionDelete is the audit action of DELETE /music/songs/{id}.
-const ActionDelete = "music.delete"
+// Audit actions (music.md section 7).
+const (
+	ActionGenerate = "music.generate"
+	ActionCancel   = "music.cancel"
+	ActionDelete   = "music.song.delete"
+)
 
 // bytesPerSecond estimates the size of a song for the disk guard: 48 kHz, stereo, 16-bit WAV.
 const bytesPerSecond = 48000 * 2 * 2
@@ -138,6 +143,7 @@ type op struct {
 	done       chan struct{}
 	lastPubP   float64
 	lastPubSt  string
+	lastPubAt  time.Time
 	finishedAt time.Time
 }
 
@@ -382,10 +388,14 @@ func (r *GenerateRequest) normalize() error {
 		return inputError("language", "invalid")
 	case r.Variations < 1 || r.Variations > MaxVariations:
 		return inputError("variations", "out_of_range")
-	case r.Seed != nil && (*r.Seed < 0 || *r.Seed > maxSeed):
+	case r.Seed != nil && (*r.Seed < 0 || *r.Seed > MaxSeed):
 		return inputError("seed", "out_of_range")
 	case r.Origin != OriginLocal && r.Origin != OriginCloud:
 		return inputError("origin", "invalid")
+	}
+	if r.Seed == nil { // always a concrete seed, so the song records it (music.md section 3.4)
+		v := randomSeed()
+		r.Seed = &v
 	}
 	if r.SamplePath == "" {
 		if r.SampleMode != "" {
@@ -434,16 +444,20 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Accepted, 
 		return Accepted{}, err
 	}
 	var info SampleInfo
+	var sampleSum string
 	if sample != "" {
 		var err error
 		if info, err = InspectSample(sample); err != nil {
 			return Accepted{}, sampleErr(err)
 		}
+		if _, sampleSum, err = hashFile(sample); err != nil {
+			return Accepted{}, err
+		}
 	}
 
 	state, model := s.d.Engine.EngineStatus()
 	if state != EngineReady {
-		return Accepted{}, api.NewError(doctor.SVC151, http.StatusConflict, map[string]any{"engine_state": state})
+		return Accepted{}, notLoaded(state)
 	}
 	if err := s.diskGuard(int64(req.Variations) * int64(req.DurationS) * bytesPerSecond); err != nil {
 		return Accepted{}, err
@@ -462,7 +476,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Accepted, 
 		s.mu.Unlock()
 		return Accepted{}, api.NewError(api.CodeStarting, http.StatusServiceUnavailable, nil)
 	}
-	if s.queuedLocked() >= s.d.MaxQueue {
+	if s.activeLocked() >= s.d.MaxQueue {
 		s.mu.Unlock()
 		return Accepted{}, queueFull()
 	}
@@ -486,7 +500,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Accepted, 
 		consumed = true
 		mode := req.SampleMode
 		treq.SamplePath, treq.SampleMode, treq.Strength = &dst, &mode, req.Strength
-		o.sample = &SampleMeta{Mode: mode, Strength: *req.Strength, Mime: info.Format.Mime, SizeBytes: info.Bytes, Seconds: round3(info.Seconds)}
+		o.sample = &SampleMeta{Mode: mode, Strength: *req.Strength, SHA256: sampleSum, Mime: info.Format.Mime, SizeBytes: info.Bytes, Seconds: round3(info.Seconds)}
 	}
 
 	taskID, err := s.d.Shim.Submit(ctx, treq)
@@ -496,7 +510,11 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Accepted, 
 		case errors.Is(err, ErrQueueFull):
 			return Accepted{}, queueFull()
 		case errors.Is(err, ErrNotReady), errors.Is(err, ErrUnreachable):
-			return Accepted{}, api.NewError(doctor.SVC151, http.StatusConflict, map[string]any{"engine_state": EngineStopped})
+			return Accepted{}, notLoaded(EngineStopped)
+		}
+		var rej *RejectedError
+		if errors.As(err, &rej) {
+			return Accepted{}, api.NewError(doctor.SVC154, http.StatusBadRequest, map[string]any{"field": "engine", "reason": rej.Reason})
 		}
 		s.log.Warn("the music engine refused a task", "code", doctor.SVC152, "error", err.Error())
 		return Accepted{}, api.NewError(doctor.SVC152, http.StatusBadGateway, map[string]any{"reason": "refused"})
@@ -508,6 +526,14 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Accepted, 
 
 	s.log.Info("song requested", "op_id", o.id, "origin", req.Origin, "lyrics_bytes", len(req.Lyrics), "tags_bytes", len(req.Tags),
 		"duration_s", req.DurationS, "variations", req.Variations, "sample_bytes", info.Bytes, "language", req.Language)
+	sampleUsed := "false"
+	if sample != "" {
+		sampleUsed = "true"
+	}
+	s.auditWrite(ctx, ActionGenerate, audit.ResultOK, "", req.Actor, o.id, map[string]string{
+		"op": o.id, "origin": req.Origin, "variations": fmt.Sprint(req.Variations), "lyrics_bytes": fmt.Sprint(len(req.Lyrics)),
+		"sample": sampleUsed, "sample_bytes": fmt.Sprint(info.Bytes),
+	})
 	s.publish(o)
 	s.wg.Add(1)
 	go s.follow(o)
@@ -520,10 +546,16 @@ func queueFull() *api.Error {
 	return e
 }
 
-func (s *Service) queuedLocked() int {
+// notLoaded is 409 LAI-SVC-151 with the hint of agent.md section 3.8.35.
+func notLoaded(state string) *api.Error {
+	return api.NewError(doctor.SVC151, http.StatusConflict, map[string]any{"engine_state": state, "hint": "workload:music"})
+}
+
+// activeLocked counts the operations queued or running (music.md section 4.3).
+func (s *Service) activeLocked() int {
 	n := 0
 	for _, o := range s.ops {
-		if o.state == StateQueued {
+		if !final(o.state) {
 			n++
 		}
 	}
@@ -677,17 +709,22 @@ func (s *Service) save(o *op, outs []TaskOutput) {
 		return
 	}
 	now := s.d.Now().UTC().Truncate(time.Second)
+	var cloudReq *string
+	if req.RequestID != "" {
+		id := req.RequestID
+		cloudReq = &id
+	}
 	var saved []string
 	for i, out := range outs[:n] {
 		ext, mime := extOf(out)
 		m := Meta{
-			ID: songIDs[i], CreatedAt: now, OpID: o.id, Variation: i + 1, Lyrics: req.Lyrics, Tags: req.Tags,
-			Language: req.Language, DurationS: round3(out.DurationS), Requested: req.DurationS, ModelID: o.modelID,
-			Seed: seedFor(req.Seed, i), Mime: mime, Origin: req.Origin, RequestID: req.RequestID, Sample: o.sample,
+			ID: songIDs[i], CreatedAt: now, OpID: o.id, Variation: i, Lyrics: req.Lyrics, Tags: req.Tags,
+			Title: Title(req.Lyrics, req.Tags), Language: req.Language, DurationS: round3(out.DurationS), Requested: req.DurationS, ModelID: o.modelID,
+			Seed: seedFor(req.Seed, i), Mime: mime, Origin: req.Origin, Sample: o.sample, CloudRequestID: cloudReq,
 		}
 		if _, err := s.store.Add(out.Path, ext, m); err != nil {
 			for _, id := range saved {
-				_ = s.store.Delete(id)
+				_, _ = s.store.Delete(id)
 			}
 			code := doctor.SVC152
 			if errors.Is(err, syscall.ENOSPC) {
@@ -699,7 +736,11 @@ func (s *Service) save(o *op, outs []TaskOutput) {
 		}
 		saved = append(saved, m.ID)
 	}
-	s.finish(o, StateDone, "", saved)
+	warn := ""
+	if n < req.Variations { // fewer songs than asked: done with what there is, and a warning
+		warn = doctor.SVC152
+	}
+	s.finish(o, StateDone, warn, saved)
 }
 
 // seedFor is the seed of variation i: the engine uses seed+i (engines/acestep backend.py).
@@ -776,8 +817,8 @@ func (s *Service) pruneLocked() {
 	}
 }
 
-// publish sends music.progress for a running operation (on a state change or a progress step of at
-// least 2 %) and music.done for a finished one.
+// publish sends music.progress for a running operation (on a state change, or a progress step of at
+// least 2 % at most once per second: agent.md section 3.10) and music.done for a finished one.
 func (s *Service) publish(o *op) {
 	if s.d.Publisher == nil {
 		return
@@ -796,11 +837,12 @@ func (s *Service) publish(o *op) {
 		if ev.Progress != nil {
 			p = *ev.Progress
 		}
-		if o.lastPubSt == o.state && p-o.lastPubP < 0.02 {
+		now := s.d.Now()
+		if o.lastPubSt == o.state && (p-o.lastPubP < 0.02 || now.Sub(o.lastPubAt) < time.Second) {
 			s.mu.Unlock()
 			return
 		}
-		o.lastPubSt, o.lastPubP = o.state, p
+		o.lastPubSt, o.lastPubP, o.lastPubAt = o.state, p, now
 	}
 	s.mu.Unlock()
 	if err := s.d.Publisher.Publish(typ, o.id, ev); err != nil {
@@ -865,7 +907,7 @@ func (s *Service) Op(opID, lang string) (OpView, error) {
 }
 
 // Cancel cancels an operation. Cancelling a finished one changes nothing and answers its view.
-func (s *Service) Cancel(ctx context.Context, opID, lang string) (OpView, error) {
+func (s *Service) Cancel(ctx context.Context, opID, lang string, actor audit.Actor) (OpView, error) {
 	s.mu.Lock()
 	o, ok := s.ops[opID]
 	if !ok {
@@ -884,6 +926,7 @@ func (s *Service) Cancel(ctx context.Context, opID, lang string) (OpView, error)
 		// The engine is gone or forgot the task: nothing runs any more.
 		s.finish(o, StateCancelled, doctor.SVC158, nil)
 	}
+	s.auditWrite(ctx, ActionCancel, audit.ResultOK, "", actor, opID, map[string]string{"op": opID})
 	s.log.Info("song cancel requested", "op_id", opID)
 	return s.Op(opID, lang)
 }
@@ -928,45 +971,53 @@ func (s *Service) Song(id string) (Meta, string, error) {
 	return m, s.store.AudioPath(m), nil
 }
 
-// DeletedSong is the answer of DELETE /music/songs/{id}.
+// DeletedSong is the answer of DELETE /music/songs/{id} (agent.md section 3.8.36).
 type DeletedSong struct {
 	ID      string `json:"id"`
 	Deleted bool   `json:"deleted"`
+	Bytes   int64  `json:"bytes"`
 }
 
-// DeleteSong removes a song and writes the music.delete audit line.
+// DeleteSong removes a song and writes the music.song.delete audit line. A song that is already gone
+// answers deleted: false (a repeated delete is not an error); an id that cannot be a song is 404.
 func (s *Service) DeleteSong(ctx context.Context, id string, actor audit.Actor) (DeletedSong, error) {
-	err := s.store.Delete(id)
-	result, code := audit.ResultOK, ""
-	if err != nil {
-		result = audit.ResultFail
-		if errors.Is(err, ErrSongNotFound) {
-			code = api.CodeNotFound
-		} else {
-			code = doctor.AGT099
-		}
-	}
-	if ValidSongID(id) {
-		s.auditWrite(ctx, result, code, actor, id)
-	}
-	if errors.Is(err, ErrSongNotFound) {
+	if !ValidSongID(id) {
 		return DeletedSong{}, notFound("song")
 	}
-	if err != nil {
+	n, err := s.store.Delete(id)
+	target := map[string]string{"song": id}
+	switch {
+	case errors.Is(err, ErrSongNotFound):
+		s.auditWrite(ctx, ActionDelete, audit.ResultOK, "", actor, "", target)
+		return DeletedSong{ID: id, Deleted: false}, nil
+	case err != nil:
+		s.auditWrite(ctx, ActionDelete, audit.ResultFail, doctor.AGT099, actor, "", target)
 		return DeletedSong{}, err
 	}
-	s.log.Info("song deleted", "song_id", id)
-	return DeletedSong{ID: id, Deleted: true}, nil
+	target["bytes"] = fmt.Sprint(n)
+	s.auditWrite(ctx, ActionDelete, audit.ResultOK, "", actor, "", target)
+	s.log.Info("song deleted", "song_id", id, "bytes", n)
+	return DeletedSong{ID: id, Deleted: true, Bytes: n}, nil
 }
 
-func (s *Service) auditWrite(ctx context.Context, result audit.Result, code string, actor audit.Actor, id string) {
+// auditWrite records one music audit line: ids and sizes only, never lyrics, tags or URLs.
+func (s *Service) auditWrite(ctx context.Context, action string, result audit.Result, code string, actor audit.Actor, opID string, target map[string]string) {
 	if s.d.Audit == nil {
 		return
 	}
-	ev := audit.Event{Action: ActionDelete, Result: result, Code: code, Actor: actor, Target: map[string]string{"song": id}, ReqID: api.InfoFrom(ctx).ID}
+	ev := audit.Event{Action: action, Result: result, Code: code, Actor: actor, Target: target, OpID: opID, ReqID: api.InfoFrom(ctx).ID}
 	if err := s.d.Audit.Write(ev); err != nil {
-		s.log.Warn("audit write failed", "action", ActionDelete, "error", err.Error())
+		s.log.Warn("audit write failed", "action", action, "error", err.Error())
 	}
+}
+
+// randomSeed draws a seed in 0..MaxSeed.
+func randomSeed() int64 {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("music: no randomness: " + err.Error())
+	}
+	return int64(binary.BigEndian.Uint32(b[:]) & MaxSeed)
 }
 
 // ---------------------------------------------------------------------------------------------------

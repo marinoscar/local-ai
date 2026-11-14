@@ -2408,10 +2408,12 @@ paths:
       description: |
         Owned by music.md. The upload is `multipart/form-data` (limit 21 MiB). Text fields: `lyrics` (at most
         8 KiB, `[verse]`/`[chorus]` tags allowed), `tags` (at most 512 bytes), `duration_s` (10 to 240, default
-        60), `language` (default `en`), `seed` (optional, 0 to 4294967295), `variations` (1 to 4, default 1).
+        60), `language` (default `en`), `seed` (optional, 0 to 2147483647; the agent draws one when it is absent
+        and records it), `variations` (1 to 4, default 1).
         An optional `sample` file (WAV, MP3, FLAC or Ogg by content, at most 20 MiB and 60 s) with
         `sample_mode` (`sounds_like` default, or `same_song`) and `strength` (0 to 1; default 0.5 for
-        `sounds_like`, 1.0 for `same_song`). Lyrics or tags must be given. Unknown fields are refused.
+        `sounds_like`, 1.0 for `same_song`). Lyrics or tags must be given. Unknown fields are refused. At most
+        `MUSIC_MAX_QUEUE` (4) operations may be queued or running. Audit `music.generate` (sizes and ids only).
 
         Answers at once with the operation and the ids its songs will have; progress arrives on `/events` as
         `music.progress` and `music.done`, and on `GET /music/ops/{op_id}`. Lyrics and sample bytes are never
@@ -2436,12 +2438,12 @@ paths:
                 two: {value: {op_id: op_7k2m9q4r8t1c, song_ids: [sng_a2b3c4d5e6f7, sng_b2c3d4e5f6g7]}}
         "400":
           $ref: "#/components/responses/InvalidRequest"
-          description: "LAI-SVC-154: a field or the sample is refused (details.field; details.reason: too_long, empty, out_of_range, invalid, not_an_integer, not_a_number, needs_sample, duplicate, unknown_field, unsupported_type, unknown_duration); LAI-AGT-020 a malformed multipart body."
+          description: "LAI-SVC-154: a field or the sample is refused (details.field; details.reason: too_long, empty, out_of_range, invalid, not_an_integer, not_a_number, needs_sample, duplicate, unknown_field, unsupported_type, unknown_duration, or the engine's own reason with details.field engine); LAI-AGT-020 a malformed multipart body."
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "409":
           $ref: "#/components/responses/Conflict"
-          description: "LAI-SVC-151: music is not loaded (details.engine_state); switch to the Music workload or load the music model."
+          description: "LAI-SVC-151: music is not loaded (details.engine_state, details.hint workload:music); switch to the Music workload or load the music model."
         "413":
           $ref: "#/components/responses/TooLarge"
           description: "LAI-SVC-154 (details.reason too_large): the body is over 21 MiB or the sample over 20 MiB."
@@ -2497,9 +2499,10 @@ paths:
       summary: Cancel a song operation
       description: |
         Cancels a queued or running operation; it ends `cancelled` with LAI-SVC-158 and leaves no files.
-        Cancelling a finished operation changes nothing and answers its state. The body is `{}`. agent.md section 3.8.
+        Cancelling a finished operation changes nothing and answers its state. The body is `{}`. Audit
+        `music.cancel`. agent.md section 3.8.
       x-localai-auth: op
-      x-localai-timeout: "10 s"
+      x-localai-timeout: "5 s"
       requestBody:
         required: false
         content:
@@ -2561,7 +2564,8 @@ paths:
       summary: Delete a song
       description: |
         Destructive: needs admin (the PIN), like `DELETE /models/{id}`. Removes the song's directory (audio and
-        meta.json). Audit `music.delete`. agent.md section 3.8.
+        meta.json) and answers the bytes freed. A repeated delete answers `deleted: false`. Audit
+        `music.song.delete`. agent.md section 3.8.
       x-localai-auth: admin
       x-localai-timeout: "10 s"
       responses:
@@ -2574,7 +2578,8 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/DeletedSong"}
               examples:
-                deleted: {value: {id: sng_a2b3c4d5e6f7, deleted: true}}
+                deleted: {value: {id: sng_a2b3c4d5e6f7, deleted: true, bytes: 11534380}}
+                again: {value: {id: sng_a2b3c4d5e6f7, deleted: false, bytes: 0}}
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthenticated"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -2593,9 +2598,11 @@ paths:
       summary: The audio of a song
       description: |
         The file as stored (`audio/wav` today). `Range` requests are answered `206`, so a player can seek.
-        agent.md section 3.8.
+        `?download=1` sends `Content-Disposition: attachment`. agent.md section 3.8.
       x-localai-auth: op
-      x-localai-timeout: "10 min"
+      x-localai-timeout: "none"
+      parameters:
+        - {name: download, in: query, schema: {type: string, enum: ["1"]}}
       responses:
         "200":
           description: The whole file.
@@ -4507,7 +4514,7 @@ components:
         tags: {type: string, maxLength: 512}
         duration_s: {type: integer, minimum: 10, maximum: 240, default: 60}
         language: {type: string, default: en}
-        seed: {type: integer, minimum: 0, maximum: 4294967295}
+        seed: {type: integer, minimum: 0, maximum: 2147483647}
         variations: {type: integer, minimum: 1, maximum: 4, default: 1}
         sample: {type: string, format: binary, description: "WAV, MP3, FLAC or Ogg, at most 20 MiB and 60 s."}
         sample_mode: {type: string, enum: [sounds_like, same_song], default: sounds_like}
@@ -4565,8 +4572,9 @@ components:
 
     DeletedSong:
       type: object
-      required: [id, deleted]
+      required: [id, deleted, bytes]
       additionalProperties: false
       properties:
         id: {type: string}
-        deleted: {type: boolean, const: true}
+        deleted: {type: boolean}
+        bytes: {type: integer, minimum: 0}

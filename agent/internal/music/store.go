@@ -1,6 +1,8 @@
 package music
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,30 +49,36 @@ var ErrSongNotFound = errors.New("music: no such song")
 
 // Meta is meta.json: the inputs of the song minus the sample bytes, and what came out. The lyrics are
 // kept with the song (it is the owner's data on the owner's disk); they never reach a log.
+//
+// The fields of music.md section 4.5, plus audio (the file name) and requested_duration_s.
 type Meta struct {
-	ID        string      `json:"id"`
-	CreatedAt time.Time   `json:"created_at"`
-	OpID      string      `json:"op_id"`
-	Variation int         `json:"variation"`
-	Lyrics    string      `json:"lyrics"`
-	Tags      string      `json:"tags"`
-	Language  string      `json:"language"`
-	DurationS float64     `json:"duration_s"`
-	Requested int         `json:"requested_duration_s"`
-	ModelID   string      `json:"model_id"`
-	Seed      *int64      `json:"seed"`
-	Mime      string      `json:"mime"`
-	Audio     string      `json:"audio"`
-	SizeBytes int64       `json:"size_bytes"`
-	Origin    string      `json:"origin"`
-	RequestID string      `json:"request_id,omitempty"`
-	Sample    *SampleMeta `json:"sample"`
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	Title     string    `json:"title"`
+	Lyrics    string    `json:"lyrics"`
+	Tags      string    `json:"tags"`
+	Language  string    `json:"language"`
+	DurationS float64   `json:"duration_s"`
+	Requested int       `json:"requested_duration_s"`
+	ModelID   string    `json:"model_id"`
+	Seed      *int64    `json:"seed"`
+	// Variation is 0-based: variation i was made with seed + i.
+	Variation      int         `json:"variation"`
+	Mime           string      `json:"mime"`
+	Audio          string      `json:"audio"`
+	SizeBytes      int64       `json:"size_bytes"`
+	SHA256         string      `json:"sha256"`
+	Sample         *SampleMeta `json:"sample"`
+	Origin         string      `json:"origin"`
+	CloudRequestID *string     `json:"cloud_request_id"`
+	OpID           string      `json:"op_id"`
 }
 
 // SampleMeta describes the reference sample a song was made with (never its bytes).
 type SampleMeta struct {
 	Mode      string  `json:"mode"`
 	Strength  float64 `json:"strength"`
+	SHA256    string  `json:"sha256"`
 	Mime      string  `json:"mime"`
 	SizeBytes int64   `json:"size_bytes"`
 	Seconds   float64 `json:"duration_s"`
@@ -143,11 +151,11 @@ func (s Store) Add(src string, ext string, meta Meta) (Meta, error) {
 	if err := moveFile(src, dst); err != nil {
 		return Meta{}, err
 	}
-	st, err := os.Stat(dst)
+	n, sum, err := hashFile(dst)
 	if err != nil {
 		return Meta{}, err
 	}
-	meta.SizeBytes = st.Size()
+	meta.SizeBytes, meta.SHA256 = n, sum
 	raw, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return Meta{}, err
@@ -192,16 +200,25 @@ func validAudioName(n string) bool {
 // AudioPath is the path of a song's audio file.
 func (s Store) AudioPath(m Meta) string { return filepath.Join(s.dir(m.ID), m.Audio) }
 
-// Delete removes a song; ErrSongNotFound when there is none.
-func (s Store) Delete(id string) error {
+// Delete removes a song and returns the bytes it held; ErrSongNotFound when there is none.
+func (s Store) Delete(id string) (int64, error) {
 	if !ValidSongID(id) {
-		return ErrSongNotFound
+		return 0, ErrSongNotFound
 	}
 	d := s.dir(id)
 	if _, err := os.Stat(d); errors.Is(err, os.ErrNotExist) {
-		return ErrSongNotFound
+		return 0, ErrSongNotFound
 	}
-	return os.RemoveAll(d)
+	var n int64
+	_ = filepath.WalkDir(d, func(_ string, e os.DirEntry, err error) error {
+		if err == nil && !e.IsDir() {
+			if info, ierr := e.Info(); ierr == nil {
+				n += info.Size()
+			}
+		}
+		return nil
+	})
+	return n, os.RemoveAll(d)
 }
 
 // All lists every song, newest first (by creation time, then id).
@@ -299,6 +316,21 @@ func clip(s string, n int) string {
 	}
 	r := []rune(s)
 	return strings.TrimSpace(string(r[:n-1])) + "…"
+}
+
+// hashFile returns the size and the hex sha256 of a file.
+func hashFile(path string) (int64, string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	n, err := io.Copy(h, f)
+	if err != nil {
+		return 0, "", err
+	}
+	return n, hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // moveFile renames src to dst, or copies and removes it across filesystems.

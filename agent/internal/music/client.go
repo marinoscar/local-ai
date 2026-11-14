@@ -156,8 +156,8 @@ func (c *HTTPShim) call(ctx context.Context, method, path string, body any, out 
 	if err != nil {
 		return resp.StatusCode, fmt.Errorf("%w: reading the answer", ErrUnreachable)
 	}
-	if out != nil && resp.StatusCode < 300 {
-		if err := json.Unmarshal(raw, out); err != nil {
+	if out != nil {
+		if err := json.Unmarshal(raw, out); err != nil && resp.StatusCode < 300 {
 			return resp.StatusCode, fmt.Errorf("music: the engine sent a bad answer to %s %s", method, path)
 		}
 	}
@@ -177,6 +177,30 @@ func shortErr(err error) string {
 	return s
 }
 
+// RejectedError is a task the engine refused as invalid (400): music.md section 4.4 step 3 answers
+// it LAI-SVC-154 with the reason in details.reason. The shim's reason names a field, never a value.
+type RejectedError struct{ Reason string }
+
+func (e *RejectedError) Error() string { return "music: the engine refused the task: " + e.Reason }
+
+// reasonText keeps the shim's reason short and printable.
+func reasonText(s string) string {
+	b := make([]rune, 0, 120)
+	for _, r := range s {
+		if len(b) >= 120 {
+			break
+		}
+		if r < 0x20 || r == 0x7f {
+			r = ' '
+		}
+		b = append(b, r)
+	}
+	if len(b) == 0 {
+		return "rejected"
+	}
+	return string(b)
+}
+
 // Health is GET /health.
 func (c *HTTPShim) Health(ctx context.Context) (Health, error) {
 	var h Health
@@ -194,6 +218,7 @@ func (c *HTTPShim) Health(ctx context.Context) (Health, error) {
 func (c *HTTPShim) Submit(ctx context.Context, req TaskRequest) (string, error) {
 	var out struct {
 		TaskID string `json:"task_id"`
+		Error  string `json:"error"`
 	}
 	st, err := c.call(ctx, http.MethodPost, "/v1/tasks", req, &out)
 	if err != nil {
@@ -206,6 +231,8 @@ func (c *HTTPShim) Submit(ctx context.Context, req TaskRequest) (string, error) 
 		return "", ErrQueueFull
 	case st == http.StatusServiceUnavailable:
 		return "", ErrNotReady
+	case st == http.StatusBadRequest:
+		return "", &RejectedError{Reason: reasonText(out.Error)}
 	}
 	return "", fmt.Errorf("music: the engine refused the task (%d)", st)
 }

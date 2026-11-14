@@ -133,7 +133,7 @@ class FakeBackend:
                     time.sleep(self.step_delay)
                 done += 1
                 progress(done / total)
-            path = os.path.join(req.output_dir, f"variation-{v + 1}.wav")
+            path = os.path.join(req.output_dir, f"out-{v}.wav")
             dur = write_wav(path, self.seconds, freq=440.0 + 110.0 * v)
             outputs.append(Output(path=path, duration_s=round(dur, 3), sample_rate=48000))
         return outputs
@@ -186,7 +186,7 @@ class AceStepBackend:
             if cancelled():
                 raise Cancelled()
             seed = None if req.seed is None else req.seed + v
-            path = os.path.join(req.output_dir, f"variation-{v + 1}.wav")
+            path = os.path.join(req.output_dir, f"out-{v}.wav")
             kwargs = {
                 # TODO(#505): parameter names and defaults of the 1.5 call (1.0 names shown).
                 "audio_duration": float(req.duration_s),

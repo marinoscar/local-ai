@@ -23,7 +23,7 @@ it listens on `127.0.0.1` only.
 | `GET /v1/tasks/{id}` | `{"state", "progress", "error", "outputs": [{"path", "duration_s", "sample_rate", "mime"}]}` |
 | `POST /v1/tasks/{id}/cancel` | `200 {}` (`404` for an unknown task) |
 
-One worker thread runs one task at a time; up to `MUSIC_MAX_QUEUE` more wait. `sample_path` and
+One worker thread runs one task at a time; `MUSIC_MAX_QUEUE` counts the running task and the waiting ones. `sample_path` and
 `output_dir` must be inside `MUSIC_WORK_DIR`. A failed or cancelled task leaves no files behind.
 
 Privacy: lyrics stay in memory until the task ends and are never logged. Logs carry task ids, sizes and

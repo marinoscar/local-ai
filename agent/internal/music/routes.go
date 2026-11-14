@@ -20,9 +20,9 @@ import (
 //	GET    /music/status                 op     5 s
 //	POST   /music/generate               op     60 s   multipart/form-data, up to 21 MiB
 //	GET    /music/ops/{op_id}            op     5 s
-//	POST   /music/ops/{op_id}/cancel     op     10 s
+//	POST   /music/ops/{op_id}/cancel     op     5 s
 //	GET    /music/songs                  op     5 s
-//	GET    /music/songs/{id}/audio       op     10 min (Range)
+//	GET    /music/songs/{id}/audio       op     none (stream, Range; ?download=1 for an attachment)
 //	DELETE /music/songs/{id}             admin  10 s   (the confirmation of DELETE /models/{id})
 
 // Route settings.
@@ -30,10 +30,11 @@ const (
 	StatusTimeout   = 5 * time.Second
 	GenerateTimeout = 60 * time.Second
 	OpTimeout       = 5 * time.Second
-	CancelTimeout   = 10 * time.Second
+	CancelTimeout   = 5 * time.Second
 	SongsTimeout    = 5 * time.Second
-	AudioTimeout    = 10 * time.Minute
-	DeleteTimeout   = 10 * time.Second
+	// AudioTimeout is none: the audio is a stream (Range), agent.md section 3.8.
+	AudioTimeout  = 0
+	DeleteTimeout = 10 * time.Second
 	// GenerateMaxBody is the sample (20 MiB) plus the text fields and the multipart framing.
 	GenerateMaxBody int64 = 21 << 20
 
@@ -83,7 +84,7 @@ func (s *Service) serveOp(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Service) serveCancel(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("op_id")
-	v, err := s.Cancel(r.Context(), id, lang(r))
+	v, err := s.Cancel(r.Context(), id, lang(r), api.AuditActor(api.InfoFrom(r.Context())))
 	if err != nil {
 		return err
 	}
@@ -133,7 +134,11 @@ func (s *Service) serveAudio(w http.ResponseWriter, r *http.Request) error {
 	}
 	w.Header().Set("Content-Type", m.Mime)
 	w.Header().Set("Cache-Control", "private, max-age=0")
-	w.Header().Set("Content-Disposition", `inline; filename="`+m.ID+"."+strings.TrimPrefix(m.Audio, "audio.")+`"`)
+	disposition := "inline"
+	if r.URL.Query().Get("download") == "1" {
+		disposition = "attachment"
+	}
+	w.Header().Set("Content-Disposition", disposition+`; filename="`+m.ID+"."+strings.TrimPrefix(m.Audio, "audio.")+`"`)
 	http.ServeContent(w, r, "", st.ModTime(), f)
 	return nil
 }

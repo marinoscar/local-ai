@@ -69,8 +69,8 @@ def parse_task(body: Any, settings: Settings) -> GenerateRequest:
     if not isinstance(language, str) or not LANGUAGE.match(language):
         raise BadRequest("language must be a language code such as en or es")
     seed = body.get("seed")
-    if seed is not None and (not isinstance(seed, int) or isinstance(seed, bool) or not 0 <= seed < 2**32):
-        raise BadRequest("seed must be null or an integer from 0 to 4294967295")
+    if seed is not None and (not isinstance(seed, int) or isinstance(seed, bool) or not 0 <= seed < 2**31):
+        raise BadRequest("seed must be null or an integer from 0 to 2147483647")
     variations = body.get("variations", 1)
     if not isinstance(variations, int) or isinstance(variations, bool) or not 1 <= variations <= 4:
         raise BadRequest("variations must be 1 to 4")
@@ -95,6 +95,8 @@ def parse_task(body: Any, settings: Settings) -> GenerateRequest:
     output_dir = body.get("output_dir")
     if not isinstance(output_dir, str) or not os.path.isabs(output_dir) or not _is_under(output_dir, settings.work_dir):
         raise BadRequest("output_dir must be an absolute path under the work directory")
+    if os.path.lexists(output_dir):
+        raise BadRequest("output_dir must not exist yet")
     return GenerateRequest(
         lyrics=lyrics, tags=tags, duration_s=float(duration), language=language, seed=seed,
         variations=variations, sample_path=sample_path, sample_mode=sample_mode,

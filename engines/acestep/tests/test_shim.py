@@ -116,14 +116,16 @@ class TaskTests(unittest.TestCase):
             self.assertEqual(len(view["outputs"]), 2)
             for out in view["outputs"]:
                 self.assertEqual(out["mime"], "audio/wav")
+                self.assertRegex(os.path.basename(out["path"]), r"^out-[01]\.wav$")
                 with wave.open(out["path"], "rb") as w:
                     self.assertGreater(w.getnframes(), 0)
         finally:
             rig.close()
 
     def test_queue_full(self):
+        # MUSIC_MAX_QUEUE counts the running task too: with 3, one runs, two wait, the fourth is refused.
         gate = threading.Event()
-        rig = Rig(FakeBackend(gate=gate), max_queue=2)
+        rig = Rig(FakeBackend(gate=gate), max_queue=3)
         try:
             ids = []
             first = rig.call("POST", "/v1/tasks", rig.task_body("a"))[1]["task_id"]
@@ -159,7 +161,6 @@ class TaskTests(unittest.TestCase):
     def test_failure_leaves_no_files(self):
         rig = Rig(FakeBackend(fail=True))
         try:
-            os.makedirs(os.path.join(rig.work, "f"))
             tid = rig.call("POST", "/v1/tasks", rig.task_body("f"))[1]["task_id"]
             view = wait_for(lambda: (lambda v: v if v["state"] == "failed" else None)(rig.call("GET", f"/v1/tasks/{tid}")[1]))
             self.assertTrue(view["error"])
@@ -172,6 +173,7 @@ class TaskTests(unittest.TestCase):
         rig = Rig(FakeBackend())
         try:
             outside = tempfile.gettempdir()
+            os.makedirs(os.path.join(rig.work, "exists"))
             cases = {
                 "unknown field": rig.task_body(extra=1),
                 "duration too long": rig.task_body(duration_s=241),
@@ -182,6 +184,8 @@ class TaskTests(unittest.TestCase):
                 "mode without sample": rig.task_body(sample_mode="same_song"),
                 "strength out of range": rig.task_body(strength=2),
                 "bool seed": rig.task_body(seed=True),
+                "seed too large": rig.task_body(seed=2**31),
+                "output exists": rig.task_body(output_dir=rig.work + "/exists"),
             }
             for name, body in cases.items():
                 with self.subTest(name):
