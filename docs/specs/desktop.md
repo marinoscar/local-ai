@@ -457,7 +457,7 @@ On `mode.changed` → `survival` (or start-up in survival, or `--portal`):
 1. Show and focus the main window, `setFullScreen(true)`, content view → `http://127.0.0.1:7070/portal`, top bar collapsed to a 32 px strip: "Survival mode" / "Modo supervivencia", language toggle EN/ES, **Exit full screen**. Tabs and the Lab are hidden.
 2. Closing the window hides it but a tray click or a re-launch returns to the full-screen Portal. Quit stays available from the tray (an operator can always get out of the app; the agent keeps running).
 3. Not `setKiosk` (it blocks the system's own keys on some desktops and could trap a user).
-4. Leaving survival happens in the Portal (agent PIN) or the tray (desktop PIN). On `mode.changed` → other: exit full screen and load the dashboard.
+4. Leaving survival happens in the Portal (the **Leave survival mode** button, operator session, no PIN) or the tray (no PIN), per [ADR-0011](../decisions/0011-full-control-from-the-app.md) and [dashboard.md](dashboard.md). On `mode.changed` → other: exit full screen and load the dashboard.
 5. The Portal is served by the agent without auth, so it shows even when the token file is unreadable (the desktop loads `/portal` directly in that case and shows LAI-DSK-001 as a small banner instead of the error page).
 
 **As built (DSK-09).** `src/main/survival.ts` (`SurvivalController`, no Electron import; the window manager, the mode and the clock are injected). Choices the text left open:
