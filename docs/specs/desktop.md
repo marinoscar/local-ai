@@ -49,7 +49,7 @@ apps/desktop/
   build/linux/icon.png         512 px copy, shipped as the `icon.png` extraResource
   build/linux/ai-desktop.apparmor
   build/linux/tray/            tray-{green,blue,orange,amber,red,grey}.png (22 px and 44 px @2x)
-  scripts/icons.mjs            `npm run icons`: packages/ui/brand/icon.svg -> app and tray PNGs (sharp, offline)
+  scripts/icons.mjs            `npm run icons`: packages/ui/brand/icon.svg (the Corona eclipse) and tray.svg (the eclipse ring in each status colour, ADR-0014) -> app and tray PNGs (sharp, offline)
   scripts/dist.mjs             wraps electron-builder --publish never
   scripts/packaged-app.mjs     verify (asar layout, fuses) | test-copy (re-enable inspect for e2e)
   src/main/

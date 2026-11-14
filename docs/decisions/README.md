@@ -17,5 +17,6 @@ Each ADR records one decision, its context and the alternatives rejected. To cha
 | [0011](0011-full-control-from-the-app.md) | Full control from the app (the Dashboard in the Portal, built-in help); no PIN to leave survival mode at the computer, the PIN guards deletes | Accepted |
 | [0012](0012-python-inference-engines.md) | Python/PyTorch inference engines run on nodes as their own loopback services, from a pinned venv built offline from the kit | Accepted |
 | [0013](0013-on-demand-engines-one-gpu-budget.md) | On-demand engines share one GPU budget, switched by named workloads; survival always wins | Accepted |
+| [0014](0014-corona-identity.md) | Corona: one dark theme (gold corona on near-black) and a total-solar-eclipse icon for the Portal, ai-desktop and the cloud app | Accepted |
 
 Template: copy [0000-template.md](0000-template.md).
