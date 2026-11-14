@@ -57,8 +57,8 @@ const (
 	FileKindAcestep = "acestep"
 )
 
-// AcestepBackends are the backends an acestep model may declare. Only cuda is supported until the
-// ACE-Step spike measures the others (TODO(#505)).
+// AcestepBackends are the backends an acestep model may declare. Only cuda is measured (spike #505
+// on ai-n2); ROCm is issue #517.
 var AcestepBackends = []string{"cuda"}
 
 // EmbeddedKeyrings are the keyring file names embedded in the agent (rebuild-kit.md section 3.4).

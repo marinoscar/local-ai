@@ -123,7 +123,7 @@ models:
 A music model is a set of PyTorch weights run by the ACE-Step engine ([music.md](music.md), [ADR-0012](../decisions/0012-python-inference-engines.md)), not by the llama router. It is a normal catalog model: pinned, verified, synced and counted in the profile budget like any other.
 
 ```yaml
-  - id: acestep-v15-turbo                 # example only; the real entry lands with #511 after the spike (#505)
+  - id: acestep-v15-turbo                 # shape only; the real entry is in catalog/models.yaml (#511)
     display_name: "ACE-Step 1.5 (music)"
     summary: "Makes songs from lyrics and a style. Can follow a short sample."
     summary_es: "Crea canciones a partir de una letra y un estilo. Puede seguir una muestra corta."
@@ -159,7 +159,7 @@ A music model is a set of PyTorch weights run by the ACE-Step engine ([music.md]
 - A breach of these rules is `LAI-CAT-021` (the layout of an `acestep` model is invalid). The agent raises the same code at run time when the files present in `music/<model-id>/` do not match the entry (a file missing or an extra directory level), and refuses to load the model.
 - `min_vram_mib` is measured as for any model (§2): on the target node while a song of the default length is generated, plus 10 %.
 
-**No `acestep` entry ships in `catalog/models.yaml` yet**: its sha256 values are unknown until the spike (#505) runs. The complete example above lives in the agent's catalog testdata and in [music.md](music.md) §3.5. When the entry lands, profiles may include it like any model (it is optional per profile, §4).
+The real entry `acestep-v15-turbo` is in `catalog/models.yaml` with the weight files the spike (#505) hashed (#511). A profile includes it like any model (it is optional per profile, §4): `cuda-12gb` does, with a `music` workload; `ark-drive-full` carries it so such a node can be rebuilt offline. Smaller cards (`small-8gb`) and ROCm (#517) wait for their own measurement.
 
 ## 3. `ark.yaml`
 
