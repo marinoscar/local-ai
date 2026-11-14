@@ -53,6 +53,7 @@ Auth levels are those of [agent.md](agent.md) §3.8 (route table). "PIN" means t
 | Offline content | **Install what's missing** | `POST /ensure` | no (confirming a compile or restart: PIN) |
 | Offline content | **Remove content not in the plan** | `POST /ark/prune` | PIN |
 | Offline content | **Prepare a new drive** | `POST /ark/drives/{root_id}/init` | PIN |
+| Offline content | **Open this drive** (a connected drive that is not mounted) | `POST /ark/drives/{root_id}/mount` | no |
 | AI models | **Use this brain** | `POST /models/{id}/load` | no |
 | AI models | **Unload** | `POST /models/{id}/unload` | no |
 | AI models | **Make default** | `PUT /models/default` | no |
@@ -104,7 +105,9 @@ Top: the readiness of each mounted root in one line ("Internal disk: ready" / "9
 - A list grouped by kind (Maps, Library, AI models, Speech, Rebuild kit), each item with its status in plain words (`verified` → "Ready", `missing` → "Not downloaded yet", `quarantined` → "Damaged copy set aside; it will be downloaded again", `blocked` → "Skipped until a new version is published"), its size, and its doctor code when there is one.
 - **Sync now** (online only; offline shows "Needs the internet"), with progress per item and **Stop**.
 - **Check content**, **Install what's missing**.
-- **Drives**: each connected AI-ARK drive with its readiness, **Copy from this drive**, **Eject safely** (the result says when it is safe to unplug), and **Prepare a new drive** (PIN; says that everything on the drive is erased).
+- **Drives**: each connected AI-ARK drive with its readiness, **Copy from this drive**, **Eject safely** (the result says when it is safe to unplug), **Open this drive** for one that is connected but not mounted, and **Prepare a new drive** for an empty one (PIN; says what it does: it adds `localai/` and `ROOT.json`, deletes nothing, and is refused on a drive whose `localai/` holds files, [ark-sync.md](ark-sync.md) §3.5; erasing a drive is `aictl ark format`, §4.17.2, not this button).
+- **Remove content not in the plan** (PIN): a dry run first, then a confirmation that lists every item that would be deleted, its size, and the copies kept because they are the last good one.
+- **As built (#496).** Code: `agent/ui/src/portal/manage/ContentScreen.tsx` (the screen), `content.ts` (the plain-word rules: groups, item and drive states, the readiness line, why a button is disabled, the eject outcome) and `contentApi.ts` (the route of each button), unit-tested in `content.test.ts` and `contentApi.test.ts`; Playwright `e2e/manage-content.spec.ts` over `e2e/fake-manage/content.mjs`. Data: `GET /ark` (each root's READY: `root.kind`, `overall`, `last_sync.finished_at`, `items[]` with `id`, `kind`, `status`, `reason`, `code`, `bytes`, and `problems[]` with `item` and `title`), `GET /ark/drives` (`root_id`, `mount`, `label`, `size_bytes`, `free_bytes`, `state`, `ready.overall`, `problems[]` with `title`, `fix`, `code`) and `GET /ark/sync` (404 or 503 = no run yet), reread every 2 s while a run is active or a drive is ejecting, else every 10 s. Groups: READY `kind` `maps` → Maps, `kiwix` → Library, `model` → AI models except ids starting with `whisper-` or `piper-` → Speech, `kit` → Rebuild kit, `docs` → Manuals, anything else → Other. READY has no `blocked` status: an item is shown as "Skipped until a new version is published" when the last ended run lists it in `items[]` with `reason: "blocked"` (ark-sync.md §4.5). The readiness line counts `verified` and `stale` as present and leaves orphans out; it never says 100 % while an item is missing. **Sync now** sends `{"trigger": "manual"}` and is disabled outside online mode ("Needs the internet"); **Stop** is `DELETE /ark/sync` for any run (sync, check or copy); **Check content** sends `{}`; **Copy from this drive** sends `{"from_root": <root_id>}`, and is offered only for a `ready` or `read_only` drive. **Eject safely** sends `{"force": false}`; after the `202` the screen watches `GET /ark/drives` until the drive is gone or `not_mounted` ("you can unplug the drive now"), or back in a mounted state (not ejected, `LAI-ARK-009`, after at most 2 minutes). A `409 LAI-ARK-009` lists `details.blockers` by name, and a `model` blocker offers **Eject anyway** (`force: true`) after a confirmation. **Prepare a new drive** and **Remove content not in the plan** send the PIN grant header; prune sends `{"orphans": true, "trash": true, "dry_run": …}`, the dry run first. **Install what's missing** is the Portal's `EnsureCard`. Every disabled button says why under it.
 
 ### 4.4 AI models
 A row per model: name, size, state (loaded, downloaded, not downloaded), "survival" tag. Buttons per §3.2. Delete explains "This removes the model from this computer. You can download it again later with the internet, or copy it from the AI-ARK drive." then asks the PIN.
@@ -240,6 +243,131 @@ Every string of the Manage screens, Home's additions and the guide lives in `age
 | Key | English | Español |
 |---|---|---|
 | `content.title` | Offline content and drives | Contenido sin conexión y discos |
+| `content.lead.ok` | Everything is here and checked. It works without the internet. | Todo está aquí y revisado. Funciona sin internet. |
+| `content.lead.noRoot` | No disk with content is ready. Plug in the AI-ARK drive, or run Install what's missing. | No hay ningún disco con contenido listo. Conecte el disco AI-ARK o use Instalar lo que falta. |
+| `content.lead.nextSync` | Some content is missing. Next step: press Sync now. | Falta parte del contenido. Siguiente paso: presione Sincronizar ahora. |
+| `content.lead.nextCopy` | Some content is missing. Next step: press Copy from this drive. | Falta parte del contenido. Siguiente paso: presione Copiar de este disco. |
+| `content.lead.nextConnect` | Some content is missing. Next step: connect to the internet, or plug in the AI-ARK drive. | Falta parte del contenido. Siguiente paso: conéctese a internet o conecte el disco AI-ARK. |
+| `content.ready.title` | Is it ready? | ¿Está listo? |
+| `content.root.internal` | Internal disk | Disco interno |
+| `content.root.drive` | AI-ARK drive ({id}) | Disco AI-ARK ({id}) |
+| `content.root.ready` | {name}: ready | {name}: listo |
+| `content.root.readyWarn` | {name}: ready, with a warning | {name}: listo, con un aviso |
+| `content.root.partOne` | {name}: {pct} % ready, 1 item missing | {name}: {pct} % listo, falta 1 elemento |
+| `content.root.partMany` | {name}: {pct} % ready, {n} items missing | {name}: {pct} % listo, faltan {n} elementos |
+| `content.lastSync` | Last sync: {when} | Última sincronización: {when} |
+| `content.lastSync.never` | No sync yet | Todavía no se ha sincronizado |
+| `content.run.title` | Update and check | Actualizar y revisar |
+| `content.run.none` | Nothing has run yet. | Todavía no se ha hecho nada. |
+| `content.run.syncing` | Downloading the newest content … | Descargando el contenido más nuevo … |
+| `content.run.verifying` | Checking the content … | Revisando el contenido … |
+| `content.run.importing` | Copying from the AI-ARK drive … | Copiando del disco AI-ARK … |
+| `content.run.stopping` | Stopping … What is half done is kept and continues next time. | Deteniendo … Lo que quedó a medias se guarda y continúa la próxima vez. |
+| `content.run.ok` | The last run finished well. | La última ejecución terminó bien. |
+| `content.run.partial` | The last run finished, but {n} items did not work. The older copies are kept. | La última ejecución terminó, pero {n} elementos no funcionaron. Se guardan las copias anteriores. |
+| `content.run.partialOne` | The last run finished, but 1 item did not work. The older copy is kept. | La última ejecución terminó, pero 1 elemento no funcionó. Se guarda la copia anterior. |
+| `content.run.partialNoCount` | The last run finished, but some items were left for next time. The older copies are kept. | La última ejecución terminó, pero algunos elementos quedaron para la próxima vez. Se guardan las copias anteriores. |
+| `content.run.cancelled` | The last run was stopped. It continues where it left off next time. | La última ejecución se detuvo. La próxima vez continúa donde quedó. |
+| `content.run.skipped` | The last run did not start. | La última ejecución no empezó. |
+| `content.run.failed` | The last run did not work. | La última ejecución no funcionó. |
+| `content.run.when` | Finished: {when} | Terminó: {when} |
+| `content.progress` | {done} of {total} items, {pct} % | {done} de {total} elementos, {pct} % |
+| `content.eta` | About {time} left | Faltan unos {time} |
+| `content.active.resolving` | finding the newest version | buscando la versión más nueva |
+| `content.active.downloading` | downloading | descargando |
+| `content.active.verifying` | checking | revisando |
+| `content.active.installing` | putting in place | instalando |
+| `content.active.waiting` | waiting | esperando |
+| `content.active.bytes` | {done} of {total} | {done} de {total} |
+| `content.sync` | Sync now | Sincronizar ahora |
+| `content.sync.started` | The download started. You can keep using the computer. | La descarga empezó. Puede seguir usando la computadora. |
+| `content.stop` | Stop | Detener |
+| `content.stop.done` | Stopping. Nothing is lost; it continues next time. | Deteniendo. No se pierde nada; continúa la próxima vez. |
+| `content.verify` | Check content | Revisar el contenido |
+| `content.verify.started` | The check started. | La revisión empezó. |
+| `content.verify.what` | Check content reads every copy on this computer and the drives and sets aside a damaged one. It works without the internet. | Revisar el contenido lee cada copia en esta computadora y en los discos y aparta las dañadas. Funciona sin internet. |
+| `content.whyLine` | {button}: {why} | {button}: {why} |
+| `content.why.busy` | Wait until the current work finishes, or press Stop. | Espere a que termine el trabajo actual, o presione Detener. |
+| `content.why.unclean` | This drive needs a repair first. | Primero hay que reparar este disco. |
+| `content.why.empty` | This drive is empty. Prepare it first. | Este disco está vacío. Prepárelo primero. |
+| `content.why.notMounted` | Open the drive first. | Primero abra el disco. |
+| `content.why.notMountedEject` | The drive is not open, so you can unplug it now. | El disco no está abierto, así que puede desconectarlo ahora. |
+| `content.why.ejecting` | The drive is being ejected. | El disco se está expulsando. |
+| `content.why.unusable` | Local AI cannot use this drive. | Local AI no puede usar este disco. |
+| `content.items.title` | What is on each disk | Qué hay en cada disco |
+| `content.items.on` | {name} ({n} items) | {name} ({n} elementos) |
+| `content.items.empty` | Nothing is planned for this disk. | No hay nada planeado para este disco. |
+| `content.group.maps` | Maps | Mapas |
+| `content.group.library` | Library | Biblioteca |
+| `content.group.models` | AI models | Modelos de IA |
+| `content.group.speech` | Speech | Voz |
+| `content.group.kit` | Rebuild kit | Kit de reconstrucción |
+| `content.group.docs` | Manuals | Manuales |
+| `content.group.other` | Other | Otros |
+| `content.item.verified` | Ready | Listo |
+| `content.item.stale` | Ready; a newer version is not downloaded yet | Listo; todavía no se descargó una versión más nueva |
+| `content.item.missing` | Not downloaded yet | Todavía no se ha descargado |
+| `content.item.quarantined` | Damaged copy set aside; it will be downloaded again | Copia dañada apartada; se descargará de nuevo |
+| `content.item.blocked` | Skipped until a new version is published | Se omite hasta que se publique una versión nueva |
+| `content.item.failed` | The download did not work; it will be tried again | La descarga no funcionó; se intentará de nuevo |
+| `content.item.orphan` | Not in the plan; it can be removed to free space | No está en el plan; se puede quitar para liberar espacio |
+| `content.item.skipped` | Skipped this time | Se omitió esta vez |
+| `content.item.skippedBudget` | Skipped: it does not fit in the space set aside | Se omitió: no cabe en el espacio reservado |
+| `content.item.skippedDisk` | Skipped: the disk is too full | Se omitió: el disco está demasiado lleno |
+| `content.item.skippedTime` | Not reached yet; the next sync continues | Todavía no se alcanzó; la próxima sincronización continúa |
+| `content.item.unknown` | Unknown state | Estado desconocido |
+| `content.drives.title` | AI-ARK drives | Discos AI-ARK |
+| `content.drives.none` | No AI-ARK drive is connected. Plug one in to copy content from it or to keep a copy on it. | No hay ningún disco AI-ARK conectado. Conecte uno para copiar contenido de él o guardar una copia en él. |
+| `content.drive.name` | {label}, {size} | {label}, {size} |
+| `content.drive.noLabel` | Drive without a name | Disco sin nombre |
+| `content.drive.free` | Free space: {free} | Espacio libre: {free} |
+| `content.drive.ready` | Ready | Listo |
+| `content.drive.readyUnchecked` | Ready; not checked yet | Listo; todavía sin revisar |
+| `content.drive.readyWarn` | Ready, with a warning | Listo, con un aviso |
+| `content.drive.incomplete` | Not complete. Sync now fills it. | Incompleto. Sincronizar ahora lo completa. |
+| `content.drive.readOnly` | Read only: content can be copied from it, not to it | Solo lectura: se puede copiar contenido de él, no hacia él |
+| `content.drive.unclean` | Needs a repair before it can be used | Necesita una reparación antes de usarse |
+| `content.drive.notMounted` | Connected but not open | Conectado pero no abierto |
+| `content.drive.ejecting` | Ejecting … | Expulsando … |
+| `content.drive.uninitialized` | Empty: not prepared for Local AI yet | Vacío: todavía no está preparado para Local AI |
+| `content.drive.unusable` | Cannot be used | No se puede usar |
+| `content.copy` | Copy from this drive | Copiar de este disco |
+| `content.copy.started` | Copying started. Nothing on this computer is deleted. | La copia empezó. No se borra nada de esta computadora. |
+| `content.mount` | Open this drive | Abrir este disco |
+| `content.mount.done` | The drive is open. | El disco está abierto. |
+| `content.eject` | Eject safely | Expulsar con seguridad |
+| `content.eject.started` | Ejecting. Do not unplug the drive yet. | Expulsando. Todavía no desconecte el disco. |
+| `content.eject.waiting` | Wait: the drive is finishing. Do not unplug it yet. | Espere: el disco está terminando. Todavía no lo desconecte. |
+| `content.eject.safe` | {name}: you can unplug the drive now. | {name}: ya puede desconectar el disco. |
+| `content.eject.notDone` | The drive could not be ejected. Close what uses it and press Eject safely again. | No se pudo expulsar el disco. Cierre lo que lo usa y presione Expulsar con seguridad otra vez. |
+| `content.eject.blockers` | Still using the drive: {names} | Todavía usan el disco: {names} |
+| `content.eject.force` | Eject anyway | Expulsar de todos modos |
+| `content.eject.forceTitle` | Eject the drive anyway? | ¿Expulsar el disco de todos modos? |
+| `content.eject.force1` | The brain running from this drive will be stopped. | Se detendrá el cerebro que funciona desde este disco. |
+| `content.eject.force2` | You can choose a brain again in AI models after that. | Después puede elegir un cerebro otra vez en Modelos de IA. |
+| `content.init` | Prepare a new drive | Preparar un disco nuevo |
+| `content.init.confirmTitle` | Prepare {name} for Local AI? | ¿Preparar {name} para Local AI? |
+| `content.init.confirm1` | This makes the drive an AI-ARK drive: it adds a localai folder and a label file to it. | Esto convierte el disco en un disco AI-ARK: le agrega una carpeta localai y un archivo de etiqueta. |
+| `content.init.confirm2` | Nothing already on the drive is deleted. A drive that already has a localai folder with files is refused. | No se borra nada de lo que ya hay en el disco. Si el disco ya tiene una carpeta localai con archivos, se rechaza. |
+| `content.init.confirm3` | Afterwards, Sync now or Copy fills it. It needs the admin PIN. | Después, Sincronizar ahora o Copiar lo llenan. Necesita el PIN de administrador. |
+| `content.init.confirmOk` | Yes, prepare it | Sí, prepararlo |
+| `content.init.pinWhy` | Preparing a drive changes it, so it needs the admin PIN. | Preparar un disco lo cambia, así que necesita el PIN de administrador. |
+| `content.init.done` | The drive is ready for Local AI. Press Sync now to fill it. | El disco está listo para Local AI. Presione Sincronizar ahora para llenarlo. |
+| `content.prune.title` | Free up space | Liberar espacio |
+| `content.prune.what` | Removes content that is no longer in the plan and old copies that a newer one replaced. The last good copy of anything is always kept. | Quita el contenido que ya no está en el plan y las copias viejas que una más nueva reemplazó. Siempre se guarda la última copia buena de todo. |
+| `content.prune` | Remove content not in the plan | Quitar el contenido que no está en el plan |
+| `content.prune.pinWhy` | This deletes content from this computer, so it needs the admin PIN. First you will see exactly what would be removed. | Esto borra contenido de esta computadora, así que necesita el PIN de administrador. Primero verá exactamente qué se quitaría. |
+| `content.prune.checked` | Checked what can be removed. | Se revisó qué se puede quitar. |
+| `content.prune.nothing` | Nothing to remove: everything here is in the plan. | No hay nada que quitar: todo lo que hay está en el plan. |
+| `content.prune.confirmTitle` | Remove this content? | ¿Quitar este contenido? |
+| `content.prune.confirm1` | This deletes {n} items ({size}) listed below. | Esto borra {n} elementos ({size}) de la lista de abajo. |
+| `content.prune.confirmOne` | This deletes 1 item ({size}) listed below. | Esto borra 1 elemento ({size}) de la lista de abajo. |
+| `content.prune.confirm2` | They cannot be brought back without the internet or an AI-ARK drive that has them. | No se pueden recuperar sin internet o sin un disco AI-ARK que los tenga. |
+| `content.prune.kindOrphan` | not in the plan | no está en el plan |
+| `content.prune.kindTrash` | old copy | copia vieja |
+| `content.prune.kept` | Kept, because it is the only good copy: {names} | Se guarda, porque es la única copia buena: {names} |
+| `content.prune.confirmOk` | Yes, remove it | Sí, quitarlo |
+| `content.prune.done` | Done. Space freed: {size}. | Listo. Espacio liberado: {size}. |
 <!-- /copy -->
 
 ### 9.4 AI models
@@ -307,8 +435,8 @@ Every string of the Manage screens, Home's additions and the guide lives in `age
 | `guide.task.update.3` | It also happens by itself every night while the computer is Online. | También ocurre solo cada noche mientras la computadora está En línea. |
 | `guide.task.import.title` | Copy everything from the AI-ARK drive | Copiar todo desde el disco AI-ARK |
 | `guide.task.import.1` | Plug in the AI-ARK drive and wait one minute. | Conecte el disco AI-ARK y espere un minuto. |
-| `guide.task.import.2` | On Home, press **Offline content**. The drive appears under **Drives**. | En el inicio, presione **Contenido sin conexión**. El disco aparece en **Discos**. |
-| `guide.task.import.3` | Press **Copy from this drive**. Nothing on this computer is deleted. | Presione **Copiar desde este disco**. No se borra nada de esta computadora. |
+| `guide.task.import.2` | On Home, press **Offline content**. The drive appears under **AI-ARK drives**. | En el inicio, presione **Contenido sin conexión**. El disco aparece en **Discos AI-ARK**. |
+| `guide.task.import.3` | Press **Copy from this drive**. Nothing on this computer is deleted. | Presione **Copiar de este disco**. No se borra nada de esta computadora. |
 | `guide.task.eject.title` | Remove the AI-ARK drive safely | Retirar el disco AI-ARK con seguridad |
 | `guide.task.eject.1` | On Home, press **Offline content**. | En el inicio, presione **Contenido sin conexión**. |
 | `guide.task.eject.2` | Next to the drive, press **Eject safely**. | Junto al disco, presione **Expulsar con seguridad**. |
