@@ -116,6 +116,11 @@ A row per model: name, size, state (loaded, downloaded, not downloaded), "surviv
 ### 4.5 Health
 **Run a full check** shows the doctor's checks: passed count, then each problem with its code, title, fix and fix button. **Show recent events** lists the last 50 log lines as sentences (time, what, code), never raw JSON. **Run a practice drill** runs the drill ([drill.md](drill.md)) with progress and shows the last result.
 
+**As built (#499).** Code: `agent/ui/src/portal/manage/HealthScreen.tsx` (three cards) and `manage/health.ts` (the pure parts, tested in `health.test.ts`); the Playwright fake is `e2e/fake-manage/health.mjs`.
+- *Full check.* Opening the screen runs `GET /doctor` at once (state first; it only reads), unless a report from the last 5 minutes is kept in memory, which is then shown with its time and **Check again**. While it runs the card says "Checking this computer … this takes up to a minute." with a progress bar and the seconds so far. The answer shows "✓ Everything is OK." or "Things to fix: N", then "N checks passed." (`passed`), then each `warning`, `error` and `critical` result with a glyph, its code, `title`, `fix` and the fix button of its `action` (the same `FixButton` as Status); `info` results are listed under "Good to know". For this the doctor result carries `action` (agent.md §3.8.27, doctor-codes.md §1.7; added by this issue).
+- *Recent events.* A choice of part (Local AI, the AI brains, the library, speech, content updates, practice drills: the six `unit` names of `GET /logs`) and **Show recent events**, which asks `lines=50`. Each entry is one line, newest first: a glyph for the level (✗ problem, ! warning, i information, · detail, with the word for screen readers), the time in the local format, what happened and "Code: LAI-…" when there is one. The agent's lines are slog JSON: the screen shows `msg`, takes the level from `level` and the code from `code`; any other program's line is shown as it is, with a code found in its text. JSON is never shown.
+- *Practice drill.* The button always starts the **short** drill (`POST /drill {"quick": true}`, about 2 minutes, drill.md §3.1), after a confirmation that says how long it takes, that the brains are loaded one by one (a chat may pause), that the internet stays connected but Local AI does not use it, and that everything is put back. A full drill (up to 90 minutes of hashing) stays the monthly scheduled run. In survival mode the button is disabled with the reason (the agent would refuse with `LAI-DRL-003`). While a run is active the card polls `GET /drill?run_id=` every 2 s and shows the checks done so far and **Stop the drill** (`DELETE /drill`); a run already active when the screen opens (the scheduled one) is picked up from `GET /drill`. The last result says passed, passed with warnings, failed, stopped or skipped in words, the counts, "Ready for survival mode: yes/no", and each check that failed or warned by its plain name (drill.md §4.2) and code. A refused start (`LAI-DRL-002`, `004`, `005`) shows its code and fix.
+
 ### 4.6 System
 Versions (app, agent, catalog), services with state and **Restart**, updates (agent, catalog), rebuild kit status and **Check the rebuild kit**, settings backup and restore, and **Change the admin PIN**. Each privileged button explains that the computer will ask for the administrator (login) password.
 
@@ -449,6 +454,97 @@ Every string of the Manage screens, Home's additions and the guide lives in `age
 | Key | English | Español |
 |---|---|---|
 | `health.title` | Health | Salud |
+| `health.lead` | Check that everything on this computer works, see what happened lately, and practise for an emergency. | Revise que todo en esta computadora funcione, vea lo que pasó hace poco y practique para una emergencia. |
+| `health.check.title` | Full check | Revisión completa |
+| `health.check.run` | Run a full check | Hacer una revisión completa |
+| `health.check.again` | Check again | Revisar de nuevo |
+| `health.check.working` | Checking this computer … this takes up to a minute. | Revisando esta computadora … esto tarda hasta un minuto. |
+| `health.check.elapsed` | {s} seconds so far. | {s} segundos hasta ahora. |
+| `health.check.progress` | Checking | Revisando |
+| `health.check.when` | Checked {time}. | Revisado: {time}. |
+| `health.check.passed` | {n} checks passed. | {n} revisiones salieron bien. |
+| `health.check.allOk` | ✓ Everything is OK. | ✓ Todo está bien. |
+| `health.check.problems` | Things to fix: {n} | Cosas por arreglar: {n} |
+| `health.check.notes` | Good to know | Bueno saber |
+| `health.sev.info` | Note | Nota |
+| `health.sev.warning` | Warning | Aviso |
+| `health.sev.error` | Problem | Problema |
+| `health.sev.critical` | Serious problem | Problema grave |
+| `health.events.title` | Recent events | Sucesos recientes |
+| `health.events.show` | Show recent events | Mostrar sucesos recientes |
+| `health.events.of` | Events of | Sucesos de |
+| `health.unit.agent` | Local AI (the main service) | Local AI (el servicio principal) |
+| `health.unit.llama` | The AI brains | Los cerebros de IA |
+| `health.unit.kiwix` | The library | La biblioteca |
+| `health.unit.whisper` | Speech | La voz |
+| `health.unit.sync` | Content updates | Actualizaciones de contenido |
+| `health.unit.drill` | Practice drills | Simulacros |
+| `health.events.working` | Reading the events … | Leyendo los sucesos … |
+| `health.events.none` | Nothing was written lately. | No se escribió nada últimamente. |
+| `health.events.count` | The last {n} events, newest first. | Los últimos {n} sucesos, el más reciente primero. |
+| `health.events.cut` | Some older events were left out because the list was too long. | Se dejaron fuera algunos sucesos antiguos porque la lista era muy larga. |
+| `health.level.error` | Problem | Problema |
+| `health.level.warning` | Warning | Aviso |
+| `health.level.info` | Information | Información |
+| `health.level.debug` | Detail | Detalle |
+| `health.events.noTime` | Time unknown | Hora desconocida |
+| `health.drill.title` | Practice drill | Simulacro |
+| `health.drill.what` | The drill tests, without the internet, everything you would need in an emergency: the brains, the library, maps, speech and the manuals. | El simulacro prueba, sin internet, todo lo que usted necesitaría en una emergencia: los cerebros, la biblioteca, los mapas, la voz y los manuales. |
+| `health.drill.run` | Run a practice drill | Hacer un simulacro |
+| `health.drill.stop` | Stop the drill | Detener el simulacro |
+| `health.drill.confirmTitle` | Run a practice drill? | ¿Hacer un simulacro? |
+| `health.drill.confirm1` | It takes about 2 minutes, sometimes more. You can stop it at any time. | Tarda unos 2 minutos, a veces más. Puede detenerlo en cualquier momento. |
+| `health.drill.confirm2` | During the drill the brains are loaded one by one, so a chat may pause. The internet stays connected, but Local AI does not use it while the drill runs. | Durante el simulacro los cerebros se cargan uno por uno, así que una conversación puede pausarse. El internet sigue conectado, pero Local AI no lo usa mientras dura el simulacro. |
+| `health.drill.confirm3` | When it ends, everything is put back as it was. | Al terminar, todo vuelve a quedar como estaba. |
+| `health.drill.start` | Start the drill | Empezar el simulacro |
+| `health.drill.survival` | Not available in survival mode: a drill never disturbs an emergency. | No está disponible en modo de supervivencia: un simulacro nunca interrumpe una emergencia. |
+| `health.drill.started` | The drill started. | El simulacro empezó. |
+| `health.drill.running` | The drill is running: {n} checks done so far. | El simulacro está en curso: {n} pruebas hechas hasta ahora. |
+| `health.drill.progress` | Drill running | Simulacro en curso |
+| `health.drill.startedAt` | Started {time}. | Empezó: {time}. |
+| `health.drill.stopping` | Stopping … putting everything back as it was. | Deteniendo … dejando todo como estaba. |
+| `health.drill.none` | No practice drill has run on this computer yet. | Todavía no se ha hecho ningún simulacro en esta computadora. |
+| `health.drill.last` | Last drill: {time}. | Último simulacro: {time}. |
+| `health.drill.short` | Short drill. | Simulacro corto. |
+| `health.out.pass` | ✓ Passed. Everything needed in an emergency works. | ✓ Salió bien. Todo lo necesario en una emergencia funciona. |
+| `health.out.warn` | ! Passed with warnings. It works, but some things need attention. | ! Salió bien con avisos. Funciona, pero algunas cosas necesitan atención. |
+| `health.out.fail` | ✗ Failed. Something needed in an emergency does not work. | ✗ Falló. Algo necesario en una emergencia no funciona. |
+| `health.out.aborted` | The drill was stopped before it ended. Everything was put back as it was. | El simulacro se detuvo antes de terminar. Todo volvió a quedar como estaba. |
+| `health.out.skipped` | The drill did not run. | El simulacro no se hizo. |
+| `health.out.manual_pass` | ✓ A "pull the plug" drill was recorded as passed. | ✓ Se registró un simulacro de "desconectar todo" que salió bien. |
+| `health.out.manual_fail` | ✗ A "pull the plug" drill was recorded as failed. | ✗ Se registró un simulacro de "desconectar todo" que falló. |
+| `health.out.running` | The drill is running. | El simulacro está en curso. |
+| `health.drill.counts` | {pass} passed, {warn} with warnings, {fail} failed, {skip} skipped. | {pass} bien, {warn} con avisos, {fail} fallaron, {skip} omitidas. |
+| `health.drill.ready` | Ready for survival mode: yes. | Listo para el modo de supervivencia: sí. |
+| `health.drill.notReady` | Ready for survival mode: no. | Listo para el modo de supervivencia: no. |
+| `health.drill.attention` | Needs attention: | Necesita atención: |
+| `health.drill.reason` | Why: {reason} | Motivo: {reason} |
+| `health.res.fail` | Failed | Falló |
+| `health.res.warn` | Warning | Aviso |
+| `health.lang.en` | English | inglés |
+| `health.lang.es` | Spanish | español |
+| `health.drl.fence` | Internet blocked during the test | Internet bloqueado durante la prueba |
+| `health.drl.offlineLint` | Settings use only this computer | La configuración usa solo esta computadora |
+| `health.drl.manifest` | All the files are there | Todos los archivos están |
+| `health.drl.hash` | The files are not damaged | Los archivos no están dañados |
+| `health.drl.answer` | A brain answers | Un cerebro responde |
+| `health.drl.photo` | A brain reads a photo | Un cerebro lee una foto |
+| `health.drl.fit` | The brains fit in memory | Los cerebros caben en la memoria |
+| `health.drl.library` | Library search | Búsqueda en la biblioteca |
+| `health.drl.firstaid` | First-aid pages | Páginas de primeros auxilios |
+| `health.drl.stt` | Speech to text | De voz a texto |
+| `health.drl.tts` | Text to speech | De texto a voz |
+| `health.drl.roundtrip` | Speech both ways | Voz de ida y vuelta |
+| `health.drl.mapsTile` | Maps draw | Los mapas se dibujan |
+| `health.drl.mapsSearch` | Map search | Búsqueda en el mapa |
+| `health.drl.portal` | Emergency screen | Pantalla de emergencia |
+| `health.drl.docs` | Manuals | Manuales |
+| `health.drl.kit` | Rebuild kit is there | El kit de reconstrucción está |
+| `health.drl.rebuild` | The AI engine could be rebuilt | El motor de IA se podría reconstruir |
+| `health.drl.services` | Helper services | Servicios de apoyo |
+| `health.drl.power` | Laptop power settings | Configuración de energía de la laptop |
+| `health.drl.clock` | The clock | El reloj |
+| `health.drl.restore` | Everything put back as it was | Todo vuelve a quedar como estaba |
 <!-- /copy -->
 
 ### 9.6 System
