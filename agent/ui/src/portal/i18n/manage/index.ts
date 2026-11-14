@@ -10,6 +10,8 @@ import healthEn from "./health.en.json";
 import healthEs from "./health.es.json";
 import systemEn from "./system.en.json";
 import systemEs from "./system.es.json";
+import guideEn from "./guide.en.json";
+import guideEs from "./guide.es.json";
 
 // The copy of the Manage screens and of Home's additions (dashboard.md section 9). One pair of files
 // per screen keeps each screen's text next to its own spec table; the merge below is what t() reads.
@@ -22,6 +24,7 @@ export const MANAGE_EN = {
   ...modelsEn,
   ...healthEn,
   ...systemEn,
+  ...guideEn,
 };
 
 export const MANAGE_ES: Record<keyof typeof MANAGE_EN, string> = {
@@ -31,6 +34,7 @@ export const MANAGE_ES: Record<keyof typeof MANAGE_EN, string> = {
   ...modelsEs,
   ...healthEs,
   ...systemEs,
+  ...guideEs,
 };
 
 /** Every pair, for the tests: [name, en, es]. */
@@ -41,4 +45,5 @@ export const MANAGE_FILES: [string, Record<string, string>, Record<string, strin
   ["models", modelsEn, modelsEs],
   ["health", healthEn, healthEs],
   ["system", systemEn, systemEs],
+  ["guide", guideEn, guideEs],
 ];

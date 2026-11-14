@@ -65,3 +65,17 @@ test("a status that is not green shows the one next thing to do", async ({ page 
   await page.locator(".next-step").getByRole("button", { name: "Run a full check" }).click();
   await expect(page).toHaveURL(/\/portal\/manage\/health$/);
 });
+
+test("Help: the guide opens from Home, the tasks unfold, and Back returns Home", async ({ page }) => {
+  await setStatus(page, { mode: "online", session: "full" });
+  await page.goto("/portal");
+  await page.locator(".statusline").getByRole("button", { name: "Help" }).click();
+  await expect(page).toHaveURL(/\/portal\/help$/);
+  await expect(page.getByRole("heading", { name: "What this app can do" })).toBeVisible();
+  await page.locator("summary", { hasText: "Leave survival mode (when the emergency is over)" }).click();
+  await expect(page.getByText("No PIN is needed.")).toBeVisible();
+  const res = await new AxeBuilder({ page }).analyze();
+  expect(res.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+  await page.getByRole("button", { name: "Back to Home" }).click();
+  await expect(page).toHaveURL(/\/portal$/);
+});
