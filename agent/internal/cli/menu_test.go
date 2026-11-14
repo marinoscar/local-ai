@@ -118,11 +118,11 @@ func TestMenuModelPickers(t *testing.T) {
 		want    string
 		message string
 	}{
-		{"load offers only models that can load and are not loaded", []menuKey{digit(4), digit(2), key(keyEnter)}, "load m-two", ""},
-		{"unload offers the loaded model", []menuKey{digit(4), digit(3), key(keyEnter)}, "unload m-one", ""},
-		{"default offers stored models; pick the second", []menuKey{digit(4), digit(4), key(keyDown), key(keyEnter)}, "default m-two", ""},
-		{"download offers models of the profile not stored", []menuKey{digit(4), digit(5), digit(1)}, "download m-three", ""},
-		{"back from a picker runs nothing", []menuKey{digit(4), digit(6), key(keyBack)}, "", ""},
+		{"load offers only models that can load and are not loaded", []menuKey{digit(4), digit(3), key(keyEnter)}, "load m-two", ""},
+		{"unload offers the loaded model", []menuKey{digit(4), digit(4), key(keyEnter)}, "unload m-one", ""},
+		{"default offers stored models; pick the second", []menuKey{digit(4), digit(5), key(keyDown), key(keyEnter)}, "default m-two", ""},
+		{"download offers models of the profile not stored", []menuKey{digit(4), digit(6), digit(1)}, "download m-three", ""},
+		{"back from a picker runs nothing", []menuKey{digit(4), digit(7), key(keyBack)}, "", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -140,7 +140,7 @@ func TestMenuModelPickers(t *testing.T) {
 }
 
 func TestMenuPickerEmptyAndAgentDown(t *testing.T) {
-	h := &fakeHost{keys: []menuKey{digit(4), digit(3)}, captures: map[string]capture{
+	h := &fakeHost{keys: []menuKey{digit(4), digit(4)}, captures: map[string]capture{
 		"status": {statusOK, 0},
 		"models": {`{"models":[{"id":"m-two","present":true,"loadable":true}]}`, 0},
 	}}
@@ -149,7 +149,7 @@ func TestMenuPickerEmptyAndAgentDown(t *testing.T) {
 		t.Fatalf("runs %v pauses %d", h.runs, h.pauses)
 	}
 
-	h = &fakeHost{keys: []menuKey{digit(4), digit(2)}, captures: map[string]capture{"status": {statusOK, 0}}}
+	h = &fakeHost{keys: []menuKey{digit(4), digit(3)}, captures: map[string]capture{"status": {statusOK, 0}}}
 	m := newTestMenu(h, LangEN)
 	m.run()
 	if len(h.runs) != 0 || h.pauses != 1 {
@@ -380,5 +380,22 @@ func TestRunNoArgsMenuGate(t *testing.T) {
 				t.Fatalf("menu shown = %v, want %v; stdout %q", got, tc.menu, stdout.String())
 			}
 		})
+	}
+}
+
+func TestMenuWorkloadPicker(t *testing.T) {
+	h := &fakeHost{keys: []menuKey{digit(4), digit(1), key(keyDown), key(keyEnter)}, captures: map[string]capture{
+		"status": {statusOK, 0},
+		"workloads": {`{"workloads":[{"name":"coding","label":{"en":"Coding","es":"Programación"},"models":["m-one"],"active":true,"fits":true,"missing":[]},` +
+			`{"name":"huge","label":{"en":"Huge","es":"Enorme"},"models":["m-big"],"active":false,"fits":false,"missing":[]},` +
+			`{"name":"music","label":{"en":"Music","es":"Música"},"models":["m-two"],"active":false,"fits":true,"missing":[]}],"active":"coding"}`, 0},
+	}}
+	newTestMenu(h, LangEN).run()
+	if len(h.runs) != 1 || strings.Join(h.runs[0], " ") != "workloads activate music" {
+		t.Fatalf("runs = %v", h.runs)
+	}
+	frames := strings.Join(h.frames, "\n")
+	if !strings.Contains(frames, "Coding (now)") || strings.Contains(frames, "Huge") {
+		t.Errorf("the picker shows the wrong choices:\n%s", frames)
 	}
 }
