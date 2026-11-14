@@ -10,7 +10,7 @@
 The person who must operate Local AI in a disaster may never have used a terminal and may not know the admin PIN. Everything an operator can do with `aictl` must therefore be possible from the ai-desktop app, by reading the screen and pressing buttons, offline, in English or Spanish ([ADR-0011](../decisions/0011-full-control-from-the-app.md)).
 
 The Dashboard is **not a second app**. It is the Survival Portal SPA with two additions:
-1. **Home in every mode.** `/` serves the Portal's Home (the placeholder `agent/ui/index.html` is removed). In survival mode Home looks exactly as [survival-portal.md](survival-portal.md) §4.1.1; outside it, the status line and the Manage row are shown and the session-only buttons are unlocked for a full session.
+1. **Home in every mode.** `/` answers `302 /portal`, the Portal's Home (the placeholder `agent/ui/index.html` is removed; [agent.md](agent.md) §3.11). The status line is shown in every mode, and the Manage row for an operator session in every mode, survival included (the person who must run the ark in an emergency uses the app's operator session). A Portal session (a browser without the token) sees Home exactly as [survival-portal.md](survival-portal.md) §4.1.1.
 2. **Manage this computer**, a row on Home that opens six screens: **Mode**, **Offline content**, **AI models**, **Health**, **System**, and **Help**.
 
 In scope: the screens, the REST route behind every button, the PIN policy, the in-app guide, the language default, the desktop entry points (menu, tray), and the tests.
@@ -91,7 +91,8 @@ Auth levels are those of [agent.md](agent.md) §3.8 (route table). "PIN" means t
 ```
 - **State first** (ADR-0009): the status line says green "Ready", amber "Ready, with problems" or red "Not ready", and when it is not green, the **one next thing** with its button (the first alert's action, else **Run a full check**).
 - In survival mode the header says SURVIVAL and a **Leave survival mode** button sits at the right of the status line (operator session only).
-- `M` opens Manage, `H` opens Help; `Esc` returns Home from every screen.
+- `M` opens Manage (the Mode screen), `H` opens Help; `Esc` returns Home from every screen. Each Manage screen starts with a row of tabs (Mode, Offline content, AI models, Health, System, Help), so moving between them never needs Home.
+- **As built (#497).** Code: `agent/ui/src/portal/manage/` (`ManageFrame`, `ManageLocked`, `ConfirmDialog`, `PinDialog` + `usePin`, `useAction`, `FailureNote`, one `<Name>Screen.tsx` per screen, `screens.tsx` the dispatcher), the gate in `view.ts` (`manage-locked` unless `session` is `full`), the Manage row in `screens/Home.tsx`, the next step and Help in `components/StatusLine.tsx`. The PIN grant is kept in memory only, until 30 s before it expires (`manage/pin.ts`). The Playwright fake keeps each screen's routes in `e2e/fake-manage/<name>.mjs`.
 
 ### 4.2 Mode
 Three large choices with one sentence each: **Online** ("Uses the internet to update content and talk to the lab"), **Offline** ("No internet. Everything here keeps working"), **Survival** ("Emergency screen with the basics. Starts at once"). The current one is marked. Choosing one opens a confirmation that says what changes (modes.md §1) and, for leaving survival, the destination (Online or Offline). No PIN for an operator session.
@@ -156,3 +157,81 @@ English by default for the app and the Portal unless the person chose a language
 | #499 | Health screen |
 | #500 | System screen |
 | #501 | English by default |
+
+## 9. Copy (all user-visible strings of these screens)
+
+Every string of the Manage screens, Home's additions and the guide lives in `agent/ui/src/portal/i18n/manage/<name>.{en,es}.json`; the tables below are those files, one per screen, and `i18n.test.ts` fails when they differ. `node agent/ui/scripts/manage-copy.mjs <name>` prints a table from its files. The Portal's own strings stay in [survival-portal.md](survival-portal.md) §4.9.
+
+### 9.1 Shared (Home, frame, PIN)
+<!-- copy:common -->
+| Key | English | Español |
+|---|---|---|
+| `manage.title` | Manage this computer | Administrar esta computadora |
+| `manage.mode` | Mode | Modo |
+| `manage.content` | Offline content | Contenido sin conexión |
+| `manage.models` | AI models | Modelos de IA |
+| `manage.health` | Health | Salud |
+| `manage.system` | System | Sistema |
+| `manage.help` | Help | Ayuda |
+| `manage.locked` | Open this in the Local AI app to change settings. | Abra esto en la aplicación Local AI para cambiar la configuración. |
+| `manage.lockedWhy` | This screen changes how the computer works, so it needs the Local AI app on this computer. | Esta pantalla cambia cómo funciona la computadora, así que necesita la aplicación Local AI de esta computadora. |
+| `manage.back` | Back to Home | Volver al inicio |
+| `manage.working` | Working … | Trabajando … |
+| `manage.done` | Done. | Listo. |
+| `manage.failed` | That did not work: {message} | No funcionó: {message} |
+| `manage.needsInternet` | Needs the internet | Necesita internet |
+| `manage.confirm` | Yes, do it | Sí, hacerlo |
+| `manage.expert` | For an expert | Para un experto |
+| `home.mode.online` | Local AI · Online | IA Local · En línea |
+| `home.mode.offline` | Local AI · Offline | IA Local · Sin conexión |
+| `home.next` | Next step: | Siguiente paso: |
+| `home.runCheck` | Run a full check | Hacer una revisión completa |
+| `home.leaveSurvival` | Leave survival mode | Salir del modo supervivencia |
+| `pin.title` | Admin PIN needed | Se necesita el PIN de administrador |
+| `pin.why` | This removes something from this computer, so it needs the admin PIN. | Esto borra algo de esta computadora, así que necesita el PIN de administrador. |
+| `pin.label` | Admin PIN | PIN de administrador |
+| `pin.ok` | Continue | Continuar |
+| `pin.wrong` | That PIN is not right. {n} tries left. | Ese PIN no es correcto. Quedan {n} intentos. |
+| `pin.wrongNoCount` | That PIN is not right. | Ese PIN no es correcto. |
+| `pin.locked` | Too many wrong tries. Wait {s} seconds and try again. | Demasiados intentos incorrectos. Espere {s} segundos y vuelva a intentarlo. |
+| `pin.notSet` | No admin PIN is set on this computer. An expert can set one in the System screen. | Esta computadora no tiene PIN de administrador. Un experto puede ponerlo en la pantalla Sistema. |
+<!-- /copy -->
+
+### 9.2 Mode
+<!-- copy:mode -->
+| Key | English | Español |
+|---|---|---|
+| `mode.title` | Mode | Modo |
+<!-- /copy -->
+
+### 9.3 Offline content
+<!-- copy:content -->
+| Key | English | Español |
+|---|---|---|
+| `content.title` | Offline content and drives | Contenido sin conexión y discos |
+<!-- /copy -->
+
+### 9.4 AI models
+<!-- copy:models -->
+| Key | English | Español |
+|---|---|---|
+| `models.title` | AI models | Modelos de IA |
+<!-- /copy -->
+
+### 9.5 Health
+<!-- copy:health -->
+| Key | English | Español |
+|---|---|---|
+| `health.title` | Health | Salud |
+<!-- /copy -->
+
+### 9.6 System
+<!-- copy:system -->
+| Key | English | Español |
+|---|---|---|
+| `system.title` | System | Sistema |
+<!-- /copy -->
+
+## 10. Open questions
+
+None.

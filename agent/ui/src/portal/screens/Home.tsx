@@ -13,7 +13,8 @@ import {
   ManualIcon,
   MicIcon,
 } from "../icons/Icons";
-import { navigate, type Screen } from "../router";
+import { MANAGE_LABEL } from "../manage/ManageFrame";
+import { MANAGE_SCREENS, navigate, type Screen } from "../router";
 import type { CapName, PortalStatus } from "../status";
 
 interface Def {
@@ -115,7 +116,10 @@ function typingTarget(e: KeyboardEvent): boolean {
   );
 }
 
-/** The shortcuts of Home: 1-8 open the buttons, F focuses the first-aid row (survival-portal.md section 4.1.1). */
+/**
+ * The shortcuts of Home: 1-8 open the buttons, F focuses the first-aid row (survival-portal.md section
+ * 4.1.1), M opens Manage and H opens Help (dashboard.md section 4.1).
+ */
 function useHomeKeys(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
@@ -129,6 +133,12 @@ function useHomeKeys(enabled: boolean) {
       } else if (e.key === "f" || e.key === "F") {
         e.preventDefault();
         document.getElementById("firstaid-first")?.focus();
+      } else if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        navigate("manage/mode");
+      } else if (e.key === "h" || e.key === "H") {
+        e.preventDefault();
+        navigate("help");
       }
     };
     window.addEventListener("keydown", onKey);
@@ -179,7 +189,30 @@ export function Home({
           })}
         </ul>
       </nav>
+      {status?.session === "full" ? <ManageRow /> : null}
       <FirstAidRow status={status} />
     </>
+  );
+}
+
+/** The Manage row of Home (dashboard.md section 4.1), for an operator session in every mode. */
+function ManageRow() {
+  return (
+    <nav aria-labelledby="manage-title" className="manage-row">
+      <h2 id="manage-title" className="manage-row-title">
+        {t("manage.title")}
+      </h2>
+      {MANAGE_SCREENS.map((s) => (
+        <button
+          key={s}
+          type="button"
+          className="btn"
+          aria-keyshortcuts={s === "manage/mode" ? "M" : undefined}
+          onClick={() => navigate(s)}
+        >
+          {t(MANAGE_LABEL[s])}
+        </button>
+      ))}
+    </nav>
   );
 }

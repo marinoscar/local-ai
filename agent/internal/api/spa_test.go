@@ -28,7 +28,6 @@ func pageServer(t *testing.T, routes ...Route) *Server {
 
 func distFS() fstest.MapFS {
 	return fstest.MapFS{
-		"index.html":                  {Data: []byte("<!doctype html><title>Dashboard</title>")},
 		"portal.html":                 {Data: []byte("<!doctype html><title>Portal</title>")},
 		"maps.html":                   {Data: []byte("<!doctype html><title>Maps</title>")},
 		"viewer/maps-7a8b9c.js":       {Data: []byte("console.log('maps')")},
@@ -60,41 +59,26 @@ func hdr(accept string) map[string]string {
 	return map[string]string{"Accept": accept}
 }
 
+// Issue #497: the Portal's Home is the Dashboard in every mode, so "/" and every page path no other
+// route claims go to /portal (the old index.html placeholder is gone).
 func TestSPAOnlineAndFallback(t *testing.T) {
 	s := spaServer(t, SPAOptions{Mode: func() string { return "online" }})
 	h := s.Handler()
 
-	t.Run("root is the dashboard with the global headers", func(t *testing.T) {
-		rec := do(h, req{target: "/"})
-		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Dashboard") {
-			t.Fatalf("%d %s", rec.Code, rec.Body.String())
-		}
-		got := rec.Header()
-		if got.Get("Content-Security-Policy") != HTMLContentSecurityPolicy || got.Get("X-Content-Type-Options") != "nosniff" ||
-			got.Get("Referrer-Policy") != "no-referrer" || got.Get("X-Frame-Options") != "SAMEORIGIN" {
-			t.Fatalf("headers: %v", got)
-		}
-		if ct := got.Get("Content-Type"); ct != "text/html; charset=utf-8" {
-			t.Fatalf("Content-Type = %q", ct)
-		}
-		if got.Get("Cache-Control") != "no-cache" {
-			t.Fatalf("Cache-Control = %q", got.Get("Cache-Control"))
-		}
-	})
-	t.Run("HEAD", func(t *testing.T) {
-		rec := do(h, req{method: "HEAD", target: "/"})
-		if rec.Code != 200 || rec.Body.Len() != 0 {
-			t.Fatalf("%d %q", rec.Code, rec.Body.String())
-		}
-	})
-	for _, p := range []string{"/settings", "/models/qwen", "/some/deep/client/route", "/index.html", "/portal.html", "/chat", "/library", "/docs", "/favicon.ico", "/.secret", "/node_modules/x/index.js", "/missing.js"} {
-		t.Run("fallback "+p, func(t *testing.T) {
+	for _, p := range []string{"/", "/settings", "/models/qwen", "/some/deep/client/route", "/index.html", "/portal.html", "/maps.html", "/chat", "/library", "/docs", "/favicon.ico", "/.secret", "/node_modules/x/index.js", "/missing.js"} {
+		t.Run("to the Portal "+p, func(t *testing.T) {
 			rec := do(h, req{target: p})
-			if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Dashboard") {
-				t.Fatalf("%s: %d %s", p, rec.Code, rec.Body.String())
+			if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/portal" {
+				t.Fatalf("%s: %d Location=%q", p, rec.Code, rec.Header().Get("Location"))
 			}
 		})
 	}
+	t.Run("HEAD", func(t *testing.T) {
+		rec := do(h, req{method: "HEAD", target: "/"})
+		if rec.Code != http.StatusFound {
+			t.Fatalf("%d %q", rec.Code, rec.Body.String())
+		}
+	})
 	t.Run("a file at the top of the dist is served as itself", func(t *testing.T) {
 		rec := do(h, req{target: "/favicon.svg"})
 		if rec.Code != 200 || !strings.HasPrefix(rec.Body.String(), "<svg") || rec.Header().Get("Content-Type") != "image/svg+xml" {
@@ -126,7 +110,7 @@ func TestSPAOnlineAndFallback(t *testing.T) {
 	t.Run("traversal under the SPA never leaves the dist", func(t *testing.T) {
 		for _, p := range []string{"/../etc/passwd", "/%2e%2e/etc/passwd", "/assets/../index.html", "/assets/%2e%2e/%2e%2e/etc/passwd"} {
 			rec := do(h, req{target: p})
-			if rec.Code != 404 && !(rec.Code == 200 && strings.Contains(rec.Body.String(), "Dashboard")) {
+			if rec.Code != 404 && rec.Code != http.StatusFound {
 				t.Fatalf("%s: %d %s", p, rec.Code, rec.Body.String())
 			}
 			if strings.Contains(rec.Body.String(), "root:") {
@@ -154,29 +138,19 @@ func TestSPADoesNotShadowTheAPI(t *testing.T) {
 	}
 }
 
+// "/" opens the Portal in every mode, and without a mode function too.
 func TestSPASurvivalRedirect(t *testing.T) {
 	var mode atomic.Value
-	mode.Store("survival")
 	s := spaServer(t, SPAOptions{Mode: func() string { return mode.Load().(string) }})
 	h := s.Handler()
-
-	rec := do(h, req{target: "/"})
-	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/portal" {
-		t.Fatalf("survival: %d Location=%q", rec.Code, rec.Header().Get("Location"))
-	}
-	// Only "/" redirects; deep client routes still get the Dashboard.
-	if rec := do(h, req{target: "/settings"}); rec.Code != 200 || !strings.Contains(rec.Body.String(), "Dashboard") {
-		t.Fatalf("/settings in survival: %d", rec.Code)
-	}
-	for _, m := range []string{"online", "offline"} {
+	for _, m := range []string{"survival", "online", "offline"} {
 		mode.Store(m)
-		if rec := do(h, req{target: "/"}); rec.Code != 200 {
-			t.Fatalf("%s: %d", m, rec.Code)
+		if rec := do(h, req{target: "/"}); rec.Code != http.StatusFound || rec.Header().Get("Location") != "/portal" {
+			t.Fatalf("%s: %d Location=%q", m, rec.Code, rec.Header().Get("Location"))
 		}
 	}
-	// A nil Mode never redirects.
 	s2 := spaServer(t, SPAOptions{})
-	if rec := do(s2.Handler(), req{target: "/"}); rec.Code != 200 {
+	if rec := do(s2.Handler(), req{target: "/"}); rec.Code != http.StatusFound {
 		t.Fatalf("no mode: %d", rec.Code)
 	}
 }
@@ -304,7 +278,7 @@ func TestSPABadBuild(t *testing.T) {
 		}
 	})
 	t.Run("Spanish", func(t *testing.T) {
-		rec := do(h, req{target: "/", header: map[string]string{"Accept": "text/html", "Accept-Language": "es"}})
+		rec := do(h, req{target: "/portal", header: map[string]string{"Accept": "text/html", "Accept-Language": "es"}})
 		if rec.Code != 503 || !strings.Contains(rec.Body.String(), "Biblioteca") || !strings.Contains(rec.Body.String(), "LAI-SVC-100") {
 			t.Fatalf("%d %s", rec.Code, rec.Body.String())
 		}
@@ -315,7 +289,7 @@ func TestSPABadBuild(t *testing.T) {
 	})
 	t.Run("nil FS is a bad build too", func(t *testing.T) {
 		s := pageServer(t, SPARoutes(SPAOptions{})...)
-		expectError(t, do(s.Handler(), req{target: "/"}), 503, CodePortalMissing)
+		expectError(t, do(s.Handler(), req{target: "/portal"}), 503, CodePortalMissing)
 	})
 }
 
