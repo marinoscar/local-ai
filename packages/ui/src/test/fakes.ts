@@ -135,8 +135,11 @@ export class FakeMusic implements MusicTransport {
     return `/api/v1/music/songs/${s.id}/audio`;
   }
 
-  deleteSong(id: string): Promise<void> {
+  pins: (string | undefined)[] = [];
+
+  deleteSong(id: string, opts?: { pin?: string }): Promise<void> {
     this.deleted.push(id);
+    this.pins.push(opts?.pin);
     this.deleteResult = deferred<void>();
     return this.deleteResult.promise;
   }

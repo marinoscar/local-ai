@@ -10,6 +10,8 @@ import type { Song, SongTransport } from './types';
 
 /** The code shown when the list or a delete fails without a code of its own: the service is not answering. */
 export const CODE_LIBRARY_FAILED = 'LAI-SVC-116';
+/** The answers that mean "the admin PIN is needed" (missing, wrong): the confirmation asks for it. */
+const PIN_CODES = new Set(['LAI-SEC-002', 'LAI-SEC-003']);
 
 export interface SongLibraryProps {
   transport: SongTransport;
@@ -144,8 +146,12 @@ function SongItem({
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<TransportErrorInfo | null>(null);
+  const [pinAsked, setPinAsked] = useState(false);
+  const [pin, setPin] = useState('');
+  const [pinError, setPinError] = useState<TransportErrorInfo | null>(null);
   const keepRef = useRef<HTMLButtonElement>(null);
   const deleteRef = useRef<HTMLButtonElement>(null);
+  const pinRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -176,13 +182,29 @@ function SongItem({
     setDeleting(true);
     setError(null);
     try {
-      await transport.deleteSong(song.id);
+      await transport.deleteSong(song.id, pinAsked ? { pin } : undefined);
       onDeleted(song.id);
     } catch (e) {
-      setError(toErrorInfo(e, CODE_LIBRARY_FAILED));
-      setConfirming(false);
+      const info = toErrorInfo(e, CODE_LIBRARY_FAILED);
       setDeleting(false);
+      if (PIN_CODES.has(info.code)) {
+        // The node wants the admin PIN (a wrong one comes back as LAI-SEC-003): ask for it inside the confirmation.
+        setPinAsked(true);
+        setPinError(info);
+        setPin('');
+        requestAnimationFrame(() => pinRef.current?.focus());
+        return;
+      }
+      setError(info);
+      closeConfirm();
     }
+  };
+
+  const closeConfirm = () => {
+    setConfirming(false);
+    setPinAsked(false);
+    setPinError(null);
+    setPin('');
   };
 
   return (
@@ -217,8 +239,30 @@ function SongItem({
       {confirming ? (
         <div className="lai-confirm" role="alertdialog" aria-labelledby={`${id}-confirm`} aria-modal="false">
           <p id={`${id}-confirm`}>{t('deleteConfirm', { title })}</p>
+          {pinAsked ? (
+            <form
+              className="lai-field"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (pin !== '' && !deleting) void doDelete();
+              }}
+            >
+              {pinError ? <ErrorNotice error={pinError} /> : null}
+              <label htmlFor={`${id}-pin`}>{t('pin')}</label>
+              <input
+                ref={pinRef}
+                id={`${id}-pin`}
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={8}
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+              />
+            </form>
+          ) : null}
           <div className="lai-actions">
-            <button type="button" className="lai-btn lai-btn-danger" disabled={deleting} onClick={() => void doDelete()}>
+            <button type="button" className="lai-btn lai-btn-danger" disabled={deleting || (pinAsked && pin === '')} onClick={() => void doDelete()}>
               {deleting ? t('deleting') : t('deleteYes')}
             </button>
             <button
@@ -227,7 +271,7 @@ function SongItem({
               className="lai-btn"
               disabled={deleting}
               onClick={() => {
-                setConfirming(false);
+                closeConfirm();
                 requestAnimationFrame(() => deleteRef.current?.focus());
               }}
             >

@@ -76,7 +76,11 @@ export interface SongTransport {
    * cloud may answer a short-lived signed URL, hence the promise.
    */
   audioUrl(song: Song): string | Promise<string>;
-  deleteSong(id: string): Promise<void>;
+  /**
+   * Deletes a song. `pin` is sent only after the node asked for the admin PIN (403 LAI-SEC-002): the agent turns it into
+   * a PIN grant; a transport without a PIN (the cloud checks its own permission) ignores it.
+   */
+  deleteSong(id: string, opts?: { pin?: string }): Promise<void>;
 }
 
 /**

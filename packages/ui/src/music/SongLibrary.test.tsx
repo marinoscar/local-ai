@@ -66,16 +66,44 @@ describe('SongLibrary', () => {
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Your songs' }));
   });
 
-  it('shows a refused delete with its code (the admin PIN) and keeps the song', async () => {
+  it('asks for the admin PIN inside the confirmation when the node wants it', async () => {
     const tr = new FakeMusic();
     tr.songs = [song()];
     render(<SongLibrary transport={tr} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Morning light' }));
     fireEvent.click(screen.getByRole('button', { name: 'Yes, delete it' }));
     await act(async () => tr.deleteResult?.reject(err('LAI-SEC-002', '', '', 403)));
+    // Still asking, now with the PIN field and the reason with its code.
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(screen.getByRole('alert').getAttribute('data-code')).toBe('LAI-SEC-002');
+    const pin = screen.getByLabelText('Deleting needs the admin PIN. Type it here:') as HTMLInputElement;
+    expect(pin.type).toBe('password');
+    expect((screen.getByRole('button', { name: 'Yes, delete it' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(pin, { target: { value: '12a34' } });
+    expect(pin.value).toBe('1234');
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, delete it' }));
+    expect(tr.pins).toEqual([undefined, '1234']);
+    // A wrong PIN asks again.
+    await act(async () => tr.deleteResult?.reject(err('LAI-SEC-003', '', '', 401)));
+    expect(screen.getByRole('alert').textContent).toContain('Type the admin PIN again, carefully.');
+    fireEvent.change(screen.getByLabelText('Deleting needs the admin PIN. Type it here:'), { target: { value: '4821' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, delete it' }));
+    await act(async () => tr.deleteResult?.resolve());
+    expect(screen.queryByRole('heading', { name: 'Morning light' })).toBeNull();
+    expect(tr.pins).toEqual([undefined, '1234', '4821']);
+  });
+
+  it('shows any other refused delete with its code and keeps the song', async () => {
+    const tr = new FakeMusic();
+    tr.songs = [song()];
+    render(<SongLibrary transport={tr} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Morning light' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, delete it' }));
+    await act(async () => tr.deleteResult?.reject(err('LAI-AGT-022', 'The song is being written.', '')));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     const alert = screen.getByRole('alert');
-    expect(alert.getAttribute('data-code')).toBe('LAI-SEC-002');
-    expect(alert.textContent).toContain('Enter the admin PIN, then try again.');
+    expect(alert.getAttribute('data-code')).toBe('LAI-AGT-022');
+    expect(alert.textContent).toContain('Wait for it to finish, then try again.');
     expect(screen.getByRole('heading', { name: 'Morning light' })).toBeTruthy();
   });
 

@@ -131,6 +131,14 @@ const CODES: Record<string, { en: [string, string]; es: [string, string] }> = {
     en: ['This needs the admin PIN.', 'Enter the admin PIN, then try again.'],
     es: ['Esto necesita el PIN de administrador.', 'Escriba el PIN de administrador y vuelva a intentarlo.'],
   },
+  'LAI-SEC-003': {
+    en: ['That PIN is not right.', 'Type the admin PIN again, carefully.'],
+    es: ['Ese PIN no es correcto.', 'Escriba otra vez el PIN de administrador con cuidado.'],
+  },
+  'LAI-SEC-004': {
+    en: ['Too many wrong PINs.', 'Wait the time shown, then try again.'],
+    es: ['Demasiados PIN incorrectos.', 'Espere el tiempo indicado y vuelva a intentarlo.'],
+  },
 };
 
 /** The fallback meaning of a code, or '' when this package does not know it. */
