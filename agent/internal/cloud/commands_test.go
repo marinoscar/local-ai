@@ -86,28 +86,30 @@ func TestDecodeParams(t *testing.T) {
 	})
 }
 
-// TypeLimits is the lease and hard cap table of cloud-app.md section 3.7 for exactly the 15 types the
+// TypeLimits is the lease and hard cap table of cloud-app.md section 3.7 for exactly the 17 types the
 // config accepts.
 func TestTypeLimitsMatchTheSpecTable(t *testing.T) {
 	want := map[string][2]time.Duration{
-		TypeStatusRefresh:   {30 * time.Second, 300 * time.Second},
-		TypeModelLoad:       {60 * time.Second, 600 * time.Second},
-		TypeModelUnload:     {30 * time.Second, 300 * time.Second},
-		TypeModelSetDefault: {30 * time.Second, 300 * time.Second},
-		TypeModelDownload:   {30 * time.Second, 300 * time.Second},
-		TypeModelDelete:     {60 * time.Second, 600 * time.Second},
-		TypeArkSync:         {30 * time.Second, 300 * time.Second},
-		TypeArkVerify:       {30 * time.Second, 300 * time.Second},
-		TypeModeOffline:     {30 * time.Second, 300 * time.Second},
-		TypeKeyRotate:       {60 * time.Second, 600 * time.Second},
-		TypeServiceRestart:  {60 * time.Second, 600 * time.Second},
-		TypeLogsTail:        {30 * time.Second, 300 * time.Second},
-		TypeCatalogRefresh:  {60 * time.Second, 600 * time.Second},
-		TypeAgentUpdate:     {300 * time.Second, 900 * time.Second},
-		TypeEnsureRun:       {30 * time.Second, 300 * time.Second},
+		TypeStatusRefresh:    {30 * time.Second, 300 * time.Second},
+		TypeModelLoad:        {60 * time.Second, 600 * time.Second},
+		TypeModelUnload:      {30 * time.Second, 300 * time.Second},
+		TypeModelSetDefault:  {30 * time.Second, 300 * time.Second},
+		TypeModelDownload:    {30 * time.Second, 300 * time.Second},
+		TypeModelDelete:      {60 * time.Second, 600 * time.Second},
+		TypeArkSync:          {30 * time.Second, 300 * time.Second},
+		TypeArkVerify:        {30 * time.Second, 300 * time.Second},
+		TypeModeOffline:      {30 * time.Second, 300 * time.Second},
+		TypeKeyRotate:        {60 * time.Second, 600 * time.Second},
+		TypeServiceRestart:   {60 * time.Second, 600 * time.Second},
+		TypeLogsTail:         {30 * time.Second, 300 * time.Second},
+		TypeCatalogRefresh:   {60 * time.Second, 600 * time.Second},
+		TypeAgentUpdate:      {300 * time.Second, 900 * time.Second},
+		TypeEnsureRun:        {30 * time.Second, 300 * time.Second},
+		TypeWorkloadActivate: {60 * time.Second, 900 * time.Second},
+		TypeMusicGenerate:    {60 * time.Second, 3600 * time.Second},
 	}
 	names := config.CloudJobNames()
-	if len(names) != 15 || len(want) != 15 {
+	if len(names) != 17 || len(want) != 17 {
 		t.Fatalf("%d config names, %d expected", len(names), len(want))
 	}
 	for _, n := range names {

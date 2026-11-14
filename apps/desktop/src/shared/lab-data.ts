@@ -276,3 +276,113 @@ export function readRefusal(body: unknown): Refusal {
     mode: mode === 'survival' ? 'survival' : mode === 'offline' ? 'offline' : null,
   };
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Workloads and music (issue #515, E11)
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** A workload's name as profiles and `node.yaml` spell it; the same pattern as the Lab allowlist (cloud-api.ts). */
+export const WORKLOAD_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
+const MAX_WORKLOADS = 16;
+
+export interface WorkloadInfo {
+  name: string;
+  label: { en: string; es: string };
+  active: boolean;
+  /** False when the node said the set does not fit its GPU (LAI-LLM-051). */
+  fits: boolean;
+  /** Model ids of the set that are not on the node yet. */
+  missing: number;
+}
+
+/**
+ * `{ data: { lastState: { workloads } } }` (`GET /api/localai/nodes/:nodeId`) -> the node's workloads, as the agent's
+ * `GET /api/v1/workloads` reports them (`{ workloads: [...], active }`, or the bare list). Null when the body is not a
+ * node; an empty list when the node has not reported any (an agent from before E11).
+ */
+export function projectWorkloads(body: unknown): WorkloadInfo[] | null {
+  const data = isObject(body) && isObject(body['data']) ? body['data'] : null;
+  if (!data) return null;
+  const state = isObject(data['lastState']) ? data['lastState'] : null;
+  const raw = state ? state['workloads'] : undefined;
+  const block = isObject(raw) ? raw : null;
+  const list = Array.isArray(raw) ? raw : block && Array.isArray(block['workloads']) ? block['workloads'] : [];
+  const activeName = block && typeof block['active'] === 'string' ? block['active'] : null;
+  const out: WorkloadInfo[] = [];
+  for (const item of list.slice(0, MAX_WORKLOADS)) {
+    if (!isObject(item) || typeof item['name'] !== 'string' || !WORKLOAD_NAME_PATTERN.test(item['name'])) continue;
+    const name = item['name'];
+    const label = isObject(item['label']) ? item['label'] : {};
+    const en = text(label['en'], 40) || name;
+    const es = text(label['es'], 40) || en;
+    out.push({
+      name,
+      label: { en, es },
+      active: bool(item['active']) || activeName === name,
+      fits: item['fits'] !== false,
+      missing: Array.isArray(item['missing']) ? Math.min(item['missing'].length, 99) : 0,
+    });
+  }
+  return out;
+}
+
+/** Where a music request stands (contract §6: it rides a `localai.music.generate` command, so the command's states). */
+export type MusicRequestStatus = CommandStatus;
+
+export interface MusicRequestInfo {
+  id: string;
+  status: MusicRequestStatus;
+  errorCode: string | null;
+  errorMessage: string | null;
+}
+
+/** Words some APIs use for the end states, read as the command states. */
+const MUSIC_STATUS_ALIASES: Readonly<Record<string, MusicRequestStatus>> = { done: 'succeeded', completed: 'succeeded', complete: 'succeeded', error: 'failed', canceled: 'cancelled', pending: 'queued' };
+
+/** `{ data: { id, status, error? } }` (`POST /music/requests`, `GET /music/requests/:id`) -> the request, or null. */
+export function projectMusicRequest(body: unknown): MusicRequestInfo | null {
+  const data = isObject(body) && isObject(body['data']) ? body['data'] : null;
+  if (!data) return null;
+  const id = data['id'];
+  if (typeof id !== 'string' || !COMMAND_ID_PATTERN.test(id)) return null;
+  const rawStatus = typeof data['status'] === 'string' ? data['status'] : '';
+  const status = (COMMAND_STATUSES as readonly string[]).includes(rawStatus) ? (rawStatus as MusicRequestStatus) : MUSIC_STATUS_ALIASES[rawStatus];
+  if (status === undefined) return null;
+  const error = isObject(data['error']) ? data['error'] : null;
+  const code = error ? text(error['code'], 16) : typeof data['errorCode'] === 'string' ? text(data['errorCode'], 16) : null;
+  const message = error ? text(error['message'], 300) : typeof data['errorMessage'] === 'string' ? text(data['errorMessage'], 300) : null;
+  return { id, status, errorCode: code !== null && DOCTOR_CODE.test(code) ? code : null, errorMessage: message || null };
+}
+
+export interface SongInfo {
+  id: string;
+  nodeId: string | null;
+  title: string;
+  durationS: number | null;
+  createdAt: string | null;
+}
+
+const MAX_SONGS = 50;
+
+/** `{ data: [...] }` or `{ data: { items | songs: [...] } }` (`GET /music/songs`) -> the songs, newest first as sent. */
+export function projectSongs(body: unknown): SongInfo[] | null {
+  if (!isObject(body)) return null;
+  const data = body['data'];
+  const list = Array.isArray(data) ? data : isObject(data) && Array.isArray(data['items']) ? data['items'] : isObject(data) && Array.isArray(data['songs']) ? data['songs'] : null;
+  if (list === null) return null;
+  const out: SongInfo[] = [];
+  for (const raw of list.slice(0, MAX_SONGS)) {
+    if (!isObject(raw) || typeof raw['id'] !== 'string' || !COMMAND_ID_PATTERN.test(raw['id'])) continue;
+    const nodeId = typeof raw['nodeId'] === 'string' && NODE_ID_PATTERN.test(raw['nodeId']) ? raw['nodeId'] : null;
+    const duration = raw['durationS'] ?? raw['duration_s'];
+    const created = raw['createdAt'] ?? raw['created_at'];
+    out.push({
+      id: raw['id'],
+      nodeId,
+      title: text(raw['title'], 120) || text(raw['tags'], 120) || '',
+      durationS: typeof duration === 'number' && Number.isFinite(duration) && duration >= 0 ? Math.round(duration) : null,
+      createdAt: typeof created === 'string' && !Number.isNaN(Date.parse(created)) ? created : null,
+    });
+  }
+  return out;
+}

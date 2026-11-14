@@ -8,13 +8,13 @@ import { AGENT_HOST, AGENT_PORT, CLOUD_HOST, isLoopbackHost, normalizeHost } fro
 
 export const MODULE = 'navigation' as const;
 
-/** The three companion apps that open in their own window, by path prefix of the agent origin. */
-export const CHILD_PREFIXES = ['chat', 'library', 'maps'] as const;
+/** The companion apps that open in their own window, by path prefix of the agent origin (`music`: issue #515). */
+export const CHILD_PREFIXES = ['chat', 'library', 'maps', 'music'] as const;
 export type ChildName = (typeof CHILD_PREFIXES)[number];
 
 /**
  * Which kind of page a webContents shows:
- * `content` the agent UI in the main window; `chat`/`library`/`maps` the child windows;
+ * `content` the agent UI in the main window; `chat`/`library`/`maps`/`music` the child windows;
  * `shell` everything on localai://app (top bar, Lab, error, PIN, connection info, link).
  */
 export type View = 'content' | ChildName | 'shell';
@@ -128,13 +128,16 @@ export interface PermissionQuery {
   requestingUrl: string;
   /** For `media`: the requested kinds (`audio`, `video`). */
   mediaTypes?: readonly string[];
+  /** The view of the asking webContents, when known: the Music window never gets the microphone, whatever URL it shows. */
+  view?: View;
   dev?: boolean;
   devOrigin?: string;
 }
 
 /**
  * Denied by default. Granted: `clipboard-sanitized-write` to shell pages, and `media` for the microphone only
- * (audio, never video) to the agent origin's speech page.
+ * (audio, never video) to the agent origin's speech page. The Music pages (`/music/`, issue #515) never get the
+ * microphone: a sample is a file the person picks, not a recording.
  */
 export function decidePermission(query: PermissionQuery): boolean {
   const url = parse(query.requestingUrl);
@@ -149,21 +152,27 @@ export function decidePermission(query: PermissionQuery): boolean {
   }
   if (query.permission === 'media') {
     const kinds = query.mediaTypes ?? [];
-    return url.origin === AGENT_ORIGIN && kinds.length > 0 && kinds.every((kind) => kind === 'audio');
+    if (url.origin !== AGENT_ORIGIN || query.view === 'music' || underPrefix(url.pathname, 'music')) return false;
+    return kinds.length > 0 && kinds.every((kind) => kind === 'audio');
   }
   return false;
 }
 
 /** Permission request, check and device handlers on one session. Electron approves everything when none is set. */
 export function installPermissionHandlers(ses: Pick<Session, 'setPermissionRequestHandler' | 'setPermissionCheckHandler' | 'setDevicePermissionHandler'>, dev: { dev?: boolean; devOrigin?: string } = {}): void {
-  ses.setPermissionRequestHandler((_contents, permission, callback, details) => {
+  // Only a registered view is passed on: an unregistered webContents reads as `shell`, which says nothing here.
+  const viewFor = (contents: WebContents | null): View | undefined => (contents && views.has(contents) ? views.get(contents) : undefined);
+  ses.setPermissionRequestHandler((contents, permission, callback, details) => {
     const d = details as { requestingUrl?: string; mediaTypes?: string[] };
-    callback(decidePermission({ permission, requestingUrl: d.requestingUrl ?? '', mediaTypes: d.mediaTypes, ...dev }));
+    const view = viewFor(contents);
+    callback(decidePermission({ permission, requestingUrl: d.requestingUrl ?? '', mediaTypes: d.mediaTypes, ...(view ? { view } : {}), ...dev }));
   });
-  ses.setPermissionCheckHandler((_contents, permission, requestingOrigin, details) => {
+  ses.setPermissionCheckHandler((contents, permission, requestingOrigin, details) => {
     const d = details as { requestingUrl?: string; mediaType?: string };
+    const view = viewFor(contents);
     return decidePermission({
       permission,
+      ...(view ? { view } : {}),
       requestingUrl: d.requestingUrl ?? requestingOrigin,
       mediaTypes: d.mediaType === 'audio' ? ['audio'] : [],
       ...dev,

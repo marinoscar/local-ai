@@ -15,7 +15,9 @@ Every node serves its LLMs and VLMs through one `llama-server` process in **rout
 - how llama.cpp is **built** into `/opt/localai/llama.cpp/builds/<commit>-<backend>` and switched;
 - the **migration** from today's hand-made `llama-qwen.service` with zero client changes;
 - the `/v1/models` output the gateway relies on;
-- the benchmark helper `aictl bench`.
+- the benchmark helper `aictl bench`;
+- the **engine adapters** that let other GPU engines (ACE-Step music, [music.md](music.md)) load and unload through the same orchestrator, with **one GPU budget** across engines (§4.15, [ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md));
+- **named workloads**, the one-button switch between sets of models (§4.16).
 
 ### Non-goals
 - Downloading model files (that is [ark-sync.md](ark-sync.md); the router's own `-hf`/`POST /models` download feature is **never** used).
@@ -35,6 +37,8 @@ Every node serves its LLMs and VLMs through one `llama-server` process in **rout
 | **Static fit** | Can this model ever load on this hardware? Drives `loadable` in the API |
 | **Dynamic fit** | Can it load **now**, given what else is loaded? Drives eviction |
 | **Build id** | `<commit>-<backend>`, e.g. `f3586e66b-cuda`. `commit` is the 9-char short sha (`git rev-parse --short=9`) |
+| **Engine adapter** | The agent-side driver of one GPU engine (`llama`, `acestep`): start for a model, readiness, stop, memory held (§4.15) |
+| **Workload** | A named set of model ids from the profile or `node.yaml` (catalog.md §4); activating it loads exactly that set (§4.16) |
 | **Legacy alias** | An extra model name kept from the pre-migration unit (e.g. `qwen3.5-9b`), so old clients keep working |
 
 ## 3. Interfaces
@@ -374,7 +378,7 @@ From `internal/hardware` (agent.md §4.4) and the profile:
 |---|---|
 | `B` | node backend (`cuda` \| `vulkan` \| `cpu`) |
 | `G_total` | cuda: VRAM total of the GPU(s) (sum when several); vulkan dedicated: VRAM total; vulkan **unified** (agent.md §4.4.2): GTT total; cpu: 0 |
-| `G_others` | GPU memory used by processes that are not children of `localai-llama` (measured, 10 s cache) |
+| `G_others` | GPU memory used by processes that are not children of `localai-llama` **and not the main process of another engine unit the agent drives while that engine has a model in the loaded set** (`localai-music`, §4.15.2; measured, 10 s cache). A music engine that is running without a loaded model (starting, stopping, crashed but not reaped) is counted here |
 | `M` | `router.memory_margin_mib` from the profile (default 512) |
 | `R_total`, `R_avail` | `MemTotal`, `MemAvailable` (MiB) |
 | `R_res` | RAM reserve: 2048 MiB, or 4096 MiB on unified-memory nodes |
@@ -443,7 +447,7 @@ request ─►│ checking │────────────────�
 ```
 
 Steps:
-1. **Check** (no lock): id exists and `engine == llama` (else `404`/`422`); static fit (`422 LAI-CAT-005`/`LAI-LLM-008`); router `/health` 200 (else `502 LAI-LLM-004`). Mode `single` → §4.8.
+1. **Check** (no lock): id exists and its engine has an adapter on this node (else `404`/`422`; `acestep` with no runtime installed is `422 LAI-LLM-043`, §4.15); static fit (`422 LAI-CAT-005`/`LAI-LLM-008`); router `/health` 200 (else `502 LAI-LLM-004`). Mode `single` → §4.8.
 2. **Lock:** `modelOpsMu.TryLock()`; busy → `409 LAI-AGT-022` with the running `op_id`. (Cloud jobs and `survival_models` wait up to 60 s instead.) Create `op_id`, audit `model.load`.
 3. **Snapshot:** `GET /models`. If `id` is `loaded` → release, `200 {already_loaded: true}`. If `loading` (started by someone else) → skip to step 6 (wait).
 4. **Plan** (§4.3.3) → `evict` list. Record `previous = loaded set` and `state.models.last_load = {id, op_id, result: "in_progress"}` (fsync; used by crash-resume logic in agent.md §4.2.4).
@@ -476,7 +480,7 @@ Steps:
 
 What the code fixes where the steps above are silent:
 
-- **Check.** A model that is not `engine: llama` is `422 LAI-CAT-005`. A model that fits and is present but that the router does not list (its preset is missing) is `500 LAI-LLM-007`, not a load attempt. An `Env.Plan` warning (`LAI-HW-005`, `LAI-HW-006`) is returned as `LoadResult.Warning` and logged; the load goes ahead.
+- **Check.** A model whose engine has no adapter (`whisper`, `piper`) is `422 LAI-CAT-005`; an `acestep` model goes through the `acestep` adapter (§4.15), and is `422 LAI-LLM-043` when the music runtime is not installed. A model that fits and is present but that the router does not list (its preset is missing) is `500 LAI-LLM-007`, not a load attempt. An `Env.Plan` warning (`LAI-HW-005`, `LAI-HW-006`) is returned as `LoadResult.Warning` and logged; the load goes ahead.
 - **Already loaded** also sets `last_used[id] = now`: asking for a model is using it, and it orders the next eviction.
 - **The operation outlives its caller.** From the moment the lock is held, steps 5 to 8 run on a context the caller cannot cancel, because stopping after an eviction would leave the node worse off. A caller that gives up (`ctx` cancelled) gets the context error and the operation completes by itself; `wait: false` is the same path with the answer given earlier. Only `Shutdown` stops it.
 - **Failure detection.** Each poll of step 6 reads the model's status. `loaded` or `sleeping` is success. `loading` is progress. `unloaded` with `failed: true` is a failure with its `exit_code`; `unloaded` after `loading` was seen means the child exited (a router restart, an OOM kill) and is a failure without an exit code; `unloaded` that was never seen loading is given 3 polls (the router may not have registered the start yet) and then fails. A router that does not answer for 20 s fails the load (`details.cause: "router_down"`); shorter gaps (a llama restart) are tolerated. A model that is no longer in the list fails (`not_listed`). `details.cause` is one of `rejected` (the router refused `POST /models/load`), `failed`, `timeout`, `unload_timeout`, `router_down`, `not_listed`.
@@ -804,6 +808,86 @@ A malformed answer, a missing key file or any other failure marks the view stale
 
 Known limit: a router that restarts and brings the same models back within one poll interval produces no event (the diff sees `loaded` before and after). The orchestrator's own restarts are suppressed anyway, and the unit's `NRestarts` (the service watcher) records the rest.
 
+### 4.15 Engine adapters and one GPU budget
+
+[ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md). Everything in §4.3 to §4.5 (fit, planner, lock, eviction, rollback, events, state, audit) applies to **every** engine; this section says only what an engine adds. Code: `internal/router/engine` (the interface and the `llama` adapter over the existing router client), `internal/music/engine` (the `acestep` adapter). One `modelOpsMu` serializes every load, unload, eviction and workload change of every engine (agent.md §4.9).
+
+#### 4.15.1 The adapter
+```go
+type Adapter interface {
+    Engine() string                                     // "llama", "acestep"
+    Installed(ctx context.Context) (ok bool, why Reason) // runtime present and built for this backend; false → LAI-LLM-043
+    Loaded(ctx context.Context) ([]LoadedModel, error)   // {id, status: loading|loaded, used_v_mib (0 = unknown)}
+    Start(ctx context.Context, m catalog.Model) error    // begin loading m (non-blocking)
+    Poll(ctx context.Context, id string) (Progress, error) // loading | loaded | failed{cause} | gone
+    Stop(ctx context.Context, id string) error           // unload m and free its memory (blocking, bounded)
+}
+```
+- **`llama`** wraps the router client: `Start` is `POST /models/load`, `Poll` reads `GET /models` (§4.4 step 6), `Stop` is `POST /models/unload` plus the wait of §4.5. Nothing about the router changes.
+- **`acestep`** drives `localai-music.service` ([music.md](music.md) §3.2). One music model at most is loaded at a time (the engine holds one); loading a second `acestep` model evicts the first. `Start` writes `/etc/localai/music.env` (atomic, 0640) for the model, then `systemctl start localai-music` through the services guard (agent.md §4.3.1). `Poll` reads the shim's `GET /health` on `127.0.0.1:<ports.music>`: `loading` → loading, `ready` → loaded, `error` → failed. `Stop` cancels the queued and running songs (`LAI-SVC-158`), then `systemctl stop localai-music` and waits for the GPU memory to be freed (§4.15.3). `used_v` is the shim's `vram_mib` when it reports one, else `need_v`.
+- **`Installed`** for `acestep`: `/opt/localai/acestep/current/venv/bin/python` exists and the runtime's `BUILD.json` names the node's backend; otherwise `LAI-LLM-043`, and every `acestep` model is `loadable: false` with that code (catalog.md §5). `whisper` and `piper` have no adapter: they are services, not loadable models (companion-services.md).
+
+#### 4.15.2 One GPU budget across engines
+- The **loaded set** is the union of every adapter's `Loaded`, each entry tagged with its engine. `last_used` (state.json `models.last_used`) covers every engine, and `state.models.desired_loaded` lists models of every engine.
+- **Dynamic fit (§4.3.3)** sums `used_v(k)` over the keep-set `K` whatever the engine of `k`, so the GPU rule is the same inequality. The **count rule** `|K| + 1 ≤ N` counts only `llama` models (`models_max` is the router's limit); an `acestep` model counts against the GPU rule and against the one-music-model rule above.
+- **Eviction** walks `K` least recently used first **across engines**, with the tie-breaks of §4.3.3 (then larger `used_v`, then id), and calls the evicted model's own adapter `Stop`. `unload_others: false` keeps every model of every engine.
+- **Static fit (§4.3.2)** applies rule 2 (graphics memory) to `acestep` models (their `min_vram_mib` is above 0) and adds rule 0: the adapter is `Installed` (`LAI-LLM-043`).
+- `W_res` (whisper) is unchanged. The music engine is never a `G_others` "other program" while its model is in the loaded set, so its memory is never counted twice; while it is running without one, it is.
+
+#### 4.15.3 Load and unload through the `acestep` adapter
+
+```
+              start unit            /health ready
+  ┌────────┐ ───────────► ┌──────────┐ ─────────► ┌────────┐
+  │stopped │              │ starting │            │ ready  │──── unit exits ──► crashed ─► LAI-SVC-152 for running songs,
+  └────────┘ ◄─────────── └────┬─────┘            └───┬────┘                   model.unloaded{reason: crash}, stopped
+      ▲      stop done         │ start fails  → LAI-LLM-040  │ Stop (request, eviction, workload, survival)
+      │                        │ health error → LAI-LLM-040  ▼
+      │                        │ deadline     → LAI-LLM-041  ┌──────────┐ unit inactive and GPU freed
+      └────────────────────────┴──── cleanup: Stop ─────────►│ stopping │───────────────────────────► stopped
+                                                             └────┬─────┘
+                                                                  │ not inactive in 30 s, or memory still held after 15 s
+                                                                  ▼
+                                                         LAI-LLM-042 (warning), stopped
+```
+Load, as step 6 of §4.4 with the adapter's `Start` and `Poll`:
+1. `Start`: write `music.env`, `systemctl start localai-music`. A start job that fails, a unit that lands in `failed`, or a write that fails → **failure** `LAI-LLM-040` (`details.cause: "start_failed"`).
+2. `Poll` every 1 s: `ready` → success; `error` → failure `LAI-LLM-040` with the shim's `error` in `details.engine_error` (`details.cause: "oom"` when the shim reports that it ran out of graphics memory, else `"engine_error"`); the unit exits while loading → failure `LAI-LLM-040` (`details.cause: "exited"`, the exit code in `details`); no answer at all is tolerated until the deadline (the program is importing).
+3. Deadline `llama.load_timeout_seconds` (the same setting as for llama models, default 300 s; doubled when the weights are on an ark drive) → failure `LAI-LLM-041`.
+4. A failure runs §4.4 step 8: `Stop` the music engine (ignoring its result), restore what was evicted with each model's own adapter, then the default and (survival only) the survival list. The answer follows §4.4.1 "The final answer": `500 LAI-LLM-040` or `504 LAI-LLM-041` with `rolled_back: true` and `restored`, or `500 LAI-LLM-012` when nothing is loaded. A rollback is never rolled back again.
+
+Unload (`Stop`), for a request, an eviction, a workload or survival:
+1. Cancel queued and running songs (they end `cancelled`, `LAI-SVC-158`).
+2. `systemctl stop localai-music` (the unit's `TimeoutStopSec=20` lets systemd kill the process). Wait until the unit is `inactive` or `failed` (30 s).
+3. Wait until no process of the unit holds GPU memory (`nvidia-smi --query-compute-apps`; 15 s, polled every 500 ms).
+4. Steps 2 or 3 not reached → `LAI-LLM-042` (warning). The model is recorded unloaded; the next plan measures `G_others` again before trusting the free memory, so a stuck process makes the next load evict more or warn (`LAI-HW-005`), never over-commit. An eviction that ends in `LAI-LLM-042` is **not** a load failure; the load goes on with the re-measured budget.
+
+**A crash while loaded** (the unit exits, or `/health` fails 3 times in a row while `ready`): running songs fail with `LAI-SVC-152`, `model.unloaded {reason: "crash"}` is published, the model leaves `desired_loaded`, and the engine is **not** restarted by itself (a person, a workload or the next load starts it).
+
+**Boot.** `localai-music` is never enabled. At agent start (agent.md §4.1 step 14) an `acestep` model in `desired_loaded` is loaded again after the default llama model, outside survival mode, with `unload_others: false`, like the rest of the set.
+
+#### 4.15.4 Survival always wins
+The survival step `engines_stop` (agent.md §4.2.1, [modes.md](../architecture/modes.md) §2.2) runs before `survival_models`: it takes `modelOpsMu` with the 60 s wait of the survival loader, calls `Stop` on every engine other than `llama` (today: `acestep`), records those models unloaded and removes them from `desired_loaded`. A stop that fails or times out is the warning `LAI-LLM-042` and the step goes on; it never fails survival. In survival mode an `acestep` load is refused `409 LAI-AGT-023` (`details.mode: "survival"`), and boot never starts the music engine.
+
+### 4.16 Workloads (`router.Workloads`)
+
+[ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md). HTTP contract: agent.md §3.8.34; catalog shape: catalog.md §4 "Workloads".
+
+**Resolution.** The profile's `workloads` merged with `node.yaml` `workloads` (same name: replaced as a whole; new name: added). An id the catalog does not have drops that workload with `LAI-CAT-020`. Resolution runs at start, on every catalog refresh and on every `node.yaml` change.
+
+**Activation** (`Activate(ctx, name, force, wait)`):
+1. **Check** (no lock): the name exists (else `404 LAI-LLM-050`). In survival mode without `force` → `409 LAI-LLM-053`. Every model of the set passes static fit and is present (else `422 LAI-LLM-051` with `details.models`, or `422 LAI-LLM-043` / `LAI-LLM-008` for the model concerned). The **set fits together**: the dynamic fit of §4.3.3 for the whole set with an empty keep-set (plus the survival models in survival mode), and at most `models_max` `llama` models and one `acestep` model (else `422 LAI-LLM-051`).
+2. **Lock** `modelOpsMu.TryLock()` (busy → `409 LAI-AGT-022`; a cloud job waits 60 s like other cloud jobs). Create `op_id`, audit `workload.activate`. With `wait: false`, answer `202 {op_id}` here and continue in the background on a context the caller cannot cancel (§4.4.1).
+3. **Diff.** `previous` = the loaded set. `unload` = loaded models not in the set, **minus the survival models when the mode is survival** (a workload never unloads a survival model). `load` = models of the set that are not loaded, in the set's order.
+4. **Unload** each of `unload` with its adapter's `Stop` (llama models: the 30 s wait of an eviction). Publish `workload.progress {phase: unloading}` per model and `model.unloaded {reason: "evicted"}`. An `acestep` stop that ends in `LAI-LLM-042` is a warning, not a failure. A `llama` unload that does not finish is a failure (step 6).
+5. **Load** each of `load` through §4.4 steps 5 to 7 with `unload_others: false` (nothing else should need to go; if the plan still asks to evict, that is a failure, `details.cause: "no_room"`). Publish `workload.progress {phase: loading}` with the model's own `model.loading` progress.
+6. **Failure** (any load fails or times out, or step 4 fails): stop what this activation loaded, restore `previous` (most recently used first, each through its adapter, each once), then the default and the survival list as in §4.4 step 8. Answer `500 LAI-LLM-052` with `details.cause` (the code of the first failure: `LAI-LLM-009`, `LAI-LLM-010`, `LAI-LLM-040`, `LAI-LLM-041`), `details.restored`; when nothing at all is loaded at the end, `500 LAI-LLM-012`. `workload.done {result: rolled_back}`.
+7. **Success:** `state.workloads.active = name`, `state.workloads.activated_at = now`, `desired_loaded` = the set (plus kept survival models), `last_used` = now for every model of the set. `workload.done {result: ok, active: name}`; push the cloud state snapshot; release the lock.
+
+**What `active` means.** `GET /workloads` reports a workload active while its set is exactly what is loaded (survival models kept beside it in survival mode do not count). A single load or unload that changes the set makes `active` `null`; nothing is undone.
+
+**Survival with `force`.** A person at the machine may force a workload in survival (for example to make a song while the survival chat stays loaded). The survival models stay; the set must fit beside them (step 1). Music is still refused in survival (§4.15.4), so a set with an `acestep` model is `409 LAI-AGT-023` in survival even with `force`.
+
 ## 5. Failure handling and edge cases
 
 | Situation | Behaviour | Code |
@@ -879,6 +963,14 @@ Known limit: a router that restarts and brings the same models back within one p
 | LAI-LLM-029 | error | The migration from the old service was interrupted | Run `sudo aiagent migrate llama-qwen` again (it continues), or `--rollback` |
 | LAI-LLM-030 | warning | A model was running from the ark drive and the drive was removed | Plug the drive back in, or load another model |
 | LAI-LLM-031 | warning | A model would not stop, so the AI service was restarted | Nothing to do |
+| LAI-LLM-040 | error | Engine failed to start (unit start failed) | Run `aictl logs --unit music` and `aictl doctor`; the previous models were started again |
+| LAI-LLM-041 | error | Engine did not become ready in time | Try again; if it repeats, run `aictl logs --unit music`. The previous models were started again |
+| LAI-LLM-042 | warning | Engine did not free GPU memory / stop cleanly | Nothing to do now; if graphics memory stays full, restart the computer |
+| LAI-LLM-043 | error | Model's engine is not installed on this node | Press **Install what's missing**, or run `aictl ensure` |
+| LAI-LLM-050 | error | Unknown workload | Run `aictl workloads` to see the names this computer has |
+| LAI-LLM-051 | warning | Workload does not fit this node's GPU | Choose another workload, or remove a model from it in `node.yaml` `workloads:` |
+| LAI-LLM-052 | error | Workload activation failed; previous models restored | Try again; if it repeats, run `aictl doctor` and `aictl logs --unit llama` |
+| LAI-LLM-053 | warning | Workload change refused in survival mode (use force) | Leave survival mode first, or confirm the change on this computer |
 
 ## 9. Test plan
 
@@ -903,6 +995,8 @@ Known limit: a router that restarts and brings the same models back within one p
 | Migration (fake systemd, fake fs, fake tailscale) | parse the ai-n3 unit verbatim (brief); unmatched sha → stop; flag diff → stop / `--accept-catalog-flags`; same-fs rename + symlink; cross-fs copy + verify; M8 failure → automatic rollback; re-run from each recorded step; rollback restores regular key file with current key; masking after moving the unit file |
 | Build (`internal/router/build`) | golden argv per backend (`testdata/golden/argv-*.txt`, with `-G Ninja` and the 3 h timeout); CUDA arch parse `7.5`→`75`, two GPUs `7.5`,`8.9` → `75;89`; jobs formula; prerequisites per backend; RUNPATH check on generated ELF files (static, `$ORIGIN`, `/home` RUNPATH and RPATH, builds `.tmp`, not an ELF); smoke accepts `version: 6000 (f3586e6)` and `… commit f3586e66b`, rejects a missing 7-hex prefix, a bad exit, no `CUDA0`, llvmpipe only; failure leaves `<id>.tmp.failed` and does not switch; source chain (extracted tree, short sha, incomplete tree, offline → `LAI-KIT-002`, clone failure → `LAI-LLM-018`, `git archive`, `--source`, tar safety); configure/build failure, timeout, killed process, disk full, cancel, lock; switch through the agent and through `systemctl`; restart, health, default load, completion and 180 s failures all switch back with `LAI-LLM-019`; busy agent; no previous build; retention (current, previous, newest other; `--keep`; sources) |
 | Bench | VRAM math, suggestion rounding, restore of previous models |
+| Engine adapters (#508, fake systemd and a fake shim over HTTP) | `acestep` load: success; start job fails, unit lands in `failed`, `music.env` write fails (`LAI-LLM-040`); `/health` `error` and an out-of-memory error (`LAI-LLM-040`, `cause: oom`); the unit exits while loading; deadline (`LAI-LLM-041`, doubled on an ark drive); each failure restores the evicted llama models; nothing restorable → `LAI-LLM-012`. Unload: clean; unit not inactive in 30 s; memory still held after 15 s (`LAI-LLM-042`, the next plan re-measures); crash while loaded (`LAI-SVC-152`, `model.unloaded {reason: crash}`, not restarted). One budget: a music load evicts the LRU llama model and vice versa; `unload_others: false` refuses (`LAI-LLM-011`); the count rule ignores `acestep`; a second `acestep` model evicts the first; `G_others` excludes the engine only while its model is loaded; `LAI-LLM-043` when the runtime is missing. Survival: `engines_stop` before `survival_models`, a stop failure is a warning and survival is entered; an `acestep` load in survival is refused |
+| Workloads (#509) | resolution (profile only, node replaces, node adds, unknown id → `LAI-CAT-020` and only that workload dropped); `active` exact-set rule; activation diff (nothing to do, unload only, load only, both); `404 LAI-LLM-050`; `422 LAI-LLM-051` for a set that cannot fit together and for `models_max`; busy `409`; survival without force `409 LAI-LLM-053`, with force the survival models stay; failure at each step restores `previous` (`LAI-LLM-052`, `details.cause`); nothing restored → `LAI-LLM-012`; `wait: false` events order (`workload.progress` then `workload.done`); the caller giving up does not stop it |
 
 ### 9.2 Integration tests (fakes)
 - A **fake router** HTTP server (`internal/router/fake`, §3.6.1 rule 7) implementing `/health`, `/models` (+`reload`), `/models/load`, `/models/unload`, `/models/sse`, `/props`, `/v1/chat/completions`, `/v1/models` with scripted timings and failures; the orchestrator is run end to end with the fake systemd manager.
@@ -968,6 +1062,9 @@ sudo aiagent migrate llama-qwen --rollback     # then forward again; both direct
 8. **ROUTER-08 llama.cpp build manager** — §4.10 source resolution, cmake per backend, arch detection, static build check, smoke, BUILD.json, atomic switch with post-switch check and rollback, retention: the build engine and its library API. Split: AICTL-09 owns the `aictl rebuild-llama` command surface (flag parsing, human/`--json` output, exit codes, [aictl.md](aictl.md) §4.23); KIT-04 adds the offline extensions (`--from-kit`, `--prebuilt`, `--dry-run` kit preflight, [rebuild-kit.md](rebuild-kit.md) §4.3). *Accept:* §9.1 build cases; real build on ai-n3 at `f3586e66b` produces `builds/f3586e66b-cuda`. *Deps:* ROUTER-04, ROUTER-06 (the switch restores models through the restart path of §4.11). *Done in* `internal/router/build/{build,cmake,source,run,smoke,switch,retention,fs}.go` (§4.10.4); the seams `build.Agent`, `build.Probe` and `build.StateRecorder` are implemented by AICTL-09 over the agent API, and KIT-04 adds sources to `source.go`, `preflight.go`, `activate.go`, `recipe.go` and `cuda_redist.go`.
 9. **ROUTER-09 Legacy migration** — §4.9 M0–M10, rollback R1–R6, `aiagent migrate llama-qwen`. *Accept:* §9.1 migration cases; the §9.3 rehearsal on ai-n3 with < 60 s downtime and no client change. *Deps:* ROUTER-03, ROUTER-04, ROUTER-06, ROUTER-08. *Done in* `internal/router/migrate` (`unitparse`, `flags`, `plan`, `run`, `steps`, `rollback`, `journal`, `checks`, `errors`, `ports`, `engine`), `internal/router/migrate/host` and `cmd/aiagent/migrate.go` (§4.9.5); the §9.3 rehearsal on a real node is the owner's.
 10. **ROUTER-10 Bench helper** — §4.13 measurement engine (`internal/router/bench`: unload, in-process GPU sampling, llama-bench exec, bench JSON file, suggested value, restore). AICTL-05 owns the `aictl bench` command wiring, confirmation, human/`--json` output and exit codes ([aictl.md](aictl.md) §4.24). *Accept:* bench JSON written; suggested value returned for the YAML snippet; previous models restored. *Deps:* ROUTER-05. *Done in* `internal/router/bench/{bench,measure,preset,procs,snippet}.go` (§4.13.1); the seams `bench.Agent`, `bench.Chatter` and `bench.Procs` are implemented by AICTL-05 in `internal/cli/cmd_bench_seams.go` ([aictl.md](aictl.md) §4.24).
+
+11. **ROUTER-11 Engine adapters and one GPU budget** (#508) — §4.15: the `Adapter` interface, the `llama` adapter over the existing client, the `acestep` adapter, the cross-engine planner and `G_others` rule, the `engines_stop` survival step, `LAI-LLM-040` to `LAI-LLM-043`. *Accept:* §9.1 engine adapter cases. *Deps:* ROUTER-05, the shim of [music.md](music.md) §3.4 (a fake is enough).
+12. **ROUTER-12 Workloads** (#509) — §4.16, agent.md §3.8.34, the `aictl workloads` commands ([aictl.md](aictl.md) §4.12a), `LAI-LLM-050` to `LAI-LLM-053`, `LAI-CAT-020`. *Accept:* §9.1 workload cases. *Deps:* ROUTER-11.
 
 ## 11. Open questions
 1. **`--sleep-idle-seconds` on battery.** Unloading the default model after idle would save battery on laptops in survival mode, but the first request after sleep is slow and the Portal shows "brain not ready". Default: off. Revisit after the first drill on battery.

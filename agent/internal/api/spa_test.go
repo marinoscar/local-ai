@@ -373,6 +373,37 @@ func TestSPAMapsViewer(t *testing.T) {
 	})
 }
 
+func TestSPAMusicPage(t *testing.T) {
+	h := spaServer(t, SPAOptions{}).Handler()
+
+	t.Run("/music/ is the Portal entry with the Portal CSP", func(t *testing.T) {
+		rec := do(h, req{target: "/music/"})
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Portal") {
+			t.Fatalf("%d %s", rec.Code, rec.Body.String())
+		}
+		if got := rec.Header().Get("Content-Security-Policy"); got != PortalContentSecurityPolicy {
+			t.Fatalf("CSP = %q", got)
+		}
+		if rec.Header().Get("Cache-Control") != "no-cache" {
+			t.Fatalf("Cache-Control = %q", rec.Header().Get("Cache-Control"))
+		}
+	})
+	t.Run("anything else under /music/ is a 404", func(t *testing.T) {
+		for _, p := range []string{"/music/other", "/music/portal.html", "/music/../index.html"} {
+			rec := do(h, req{target: p})
+			if rec.Code != 404 {
+				t.Fatalf("%s: %d %s", p, rec.Code, rec.Body.String())
+			}
+		}
+	})
+	t.Run("/music without the slash goes to /music/", func(t *testing.T) {
+		rec := do(h, req{target: "/music"})
+		if rec.Code != 307 && rec.Code != 301 || rec.Header().Get("Location") != "/music/" {
+			t.Fatalf("%d %v", rec.Code, rec.Header())
+		}
+	})
+}
+
 func TestSPAOverTCP(t *testing.T) {
 	s := spaServer(t, SPAOptions{Mode: func() string { return "survival" }})
 	srv := httptest.NewServer(s.Handler())

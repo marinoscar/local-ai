@@ -189,7 +189,7 @@ Rules: a `LAI-SEC-004` answer (PIN locked after too many wrong tries, `429`) is 
 | 1 | See the state of this computer | `status` |
 | 2 | Find and fix problems (health check) | `doctor` |
 | 3 | Use the AI: key and addresses › | `key show`, `key copy`, `key snippets`, `ui-code`, `key rotate` |
-| 4 | AI models: load, change, download › | `models`; pickers for `load`, `unload`, `default`, `download`, `delete` |
+| 4 | AI models: load, change, download › | **Switch what this computer does** (picker for `workloads activate`, listed first), `models`; pickers for `load`, `unload`, `default`, `download`, `delete` |
 | 5 | Mode: online, offline or survival › | `mode`, `mode online`, `mode offline`, `mode survival` |
 | 6 | Offline content and the AI-ARK drive › | `ark status`, `ark sync --wait`, `ark import --wait`, `ark verify --wait`, `ark budget`, `ark hf-token set`; and **The AI-ARK drive itself ›**: `ark drives`, picker for `ark eject`, `ark format`, pickers for `ark repair` and `ark new-id` |
 | 7 | Repair with no internet (rebuild kit) › | `ensure` (**Install what is missing**), `kit status`, `kit verify`, `rebuild-llama`, `rebuild-whisper`, `rebuild-agent` |
@@ -203,7 +203,7 @@ Rules: a `LAI-SEC-004` answer (PIN locked after too many wrong tries, `429`) is 
 
 **Running an entry.** The screen clears and shows the entry's name and the typed command (`Typed command: aictl load qwen3.5-9b-q4km`), so the fast path is learned by using the menu. The command then runs with the terminal in normal mode. Ctrl-C stops only that command. Afterwards one line explains the result in words: exit 0 "Done", 8 "Finished, with warnings", 9 "Finished, and found problems", 130 "Stopped", anything else "It did not finish (exit code N), the message above says why". Then "Press Enter to go back to the menu".
 
-**Pickers.** An entry that needs a value lists the choices from the command's own `--json` output (§3.5): `models` for the model entries (load: stored, loadable and not loaded; unload: loaded; default and delete: stored; download: in the profile and not stored), `ark drives` for eject (drives with a root id), for repair (drives with a root id that are not `unusable`, `ejecting` or a copy with `LAI-ARK-006`; those with `LAI-ARK-004` first, marked "has errors") and for new-id (only the copies with `LAI-ARK-006`, chosen by mount path, because the root id names both twins), and a fixed list for services. `ark format` has no picker: the command lists the disks and asks for a number itself (§4.10). Each choice shows the display name, the id, the size and "starts with the computer" for the default. An empty list or an agent that does not answer gives one plain sentence and no command.
+**Pickers.** An entry that needs a value lists the choices from the command's own `--json` output (§3.5): `models` for the model entries (load: stored, loadable and not loaded; unload: loaded; default and delete: stored; download: in the profile and not stored), `workloads` for **Switch what this computer does** (every workload with its label in the menu's language, `(now)` after the active one, and `does not fit` or `missing: <ids>` after one that cannot be activated, which is shown but cannot be chosen), `ark drives` for eject (drives with a root id), for repair (drives with a root id that are not `unusable`, `ejecting` or a copy with `LAI-ARK-006`; those with `LAI-ARK-004` first, marked "has errors") and for new-id (only the copies with `LAI-ARK-006`, chosen by mount path, because the root id names both twins), and a fixed list for services. `ark format` has no picker: the command lists the disks and asks for a number itself (§4.10). Each choice shows the display name, the id, the size and "starts with the computer" for the default. An empty list or an agent that does not answer gives one plain sentence and no command.
 
 **Implementation.** Raw key reads use `golang.org/x/term` (already vendored), with no new dependency: the menu only needs a list picker, because full screens belong to the commands it runs. The `menuHost` interface (keys, run, capture, pause, screen) keeps the menu testable without a terminal; `menu_test.go` checks that every entry and flag the menu runs exists in the registry.
 
@@ -246,7 +246,7 @@ Line rules (AICTL-04). A section the agent leaves out is skipped, never printed 
 
 ### 4.2 `aictl models`  [10 s]
 ```
-aictl models [--loadable] [--all] [--engine llama|whisper|piper]
+aictl models [--loadable] [--all] [--engine llama|whisper|piper|acestep]
 aictl models show <model-id>
 ```
 `GET /models` (`?loadable=1` with `--loadable`, `?engine=` with `--engine`; another engine is exit 2). Default shows models in the profile plus any present (a client-side filter); `--all` shows the whole catalog; `--loadable` shows the agent's list as it comes. Offline: works.
@@ -541,6 +541,37 @@ Switch to the profile cuda-12gb? [y/N]
 ```
 The lists are the target profile's `include` lists plus the node's `profile_overrides` (`add_*`, minus `remove_*`; `budget_bytes` replaces the profile's budget), sorted, with the size of each id from `models[]` / `content[]` of the catalog (`?` when unknown). `GET /catalog` therefore carries a `profiles` array (added to [agent.md](agent.md) §3.8.21 and the OpenAPI `Catalog` schema, optional): `[{"id", "display_name", "include": {"models": [], "content": []}, "budget_bytes"}]`. A target that is not in that array is `LAI-CAT-003`, exit 6, nothing asked; a catalog without the array (an older agent) gets the question without the lists. `--yes` skips the reads and the preview and sends only the `PUT {"profile": id}` (through the admin PIN flow, after the confirmation).
 
+### 4.12a `aictl workloads`  [10 s; activate: load timeout × (n+2) + 60 s]
+```
+aictl workloads
+aictl workloads activate <name> [--force] [--no-wait]
+```
+"Switch what this computer does" ([ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md), [llama-router.md](llama-router.md) §4.16). In the menu (§3.6) it is the first entry of **AI models ›**, so nobody has to type it. Offline: works (local).
+
+`aictl workloads` (`GET /workloads`): one line per workload, the active one first marked `●`, the label in the user's language, the name, and the models; a workload that cannot be activated says why.
+```
+  WORKLOAD               NAME     MODELS
+● Coding                 coding   qwen3.5-9b-q4km
+  Chat and photos        chat     qwen3.5-9b-q4km, small-vlm-q4km
+  Music                  music    acestep-v15-turbo
+  Chat with voice        speech   ✗ missing: whisper-small
+```
+`--json`: the `GET /workloads` body unchanged:
+```json
+{"workloads": [{"name": "coding", "label": {"en": "Coding", "es": "Programación"}, "models": ["qwen3.5-9b-q4km"],
+                "active": true, "fits": true, "missing": []}], "active": "coding"}
+```
+Exit 0.
+
+`aictl workloads activate <name>`: `POST /workloads/{name}/activate` with `{"wait": false, "force": <--force>}`, then follows `/events` for the `op_id` (opened before the request, as `aictl load`, §4.3): `workload.progress` prints one line per model (`… Stopping Qwen 3.5 9B`, `… Starting ACE-Step 1.5 (music)` with the model's own progress bar), `workload.done` ends it.
+```
+… Stopping Qwen 3.5 9B to make room
+… Starting ACE-Step 1.5 (music)   ██████████  100%
+✓ This computer now makes music. (42 s)
+```
+Failure: `✗ The switch to Music did not work. The previous models were started again.  [LAI-LLM-052]` and the fix. In survival mode without `--force` the agent refuses (`LAI-LLM-053`); on a terminal the command explains it and asks `Change it anyway? The survival models stay loaded. [y/N]`, then sends `force: true` (without a terminal, or with `--json`, it does not ask). Ctrl-C stops only the waiting (exit 130, "Still running in the background"). `--no-wait` prints the `202` body and exits 0. `--json`: the final `200` body of the agent (`op_id`, `active`, `loaded`, `unloaded`) or the error envelope.
+Exit: 5 unknown name (`LAI-LLM-050`); 6 busy (`LAI-AGT-022`), does not fit (`LAI-LLM-051`), refused in survival (`LAI-LLM-053`), engine not installed (`LAI-LLM-043`); 1 failed (`LAI-LLM-052`, rolled back) or nothing could be started (`LAI-LLM-012`); 7 the deadline. A name that is not `^[a-z][a-z0-9-]{1,31}$` is exit 2 before the agent is asked.
+
 ### 4.13 `aictl services`  [10 s]
 ```
 aictl services
@@ -567,7 +598,7 @@ The service is called "the AI model service" (llama), "the library service" (kiw
 
 ### 4.15 `aictl logs`  [10 s; `-f`: none]
 ```
-aictl logs [--unit agent|llama|kiwix|whisper|sync|drill] [-n <lines>] [--since <time>] [-f]
+aictl logs [--unit agent|llama|kiwix|whisper|music|sync|drill] [-n <lines>] [--since <time>] [-f]
 ```
 `GET /logs` (`unit` default `agent` in the CLI, which always sends it; `-n` default 100, 1 to 2000). `--since` takes an RFC 3339 time or an age (`15m`, `2h`) before now, sent as RFC 3339 UTC. `-f` polls every 2 s with `since` = the last line's time and `lines=2000`. Secrets are already scrubbed by the agent. Offline: works.
 ```
@@ -870,7 +901,7 @@ Documented here so nobody re-invents them. They may change between versions with
 ### 4.29 Offline behaviour summary
 | Works with no network at all | Needs network | Refused in survival |
 |---|---|---|
-| status, models, load, unload, default, delete, key show/copy/rotate/snippets, mode, ark status/verify/import/drives/eject/init/mount/prune, catalog lint/restore/use --test, profile *, services (+ start/stop/restart), restart, logs, doctor, ensure, drill (+ show, record-manual), cloud status, pin set, ui-code, token rotate, docs render, rebuild-llama/rebuild-whisper (kit source), rebuild-agent, kit *, verify-release, bench, backup-config, version | download, ark sync, catalog refresh, update, cloud enroll (stores the credential offline; connects later), cloud resend-key, rebuild-llama without local source | download, ark sync (`LAI-SYN-010`), catalog refresh, update |
+| status, models, workloads (+ activate), load, unload, default, delete, key show/copy/rotate/snippets, mode, ark status/verify/import/drives/eject/init/mount/prune, catalog lint/restore/use --test, profile *, services (+ start/stop/restart), restart, logs, doctor, ensure, drill (+ show, record-manual), cloud status, pin set, ui-code, token rotate, docs render, rebuild-llama/rebuild-whisper (kit source), rebuild-agent, kit *, verify-release, bench, backup-config, version | download, ark sync, catalog refresh, update, cloud enroll (stores the credential offline; connects later), cloud resend-key, rebuild-llama without local source | download, ark sync (`LAI-SYN-010`), catalog refresh, update |
 
 `offline_test.go` encodes the first column: it reads that cell of the table, fails when a command it names is not run (or a command it runs is not named), and runs every one of them (the API commands against a fake agent, the local ones against their fixtures; the build commands with `--dry-run`) while the default HTTP transport and the default resolver of the process fail the test and record who asked. A command that downloads, resolves a host name or calls an HTTP API on the internet is caught; a dial to a literal non-loopback address through a transport of its own is not (aictl has none: its client dials the socket or the loopback address it validated). The second and third columns are not run.
 
@@ -988,6 +1019,7 @@ Run `aictl` against a real `aiagent serve` started by the integration harness (a
 8. **AICTL-08 Docs render** — goldmark rendering, placeholder fill from inventory, link rewriting, index.json, optional Chromium PDF, `.git` guard. (START-HERE.html is written by sync, SYNC-14.) *Accept:* fixture render; redaction check passes on the repo (no output inside it). *Deps:* AICTL-02.
 9. **AICTL-09 Build and update commands** — `rebuild-llama` command surface only: flag parsing, output and exit codes (build engine and switch: ROUTER-08, [llama-router.md](llama-router.md) §10; offline flags/preflight/activation extensions: KIT-04, [rebuild-kit.md](rebuild-kit.md) §10), `update` (agent.md §4.10 in-process, wait for new version). *Accept:* build on ai-n3; update against a fake release server with rollback. *Deps:* AICTL-06, ROUTER-08, KIT-04, AGENT-19.
 10. **AICTL-10 Command-surface completion** — `verify-release` (§4.27a, offline minisign + SHA256SUMS check with the embedded key), `services start|stop|restart` (§4.13), `drill`, `drill show`, `drill record-manual` CLI surface (§4.17; engine, API and handlers: DRILL-01), `kit status|verify|export-build` and `rebuild-agent` entry points calling rebuild-kit code (§4.23b–c; the `kit install*` dispatcher is KIT-06, `rebuild-whisper` is SVC-05), help listing and the §4.29 table. *Accept:* golden outputs; `verify-release` rejects a tampered file and a bad signature; `aictl help` lists exactly §4.1–§4.27a. *Deps:* AICTL-04, AICTL-06, AGENT-19, KIT-03, KIT-05, KIT-06, DRILL-06. *Done in* `internal/cli/cmd_{verify_release,drill,drill_show,drill_text,services}.go`, `help.go`, `help_es.go`, `help_test.go`, `offline_test.go`; `kit status|verify|export-build` and `rebuild-agent` were already built by KIT-03 and KIT-05, `kit install*` by KIT-06 and `rebuild-whisper` by SVC-05.
+11. **AICTL-11 Workloads (E11, #509)** — `workloads`, `workloads activate` and the menu entry **Switch what this computer does** (§4.12a, §3.6), built with ROUTER-12 ([llama-router.md](llama-router.md) §10). *Accept:* golden outputs of §4.12a, the `--json` body, the menu picker, the survival prompt. *Deps:* ROUTER-12, AICTL-03.
 
 ## 11. Open questions
 1. **PDF rendering offline.** Chromium is large and not on every node. Default: HTML is the primary output and PDFs are optional; the ark drive carries PDFs rendered on a node that has Chromium. Revisit if a pure-Go PDF path becomes necessary.

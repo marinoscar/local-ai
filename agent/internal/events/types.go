@@ -36,6 +36,9 @@ const (
 	// E11 workloads (go-core): agent.md section 3.10, llama-router.md section 4.16.
 	TypeWorkloadProgress = "workload.progress"
 	TypeWorkloadDone     = "workload.done"
+	// Music (E11, docs/specs/music.md): the progress and the end of a song operation.
+	TypeMusicProgress = "music.progress"
+	TypeMusicDone     = "music.done"
 
 	// TypeResync tells a client its picture may be stale: re-read /status. The bus owns it (Resync
 	// and the replay rules of Subscribe); Publish refuses it.
@@ -295,6 +298,17 @@ type DrillNotice struct {
 	ES string `json:"es"`
 }
 
+// MusicOp is the data of music.progress and music.done (E11): an operation of POST /music/generate.
+// State is queued, running, done, failed or cancelled; Progress is 0 to 1 when the engine reports it;
+// Code is the doctor code of a failed or cancelled operation. Never lyrics or sample bytes.
+type MusicOp struct {
+	OpID     string   `json:"op_id"`
+	State    string   `json:"state"`
+	Progress *float64 `json:"progress"`
+	SongIDs  []string `json:"song_ids"`
+	Code     string   `json:"code,omitempty"`
+}
+
 // ResyncData is the data of resync. Reason is ResyncGap or ResyncRestart.
 type ResyncData struct {
 	Reason string `json:"reason"`
@@ -326,6 +340,8 @@ var payloads = map[string]reflect.Type{
 	TypeDrillDone:           reflect.TypeOf(DrillDone{}),
 	TypeWorkloadProgress:    reflect.TypeOf(WorkloadProgress{}),
 	TypeWorkloadDone:        reflect.TypeOf(WorkloadDone{}),
+	TypeMusicProgress:       reflect.TypeOf(MusicOp{}),
+	TypeMusicDone:           reflect.TypeOf(MusicOp{}),
 }
 
 // Types returns every publishable event type, sorted. resync and shutdown are not in the list: the

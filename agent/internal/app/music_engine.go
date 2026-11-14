@@ -122,8 +122,8 @@ func (d *Daemon) writeMusicUnit(ctx context.Context) {
 
 // musicEngineModels is the cached picture of the music engine for GET /models.
 func (d *Daemon) musicEngineModels() []router.EngineModel {
-	if d.music == nil {
+	if d.acestep == nil {
 		return nil
 	}
-	return d.music.Cached()
+	return d.acestep.Cached()
 }

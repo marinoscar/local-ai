@@ -170,6 +170,14 @@ func (d *Daemon) build(ctx context.Context) error {
 		ModelID: func() string { return whisper.EnvModelID(d.c.Paths.Join(whisper.EnvPath), nil) },
 		Now:     clock.Now, Metrics: metrics, Logger: log,
 	})
+	// The music engine adapter (E11, #508): the orchestrator loads acestep models with it and the music
+	// API reads the engine state from it.
+	if music, merr := d.newMusicAdapter(); merr != nil {
+		log.Error("the music engine adapter could not be built; music models cannot load", "error", merr.Error())
+	} else {
+		d.acestep = music
+	}
+	d.buildMusic()
 	d.maps = maps.New(d.mapsDeps(metrics))
 	d.maps.SetGPS(lazyGPS{d})
 	d.places = &places.Manager{Copies: d.c.ArkIndex, Log: d.log}
@@ -254,11 +262,8 @@ func (d *Daemon) build(ctx context.Context) error {
 		return fmt.Errorf("unit generator: %w", err)
 	}
 	var engines []router.EngineAdapter
-	if music, merr := d.newMusicAdapter(); merr != nil {
-		log.Error("the music engine adapter could not be built; music models cannot load", "error", merr.Error())
-	} else {
-		d.music = music
-		engines = append(engines, music)
+	if d.acestep != nil {
+		engines = append(engines, d.acestep)
 	}
 	c.Orchestrator, err = router.NewOrchestrator(router.OrchestratorOptions{
 		Router: c.Router, State: c.State, Inputs: d.routerInputs, Presence: router.ManifestPresence{FS: fs},
@@ -639,6 +644,12 @@ func (d *Daemon) buildServer() error {
 			return reg.Add(kiwix.Routes(kiwix.NewProxy(kiwix.ProxyOptions{Port: c.Config.Get().Ports.Kiwix, Logger: d.log}))...)
 		}},
 		{"speech stt", func() error { return reg.Add(d.whisperSTT.Routes()...) }},
+		{"music", func() error {
+			if d.music == nil { // the service could not be built: the routes answer 404, the log says why
+				return nil
+			}
+			return d.music.Register(reg)
+		}},
 		{"maps", func() error { return reg.Add(d.maps.Routes()...) }},
 		{"chat", func() error { return reg.Add(d.chatRoutes()...) }},
 		{"docs", func() error { return reg.Add(d.docsRoutes()...) }},
@@ -693,6 +704,12 @@ func (d *Daemon) buildClaimPlane(sdeps statusapi.Deps) error {
 	}
 	if d.ark != nil { // the engine itself is built later in the start-up; the command looks at it when it runs
 		jd.Ensure = lazyEnsureJobs{d}
+	}
+	if d.music != nil { // music.generate (E11)
+		jd.Music = d.music
+	}
+	if c.Orchestrator != nil { // workload.activate (E11, #509)
+		jd.Workloads = router.CloudWorkloads{O: c.Orchestrator}
 	}
 	var recoverFn func(context.Context, cloud.InflightEntry) bool
 	if d.updater != nil {

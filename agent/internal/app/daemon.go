@@ -19,6 +19,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/maps/places"
 	"github.com/marinoscar/local-ai/agent/internal/modelsapi"
 	"github.com/marinoscar/local-ai/agent/internal/modes"
+	"github.com/marinoscar/local-ai/agent/internal/music"
 	"github.com/marinoscar/local-ai/agent/internal/portal"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 	"github.com/marinoscar/local-ai/agent/internal/statusapi"
@@ -97,6 +98,7 @@ type Daemon struct {
 	ensure     *ensureStack // nil when the sync stack or the install engine could not be built (ensure.go)
 	piper      *piper.Service
 	whisperSTT *whisper.STTService
+	music      *music.Service // nil when the music API could not be built (music.go)
 	maps       *maps.Maps
 	places     *places.Manager
 	hooksSync  syncCanceller
@@ -131,8 +133,8 @@ type Daemon struct {
 	haveLocalAI bool
 
 	whisper whisperState
-	// music is the acestep engine adapter (music_engine.go); nil when it could not be built.
-	music *acestep.Adapter
+	// acestep is the music engine adapter (music_engine.go); nil when it could not be built.
+	acestep *acestep.Adapter
 
 	shutdown1 sync.Once
 }

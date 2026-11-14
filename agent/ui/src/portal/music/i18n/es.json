@@ -1,0 +1,20 @@
+{
+  "music.title": "Música",
+  "music.loading": "Preguntando a la computadora por la música…",
+  "music.ready": "La música está lista. Escriba su canción abajo.",
+  "music.notLoaded": "La música no está cargada.",
+  "music.notLoadedWhy": "Pulse Cambiar a Música. La computadora detiene lo que ejecuta ahora y carga la música. Tarda unos minutos.",
+  "music.notInstalled": "La música no está instalada en esta computadora.",
+  "music.notInstalledWhy": "Las canciones las hace un programa de música que todavía no está en esta computadora.",
+  "music.notInstalledFix": "Conecte el disco AI-ARK y use \"Instalar lo que falta\" en la pantalla Estado, o pida al responsable del laboratorio que instale la música.",
+  "music.starting": "La música está arrancando. Puede tardar unos minutos. Mientras tanto puede escribir su canción.",
+  "music.stopping": "La música se está deteniendo. Espere un momento y vuelva a cambiar a Música.",
+  "music.failed": "La música dejó de funcionar.",
+  "music.failedFix": "Pulse Cambiar a Música para arrancarla otra vez. Si falla dos veces, reinicie la computadora.",
+  "music.survival": "La música no funciona en modo supervivencia.",
+  "music.survivalFix": "El modo supervivencia mantiene el cerebro de emergencia. Salga primero del modo supervivencia y vuelva aquí.",
+  "music.signIn": "La música necesita la aplicación Local AI de esta computadora.",
+  "music.signInFix": "Abra Local AI desde el menú de esta computadora, o inicie sesión en la primera página con un código del responsable del laboratorio.",
+  "music.statusFailed": "La computadora no respondió sobre la música.",
+  "music.open": "Abrir Música"
+}

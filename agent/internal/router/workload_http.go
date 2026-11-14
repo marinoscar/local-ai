@@ -1,11 +1,13 @@
 package router
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/api"
+	"github.com/marinoscar/local-ai/agent/internal/audit"
 )
 
 // The workload routes (agent.md section 3.8.34): GET /workloads and POST /workloads/{name}/activate,
@@ -129,4 +131,19 @@ func (o WorkloadRouteOptions) activate(w http.ResponseWriter, r *http.Request) e
 	}
 	api.WriteJSON(w, r, http.StatusOK, activatedJSON{OpID: res.OpID, Active: res.Active, Loaded: nz(res.Loaded), Unloaded: nz(res.Unloaded)})
 	return nil
+}
+
+// CloudWorkloads is the cloud command workload.activate over the orchestrator (agent.md section
+// 4.8.6): an activation with wait true that waits up to DefaultLockWait for modelOpsMu, like the other
+// cloud jobs. Its errors are *api.Error with the codes of the route (survival without force is
+// LAI-LLM-053).
+type CloudWorkloads struct{ O *Orchestrator }
+
+// Activate implements internal/cloud/jobs.Workloads.
+func (c CloudWorkloads) Activate(ctx context.Context, name string, force bool, actor audit.Actor) (string, error) {
+	res, err := c.O.ActivateWorkload(ctx, WorkloadRequest{Name: name, Force: force, Wait: true, Actor: actor, LockWait: DefaultLockWait})
+	if err != nil {
+		return "", apiError("en", err)
+	}
+	return res.Active, nil
 }

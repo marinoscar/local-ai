@@ -71,7 +71,18 @@ func SPARoutes(opts SPAOptions) []Route {
 		get("/portal/assets/", s.assets),
 		get("/maps/", s.maps),
 		get("/maps/viewer/", s.viewerAssets),
+		get("/music/", s.music),
 	}
+}
+
+// music serves the music page (E11, issue #512) at exactly /music/: the Portal entry, whose router
+// opens its Music screen for that path, with the Portal CSP (the page uses the Portal's assets).
+// Any other path under /music/ is a plain 404; the music API lives under /api/v1/music/.
+func (s *spa) music(w http.ResponseWriter, r *http.Request) error {
+	if r.URL.Path != "/music/" {
+		return notFoundError()
+	}
+	return s.page(w, r, s.opts.PortalFile, PortalContentSecurityPolicy)
 }
 
 func (s *spa) survival() bool {

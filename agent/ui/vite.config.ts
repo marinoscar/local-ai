@@ -22,6 +22,9 @@ function keepGitkeep(): Plugin {
 export default defineConfig({
   base: '/portal/',
   plugins: [react(), keepGitkeep()],
+  // @localai/ui (packages/ui) is a `file:` link to TypeScript source: resolving its imports from the link (not its real
+  // path) finds React in this app's node_modules, one copy (the same setting as apps/desktop and apps/cloud).
+  resolve: { preserveSymlinks: true },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -37,5 +40,6 @@ export default defineConfig({
   },
   server: {
     proxy: { '/api': 'http://127.0.0.1:7070' },
+    fs: { allow: [__dirname, resolve(__dirname, '../../packages/ui')] },
   },
 });

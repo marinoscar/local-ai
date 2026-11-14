@@ -26,13 +26,15 @@ const (
 // DefaultCloudURL is the cloud app's address when node.yaml does not set cloud.url.
 const DefaultCloudURL = "https://ai.marin.cr"
 
-// CloudJobNames returns the 15 job names cloud.allow accepts (agent.md 4.8.6), names without the
-// "localai." prefix. It returns a fresh slice each call.
+// CloudJobNames returns the 17 job names cloud.allow accepts (agent.md 4.8.6), names without the
+// "localai." prefix. It returns a fresh slice each call. workload.activate and music.generate are
+// the E11 commands (#513).
 func CloudJobNames() []string {
 	return []string{
 		"status.refresh", "model.load", "model.unload", "model.set_default", "model.download",
 		"model.delete", "ark.sync", "ark.verify", "mode.offline", "key.rotate", "service.restart",
 		"logs.tail", "catalog.refresh", "agent.update", "ensure.run",
+		"workload.activate", "music.generate",
 	}
 }
 

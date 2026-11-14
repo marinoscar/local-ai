@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "localai-music-shim"
+version = "0.1.0"
+description = "Loopback HTTP shim between the Local AI agent and ACE-Step (epic E11)"
+readme = "README.md"
+requires-python = ">=3.10"
+# Standard library only. ACE-Step and torch come from the runtime's wheel bundle
+# (kit/engines/acestep/<version>/), installed with pip install --no-index.
+dependencies = []
+
+[project.scripts]
+localai-music-shim = "localai_music_shim.__main__:main"
+
+[tool.setuptools]
+packages = ["localai_music_shim"]

@@ -25,11 +25,11 @@ Every problem a user can see — an API error, a doctor result, an alert, a CLI 
 |---|---|---|---|
 | Agent core / config | `LAI-AGT` | [agent.md](agent.md) §8.1 | `020–029` generic API errors (bad request, not found, busy, mode, starting, too large); `099` internal error |
 | CLI | `LAI-CLI` | [aictl.md](aictl.md) §8 | — |
-| LLM / router | `LAI-LLM` | [llama-router.md](llama-router.md) §8 | `020–021` survival model fallback (referenced by modes.md) |
-| Catalog / profile | `LAI-CAT` | [catalog.md](catalog.md) §7 | `010–019` lint rules |
+| LLM / router | `LAI-LLM` | [llama-router.md](llama-router.md) §8 | `020–021` survival model fallback (referenced by modes.md); `040–049` engine adapters (llama-router.md §4.15); `050–059` workloads (§4.16) |
+| Catalog / profile | `LAI-CAT` | [catalog.md](catalog.md) §7 | `010–019` lint rules; `020–021` workloads and `acestep` file layout (E11) |
 | Ark sync | `LAI-SYN` | [ark-sync.md](ark-sync.md) | `010` sync refused in survival (referenced by modes.md) |
 | Ark drive | `LAI-ARK` | [ark-sync.md](ark-sync.md) | — |
-| Companion services | `LAI-SVC` | [companion-services.md](companion-services.md) §8 (`001–099`), [survival-portal.md](survival-portal.md) §8 (`100–149`) | `001` no ZIM library content (referenced by modes.md); `100–149` Survival Portal |
+| Companion services | `LAI-SVC` | [companion-services.md](companion-services.md) §8 (`001–099`), [survival-portal.md](survival-portal.md) §8 (`100–149`), [music.md](music.md) §8 (`150–179`) | `001` no ZIM library content (referenced by modes.md); `100–149` Survival Portal; `150–179` music engine (E11) |
 | Network / Tailscale | `LAI-NET` | [agent.md](agent.md) §8.2 | `003` tailscaled not logged in (referenced by modes.md) |
 | Cloud link | `LAI-CLD` | [cloud-app.md](cloud-app.md) | **`050–069` agent-side link client, defined in [agent.md](agent.md) §8.5** |
 | Gateway | `LAI-GW` | [gateway.md](gateway.md) | — |
@@ -169,6 +169,14 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-LLM-029 | error | The migration from the old service was interrupted | Run `sudo aiagent migrate llama-qwen` again (it continues), or `--rollback` |
 | LAI-LLM-030 | warning | A model was running from the ark drive and the drive was removed | Plug the drive back in, or load another model |
 | LAI-LLM-031 | warning | A model would not stop, so the AI service was restarted | Nothing to do |
+| LAI-LLM-040 | error | Engine failed to start (unit start failed) | Run `aictl logs --unit music` and `aictl doctor`; the previous models were started again |
+| LAI-LLM-041 | error | Engine did not become ready in time | Try again; if it repeats, run `aictl logs --unit music`. The previous models were started again |
+| LAI-LLM-042 | warning | Engine did not free GPU memory / stop cleanly | Nothing to do now; if graphics memory stays full, restart the computer |
+| LAI-LLM-043 | error | Model's engine is not installed on this node | Press **Install what's missing**, or run `aictl ensure` |
+| LAI-LLM-050 | error | Unknown workload | Run `aictl workloads` to see the names this computer has |
+| LAI-LLM-051 | warning | Workload does not fit this node's GPU | Choose another workload, or remove a model from it in `node.yaml` `workloads:` |
+| LAI-LLM-052 | error | Workload activation failed; previous models restored | Try again; if it repeats, run `aictl doctor` and `aictl logs --unit llama` |
+| LAI-LLM-053 | warning | Workload change refused in survival mode (use force) | Leave survival mode first, or confirm the change on this computer |
 
 ### `LAI-CAT` — catalog and profiles ([catalog.md](catalog.md) §7)
 | Code | Sev | Meaning | Fix (plain language) |
@@ -191,6 +199,8 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-CAT-017 | error | Lint: `portal_links` rule broken | Fix the YAML at the reported path |
 | LAI-CAT-018 | error | Lint: profile rule broken (`router.models_max` ≥ 1, `router.autoload` false, `default_model`/`survival.*` inside `include`, `ark-drive-full` has no `match`, overlapping `match` ranges) | Fix the YAML at the reported path |
 | LAI-CAT-019 | error | Lint: `CATALOG_VERSION` missing or not `YYYY.MM.DD-N`, or wrong file layout | Fix the YAML at the reported path |
+| LAI-CAT-020 | error | Workload references an unknown model id | Fix the workload in the profile or in `node.yaml` `workloads:`; `aictl models` lists the valid ids |
+| LAI-CAT-021 | error | `acestep` model has an invalid file layout | Run `aictl ark verify --item <model id>` to fetch it again; if the catalog entry is wrong, fix it in the repo |
 
 ### `LAI-NET` — network and Tailscale ([agent.md](agent.md) §8.2)
 | Code | Sev | Meaning | Fix (plain language) |
@@ -364,8 +374,8 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-ARK-020 | warning | The internal content folder was missing and was recreated empty | Run `aictl ark sync`, or `aictl ark import` from a drive. |
 | LAI-ARK-021 | warning | The content folder is on a network disk; it is used read-only | Move `/srv/localai` to a local disk. |
 
-### `LAI-SVC` — owner: [companion-services.md](companion-services.md)
-> `001–099` copied from [companion-services.md](companion-services.md) §8; `100–149` copied from [survival-portal.md](survival-portal.md) §8 (both authoritative; Spanish fixes are there). `LAI-SVC-001` = survival mode needs the library but no ZIM content is present ([modes.md](../architecture/modes.md) §1).
+### `LAI-SVC` — owner: [companion-services.md](companion-services.md) (`150–179`: [music.md](music.md))
+> `001–099` copied from [companion-services.md](companion-services.md) §8; `100–149` copied from [survival-portal.md](survival-portal.md) §8; `150–179` copied from [music.md](music.md) §8 (all three authoritative; Spanish fixes are there). `LAI-SVC-001` = survival mode needs the library but no ZIM content is present ([modes.md](../architecture/modes.md) §1).
 
 | Code | Sev | Meaning | Fix (plain language) |
 |---|---|---|---|
@@ -414,6 +424,16 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-SVC-116 | warning | The Portal lost contact with the AI service | Wait a minute: it tries again by itself. If it stays, restart the computer; the printed survival card has the steps. |
 | LAI-SVC-117 | warning | Too many repair attempts from the Portal; wait a few minutes | Wait a few minutes, then press the button again. |
 | LAI-SVC-118 | warning | No usable AI-ARK drive is connected to copy from | Plug in the AI-ARK drive, wait a minute, then press **Copy from the AI-ARK drive** again. |
+| LAI-SVC-150 | error | Music runtime not installed | Press **Install what's missing**, or run `aictl ensure`. |
+| LAI-SVC-151 | warning | Music is not loaded (hint: switch to the Music workload) | Press **Switch to Music**, or run `aictl workloads activate music`. |
+| LAI-SVC-152 | error | Music engine crashed during a song | Press **Switch to Music** again and retry; if it repeats, run `aictl logs --unit music`. |
+| LAI-SVC-153 | warning | Music queue full | Wait for a song to finish, then try again. |
+| LAI-SVC-154 | warning | Sample or input rejected (type/size/length) | Use a WAV, MP3, FLAC or Ogg sample under 20 MB and 60 seconds, and keep the lyrics short. |
+| LAI-SVC-155 | error | Not enough disk space to save the song | Delete songs you no longer need, or free space on the disk, then try again. |
+| LAI-SVC-156 | error | Cloud request: sample download or checksum failed | Send the request again from ai.marin.cr; if it repeats, upload the sample again. |
+| LAI-SVC-157 | error | Cloud request: song upload failed | The song is kept on this computer; check the internet connection and send the request again. |
+| LAI-SVC-158 | info | Song cancelled | Nothing to do. |
+| LAI-SVC-159 | error | GPU driver/CUDA too old for the music runtime | Run `aictl doctor` to see the driver version, then update the graphics driver from the rebuild kit. |
 
 ### `LAI-GW` — owner: [gateway.md](gateway.md)
 > Copied from [gateway.md](gateway.md) §8 (authoritative).

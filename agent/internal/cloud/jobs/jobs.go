@@ -162,6 +162,13 @@ type Deps struct {
 	AgentUpdate AgentUpdater
 	// Ensure is the install engine's start call (ADR-0010); nil leaves ensure.run out.
 	Ensure Ensure
+	// Workloads activates a workload (E11, #509); nil leaves workload.activate out.
+	Workloads Workloads
+	// Music is the music service (E11, #510); nil leaves music.generate out.
+	Music Music
+	// MusicHTTP downloads the samples and uploads the songs of music.generate; default
+	// netx.Client("cloud-music").
+	MusicHTTP HTTPDoer
 
 	// Clock times the wait for modelOpsMu; nil is the wall clock.
 	Clock cloud.Clock
@@ -179,7 +186,8 @@ func (d Deps) clock() cloud.Clock {
 // (Router, Status), model.unload and model.set_default (Router), model.download and model.delete
 // (Models), ark.sync and ark.verify (Ark), mode.offline (Modes), key.rotate (Models),
 // service.restart (Services), logs.tail (Logs), catalog.refresh (Catalog, Status); agent.update is
-// always there; ensure.run needs Ensure (the install engine).
+// always there; ensure.run needs Ensure (the install engine); workload.activate needs Workloads and
+// music.generate Music (E11).
 func Handlers(d Deps) []cloud.Handler {
 	var hs []cloud.Handler
 	add := func(ok bool, h cloud.Handler) {
@@ -202,6 +210,8 @@ func Handlers(d Deps) []cloud.Handler {
 	add(d.Catalog != nil && d.Status != nil, newCatalogRefresh(d))
 	add(true, newAgentUpdate(d))
 	add(d.Ensure != nil, newEnsureRun(d))
+	add(d.Workloads != nil, newWorkloadActivate(d))
+	add(d.Music != nil, newMusicGenerate(d))
 	return hs
 }
 

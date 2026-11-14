@@ -101,6 +101,8 @@ func offlineCases() []offlineCase {
 		apiCase("models", "models"),
 		apiCase("load", "load", "qwen3.5-9b-q4km"),
 		apiCase("unload", "unload", "qwen3.5-9b-q4km"),
+		apiCase("workloads", "workloads"),
+		apiCase("workloads", "workloads", "activate", "coding"),
 		apiCase("default", "default"),
 		apiCase("default", "default", "qwen3.5-9b-q4km"),
 		apiCase("delete", "delete", "qwen3.5-9b-q4km"),

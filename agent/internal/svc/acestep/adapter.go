@@ -137,7 +137,7 @@ type Options struct {
 	// Poll is the cadence of the waits; StopTimeout bounds the wait for the unit to stop, FreeTimeout
 	// the wait for its graphics memory afterwards (polled every FreePoll).
 	Poll, StopTimeout, FreeTimeout, FreePoll time.Duration
-	Clock             config.Clock
+	Clock                                    config.Clock
 	// Sleep waits between polls; tests advance a clock in it.
 	Sleep  func(ctx context.Context, d time.Duration)
 	Logger *slog.Logger
@@ -233,6 +233,13 @@ func (a *Adapter) Status() Status {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.st
+}
+
+// EngineStatus implements internal/music.Engine: the engine state (stopped, starting, ready,
+// stopping, failed) and the model it runs, from the cache, without I/O.
+func (a *Adapter) EngineStatus() (state string, modelID string) {
+	s := a.Status()
+	return s.State, s.ModelID
 }
 
 // Cached returns what the engine holds as last seen, without I/O (GET /models).
