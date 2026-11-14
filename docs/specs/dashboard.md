@@ -65,10 +65,10 @@ Auth levels are those of [agent.md](agent.md) §3.8 (route table). "PIN" means t
 | Health | **Run a practice drill** / **Stop** | `POST /drill` / `DELETE /drill`; result `GET /drill` | no |
 | System | **Restart** (per service) | `POST /services/{name}/restart` | no |
 | System | **Get the newest catalog** | `POST /catalog/refresh` | no |
-| System | **Update Local AI** | privileged: `pkexec /opt/localai/bin/aiagent ctl update --yes` | no (system password) |
-| System | **Check the rebuild kit** | privileged: `pkexec /opt/localai/bin/aiagent ctl kit verify` | no (system password) |
-| System | **Save settings to a file** / **Restore settings** | privileged: `aiagent ctl backup-config` / `--restore` | restore: PIN |
-| System | **Change the admin PIN** | privileged: `aiagent ctl pin set` | system password |
+| System | **Update Local AI** | privileged: `pkexec /opt/localai/bin/aiagent ctl --json --lang <l> update --yes` (online only) | no (system password) |
+| System | **Check the rebuild kit** | privileged: `pkexec /opt/localai/bin/aiagent ctl --lang <l> kit verify` | no (system password) |
+| System | **Save settings to a file** / **Restore settings** | privileged: `pkexec /opt/localai/bin/aiagent ctl --json --lang <l> backup-config --to-ark --yes` / `… backup-config --restore latest --yes` | restore: PIN, then the system password |
+| System | **Change the admin PIN** | not a button: `sudo aictl pin set` under "For an expert" (it reads the PIN from a terminal; [desktop.md](desktop.md) §4.2) | system password |
 | Help | **What this app can do**, **Emergency steps**, **Manuals** | embedded pages; `/docs/` for the manuals | no |
 
 ### 3.3 Desktop entry points

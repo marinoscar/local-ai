@@ -567,11 +567,30 @@ describe('what an allowed shell page can do', () => {
   });
 });
 
-describe('the host bridge has the five members and no handler for anything else', () => {
-  it('lists exactly isDesktop, version, copyApiKey, openWindow, connectionInfo', () => {
-    expect([...HOST_MEMBERS]).toEqual(['isDesktop', 'version', 'copyApiKey', 'openWindow', 'connectionInfo']);
+describe('the host bridge has the six members and no handler for anything else', () => {
+  it('lists exactly isDesktop, version, copyApiKey, openWindow, connectionInfo, runSystemAction', () => {
+    expect([...HOST_MEMBERS]).toEqual(['isDesktop', 'version', 'copyApiKey', 'openWindow', 'connectionInfo', 'runSystemAction']);
     const { deps } = makeDeps();
-    expect(Object.keys(createHostHandlers(deps)).sort()).toEqual([CHANNELS.hostConnectionInfo, CHANNELS.hostCopyApiKey, CHANNELS.hostOpenWindow, CHANNELS.hostVersion].sort());
+    expect(Object.keys(createHostHandlers(deps)).sort()).toEqual(
+      [CHANNELS.hostConnectionInfo, CHANNELS.hostCopyApiKey, CHANNELS.hostOpenWindow, CHANNELS.hostVersion, CHANNELS.hostRunSystemAction].sort(),
+    );
+  });
+
+  it('runSystemAction (issue #500): only the agent page, the name handed over as it is, in the app language', async () => {
+    const runNamed = vi.fn(async () => ({ ok: true as const }));
+    const { deps } = makeDeps({ systemActions: { runNamed } });
+    const host = registerHandlers({ handle: vi.fn(), on: vi.fn() }, createHostHandlers({ ...deps, lang: () => 'es' }), { policy: {} });
+    expect(await host[CHANNELS.hostRunSystemAction]!(from(AGENT), 'kit-verify')).toEqual({ ok: true });
+    expect(runNamed).toHaveBeenCalledWith('kit-verify', 'es');
+    await expect(host[CHANNELS.hostRunSystemAction]!(from(SHELL), 'kit-verify')).rejects.toThrow();
+    await expect(host[CHANNELS.hostRunSystemAction]!(from('http://localhost:7070/portal'), 'kit-verify')).rejects.toThrow();
+    expect(runNamed).toHaveBeenCalledTimes(1);
+  });
+
+  it('runSystemAction without the system actions wired answers not_implemented', async () => {
+    const { deps } = makeDeps();
+    const host = registerHandlers({ handle: vi.fn(), on: vi.fn() }, createHostHandlers(deps), { policy: {} });
+    expect(await host[CHANNELS.hostRunSystemAction]!(from(AGENT), 'update-agent')).toEqual({ ok: false, reason: 'not_implemented' });
   });
 });
 

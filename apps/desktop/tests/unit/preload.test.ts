@@ -1,5 +1,5 @@
 // The two preload bridges (docs/specs/desktop.md 3.5): exactly the members of the spec, each on the channel of ipc.ts,
-// and nothing from Node. The agent bridge must not grow: it has the five names and no more.
+// and nothing from Node. The agent bridge must not grow: it has the six names and no more.
 import { describe, expect, it, vi } from 'vitest';
 import { CHANNELS } from '../../src/main/ipc';
 import { type HostIpcLike, createHostBridge } from '../../src/preload/agent';
@@ -147,10 +147,10 @@ describe('window.localaiDesktopHost (agent pages)', () => {
     return { ...ipc, invoke, send, sendSync };
   }
 
-  it('has exactly the 5 names of the spec (the test that stops the agent bridge from growing)', () => {
+  it('has exactly the 6 names of the spec (the test that stops the agent bridge from growing)', () => {
     const bridge = createHostBridge(hostIpc());
     expect(Object.keys(bridge).sort()).toEqual([...HOST_MEMBERS].sort());
-    expect(Object.keys(bridge)).toHaveLength(5);
+    expect(Object.keys(bridge)).toHaveLength(6);
     expect(bridge.isDesktop).toBe(true);
     expect(bridge.version).toBe('1.2.3');
   });
@@ -165,8 +165,11 @@ describe('window.localaiDesktopHost (agent pages)', () => {
     const b = createHostBridge(ipc);
     await b.copyApiKey();
     await b.connectionInfo();
+    await b.runSystemAction('kit-verify');
     b.openWindow('maps');
-    expect(ipc.invoke.mock.calls.map((c) => c[0])).toEqual([CHANNELS.hostCopyApiKey, CHANNELS.hostConnectionInfo]);
+    expect(ipc.invoke.mock.calls.map((c) => c[0])).toEqual([CHANNELS.hostCopyApiKey, CHANNELS.hostConnectionInfo, CHANNELS.hostRunSystemAction]);
+    // The name is passed as it is: the main process judges it (system-actions.ts), the preload adds nothing.
+    expect(ipc.invoke.mock.calls[2]).toEqual([CHANNELS.hostRunSystemAction, 'kit-verify']);
     expect(ipc.send).toHaveBeenCalledWith(CHANNELS.hostOpenWindow, 'maps');
     expect(ipc.sendSync).toHaveBeenCalledWith(CHANNELS.hostVersion);
   });

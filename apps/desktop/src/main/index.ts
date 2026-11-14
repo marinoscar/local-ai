@@ -479,7 +479,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
         const outcome = await modes.setMode(target);
         return outcome.ok ? { ok: true } : { ok: false, code: outcome.code };
       } }),
-      ...createHostHandlers({ version, openChild: open, keys }),
+      ...createHostHandlers({ version, openChild: open, keys, systemActions, lang: () => lang }),
     },
     { policy, log },
   );

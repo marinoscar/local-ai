@@ -339,16 +339,46 @@ export interface LocalaiDesktop {
   };
 }
 
-/** `window.localaiDesktopHost` (agent pages): exactly these five members (desktop.md 3.5). */
+/** The System screen's privileged buttons (dashboard.md 3.2, issue #500); the main process maps each to a fixed argv. */
+export type SystemActionName = 'update-agent' | 'kit-verify' | 'backup-config' | 'restore-config';
+
+/**
+ * What a System-screen button came to, in fixed words the page turns into a sentence. Never program output.
+ * `reason`: `cancelled` (the password window was closed or the password refused), `busy` (another privileged call is
+ * waiting), `unavailable` (no pkexec), `timeout`, `failed` (with the command's doctor code, message and fix when it gave
+ * them), `unknown-action` (a name outside the list: nothing ran). On success, the fields of the command's answer.
+ */
+export type SystemActionResult =
+  | {
+      ok: true;
+      /** update-agent: `updated` or `already_current`, the versions before and after. */
+      status?: string;
+      from?: string;
+      to?: string;
+      /** kit-verify: the kit's colour, and the first doctor code of a problem when not green. */
+      overall?: 'green' | 'yellow' | 'red';
+      code?: string;
+      /** backup-config: how many files were saved, and whether the secrets are in it. */
+      files?: number;
+      secretsIncluded?: boolean;
+      /** restore-config: how many files were put back, and whether the agent restarted. */
+      restored?: number;
+      restarted?: boolean;
+    }
+  | { ok: false; reason: 'cancelled' | 'busy' | 'unavailable' | 'timeout' | 'failed' | 'unknown-action' | 'not_implemented'; code?: string; message?: string; fix?: string };
+
+/** `window.localaiDesktopHost` (agent pages): exactly these six members (desktop.md 3.5). */
 export interface LocalaiDesktopHost {
   readonly isDesktop: true;
   readonly version: string;
   copyApiKey(): Promise<CopyKeyResult>;
   openWindow(which: ChildWindowName): void;
   connectionInfo(): Promise<ConnectionInfoResult>;
+  /** The System screen's privileged buttons (issue #500): the system's own password window asks first. */
+  runSystemAction(name: SystemActionName): Promise<SystemActionResult>;
 }
 
-export const HOST_MEMBERS = ['isDesktop', 'version', 'copyApiKey', 'openWindow', 'connectionInfo'] as const;
+export const HOST_MEMBERS = ['isDesktop', 'version', 'copyApiKey', 'openWindow', 'connectionInfo', 'runSystemAction'] as const;
 
 /** `window.localaiPin` (the PIN window only, src/preload/pin.ts): the smallest surface that can type a PIN and give up. */
 export interface LocalaiPin {

@@ -10,8 +10,13 @@
 // - `pkexec` is the only way to get privilege: the system shows its own password window. No password passes through
 //   this app. A build whose test hooks name no pkexec stub never runs a real pkexec (`StartBinaries.pkexec === null`);
 // - the log names the action and the outcome, never the argv's user name, never output.
+//
+// Issue #500 adds the System screen's buttons (dashboard.md 3.2): the agent page names one of SYSTEM_ACTION_NAMES through
+// `window.localaiDesktopHost.runSystemAction(name)`, and `systemActionArgv` maps it to a fixed `pkexec aiagent ctl …`
+// argv. A name outside the list is refused before anything runs.
 import { userInfo } from 'node:os';
-import { type ExecFn, OPERATORS_GROUP, type StartBinaries } from './agent-supervisor';
+import type { SystemActionName, SystemActionResult } from '../shared/types';
+import { type ExecFn, type ExecResult, OPERATORS_GROUP, type StartBinaries } from './agent-supervisor';
 import { type Logger, NULL_LOGGER } from './log';
 
 export const MODULE = 'system-actions' as const;
@@ -77,11 +82,110 @@ export type SystemFailure = 'cancelled' | 'failed' | 'unavailable' | 'invalid-us
 
 export type SystemResult = { ok: true } | { ok: false; reason: SystemFailure };
 
+/** The System screen's privileged buttons (dashboard.md 3.2), in the order of the screen. Nothing else can be named. */
+export const SYSTEM_ACTION_NAMES = ['update-agent', 'kit-verify', 'backup-config', 'restore-config'] as const satisfies readonly SystemActionName[];
+
+export function isSystemActionName(name: unknown): name is SystemActionName {
+  return typeof name === 'string' && (SYSTEM_ACTION_NAMES as readonly string[]).includes(name);
+}
+
+/** How long each one may take, password window included: `update` itself waits up to 15 min (aictl.md 4.27). */
+export const SYSTEM_ACTION_TIMEOUT_MS: Record<SystemActionName, number> = {
+  'update-agent': 20 * 60_000,
+  'kit-verify': 60 * 60_000,
+  'backup-config': PRIVILEGED_TIMEOUT_MS,
+  'restore-config': 5 * 60_000,
+};
+
+/**
+ * The fixed argv of a System-screen button. Global flags come before the command name (aictl.md 3.1): `--json` so the
+ * answer (or the error envelope with its doctor code) can be read, and `--lang` in the app's language. `kit verify` is
+ * read by its exit code instead (its JSON report lists every file of the kit and may be large).
+ *  - update-agent:   pkexec aiagent ctl --json --lang <l> update --yes                       (aictl.md 4.27)
+ *  - kit-verify:     pkexec aiagent ctl --lang <l> kit verify                                (aictl.md 4.23c)
+ *  - backup-config:  pkexec aiagent ctl --json --lang <l> backup-config --to-ark --yes      (aictl.md 4.25)
+ *  - restore-config: pkexec aiagent ctl --json --lang <l> backup-config --restore latest --yes
+ */
+export function systemActionArgv(pkexec: string, name: SystemActionName, lang: 'en' | 'es'): Argv {
+  const ctl = [AIAGENT, 'ctl'];
+  switch (name) {
+    case 'update-agent':
+      return { file: pkexec, args: [...ctl, '--json', '--lang', lang, 'update', '--yes'] };
+    case 'kit-verify':
+      return { file: pkexec, args: [...ctl, '--lang', lang, 'kit', 'verify'] };
+    case 'backup-config':
+      return { file: pkexec, args: [...ctl, '--json', '--lang', lang, 'backup-config', '--to-ark', '--yes'] };
+    case 'restore-config':
+      return { file: pkexec, args: [...ctl, '--json', '--lang', lang, 'backup-config', '--restore', 'latest', '--yes'] };
+  }
+}
+
+const DOCTOR_CODE = /\bLAI-[A-Z]{2,4}-\d{3}\b/;
+
+/** The last JSON object the command printed on stdout (with `--json` it prints exactly one), or null. */
+function lastDocument(stdout: string): Record<string, unknown> | null {
+  const text = stdout.trim();
+  if (text === '') return null;
+  try {
+    const value: unknown = JSON.parse(text);
+    return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
+const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+/**
+ * interpretSystemAction turns what the command did into the page's answer: never the raw output, only the fields the
+ * screen words its sentence from (a version, a count, the kit's colour) or the error envelope's code, message and fix.
+ */
+export function interpretSystemAction(name: SystemActionName, r: ExecResult): SystemActionResult {
+  if (r.code === 'ENOENT') return { ok: false, reason: 'unavailable' };
+  if (r.code === 126 || r.code === 127) return { ok: false, reason: 'cancelled' };
+  if (r.timedOut) return { ok: false, reason: 'timeout' };
+  if (name === 'kit-verify') {
+    // aictl.md 4.23c: 0 all fine, 8 warnings only, 9 parts missing or inconsistent, 1 a damaged file or a bad signature.
+    const overall = r.code === 0 ? 'green' : r.code === 8 ? 'yellow' : r.code === 9 || r.code === 1 ? 'red' : null;
+    const code = (`${r.stdout}\n${r.stderr}`.match(DOCTOR_CODE) ?? [])[0];
+    if (overall !== null) return { ok: true, overall, ...(overall !== 'green' && code ? { code } : {}) };
+    return { ok: false, reason: 'failed', ...(code ? { code } : {}) };
+  }
+  const doc = lastDocument(r.stdout);
+  const err = doc && typeof doc.error === 'object' && doc.error !== null ? (doc.error as Record<string, unknown>) : null;
+  if (r.code !== 0 || err) {
+    const code = str(err?.code) ?? (`${r.stdout}\n${r.stderr}`.match(DOCTOR_CODE) ?? [])[0];
+    const message = str(err?.message);
+    const fix = str(err?.fix);
+    return { ok: false, reason: 'failed', ...(code ? { code } : {}), ...(message ? { message } : {}), ...(fix ? { fix } : {}) };
+  }
+  if (!doc) return { ok: true };
+  switch (name) {
+    case 'update-agent': {
+      const status = str(doc.status);
+      const from = str(doc.from);
+      const to = str(doc.to);
+      return { ok: true, ...(status ? { status } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) };
+    }
+    case 'backup-config': {
+      const files = num(doc.files);
+      return { ok: true, ...(files !== undefined ? { files } : {}), ...(typeof doc.secrets_included === 'boolean' ? { secretsIncluded: doc.secrets_included } : {}) };
+    }
+    case 'restore-config': {
+      const restored = num(doc.restored);
+      return { ok: true, ...(restored !== undefined ? { restored } : {}), ...(typeof doc.restarted === 'boolean' ? { restarted: doc.restarted } : {}) };
+    }
+  }
+}
+
 export interface SystemActions {
   allowUser(): Promise<SystemResult>;
   repairAccess(): Promise<SystemResult>;
   rotateToken(): Promise<SystemResult>;
   reboot(): Promise<SystemResult>;
+  /** A System-screen button (issue #500). `name` comes from a page: anything outside SYSTEM_ACTION_NAMES runs nothing. */
+  runNamed(name: unknown, lang: 'en' | 'es'): Promise<SystemActionResult>;
 }
 
 export interface SystemActionDeps {
@@ -134,5 +238,23 @@ export function createSystemActions(deps: SystemActionDeps): SystemActions {
       return run('make a new token', rotateTokenArgv(pkexec), PRIVILEGED_TIMEOUT_MS);
     },
     reboot: () => run('restart the computer', rebootArgv(deps.binaries.systemctl), REBOOT_TIMEOUT_MS),
+    runNamed: async (name, lang) => {
+      if (!isSystemActionName(name)) {
+        log.log('warn', 'app', 'a system action was refused: not on the list');
+        return { ok: false, reason: 'unknown-action' };
+      }
+      if (pkexec === null) return { ok: false, reason: 'unavailable' };
+      if (running) return { ok: false, reason: 'busy' };
+      running = true;
+      try {
+        const argv = systemActionArgv(pkexec, name, lang === 'es' ? 'es' : 'en');
+        const answer = interpretSystemAction(name, await deps.exec(argv.file, argv.args, { timeoutMs: SYSTEM_ACTION_TIMEOUT_MS[name] }));
+        if (answer.ok) log.log('info', 'app', `${name}: done`);
+        else log.log('warn', 'app', `${name}: did not work (${answer.reason})`, answer.code ? { code: answer.code } : undefined);
+        return answer;
+      } finally {
+        running = false;
+      }
+    },
   };
 }
