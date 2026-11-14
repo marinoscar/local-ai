@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- The tray glyph (ADR-0014): the eclipse ring, drawn in the tray's status colour by scripts/icons.mjs
+       (STATUS is replaced). A dark moon inside keeps it readable on light and dark panels. -->
+  <circle cx="256" cy="256" r="200" fill="#050505"/>
+  <circle cx="256" cy="256" r="178" fill="none" stroke="STATUS" stroke-width="72"/>
+</svg>
