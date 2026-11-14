@@ -1,8 +1,8 @@
 # Roadmap
 
-> **Generated** from the issue drafts that created the GitHub issues. Regenerate it instead of hand-editing. The source of truth for status is [GitHub Issues](https://github.com/marinoscar/local-ai/issues). Each item key (e.g. `AGENT-05`) appears at the bottom of its issue and is the id used in spec §10 breakdowns.
+> **Generated** from the issue drafts that created the GitHub issues. Regenerate it instead of hand-editing. *Exception:* epic E11 ([#504](https://github.com/marinoscar/local-ai/issues/504)) was added by hand in the same format, because the generator and its drafts are not in the repository; its items have no item key yet (the issue number is the id), and they are not placed in the waves or the critical path below. The source of truth for status is [GitHub Issues](https://github.com/marinoscar/local-ai/issues). Each item key (e.g. `AGENT-05`) appears at the bottom of its issue and is the id used in spec §10 breakdowns.
 
-**10 epics, 171 work items.** Phases: **0** foundation → **1** node agent and ark (works fully offline) → **2** cloud and gateway → **3** desktop.
+**11 epics, 184 work items.** Phases: **0** foundation → **1** node agent and ark (works fully offline) → **2** cloud and gateway → **3** desktop.
 
 ## How to pick the next issue
 1. Take the lowest **wave** whose items have all their dependencies merged.
@@ -22,6 +22,7 @@
 | [#8](https://github.com/marinoscar/local-ai/issues/8) | Unified OpenAI-compatible gateway at ai.marin.cr/v1 | 12 | 0 |
 | [#9](https://github.com/marinoscar/local-ai/issues/9) | ai-desktop app (Electron shell, connected + offline) | 12 | 7 |
 | [#10](https://github.com/marinoscar/local-ai/issues/10) | Drills, QA & runbook verification | 17 | 10 |
+| [#504](https://github.com/marinoscar/local-ai/issues/504) | Creative workloads: on-demand music generation and named workloads (E11) | 13 | 0 |
 
 ## Epic dependency graph
 ```mermaid
@@ -58,6 +59,13 @@ flowchart LR
   E8 --> E9
   E9 --> E1
   E9 --> E5
+  E11 --> E1
+  E11 --> E2
+  E11 --> E3
+  E11 --> E4
+  E11 --> E5
+  E11 --> E6
+  E11 --> E8
 ```
 
 ## Waves (topological order)
@@ -308,6 +316,23 @@ A wave is the length of the longest dependency chain ending at an item. All item
 | [#175](https://github.com/marinoscar/local-ai/issues/175) `RB-09` | Runbook verification - 09 laptop as server (hardening) | [#116](https://github.com/marinoscar/local-ai/issues/116) | `area:runbook` `size:S` `needs-hardware` |
 | [#176](https://github.com/marinoscar/local-ai/issues/176) `RB-10` | Runbook verification - 10 lab operations (cloud dashboard, routines) | [#92](https://github.com/marinoscar/local-ai/issues/92), [#146](https://github.com/marinoscar/local-ai/issues/146) | `area:runbook` `size:S` `needs-hardware` |
 
+### [#504](https://github.com/marinoscar/local-ai/issues/504) Creative workloads: on-demand music generation and named workloads (E11)
+| Item | Title | Depends on | Labels |
+|---|---|---|---|
+| [#505](https://github.com/marinoscar/local-ai/issues/505) | Spike: ACE-Step 1.5 on ai-n2 and ai-n3 (lyrics + sample, VRAM, headless API, offline) | — | `enhancement` |
+| [#506](https://github.com/marinoscar/local-ai/issues/506) | ADRs: Python/PyTorch engines on nodes; on-demand engines sharing one GPU budget | [#505](https://github.com/marinoscar/local-ai/issues/505) | `enhancement` |
+| [#507](https://github.com/marinoscar/local-ai/issues/507) | Spec: engine acestep, role music, named workloads, canonical port/unit/path, doctor codes | [#505](https://github.com/marinoscar/local-ai/issues/505), [#506](https://github.com/marinoscar/local-ai/issues/506) | `enhancement` |
+| [#508](https://github.com/marinoscar/local-ai/issues/508) | Agent: engine adapters, load/unload across engines with GPU eviction; survival stops music | [#507](https://github.com/marinoscar/local-ai/issues/507) | `enhancement` |
+| [#509](https://github.com/marinoscar/local-ai/issues/509) | Agent: named workloads (presets, /workloads/{name}/activate, aictl menu) | [#508](https://github.com/marinoscar/local-ai/issues/508) | `enhancement` |
+| [#510](https://github.com/marinoscar/local-ai/issues/510) | Agent: music API (async generate with lyrics + sample, songs list/download/delete) | [#507](https://github.com/marinoscar/local-ai/issues/507), [#508](https://github.com/marinoscar/local-ai/issues/508) | `enhancement` |
+| [#511](https://github.com/marinoscar/local-ai/issues/511) | Installer/kit: ACE-Step runtime (pinned CUDA wheels), catalog entries with sha256, ensure allowlist, optional ark per profile | [#505](https://github.com/marinoscar/local-ai/issues/505), [#507](https://github.com/marinoscar/local-ai/issues/507) | `enhancement` |
+| [#512](https://github.com/marinoscar/local-ai/issues/512) | Local UI: /music/ page and workload switcher (packages/ui, ES/EN) | [#509](https://github.com/marinoscar/local-ai/issues/509), [#510](https://github.com/marinoscar/local-ai/issues/510) | `enhancement` |
+| [#513](https://github.com/marinoscar/local-ai/issues/513) | Cloud API: commands localai.music.generate and localai.workload.activate, storage hand-off, /api/localai/music/* | [#509](https://github.com/marinoscar/local-ai/issues/509), [#510](https://github.com/marinoscar/local-ai/issues/510) | `enhancement` |
+| [#514](https://github.com/marinoscar/local-ai/issues/514) | Cloud web: ai.marin.cr/music page and workload buttons on /lab/nodes/:nodeId | [#513](https://github.com/marinoscar/local-ai/issues/513) | `enhancement` |
+| [#515](https://github.com/marinoscar/local-ai/issues/515) | Desktop: Music window, top-bar button, Lab allowlist for music.generate and workload.activate | [#512](https://github.com/marinoscar/local-ai/issues/512), [#513](https://github.com/marinoscar/local-ai/issues/513) | `enhancement` |
+| [#516](https://github.com/marinoscar/local-ai/issues/516) | Runbook: make a song, and switch what a node does (plain language, ES/EN) | [#512](https://github.com/marinoscar/local-ai/issues/512), [#514](https://github.com/marinoscar/local-ai/issues/514), [#515](https://github.com/marinoscar/local-ai/issues/515) | `documentation` `area:runbook` |
+| [#517](https://github.com/marinoscar/local-ai/issues/517) | Later: ACE-Step on ai-n1 (ROCm, gfx1151 Strix Halo) | [#511](https://github.com/marinoscar/local-ai/issues/511) | `enhancement` |
+
 ## Spec → item coverage
 | Spec | Items |
 |---|---|
@@ -326,6 +351,8 @@ A wave is the length of the longest dependency chain ending at an item. All item
 | (runbooks) | [#166](https://github.com/marinoscar/local-ai/issues/166), [#167](https://github.com/marinoscar/local-ai/issues/167), [#168](https://github.com/marinoscar/local-ai/issues/168), [#169](https://github.com/marinoscar/local-ai/issues/169), [#170](https://github.com/marinoscar/local-ai/issues/170), [#171](https://github.com/marinoscar/local-ai/issues/171), [#172](https://github.com/marinoscar/local-ai/issues/172), [#173](https://github.com/marinoscar/local-ai/issues/173), [#174](https://github.com/marinoscar/local-ai/issues/174), [#175](https://github.com/marinoscar/local-ai/issues/175), [#176](https://github.com/marinoscar/local-ai/issues/176) |
 | [llama-router.md](specs/llama-router.md) | [#27](https://github.com/marinoscar/local-ai/issues/27), [#25](https://github.com/marinoscar/local-ai/issues/25), [#28](https://github.com/marinoscar/local-ai/issues/28), [#30](https://github.com/marinoscar/local-ai/issues/30), [#31](https://github.com/marinoscar/local-ai/issues/31), [#32](https://github.com/marinoscar/local-ai/issues/32), [#177](https://github.com/marinoscar/local-ai/issues/177), [#48](https://github.com/marinoscar/local-ai/issues/48), [#150](https://github.com/marinoscar/local-ai/issues/150), [#43](https://github.com/marinoscar/local-ai/issues/43) |
 | [companion-services.md](specs/companion-services.md) | [#65](https://github.com/marinoscar/local-ai/issues/65), [#64](https://github.com/marinoscar/local-ai/issues/64), [#103](https://github.com/marinoscar/local-ai/issues/103), [#104](https://github.com/marinoscar/local-ai/issues/104), [#61](https://github.com/marinoscar/local-ai/issues/61), [#105](https://github.com/marinoscar/local-ai/issues/105), [#106](https://github.com/marinoscar/local-ai/issues/106), [#66](https://github.com/marinoscar/local-ai/issues/66), [#107](https://github.com/marinoscar/local-ai/issues/107), [#108](https://github.com/marinoscar/local-ai/issues/108), [#109](https://github.com/marinoscar/local-ai/issues/109), [#178](https://github.com/marinoscar/local-ai/issues/178), [#95](https://github.com/marinoscar/local-ai/issues/95) |
+| [music.md](specs/music.md) | [#507](https://github.com/marinoscar/local-ai/issues/507), [#510](https://github.com/marinoscar/local-ai/issues/510), [#511](https://github.com/marinoscar/local-ai/issues/511), [#512](https://github.com/marinoscar/local-ai/issues/512), [#513](https://github.com/marinoscar/local-ai/issues/513), [#514](https://github.com/marinoscar/local-ai/issues/514), [#515](https://github.com/marinoscar/local-ai/issues/515), [#516](https://github.com/marinoscar/local-ai/issues/516) |
+| (E11 ADRs, router, workloads) | [#506](https://github.com/marinoscar/local-ai/issues/506), [#508](https://github.com/marinoscar/local-ai/issues/508), [#509](https://github.com/marinoscar/local-ai/issues/509), [#517](https://github.com/marinoscar/local-ai/issues/517) |
 | [ark-sync.md](specs/ark-sync.md) | [#49](https://github.com/marinoscar/local-ai/issues/49), [#179](https://github.com/marinoscar/local-ai/issues/179), [#180](https://github.com/marinoscar/local-ai/issues/180), [#50](https://github.com/marinoscar/local-ai/issues/50), [#51](https://github.com/marinoscar/local-ai/issues/51), [#55](https://github.com/marinoscar/local-ai/issues/55), [#57](https://github.com/marinoscar/local-ai/issues/57), [#101](https://github.com/marinoscar/local-ai/issues/101), [#72](https://github.com/marinoscar/local-ai/issues/72), [#73](https://github.com/marinoscar/local-ai/issues/73), [#63](https://github.com/marinoscar/local-ai/issues/63), [#58](https://github.com/marinoscar/local-ai/issues/58), [#102](https://github.com/marinoscar/local-ai/issues/102), [#152](https://github.com/marinoscar/local-ai/issues/152) |
 
 ## Critical path (longest chain)

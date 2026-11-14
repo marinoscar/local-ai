@@ -44,7 +44,7 @@ REG="docs/specs/doctor-codes.md"
 # Area prefixes (doctor-codes.md §1.1) and the spec file(s) that own each (§1.3).
 # Format: AREA=file[,file...]; a file may carry a numeric block "file:050-069" meaning it owns only that block.
 OWNERS="AGT=agent.md NET=agent.md HW=agent.md SEC=agent.md CLI=aictl.md LLM=llama-router.md CAT=catalog.md \
-SYN=ark-sync.md ARK=ark-sync.md SVC=companion-services.md,survival-portal.md CLD=cloud-app.md,agent.md:050-069 \
+SYN=ark-sync.md ARK=ark-sync.md SVC=companion-services.md,survival-portal.md,music.md:150-179 CLD=cloud-app.md,agent.md:050-069 \
 GW=gateway.md DSK=desktop.md INS=installer.md KIT=rebuild-kit.md DRL=drill.md"
 # Documented families (ranges allowed in prose), doctor-codes.md §1.2/§1.6.
 FAMILIES="LAI-CAT-010..019 LAI-CLD-050..069 LAI-INS-040..044"

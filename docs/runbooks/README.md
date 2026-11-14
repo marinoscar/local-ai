@@ -20,6 +20,7 @@ These pages are for **people**, not programmers. Each one tells you exactly what
 | [09-laptop-as-server.md](09-laptop-as-server.md) | A laptop must stay on with the lid closed, never sleep, and stay reachable |
 | [10-lab-operations.md](10-lab-operations.md) | You run the whole lab from `https://ai.marin.cr`: weekly and monthly checks, updates, keys, alerts, and installing or updating the cloud app itself (Part 9) |
 | [11-gateway-load-test.md](11-gateway-load-test.md) | You want to prove the gateway copes with 200 streams at once (fake test), or load-test the real lab off-hours |
+| [12-make-music-and-switch-workloads.md](12-make-music-and-switch-workloads.md) | You want a computer to **make a song** from your lyrics (with an optional sample), or to switch what it does (**Coding**, **Music**, ...). **English and Spanish** |
 
 ## How these pages are written
 - Steps are numbered. Commands go in grey boxes: type them exactly, then press **Enter**. Buttons are in **bold**.

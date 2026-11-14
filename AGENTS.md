@@ -108,6 +108,7 @@ while the marker file `scripts/tests/redaction/.redaction-fixtures` exists there
 - **Cloud:** EnterpriseAppBase packages (NestJS 11/Fastify, Prisma 7, Postgres 16, React 19 + MUI). See ADR-0008.
 - **Desktop:** Electron + electron-builder, following the kvox-desktop pattern, as a thin shell. See ADR-0004.
 - **Inference:** llama.cpp `llama-server` in **router mode**. See ADR-0002.
+- **Python engines (music):** PyTorch programs such as ACE-Step run as their own loopback `localai-<engine>.service` from a pinned venv built offline from the kit's wheel bundle; the agent stays Go and drives them over HTTP. All GPU engines share one budget and are switched by named workloads. See ADR-0011 and ADR-0012.
 
 ## Testing expectations
 - Go: `go test ./...` must pass. Every spec'd state machine (sync, modes, router load) gets table-driven tests, including failure paths: checksum mismatch, disk full, a killed process.

@@ -56,6 +56,9 @@ Non-goals: building Ubuntu itself; replacing the Ubuntu installer; keeping a ful
     kiwix-tools/kiwix-tools_linux-x86_64-<ver>.tar.gz   (+ aarch64)       kit-kiwix-tools
     pmtiles/go-pmtiles_<ver>_Linux_x86_64.tar.gz       (+ arm64)        kit-pmtiles
     piper/piper_linux_x86_64.tar.gz                    (+ aarch64)       kit-piper
+  engines/acestep/<version>/                   kit-engine-acestep-<backend> (E11, ADR-0011; only when a profile includes an acestep model)
+    acestep-<version>-<backend>.tar.zst        the wheel bundle: every wheel, the shim's wheel, requirements.lock with a hash per wheel
+    MANIFEST.json
   desktop/
     ai-desktop_<ver>_amd64.deb   ai-desktop-<ver>-x86_64.AppImage   SHA256SUMS   kit-desktop (github_release)
   debs/<codename>-<arch>/                      kit-debs-<codename>-<arch> (apt_closure)
@@ -88,6 +91,7 @@ The **rendered docs** are not duplicated in the kit: they are `<root>/docs/` (it
 | `kit-go-toolchain` | `url` (pinned per Go version listed in `agent/go.mod` `toolchain`) | when `go.mod` changes | all (own arch internally) |
 | `kit-kiwix-tools`, `kit-pmtiles`, `kit-piper` | `url` / `github_release`, pinned | when the catalog pin changes | all |
 | `kit-desktop` | `github_release` (`marinoscar/local-ai`, desktop tag) | with each desktop release | all with a desktop |
+| `kit-engine-acestep-<backend>` (backend `cuda` first) | `github_release` (`marinoscar/local-ai`, tag `acestep-<version>`, asset `acestep-<version>-<backend>.tar.zst`, pinned sha256; built by CI from the shim and a pinned `requirements.lock` with `pip download --require-hashes`) | when the catalog pin changes | **optional per profile**: only profiles that include an `acestep` model; all on the drive (`ark-drive-full`). Several GB per backend and version ([ADR-0011](../decisions/0011-python-inference-engines.md)) |
 | `kit-debs-<codename>-<arch>` | `apt_closure` | `refresh_days: 30` | own codename/arch internally; all on the drive |
 | `kit-nvidia-<codename>-<arch>-<branch>` | `apt_closure` | `refresh_days: 30` | CUDA nodes; all on the drive |
 | `kit-cuda-redist-<ver>-<arch>` | `url` set (optional, §CUDA option B) | when pinned | off by default |
@@ -124,6 +128,7 @@ Every kit item has exactly one **item directory** below `kit/`, the directory th
 | `kit-go-toolchain` | `kit/toolchains/` | |
 | `kit-kiwix-tools`, `kit-pmtiles`, `kit-piper` | `kit/tools/kiwix-tools/`, `kit/tools/pmtiles/`, `kit/tools/piper/` | |
 | `kit-desktop` | `kit/desktop/` | |
+| `kit-engine-acestep-<backend>` | `kit/engines/acestep/<version>/` | |
 | `kit-debs-<codename>-<arch>` | `kit/debs/<codename>-<arch>/` | |
 | `kit-nvidia-<codename>-<arch>-<branch>` | `kit/nvidia/<codename>-<arch>-<branch>/` | |
 | `kit-cuda-redist-<ver>-<arch>` | `kit/cuda/<ver>-<arch>/` | |
@@ -395,6 +400,7 @@ Sync downloads and verifies; this is what turns the kit into a working node ([AD
 | `apt.packages` | the profile has `kit-debs-<codename>-<arch>` | dpkg has every package of `kit.DefaultPackages(<backend>)` that the kit carries | `kit.Apt.Run` with those names (= `aictl kit install-debs --packages …`): every `.deb` is re-verified, a temporary source, only that source enabled, removed on every path |
 | `whisper.restore` | the profile has `kit-whisper-cpp` and `whisper.enabled` is not `false` | `/opt/localai/whisper.cpp/current/bin/whisper-server` exists and can run (**not** replaced when it does, whatever its commit) | a ready-made build of `kit/prebuilt/` that fits exactly (§4.2): `aiagent ctl rebuild-whisper --prebuilt <file> --yes`, which verifies, smoke tests, switches and rolls back |
 | `whisper.build` | no build in use, no ready-made one fits, and the kit has the source of the pinned commit | as above | **needs a confirmation**: `aiagent ctl rebuild-whisper --from-kit --yes` (no internet) |
+| `engine.acestep` | the profile or `node.yaml` includes an `acestep` model and the profile has `kit-engine-acestep-<backend>` for the node's backend (E11, [music.md](music.md) §3.1) | `/opt/localai/acestep/current/BUILD.json` names the bundle's version and the node's backend, and its self-test passes | the offline venv build of music.md §3.1: verify the bundle, unpack, `python3 -m venv`, `pip install --no-index --require-hashes`, self-test, move `current`; a failure leaves `current` as it was (`LAI-KIT-051`). Never touches a running `localai-music` (a new runtime is used at the next music load) |
 | `restart.kiwix` | kiwix-tools was replaced while the library service ran (the journal remembers it) | the service was restarted | **needs a confirmation**: the same restart as `POST /services/kiwix/restart` |
 
 A step whose kit item is missing or damaged is `blocked` (`LAI-KIT-040`, `LAI-KIT-001`) when the node does not already have the thing; a node that has a tool and whose kit lacks it is simply complete (READY and `kit verify` report the kit, not this). An essential package (the build tools and the backend's own: cmake, the compilers, the Vulkan or CUDA ones) that the kit cannot supply is `blocked` (`not_in_kit`); an optional one (an everyday tool such as `curl`) that the kit lacks is ignored. "Outdated" is a tool whose `current` is another version than the kit's: the kit's version is the catalog pin.
@@ -425,6 +431,7 @@ Plain list, also printed in the rebuild runbook:
 | **Firmware/BIOS problems, dead disk, dead GPU** | Hardware | The ark drive + another machine + the ISO (tier 3) |
 | **Desktop app on a different arch** | Only amd64 builds exist today | Use any browser at `http://127.0.0.1:7070` |
 | **Agent UI changes** | Rebuilding the UI needs Node/npm, not in the kit | The agent source tarball contains the built UI; UI changes need internet |
+| **A new music runtime version** | A new wheel bundle must be built online (`pip download`) | The kit keeps the bundle in use; the venv is rebuilt from it offline as often as needed. Music on a backend with no bundle (ROCm, CPU) is not possible offline or online until #517 |
 
 ## 6. Failure handling and edge cases
 
