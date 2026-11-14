@@ -22,10 +22,12 @@ var (
 	reCode     = regexp.MustCompile(`^LAI-[A-Z]{2,3}-\d{3}$`)
 	reISO      = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`)
 	reAnything = regexp.MustCompile(`.*`)
+	reSHA256   = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	reWorkload = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
 )
 
 type spec struct {
-	kind     string // object, string, int, bool, array, enum, literal-true
+	kind     string // object, string, int, number, bool, array, enum, literal-true
 	fields   map[string]spec
 	re       *regexp.Regexp
 	maxLen   int
@@ -41,6 +43,7 @@ func str(re *regexp.Regexp, maxLen int) spec {
 	return spec{kind: "string", re: re, maxLen: maxLen}
 }
 func integer(min int64) spec   { return spec{kind: "int", min: min} }
+func number(min int64) spec    { return spec{kind: "number", min: min} }
 func boolean() spec            { return spec{kind: "bool"} }
 func enum(v ...string) spec    { return spec{kind: "enum", enum: v} }
 func arr(e spec, max int) spec { return spec{kind: "array", elem: &e, maxItems: max} }
@@ -80,6 +83,14 @@ var resultSchemas = map[string]spec{
 		"catalog_version": str(reCatalog, 0), "changed": boolean(), "accepted": boolean(), "rejected_code": null(str(reCode, 0)),
 	}),
 	"localai.ensure.run": obj(map[string]spec{"started": boolean(), "state": enum("complete", "installing", "needs_you", "off"), "pending_steps": integer(0)}),
+	// E11: workloads and music (the cloud's contracts, apps/cloud .../contracts/commands.ts).
+	"localai.workload.activate": obj(map[string]spec{"active": str(reWorkload, 0)}),
+	"localai.music.generate": obj(map[string]spec{
+		"songs": arr(obj(map[string]spec{
+			"index": integer(0), "sha256": str(reSHA256, 0), "size_bytes": integer(1),
+			"mime": str(reAnything, 64), "duration_s": number(0),
+		}), 4),
+	}),
 	"localai.agent.update": obj(map[string]spec{
 		"from_version": str(reSemver, 0), "to_version": str(reSemver, 0), "status": enum("updated", "already_current", "rolled_back"),
 	}),
@@ -165,6 +176,20 @@ func check(sp spec, v any, path string, probs *[]string) {
 			return
 		}
 		if i < sp.min {
+			bad("below %d", sp.min)
+		}
+	case "number":
+		n, ok := v.(json.Number)
+		if !ok {
+			bad("expected a number")
+			return
+		}
+		f, err := n.Float64()
+		if err != nil {
+			bad("expected a number")
+			return
+		}
+		if f < float64(sp.min) {
 			bad("below %d", sp.min)
 		}
 	case "bool":
