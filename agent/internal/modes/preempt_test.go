@@ -54,7 +54,7 @@ func TestSurvivalPreemptsOfflineAfterAtMostOneStep(t *testing.T) {
 
 	want := []string{
 		"link.stop", "sync.cancel", // the offline transition, stopped after the running step
-		"link.stop", "sync.cancel", "prober.stop", "tailscale.off", "models.load", "service.start kiwix", "service.start whisper",
+		"link.stop", "sync.cancel", "prober.stop", "tailscale.off", "engines.stop", "models.load", "service.start kiwix", "service.start whisper",
 	}
 	if got := r.env.Effects(); !equalStrings(got, want) {
 		t.Fatalf("effects:\n got  %s\n want %s", joined(got), joined(want))

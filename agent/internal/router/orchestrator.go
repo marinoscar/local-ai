@@ -147,7 +147,10 @@ type OrchestratorOptions struct {
 	Units    SingleUnits
 	UnitBase func() UnitInputs
 	Stopper  LlamaStopper
-	Timing   Timing
+	// Engines are the adapters of the engines other than llama (E11: acestep, the music engine). A
+	// model of an engine without an adapter is refused (whisper and piper run as services).
+	Engines []EngineAdapter
+	Timing  Timing
 	// Clock measures every wait; Sleep waits between polls (tests advance a manual clock in it).
 	// The default Sleep returns early when the orchestrator shuts down.
 	Clock  config.Clock

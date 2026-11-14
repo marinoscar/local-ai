@@ -30,6 +30,7 @@ var allowlist = map[string]allowRow{
 	IDWhisperRestore: {KindWhisperRestore, "whisper", false},
 	IDWhisperBuild:   {KindWhisperBuild, "whisper", true},
 	IDRestartKiwix:   {KindRestart, "kiwix", true},
+	IDEngineAcestep:  {KindEngine, "acestep", false},
 }
 
 // Allowed checks one step against the table.

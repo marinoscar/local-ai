@@ -37,6 +37,8 @@ func Title(id, lang string) string {
 		return pick(lang, "Speech-to-text program (build from source)", "Programa de voz a texto (compilar desde el código)")
 	case IDRestartKiwix:
 		return pick(lang, "Restart the library service", "Reiniciar el servicio de biblioteca")
+	case IDEngineAcestep:
+		return pick(lang, "Music program (ACE-Step)", "Programa de música (ACE-Step)")
 	}
 	return id
 }
@@ -56,6 +58,8 @@ func short(id, lang string) string {
 		return pick(lang, "the speech-to-text program", "el programa de voz a texto")
 	case IDRestartKiwix:
 		return pick(lang, "the library service", "el servicio de biblioteca")
+	case IDEngineAcestep:
+		return pick(lang, "the music program", "el programa de música")
 	}
 	return id
 }

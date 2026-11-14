@@ -170,6 +170,13 @@ func (d *Daemon) build(ctx context.Context) error {
 		ModelID: func() string { return whisper.EnvModelID(d.c.Paths.Join(whisper.EnvPath), nil) },
 		Now:     clock.Now, Metrics: metrics, Logger: log,
 	})
+	// The music engine adapter (E11, #508): the orchestrator loads acestep models with it and the music
+	// API reads the engine state from it.
+	if music, merr := d.newMusicAdapter(); merr != nil {
+		log.Error("the music engine adapter could not be built; music models cannot load", "error", merr.Error())
+	} else {
+		d.acestep = music
+	}
 	d.buildMusic()
 	d.maps = maps.New(d.mapsDeps(metrics))
 	d.maps.SetGPS(lazyGPS{d})
@@ -212,6 +219,9 @@ func (d *Daemon) build(ctx context.Context) error {
 	if err := vision.Register(c.Checks, visionSource{d}); err != nil {
 		return err
 	}
+	if err := d.registerMusicChecks(); err != nil {
+		return err
+	}
 
 	// The llama router: client, watcher, the one shared lock, generators, orchestrator, reconciler.
 	c.Router, err = router.NewClient(router.Options{Port: cfg.Get().Ports.Llama, Keys: router.NewFileKey(fs, c.Paths.APIKey()), Logger: log,
@@ -251,6 +261,10 @@ func (d *Daemon) build(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("unit generator: %w", err)
 	}
+	var engines []router.EngineAdapter
+	if d.acestep != nil {
+		engines = append(engines, d.acestep)
+	}
 	c.Orchestrator, err = router.NewOrchestrator(router.OrchestratorOptions{
 		Router: c.Router, State: c.State, Inputs: d.routerInputs, Presence: router.ManifestPresence{FS: fs},
 		Lock: c.OpLock, Generator: c.Generator, Publisher: c.Bus, Audit: d.audit, Alerts: alerts,
@@ -259,6 +273,7 @@ func (d *Daemon) build(ctx context.Context) error {
 		Units: c.UnitGenerator, Stopper: llamaUnit{c.Systemd},
 		UnitBase: func() router.UnitInputs { return router.UnitInputs{Port: cfg.Get().Ports.Llama} },
 		Builds:   router.FileBuild{FS: fs, Path: c.Paths.BuildJSON()}, Timing: env.RouterTiming, Clock: clock, Logger: log,
+		Engines: engines,
 	})
 	if err != nil {
 		return fmt.Errorf("orchestrator: %w", err)
@@ -303,6 +318,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	merger := &statusapi.ModelMerger{
 		Config: cfg, Catalog: c.Catalog, State: c.State, Mode: mv, Hardware: c.Hardware, Router: c.RouterWatcher,
 		Roots: d.roots, Presence: router.ManifestPresence{FS: fs}, WhisperReserveMiB: d.whisperReserveMiB,
+		EngineModels: d.musicEngineModels,
 	}
 	svcView := health.Combine(c.Watcher, sup)
 	gauge := &gauges{}
@@ -337,6 +353,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	var snap cloud.SnapshotOptions
 	snap.Drill = reporter
 	snap.Ensure = ensureSnapshot{d} // the engine is built after the link; the source looks at it when asked
+	snap.Workloads = workloadsSnapshot{d}
 	if d.ark != nil {
 		snap.Ark, snap.Sync = d.ark.ready.CloudSource(), adapt.CloudSync{Engine: d.ark.engine}
 	}
@@ -553,6 +570,14 @@ func (d *Daemon) buildServer() error {
 				Orchestrator: router.NewHTTPOps(c.Orchestrator), LoadTimeout: loadTimeout(cfg), ModelsMax: max,
 			})
 		}},
+		{"workloads", func() error {
+			cfg := c.Config.Get()
+			max := 1
+			if p := d.profile(); p != nil && cfg.Llama.Mode != router.LlamaModeSingle {
+				max = p.Router.ModelsMax
+			}
+			return router.RegisterWorkloads(reg, router.WorkloadRouteOptions{Orchestrator: c.Orchestrator, LoadTimeout: loadTimeout(cfg), ModelsMax: max})
+		}},
 		{"mode", func() error {
 			return api.RegisterMode(reg, api.ModeDeps{Engine: c.Modes, Audit: d.audit, Logger: d.log})
 		}},
@@ -681,8 +706,11 @@ func (d *Daemon) buildClaimPlane(sdeps statusapi.Deps) error {
 	if d.ark != nil { // the engine itself is built later in the start-up; the command looks at it when it runs
 		jd.Ensure = lazyEnsureJobs{d}
 	}
-	if d.music != nil { // music.generate (E11); workload.activate waits for the workloads engine (#509)
+	if d.music != nil { // music.generate (E11)
 		jd.Music = d.music
+	}
+	if c.Orchestrator != nil { // workload.activate (E11, #509)
+		jd.Workloads = router.CloudWorkloads{O: c.Orchestrator}
 	}
 	var recoverFn func(context.Context, cloud.InflightEntry) bool
 	if d.updater != nil {
@@ -829,6 +857,7 @@ func (d *Daemon) routerInputs() router.Inputs {
 		NodeID: cfg.Node.ID, Catalog: cs.Catalog, Profile: prof, Overrides: cfg.ProfileOverrides, Llama: cfg.Llama,
 		Roots: d.roots(), Fit: router.NewEnv(d.c.Hardware.Snapshot(), cfg.Llama.Backend, rcfg, d.whisperReserveMiB()),
 		StateDefault: def, Survival: st.Mode == state.ModeSurvival,
+		Workloads: d.resolveWorkloads(cs.Catalog, prof),
 	}
 }
 

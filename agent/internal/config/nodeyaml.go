@@ -141,6 +141,9 @@ type Config struct {
 	UI               UIBlock          `yaml:"ui"`
 	Ports            PortsBlock       `yaml:"ports"`
 	Logging          LoggingBlock     `yaml:"logging"`
+	// Workloads override the profile's workloads by name (replace) and may add new ones
+	// (catalog.md section 4, "Workloads"; agent.md section 3.4).
+	Workloads map[string]Workload `yaml:"workloads"`
 
 	// Blocks holds the owned blocks that are present in the file, by name.
 	Blocks map[string]RawBlock `yaml:"-"`
@@ -223,6 +226,19 @@ type PortsBlock struct {
 	Llama   int `yaml:"llama"`
 	Kiwix   int `yaml:"kiwix"`
 	Whisper int `yaml:"whisper"`
+	Music   int `yaml:"music"`
+}
+
+// Workload is one entry of workloads{}: a named model set with a bilingual label.
+type Workload struct {
+	Label  WorkloadLabel `yaml:"label"`
+	Models []string      `yaml:"models"`
+}
+
+// WorkloadLabel is the label of a workload.
+type WorkloadLabel struct {
+	EN string `yaml:"en"`
+	ES string `yaml:"es"`
 }
 
 // LoggingBlock is logging{}.
@@ -259,6 +275,13 @@ func (c Config) Clone() Config {
 		}
 	}
 	out.Cloud.Allow = cloneStrs(c.Cloud.Allow)
+	if c.Workloads != nil {
+		out.Workloads = make(map[string]Workload, len(c.Workloads))
+		for k, w := range c.Workloads {
+			w.Models = cloneStrs(w.Models)
+			out.Workloads[k] = w
+		}
+	}
 	if c.Blocks != nil {
 		out.Blocks = make(map[string]RawBlock, len(c.Blocks))
 		for k, v := range c.Blocks {

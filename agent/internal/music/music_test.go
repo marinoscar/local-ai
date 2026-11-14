@@ -109,6 +109,10 @@ func TestGenerateRequests(t *testing.T) {
 			setup: func(r *rig) { r.shim.Status = music.HealthLoading },
 		},
 		{
+			name: "music runtime not installed", form: form{fields: baseFields(nil)}, status: http.StatusConflict, code: doctor.SVC150,
+			setup: func(r *rig) { r.installed.Store(false) },
+		},
+		{
 			name: "music engine stopped", form: form{fields: baseFields(nil), sample: wavBytes(2)}, status: http.StatusConflict, code: doctor.SVC151,
 			setup: func(r *rig) { r.shim.Kill() },
 		},

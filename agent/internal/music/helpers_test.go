@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -102,6 +103,8 @@ type rig struct {
 	logs  *syncBuf
 	free  func() int64
 	mu    sync.Mutex
+	// installed is what Deps.Installed answers (true by default).
+	installed atomic.Bool
 }
 
 func (r *rig) setFree(n int64) {
@@ -115,6 +118,7 @@ func newRig(t *testing.T, mod ...func(*music.Deps)) *rig {
 	dir := t.TempDir()
 	r := &rig{t: t, shim: fake.New(), songs: filepath.Join(dir, "songs"), work: filepath.Join(dir, "work"), pub: &pubLog{}, audit: &auditLog{}, logs: &syncBuf{}}
 	r.free = func() int64 { return 1 << 40 }
+	r.installed.Store(true)
 	d := music.Deps{
 		Shim: r.shim, SongsDir: r.songs, WorkDir: r.work, Publisher: r.pub, Audit: r.audit, Poll: 2 * time.Millisecond,
 		MinFreeBytes: func() int64 { return 1 << 20 },
@@ -123,7 +127,7 @@ func newRig(t *testing.T, mod ...func(*music.Deps)) *rig {
 			defer r.mu.Unlock()
 			return r.free(), nil
 		},
-		Installed: func() bool { return true },
+		Installed: func() bool { return r.installed.Load() },
 		Logger:    slog.New(slog.NewJSONHandler(r.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}
 	for _, m := range mod {

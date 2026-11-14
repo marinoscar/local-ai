@@ -1794,7 +1794,7 @@ paths:
       x-localai-auth: op
       x-localai-timeout: "10 s"
       parameters:
-        - {name: unit, in: query, required: true, schema: {type: string, enum: [agent, llama, kiwix, whisper, sync, drill]}}
+        - {name: unit, in: query, required: true, schema: {type: string, enum: [agent, llama, kiwix, whisper, music, sync, drill]}}
         - {name: lines, in: query, schema: {type: integer, minimum: 1, maximum: 2000, default: 200}}
         - {name: since, in: query, schema: {type: string, format: date-time}, description: "RFC 3339."}
       responses:
@@ -2629,6 +2629,98 @@ paths:
         "404": {$ref: "#/components/responses/NotFound"}
         "500": {$ref: "#/components/responses/Internal"}
 
+  /workloads:
+    get:
+      tags: [models]
+      operationId: listWorkloads
+      summary: List the workloads
+      description: |
+        The profile's workloads merged with `node.yaml` `workloads:` (same name replaces, a new name adds), sorted
+        by name. A workload that names a model the catalog does not have is left out (`LAI-CAT-020` is a doctor
+        finding instead). `active` per entry: exactly that set is loaded (survival models kept beside it in
+        survival mode do not count). Top-level `active`: the workload last activated while it is still exactly
+        loaded, else null. `fits`: the set passes the fit check; `missing`: its models with no verified copy.
+        agent.md section 3.8.34, llama-router.md section 4.16.
+      x-localai-auth: op
+      x-localai-timeout: "5 s"
+      responses:
+        "200":
+          description: The workloads.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/WorkloadsResponse"}
+              examples:
+                coding: {value: {workloads: [{name: coding, label: {en: Coding, es: "Programación"}, models: [qwen3.6-35b-a3b-q4km], active: true, fits: true, missing: []}], active: coding}}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/Internal"}
+  /workloads/{name}/activate:
+    post:
+      tags: [models]
+      operationId: activateWorkload
+      summary: Switch the node to a workload
+      description: |
+        Unloads the loaded models that are not in the set (never a survival model in survival mode), then loads
+        the missing ones, each through its engine (llama or acestep), under `modelOpsMu`. A failure restores the
+        previous set. With `wait: false` (the default) the answer is `202 {op_id}` and progress follows on
+        `/events` as `workload.progress` and `workload.done`. Music is refused in survival mode even with
+        `force` (409 LAI-AGT-023). agent.md section 3.8.34, llama-router.md section 4.16. Audit
+        `workload.activate`.
+      x-localai-auth: op
+      x-localai-timeout: "5 s, or with wait load_timeout x (n+2) + 60 s"
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/WorkloadActivateRequest"}
+            examples:
+              wait: {value: {wait: true, force: false}}
+      responses:
+        "200":
+          description: The workload is active (wait true).
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/WorkloadActivated"}
+              examples:
+                music: {value: {op_id: op_abcdefghijkl, active: music, loaded: [acestep-v15-turbo], unloaded: [qwen3.5-9b-q4km]}}
+        "202":
+          description: Accepted (wait false); the outcome follows on /events.
+          headers:
+            X-Request-Id: {$ref: "#/components/headers/XRequestId"}
+            X-LocalAI-Op-Id: {$ref: "#/components/headers/XLocalAIOpId"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/WorkloadAccepted"}
+              examples:
+                accepted: {value: {op_id: op_abcdefghijkl}}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthenticated"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: "LAI-LLM-050 there is no workload with this name."
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: "LAI-AGT-022 another model operation runs; LAI-LLM-053 survival mode without force; LAI-AGT-023 music in survival mode, or single-model mode."
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "415": {$ref: "#/components/responses/UnsupportedMediaType"}
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+          description: "LAI-LLM-051 the set does not fit this node; LAI-LLM-043 an engine is not installed; LAI-LLM-008 files missing."
+        "500":
+          $ref: "#/components/responses/Internal"
+          description: "LAI-LLM-052 the activation failed and the previous set was restored (wait true); LAI-LLM-012 nothing could be restored."
+        "502":
+          $ref: "#/components/responses/Internal"
+          description: "LAI-LLM-004 the AI model service is not answering."
+        "503": {$ref: "#/components/responses/Starting"}
 components:
   securitySchemes:
     bearerToken:
@@ -4578,3 +4670,49 @@ components:
         id: {type: string}
         deleted: {type: boolean}
         bytes: {type: integer, minimum: 0}
+    WorkloadsResponse:
+      type: object
+      additionalProperties: false
+      required: [workloads, active]
+      properties:
+        workloads:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, label, models, active, fits, missing]
+            properties:
+              name: {type: string}
+              label:
+                type: object
+                additionalProperties: false
+                required: [en, es]
+                properties:
+                  en: {type: string}
+                  es: {type: string}
+              models: {type: array, items: {type: string}}
+              active: {type: boolean}
+              fits: {type: boolean}
+              missing: {type: array, items: {type: string}}
+        active: {type: [string, "null"]}
+    WorkloadActivateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        wait: {type: boolean}
+        force: {type: boolean}
+    WorkloadActivated:
+      type: object
+      additionalProperties: false
+      required: [op_id, active, loaded, unloaded]
+      properties:
+        op_id: {type: string}
+        active: {type: string}
+        loaded: {type: array, items: {type: string}}
+        unloaded: {type: array, items: {type: string}}
+    WorkloadAccepted:
+      type: object
+      additionalProperties: false
+      required: [op_id]
+      properties:
+        op_id: {type: string}

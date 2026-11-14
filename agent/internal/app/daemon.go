@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/marinoscar/local-ai/agent/internal/svc/acestep"
 	"io"
 	"log/slog"
 	"sync"
@@ -132,6 +133,8 @@ type Daemon struct {
 	haveLocalAI bool
 
 	whisper whisperState
+	// acestep is the music engine adapter (music_engine.go); nil when it could not be built.
+	acestep *acestep.Adapter
 
 	shutdown1 sync.Once
 }

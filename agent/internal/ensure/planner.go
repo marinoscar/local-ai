@@ -20,6 +20,9 @@ type Facts struct {
 	KiwixOff, PiperOff, WhisperOff bool
 	// WhisperCommit and WhisperBackend are whisper.commit and whisper.backend ("auto" or "" follow llama).
 	WhisperCommit, WhisperBackend string
+	// MusicWanted says that the profile or node.yaml includes an acestep model (in the model list or a
+	// workload).
+	MusicWanted bool
 }
 
 // Wants is what the profile and node.yaml want installed.
@@ -33,6 +36,9 @@ type Wants struct {
 	// Whisper is true when the speech program is wanted.
 	Whisper     bool
 	WhisperWant WhisperWant
+	// EngineBackend is the backend of the music runtime to build ("" when music is not wanted, or the
+	// profile has no kit-engine-acestep-<backend> item for this backend).
+	EngineBackend string
 }
 
 // WantsFor turns the kit items of the profile (catalog ids) and the node facts into Wants. The profile
@@ -66,6 +72,9 @@ func WantsFor(profileItems []string, f Facts) Wants {
 			backend = "cpu"
 		}
 		w.WhisperWant = WhisperWant{Commit: f.WhisperCommit, Backend: backend}
+	}
+	if b := f.Backend; f.MusicWanted && b != "" && has["kit-engine-acestep-"+b] {
+		w.EngineBackend = b
 	}
 	return w
 }
@@ -129,6 +138,13 @@ func (p *Planner) Plan(ctx context.Context, in PlanInput) (Plan, error) {
 			add(s)
 		}
 	}
+	if in.Wants.EngineBackend != "" {
+		s, err := p.engineStep(ctx, in.Wants.EngineBackend)
+		if err != nil {
+			return plan, err
+		}
+		add(s)
+	}
 	for _, svc := range in.PendingRestart {
 		if svc != "kiwix" {
 			continue
@@ -169,6 +185,34 @@ func (p *Planner) toolStep(ctx context.Context, id, tool, item string) (Step, er
 		return st, nil
 	}
 	st.Source, st.Version, st.From = src.KitDir, version, installed
+	if installed == version {
+		st.Status, st.From = StatusOK, ""
+		return st, nil
+	}
+	st.Status = StatusPending
+	return st, nil
+}
+
+// engineStep is the music runtime (engine.acestep): ok when the runtime in use is the kit's version
+// for this backend (or the kit has none and some runtime is in use), pending when the kit has a
+// verified bundle that is not installed, blocked otherwise.
+func (p *Planner) engineStep(ctx context.Context, backend string) (Step, error) {
+	st := Step{ID: IDEngineAcestep, Kind: KindEngine, Target: "acestep", Item: "kit-engine-acestep-" + backend}
+	installed := p.Machine.EngineVersion("acestep", backend)
+	src, version, err := p.Kit.Engine(ctx, "acestep", backend)
+	if err != nil {
+		reason, code, ok := kitFailure(err)
+		if !ok {
+			return st, fmt.Errorf("ensure: the kit check of the music runtime failed: %w", err)
+		}
+		if installed != "" {
+			st.Status, st.Version = StatusOK, installed
+			return st, nil
+		}
+		st.Status, st.Reason, st.Code = StatusBlocked, reason, code
+		return st, nil
+	}
+	st.Source, st.File, st.Version, st.From = src.KitDir, src.File, version, installed
 	if installed == version {
 		st.Status, st.From = StatusOK, ""
 		return st, nil

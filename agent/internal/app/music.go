@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/marinoscar/local-ai/agent/internal/music"
 )
@@ -15,15 +14,17 @@ import (
 // else depends on it.
 func (d *Daemon) buildMusic() {
 	c := d.c
-	shim := &music.HTTPShim{BaseURL: func() string { return fmt.Sprintf("http://127.0.0.1:%d", music.DefaultPort) }}
+	shim := &music.HTTPShim{BaseURL: func() string { return fmt.Sprintf("http://127.0.0.1:%d", c.Config.Get().Ports.Music) }}
+	var engine music.Engine
+	if d.acestep != nil {
+		engine = d.acestep // starting, ready, stopping, failed from the unit it drives (#508)
+	}
 	svc, err := music.New(music.Deps{
-		Shim:     shim,
-		SongsDir: c.Paths.Join(music.DefaultSongsDir),
-		WorkDir:  c.Paths.Join(music.DefaultWorkDir),
-		Installed: func() bool {
-			_, err := os.Stat(c.Paths.Join(music.RuntimeDir))
-			return err == nil
-		},
+		Shim:      shim,
+		Engine:    engine,
+		SongsDir:  c.Paths.Join(music.DefaultSongsDir),
+		WorkDir:   c.Paths.Join(music.DefaultWorkDir),
+		Installed: func() bool { return d.musicRuntime().Installed() == nil },
 		MinFreeBytes: func() int64 {
 			if p := d.profile(); p != nil {
 				return p.Storage.MinFreeBytes

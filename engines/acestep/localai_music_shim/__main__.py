@@ -13,7 +13,22 @@ from .server import make_server
 from .tasks import TaskManager
 
 
-def main() -> int:
+def self_test() -> int:
+    """--self-test (music.md section 3.1): import every module the engine needs, with no GPU work and no
+    network, so the offline install can refuse a runtime that cannot start. The ACE-Step import itself
+    is checked by the real backend when it is present (TODO(#505))."""
+    import importlib
+
+    for mod in ("localai_music_shim.backend", "localai_music_shim.config", "localai_music_shim.server", "localai_music_shim.tasks"):
+        importlib.import_module(mod)
+    print("self-test ok")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if "--self-test" in args:
+        return self_test()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s", stream=sys.stderr)
     log = logging.getLogger("localai_music_shim")
     try:

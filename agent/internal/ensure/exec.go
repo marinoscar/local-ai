@@ -114,6 +114,18 @@ func (e *Executor) run(ctx context.Context, step *Step) error {
 		return e.Installer.BuildWhisper(ctx)
 	case KindRestart:
 		return e.Installer.RestartService(ctx, step.Target)
+	case KindEngine:
+		backend := strings.TrimPrefix(step.Item, "kit-engine-"+step.Target+"-")
+		src, version, err := e.Kit.Engine(ctx, step.Target, backend)
+		if err != nil {
+			return err
+		}
+		step.Source, step.File, step.Version = src.KitDir, src.File, version
+		out, err := e.Installer.InstallEngine(ctx, step.Target, src, version, backend)
+		if err != nil {
+			return err
+		}
+		step.Version, step.From = out.Version, out.Previous
 	}
 	return nil
 }

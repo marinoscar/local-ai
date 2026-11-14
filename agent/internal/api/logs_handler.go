@@ -106,7 +106,7 @@ func (d LogsDeps) get(w http.ResponseWriter, r *http.Request) error {
 }
 
 // logUnitNames are the values of the unit parameter, for the error details.
-var logUnitNames = []string{"agent", "llama", "kiwix", "whisper", "sync", "drill"}
+var logUnitNames = []string{"agent", "llama", "kiwix", "whisper", "music", "sync", "drill"}
 
 // mapTailError turns a journal failure into an API error: a timeout is 504, anything else 500, both
 // with the internal code (the details say what journalctl did).

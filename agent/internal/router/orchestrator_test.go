@@ -16,7 +16,10 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/state"
 )
 
-var _ modes.ModelLoader = (*Orchestrator)(nil)
+var (
+	_ modes.ModelLoader   = (*Orchestrator)(nil)
+	_ modes.EngineStopper = (*Orchestrator)(nil)
+)
 
 func TestLoadSuccessWithoutEviction(t *testing.T) {
 	r := newOrRig(t)

@@ -17,6 +17,9 @@ var allowed = map[string][]Verb{
 	UnitLlama:   {VerbState, VerbSubscribe, VerbStart, VerbStop, VerbRestart, VerbEnable, VerbDisable},
 	UnitKiwix:   {VerbState, VerbSubscribe, VerbStart, VerbStop, VerbRestart, VerbEnable, VerbDisable},
 	UnitWhisper: {VerbState, VerbSubscribe, VerbStart, VerbStop, VerbRestart, VerbEnable, VerbDisable},
+	// The music engine is started and stopped by the engine adapter only; it is never enabled at boot,
+	// so enable and disable are not on the list (E11).
+	UnitMusic: {VerbState, VerbSubscribe, VerbStart, VerbStop, VerbRestart},
 
 	UnitSync:       {VerbState, VerbSubscribe, VerbStart, VerbStop, VerbRestart, VerbEnable, VerbDisable},
 	UnitSyncTimer:  {VerbState, VerbSubscribe, VerbStart, VerbStop, VerbRestart, VerbEnable, VerbDisable},

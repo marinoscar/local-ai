@@ -10,7 +10,7 @@
 # agent/internal/svc/kiwix/testdata and agent/internal/svc/whisper/testdata): `go test` proves each generator renders exactly those bytes, so
 # verifying them verifies the generator's output. Checked: the router unit (ai-n3 and ai-n1 profiles),
 # the single-mode unit, the router unit together with the environment drop-in, the kiwix unit, the
-# whisper unit, the agent unit and the drill service with its timer (agent/internal/setup/units, embedded in the binary).
+# whisper unit, the music unit (agent/internal/svc/acestep/testdata), the agent unit and the drill service with its timer (agent/internal/setup/units, embedded in the binary).
 #
 # systemd-analyze verify wants the program of ExecStart to exist and be executable. When the real
 # path is absent this script installs an empty stub there (needs root, or sudo) and removes it on
@@ -25,9 +25,10 @@ root="$(git rev-parse --show-toplevel)"
 golden="$root/agent/internal/router/testdata/golden"
 kiwix_golden="$root/agent/internal/svc/kiwix/testdata/localai-kiwix.service.golden"
 whisper_golden="$root/agent/internal/svc/whisper/testdata/localai-whisper.service.golden"
+music_golden="$root/agent/internal/svc/acestep/testdata/localai-music.service.golden"
 aictl=/usr/local/bin/aictl
 units="$root/agent/internal/setup/units"
-bins=(/opt/localai/llama.cpp/current/bin/llama-server /opt/localai/kiwix-tools/current/kiwix-serve /opt/localai/whisper.cpp/current/bin/whisper-server /opt/localai/bin/aiagent "$aictl")
+bins=(/opt/localai/llama.cpp/current/bin/llama-server /opt/localai/kiwix-tools/current/kiwix-serve /opt/localai/whisper.cpp/current/bin/whisper-server /opt/localai/acestep/current/venv/bin/python /opt/localai/bin/aiagent "$aictl")
 
 command -v systemd-analyze >/dev/null 2>&1 || { echo "verify-units: systemd-analyze not found" >&2; exit 2; }
 
@@ -82,6 +83,7 @@ check single-ai-n3 "$golden/localai-llama.single.service"
 check router-with-dropin "$golden/localai-llama.router.ai-n1.service" "$golden/50-env.conf"
 check kiwix "$kiwix_golden" "" localai-kiwix.service
 check whisper "$whisper_golden" "" localai-whisper.service
+check music "$music_golden" "" localai-music.service
 
 # The agent unit is verified on its own (its ExecStart is /opt/localai/bin/aiagent).
 check agent "$units/localai-agent.service" "" localai-agent.service

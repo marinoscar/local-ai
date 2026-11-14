@@ -115,8 +115,53 @@ func Validate(cfg Config, h *Hooks) Problems {
 		v.errf("logging.level", "must be debug, info, warn or error (got %q)", cfg.Logging.Level)
 	}
 
+	v.workloads(cfg.Workloads, h)
 	v.ownedBlocks(cfg, h)
 	return v.probs
+}
+
+// workloadNameRe is catalog.WorkloadNameRe (this package does not import the catalog).
+var workloadNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
+
+// workloads checks workloads{}: a name like the profile's, both labels, at least one model, and, when
+// the catalog is known, every model id in it (LAI-CAT-020).
+func (v *validator) workloads(ws map[string]Workload, h *Hooks) {
+	if len(ws) == 0 {
+		return
+	}
+	var known map[string]bool
+	if h != nil && h.CatalogModelIDs != nil {
+		if ids := h.CatalogModelIDs(); len(ids) > 0 {
+			known = make(map[string]bool, len(ids))
+			for _, id := range ids {
+				known[id] = true
+			}
+		}
+	}
+	names := make([]string, 0, len(ws))
+	for n := range ws {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		w := ws[n]
+		p := "workloads." + n
+		if !workloadNameRe.MatchString(n) {
+			v.errf(p, "a workload name is lowercase letters, digits and dashes, starting with a letter (got %q)", n)
+		}
+		if strings.TrimSpace(w.Label.EN) == "" || strings.TrimSpace(w.Label.ES) == "" {
+			v.errf(p+".label", "needs both en and es")
+		}
+		if len(w.Models) == 0 {
+			v.errf(p+".models", "must list at least one model")
+		}
+		for i, id := range w.Models {
+			if known != nil && !known[id] {
+				// Non-blocking (agent.md section 3.4): the file loads, that workload is left out.
+				v.coded(fmt.Sprintf("%s.models[%d]", p, i), CodeWorkloadModel, SeverityWarning, "model %q is not in the catalog; this workload is left out", id)
+			}
+		}
+	}
 }
 
 func (v *validator) llama(l LlamaBlock, h *Hooks) {
@@ -242,7 +287,7 @@ func (v *validator) ports(p PortsBlock) {
 		name string
 		n    int
 	}
-	all := []port{{"agent", p.Agent}, {"llama", p.Llama}, {"kiwix", p.Kiwix}, {"whisper", p.Whisper}}
+	all := []port{{"agent", p.Agent}, {"llama", p.Llama}, {"kiwix", p.Kiwix}, {"whisper", p.Whisper}, {"music", p.Music}}
 	used := map[int]string{}
 	for _, x := range all {
 		path := "ports." + x.name

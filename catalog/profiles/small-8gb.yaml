@@ -69,3 +69,14 @@ survival:
   default_model: qwen3.5-9b-q4km
   require_services: [kiwix, whisper]
   portal_language: auto
+# Named model sets a person switches between with one action (catalog.md section 4, "Workloads").
+workloads:
+  coding:
+    label: {en: "Coding", es: "Programación"}
+    models: [qwen3.5-9b-q4km]
+  chat:
+    label: {en: "Chat", es: "Conversación"}
+    models: [qwen3.5-9b-q4km]
+  speech:
+    label: {en: "Speech", es: "Voz"}
+    models: [qwen3.5-4b-q4km]

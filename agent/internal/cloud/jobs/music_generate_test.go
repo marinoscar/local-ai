@@ -184,9 +184,10 @@ func TestWorkloadActivate(t *testing.T) {
 	if w.name != "music" || w.force || w.actor.Kind != audit.KindCloud || w.actor.JobID != "job-w" {
 		t.Fatalf("call %+v", w)
 	}
-	w.err = api.NewError(doctor.AGT022, http.StatusConflict, nil)
+	// Survival mode without force: the agent's LAI-LLM-053 is the job's code.
+	w.err = api.NewError(doctor.LLM053, http.StatusConflict, nil)
 	_, err = h.Run(context.Background(), job("job-w2"), params)
-	if code, _ := cloud.CodeAndMessage(err); code != doctor.AGT022 {
+	if code, _ := cloud.CodeAndMessage(err); code != doctor.LLM053 {
 		t.Fatalf("error %v", err)
 	}
 	// Without the workloads engine the type is not offered.
@@ -396,11 +397,15 @@ func TestMusicGenerateFailures(t *testing.T) {
 	}{
 		{
 			name: "bad sha256", code: doctor.SVC156,
-			params: func(r *musicRig) map[string]any { return r.withSample(sample, map[string]any{"sha256": strings.Repeat("0", 64)}) },
+			params: func(r *musicRig) map[string]any {
+				return r.withSample(sample, map[string]any{"sha256": strings.Repeat("0", 64)})
+			},
 		},
 		{
 			name: "wrong size", code: doctor.SVC156,
-			params: func(r *musicRig) map[string]any { return r.withSample(sample, map[string]any{"size_bytes": len(sample) + 10}) },
+			params: func(r *musicRig) map[string]any {
+				return r.withSample(sample, map[string]any{"size_bytes": len(sample) + 10})
+			},
 		},
 		{
 			name: "sample gone", code: doctor.SVC156, setup: func(r *musicRig) { r.blob.getStatus = http.StatusForbidden },

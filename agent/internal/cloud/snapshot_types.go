@@ -34,6 +34,31 @@ type StateSnapshot struct {
 	// Ensure is "Install what's missing" (ADR-0010): optional on the wire, sent only to a cloud whose
 	// handshake lists FeatureEnsure (an older cloud's strict schema would refuse the key).
 	Ensure *SnapEnsure `json:"ensure,omitempty"`
+	// Workloads are the node's workloads for the cloud's buttons (E11, #513): optional, sent only to a
+	// cloud whose handshake lists FeatureWorkloads, exactly like Ensure.
+	Workloads *SnapWorkloads `json:"workloads,omitempty"`
+}
+
+// SnapWorkloads is WorkloadsBlockV1: the active workload and, per workload, its name, label, models,
+// whether it fits and which of its models are missing. Names and labels only, never a path.
+type SnapWorkloads struct {
+	Active *string        `json:"active"`
+	Items  []SnapWorkload `json:"items"`
+}
+
+// SnapWorkload is one entry of workloads.items.
+type SnapWorkload struct {
+	Name    string            `json:"name"`
+	Label   SnapWorkloadLabel `json:"label"`
+	Models  []string          `json:"models"`
+	Fits    bool              `json:"fits"`
+	Missing []string          `json:"missing"`
+}
+
+// SnapWorkloadLabel is the bilingual label of a workload.
+type SnapWorkloadLabel struct {
+	EN string `json:"en"`
+	ES string `json:"es"`
 }
 
 // SnapEnsure is ensure: a compact picture of what the node still needs from its kit and whether the agent

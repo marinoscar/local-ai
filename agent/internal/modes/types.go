@@ -33,6 +33,7 @@ const (
 	StepSyncCancel      = "sync_cancel"
 	StepProberStop      = "prober_stop"
 	StepTailscaleOff    = "tailscale_off"
+	StepEnginesStop     = "engines_stop"
 	StepSurvivalModels  = "survival_models"
 	StepSurvivalService = "survival_services"
 	StepTailscaleOn     = "tailscale_on"
@@ -110,6 +111,14 @@ type ModelLoader interface {
 	LoadSurvivalSet(ctx context.Context, skip []string) ([]Warning, error)
 }
 
+// EngineStopper is the optional part of a ModelLoader that stops every engine other than llama (the
+// music engine) before the survival models load: step engines_stop (agent.md section 4.2.1,
+// llama-router.md section 4.15.4). It never fails: an engine that does not stop is a LAI-LLM-042
+// warning. *router.Orchestrator implements it; a loader without it makes the step a no-op.
+type EngineStopper interface {
+	StopEnginesForSurvival(ctx context.Context) []Warning
+}
+
 // ServiceStarter starts a unit and waits for it to be active. *services.Controller implements it.
 type ServiceStarter interface {
 	Do(ctx context.Context, svc services.Service, action services.Action) (services.UnitState, error)
@@ -185,6 +194,7 @@ var DefaultTimeouts = map[string]time.Duration{
 	StepSyncCancel:      30 * time.Second,
 	StepProberStop:      time.Second,
 	StepTailscaleOff:    20 * time.Second,
+	StepEnginesStop:     60 * time.Second,
 	StepSurvivalModels:  3 * 300 * time.Second,
 	StepSurvivalService: 60 * time.Second,
 	StepTailscaleOn:     30 * time.Second,

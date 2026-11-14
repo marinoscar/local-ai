@@ -28,10 +28,12 @@ const (
 	IDWhisperRestore = "whisper.restore"
 	IDWhisperBuild   = "whisper.build"
 	IDRestartKiwix   = "restart.kiwix"
+	// IDEngineAcestep builds the music runtime from the kit's wheel bundle (E11, rebuild-kit.md section 4.5).
+	IDEngineAcestep = "engine.acestep"
 )
 
 // StepIDs lists every step id, in the order a pass runs them.
-var StepIDs = []string{IDPackages, IDKiwix, IDPmtiles, IDPiper, IDWhisperRestore, IDWhisperBuild, IDRestartKiwix}
+var StepIDs = []string{IDPackages, IDKiwix, IDPmtiles, IDPiper, IDWhisperRestore, IDWhisperBuild, IDEngineAcestep, IDRestartKiwix}
 
 // Kind is what a step does. The set is closed: the executor refuses a step of any other kind (the
 // allowlist, allowlist.go).
@@ -44,6 +46,7 @@ const (
 	KindWhisperRestore Kind = "restore_whisper"
 	KindWhisperBuild   Kind = "build_whisper"
 	KindRestart        Kind = "restart_service"
+	KindEngine         Kind = "install_engine"
 )
 
 // Status is where a step stands.

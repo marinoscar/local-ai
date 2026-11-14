@@ -252,3 +252,12 @@ class ConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SelfTestTests(unittest.TestCase):
+    """--self-test is what the offline install runs before it moves current (music.md section 3.1)."""
+
+    def test_self_test_passes_without_a_gpu(self) -> None:
+        from localai_music_shim.__main__ import main
+
+        self.assertEqual(main(["--self-test"]), 0)

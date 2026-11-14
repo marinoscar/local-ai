@@ -74,6 +74,9 @@ type State struct {
 	// Migration maps a migration name (for example "llama_qwen") to its progress.
 	Migration map[string]MigrationEntry `json:"migration"`
 	Update    UpdateInfo                `json:"update"`
+	// Workloads records the last workload activated (llama-router.md section 4.16 step 7); absent
+	// until the first activation.
+	Workloads *Workloads `json:"workloads,omitempty"`
 
 	// Owned by other specs, stored opaquely (each carries its own "_owner" marker).
 	Sync  json.RawMessage `json:"sync,omitempty"`  // ark-sync.md
@@ -147,6 +150,26 @@ type MigrationEntry struct {
 	Step  string                     `json:"step"`
 	At    time.Time                  `json:"at"`
 	Extra map[string]json.RawMessage `json:"-"`
+}
+
+// Workloads is the workload bookkeeping: the name last activated and when. Whether it is still
+// active is decided from what is loaded, not from here.
+type Workloads struct {
+	Active      string                     `json:"active"`
+	ActivatedAt time.Time                  `json:"activated_at"`
+	Extra       map[string]json.RawMessage `json:"-"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (v *Workloads) UnmarshalJSON(b []byte) error {
+	type plain Workloads
+	return decodeKeepExtra(b, (*plain)(v), &v.Extra)
+}
+
+// MarshalJSON implements json.Marshaler.
+func (v Workloads) MarshalJSON() ([]byte, error) {
+	type plain Workloads
+	return encodeKeepExtra(plain(v), v.Extra)
 }
 
 // UpdateInfo holds the self-update outcome (an update in progress is update/pending.json, not here).

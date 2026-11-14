@@ -285,6 +285,25 @@
           }
         }
       }
+    },
+    "workloads": {
+      "type": "object", "additionalProperties": false, "required": ["active", "items"],
+      "properties": {
+        "active": {"type": ["string", "null"], "maxLength": 32},
+        "items": {
+          "type": "array", "maxItems": 16,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["name", "label", "models", "fits", "missing"],
+            "properties": {
+              "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$"},
+              "label": {"type": "object", "additionalProperties": false, "required": ["en", "es"], "properties": {"en": {"type": "string", "maxLength": 64}, "es": {"type": "string", "maxLength": 64}}},
+              "models": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/ModelId"}},
+              "fits": {"type": "boolean"},
+              "missing": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/ModelId"}}
+            }
+          }
+        }
+      }
     }
   }
 }

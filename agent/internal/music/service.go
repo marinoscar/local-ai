@@ -455,6 +455,9 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Accepted, 
 		}
 	}
 
+	if !s.d.Installed() {
+		return Accepted{}, api.NewError(doctor.SVC150, http.StatusConflict, map[string]any{"hint": "ensure"})
+	}
 	state, model := s.d.Engine.EngineStatus()
 	if state != EngineReady {
 		return Accepted{}, notLoaded(state)
