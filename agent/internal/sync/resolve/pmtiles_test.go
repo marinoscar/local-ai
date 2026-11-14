@@ -720,6 +720,8 @@ func TestCheckPMTilesHeader(t *testing.T) {
 		hdr(`"mvt"`, "-924900001", "70099999", "-770099999", "185900001"),
 		// degrees instead of E7
 		`{"tile_type":"mvt","min_lon":-92.5,"min_lat":7,"max_lon":-77,"max_lat":18.6}`,
+		// what pmtiles 1.31.2 really prints (issue #484)
+		`{"tile_compression":"gzip","tile_type":"mvt","minzoom":0,"maxzoom":15,"bounds":[-92.5,7,-77,18.6],"center":[-84.75,12.8,0]}`,
 	}
 	for _, h := range ok {
 		if err := checkPMTilesHeader([]byte(h), want); err != nil {
@@ -736,6 +738,9 @@ func TestCheckPMTilesHeader(t *testing.T) {
 		hdr(`"mvt"`, "-925000000", "70000000", "-770200000", "186000000"),
 		hdr(`"mvt"`, "-925000000", "70000000", "-770000000", "185800000"),
 		`{"tile_type":"mvt"}`,
+		// a bounds array that is not four numbers, or too small
+		`{"tile_type":"mvt","bounds":[-92.5,7,-77]}`,
+		`{"tile_type":"mvt","bounds":[-92.4,7,-77,18.6]}`,
 		`not json`,
 		``,
 	}
@@ -745,5 +750,79 @@ func TestCheckPMTilesHeader(t *testing.T) {
 		if !errors.As(err, &pe) || pe.DoctorCode() != doctor.SYN023 {
 			t.Errorf("%q: want LAI-SYN-023, got %v", h, err)
 		}
+	}
+}
+
+// Issue #484: the validator runs the tool as the service user too, after the extract handed the tree
+// back to root and closed .staging again. It must lend the tree for its checks and hand it back after.
+func TestPMTilesValidatorLendsTheStagedTreeToTheServiceUser(t *testing.T) {
+	p := newFakePlanet(t, "20261030")
+	pm := newPM(t, newPMEnv(t, "ok"), p)
+	vals := item.NewValidators()
+	if err := pm.RegisterValidator(vals); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pm.ResolveItem(context.Background(), pmCatalog(p.pattern()), plan.ItemPlan{}); err != nil {
+		t.Fatal(err)
+	}
+	target := item.Target{
+		Meta:      item.Meta{ItemID: "osm-central-america", Kind: "maps", SourceType: "pmtiles_extract"},
+		StagedDir: stagedMap(t), Dir: true,
+	}
+	root := t.TempDir()
+	staging := filepath.Join(root, ".staging")
+	tree := filepath.Join(staging, "osm-central-america", "20261030", "tree")
+	if err := os.MkdirAll(tree, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(target.StagedDir, "osm-central-america.pmtiles"), filepath.Join(tree, "osm-central-america.pmtiles")); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{staging, filepath.Join(staging, "osm-central-america"), filepath.Join(staging, "osm-central-america", "20261030")} {
+		if err := os.Chmod(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target.StagedDir = tree
+
+	var mu sync.Mutex
+	var chowns []string
+	pm.Credential = &execx.Credential{UID: 1234, GID: 5678}
+	pm.Euid, pm.Egid = func() int { return 0 }, func() int { return 0 }
+	pm.Chown = func(path string, uid, gid int) error {
+		mu.Lock()
+		defer mu.Unlock()
+		chowns = append(chowns, strings.TrimPrefix(path, root)+"="+strconv.Itoa(uid)+":"+strconv.Itoa(gid))
+		return nil
+	}
+	inner := pm.Env.runner()
+	var searchable []bool
+	pm.Env.Runner = pmRunnerFunc(func(ctx context.Context, c execx.Cmd) (execx.Result, error) {
+		if c.Credential == nil || *c.Credential != *pm.Credential {
+			t.Errorf("the check did not run as the service user: %+v", c.Credential)
+		}
+		st, _ := os.Stat(staging)
+		searchable = append(searchable, st.Mode().Perm()&0o001 != 0)
+		c.Credential = nil // the fake tool runs as this test; the credential was checked above
+		return inner.Run(ctx, c)
+	})
+
+	if err := vals.Run(context.Background(), target); err != nil {
+		t.Fatal(err)
+	}
+	if len(searchable) != 2 || !searchable[0] || !searchable[1] {
+		t.Fatalf(".staging searchable during verify and show: %v (want [true true])", searchable)
+	}
+	for _, d := range []string{staging, filepath.Join(staging, "osm-central-america"), filepath.Join(staging, "osm-central-america", "20261030")} {
+		if st, _ := os.Stat(d); st.Mode().Perm() != 0o700 {
+			t.Errorf("%s is %v after the check, want 0700 again", strings.TrimPrefix(d, root), st.Mode().Perm())
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(chowns) < 2 || chowns[0] != "/.staging/osm-central-america/20261030/tree=1234:5678" ||
+		!pmContains(chowns, "/.staging/osm-central-america/20261030/tree/osm-central-america.pmtiles=0:0") ||
+		chowns[len(chowns)-1] != "/.staging/osm-central-america/20261030/tree=0:0" {
+		t.Fatalf("the tree was not lent and handed back: %v", chowns)
 	}
 }

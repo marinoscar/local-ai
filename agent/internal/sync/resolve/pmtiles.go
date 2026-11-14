@@ -496,7 +496,8 @@ func (p *PMTiles) build(ctx context.Context, e pmtilesExpect, treeDir string) er
 	return fail(CodeFetch, last, "the map extract of %s failed %d times", e.id, pmtilesAttempts)
 }
 
-// lend gives the staged tree to the service user for the duration of the extract and returns the
+// lend gives the staged tree to the service user for the duration of the extract (and, separately, of
+// the validator's checks) and returns the
 // function that hands it back. The tool runs as that user and the staging folders are 0700 root, so the
 // tree is chowned to it and every folder from the tree up to .staging gets the search bit for others
 // (never read): the modes and owners are restored when the tool is done, and the layout check of the
@@ -635,6 +636,14 @@ func (p *PMTiles) validate(ctx context.Context, e pmtilesExpect, dir string) err
 	if err != nil {
 		return err
 	}
+	// The checks run as the service user like the extract, so they need the same loan of the staged tree:
+	// the extract handed it back to root and .staging is 0700 again (issue #484: without this, every
+	// extract failed verify with "permission denied" and was quarantined).
+	restore, err := p.lend(dir)
+	if err != nil {
+		return &PMTilesError{Msg: "cannot hand the staging folder to the service user for the check: " + Clip([]byte(err.Error()), 200)}
+	}
+	defer restore()
 	res, err := subproc.Run(ctx, p.Env.runner(), subproc.Spec{
 		Bin: bin, Args: []string{"verify", file}, Home: p.Env.SyncHome, Credential: p.Credential, Timeout: pmtilesVerifyTimeout, MaxOut: smallOut,
 	})
@@ -678,9 +687,15 @@ type pmtilesHeader struct {
 	MinLat   *float64        `json:"min_lat"`
 	MaxLon   *float64        `json:"max_lon"`
 	MaxLat   *float64        `json:"max_lat"`
+	// Bounds is what pmtiles 1.x prints (1.31.2, the kit's version): [west, south, east, north] in
+	// degrees (issue #484: only the forms above were read, so every real extract had "no bounding box").
+	Bounds []float64 `json:"bounds"`
 }
 
 func (h pmtilesHeader) bounds() (b [4]float64, ok bool) {
+	if len(h.Bounds) == 4 {
+		return [4]float64{h.Bounds[0], h.Bounds[1], h.Bounds[2], h.Bounds[3]}, true
+	}
 	pick := func(e7, deg *float64) (float64, bool) {
 		switch {
 		case e7 != nil:
