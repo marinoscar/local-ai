@@ -3,7 +3,8 @@ import { navigate, type Screen } from "../router";
 
 // Screens owned by later items (PORTAL-06 .. PORTAL-11) show their title until they land. Each of
 // them replaces its entry in App.tsx; the lock and unavailable handling in front of it stays.
-const TITLE: Record<Screen, Key> = {
+// Music has its own screen and words (screens/Music.tsx), so it never reaches the stub.
+const TITLE: Record<Exclude<Screen, "music">, Key> = {
   chat: "btn.chat",
   photo: "photo.title",
   talk: "talk.title",
@@ -16,7 +17,7 @@ const TITLE: Record<Screen, Key> = {
   help: "help.title",
 };
 
-export function Stub({ screen }: { screen: Screen }) {
+export function Stub({ screen }: { screen: Exclude<Screen, "music"> }) {
   return (
     <section className="screen" aria-labelledby="screen-title">
       <h1 id="screen-title" className="screen-title">

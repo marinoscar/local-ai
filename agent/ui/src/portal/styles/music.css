@@ -1,0 +1,109 @@
+/* The /music/ page (issue #512): the shared components' lai-* classes (packages/ui creative.css) in the Portal's
+   look. Classes only: the CSP has no 'unsafe-inline' (survival-portal.md section 4.11). */
+
+:is(.music, .workloads) .lai-studio,
+:is(.music, .workloads) .lai-library,
+:is(.music, .workloads) .lai-workloads {
+  --lai-gap: 16px;
+  --lai-border: var(--line);
+  --lai-muted: #3a3a3a;
+  --lai-primary: var(--primary);
+  --lai-danger: var(--bad);
+  --lai-danger-bg: var(--bad-bg);
+  --lai-info-bg: var(--info-bg);
+  --lai-radius: 10px;
+  margin: 0 0 var(--gap);
+}
+
+:is(.music, .workloads) .lai-studio-title,
+:is(.music, .workloads) .lai-library-title,
+:is(.music, .workloads) .lai-workloads-title {
+  font-size: 1.4rem;
+  margin: 8px 0 4px;
+}
+
+:is(.music, .workloads) .lai-btn {
+  font-weight: 700;
+  min-height: 48px;
+  padding: 8px 22px;
+  border-width: 3px;
+  background: var(--panel);
+  color: var(--fg);
+}
+
+:is(.music, .workloads) .lai-btn-small {
+  min-height: 40px;
+  padding: 4px 14px;
+}
+
+:is(.music, .workloads) .lai-btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+:is(.music, .workloads) .lai-btn-danger {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+:is(.music, .workloads) .lai-btn:focus-visible,
+:is(.music, .workloads) .lai-field :focus-visible,
+:is(.music, .workloads) .lai-more summary:focus-visible {
+  outline: 4px solid var(--focus);
+  outline-offset: 2px;
+}
+
+:is(.music, .workloads) .lai-field textarea,
+:is(.music, .workloads) .lai-field input[type="text"],
+:is(.music, .workloads) .lai-field input[type="number"],
+:is(.music, .workloads) .lai-field input[type="password"],
+:is(.music, .workloads) .lai-field select {
+  border: 2px solid var(--line);
+  background: var(--panel);
+  color: var(--fg);
+  min-height: 48px;
+}
+
+:is(.music, .workloads) .lai-field input[type="file"] {
+  font: inherit;
+  max-width: 100%;
+}
+
+:is(.music, .workloads) .lai-field input[type="range"] {
+  width: 100%;
+  max-width: 30rem;
+}
+
+:is(.music, .workloads) .lai-sample-mode {
+  border: 2px solid var(--line);
+}
+
+:is(.music, .workloads) .lai-radio input[type="radio"] {
+  width: 24px;
+  height: 24px;
+}
+
+:is(.music, .workloads) .lai-song {
+  border: 3px solid var(--line);
+  background: var(--panel);
+}
+
+:is(.music, .workloads) .lai-error {
+  border-left-width: 6px;
+}
+
+.music-ready {
+  font-weight: 700;
+  color: var(--ok);
+}
+
+/* Narrow windows (the 80-column worst case): one column, nothing wider than the screen. */
+@media (max-width: 40rem) {
+  .music .lai-field-row {
+    flex-direction: column;
+  }
+  .music .lai-actions .lai-btn {
+    flex: 1 1 100%;
+  }
+}

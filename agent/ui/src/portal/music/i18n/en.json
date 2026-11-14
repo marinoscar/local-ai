@@ -1,0 +1,20 @@
+{
+  "music.title": "Music",
+  "music.loading": "Asking the computer about music…",
+  "music.ready": "Music is ready. Write your song below.",
+  "music.notLoaded": "Music is not loaded.",
+  "music.notLoadedWhy": "Press Switch to Music. The computer stops what it is running now and loads music. It takes a few minutes.",
+  "music.notInstalled": "Music is not installed on this computer.",
+  "music.notInstalledWhy": "Songs are made by a music program that is not on this computer yet.",
+  "music.notInstalledFix": "Connect the AI-ARK drive and use \"Install what is missing\" on the Status screen, or ask the lab owner to install music.",
+  "music.starting": "Music is starting. This can take a few minutes. You can write your song meanwhile.",
+  "music.stopping": "Music is stopping. Wait a moment, then switch to Music again.",
+  "music.failed": "Music stopped working.",
+  "music.failedFix": "Press Switch to Music to start it again. If it fails twice, restart the computer.",
+  "music.survival": "Music does not run in survival mode.",
+  "music.survivalFix": "Survival mode keeps the emergency brain running. Leave survival mode first, then come back here.",
+  "music.signIn": "Music needs the Local AI app of this computer.",
+  "music.signInFix": "Open Local AI from this computer's menu, or sign in on the first page with a code from the lab owner.",
+  "music.statusFailed": "The computer did not answer about music.",
+  "music.open": "Open Music"
+}
