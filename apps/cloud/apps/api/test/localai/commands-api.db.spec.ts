@@ -198,7 +198,17 @@ describe('send, claim, result, read (the whole path)', () => {
 });
 
 describe('the permission matrix on real sessions', () => {
-  it.each(ALL)('%s: viewer 403, contributor by type, admin 201', async (short) => {
+  it('music.generate is refused on the generic route for everyone (400 feature_only_command); /api/localai/music/requests queues it', async () => {
+    const n = await enrolled();
+    const params = examples['localai.music.generate'].params;
+    for (const token of [tokens.viewer, tokens.contributor, tokens.admin]) {
+      const response = await api('POST', `/nodes/${n.nodeId}/commands`, token, { type: 'music.generate', params });
+      expect(token === tokens.viewer ? [403, 400] : [400]).toContain(response.statusCode);
+    }
+    expect(await prisma.localaiCommand.count({ where: { nodeId: n.rowId } })).toBe(0);
+  });
+
+  it.each(ALL.filter((short) => short !== 'music.generate'))('%s: viewer 403, contributor by type, admin 201', async (short) => {
     const n = await enrolled();
     const params = examples[`localai.${short}`].params;
     const send = (token: string) => api('POST', `/nodes/${n.nodeId}/commands`, token, { type: short, params });
