@@ -28,8 +28,8 @@ Mode is about **policy**, not about whether the internet actually exists. An `on
 | Music engine (`localai-music`) | on while a music model is loaded (the Music workload) | same | **off**: stopped first on entry, never started ([music.md](../specs/music.md) §4.6) |
 | Workload switch | allowed | allowed | refused unless forced at the machine (`LAI-LLM-053`); never unloads a survival model; music refused even when forced |
 | Piper TTS | available | available | available |
-| Local UI home page | Dashboard | Dashboard | **Survival Portal** (`/portal`) |
-| ai-desktop on launch | Dashboard | Dashboard | Portal full screen |
+| Local UI home page (`/` → `/portal`) | Home with the Manage row ([dashboard.md](../specs/dashboard.md) §4.1) | same | Home, survival look (**Survival Portal**) |
+| ai-desktop on launch | Home in the window | Home in the window | Portal full screen |
 | Admin PIN required for destructive ops | yes (desktop/UI), CLI requires root | same | same |
 | Power profile | `performance` (installer default) | unchanged | unchanged (laptop: also shows battery % prominently) |
 

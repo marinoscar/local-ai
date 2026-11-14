@@ -140,7 +140,8 @@ test("the admin PIN is asked inside the delete confirmation when the agent wants
   await expect(page.locator('[data-code="LAI-SEC-002"]')).toBeVisible();
   await page.getByLabel("Deleting needs the admin PIN. Type it here:").fill("1111");
   await page.getByRole("button", { name: "Yes, delete it" }).click();
-  await expect(page.locator('[data-code="LAI-SEC-003"]')).toContainText("That PIN is not right.");
+  // A wrong PIN shows the agent's LAI-SEC-003 (the shared PIN fake is fake-manage/pin.mjs).
+  await expect(page.locator('[data-code="LAI-SEC-003"]')).toBeVisible();
   await page.getByLabel("Deleting needs the admin PIN. Type it here:").fill("4821");
   await page.getByRole("button", { name: "Yes, delete it" }).click();
   await expect(page.getByRole("heading", { name: "Old song" })).toHaveCount(0);

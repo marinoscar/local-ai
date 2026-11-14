@@ -141,6 +141,8 @@ export type MenuAction =
   | 'mode:online'
   | 'mode:offline'
   | 'survival'
+  | 'leave-survival'
+  | 'help'
   | 'copy-key'
   | 'connection-info'
   | 'lab'
@@ -171,9 +173,11 @@ export interface MenuFeatures {
   autostart: boolean | null;
   /** DSK-08: a PIN prompt exists, so survival can be left from the tray. */
   pin: boolean;
+  /** Epic E10 (#495): Help, and Leave survival mode, open screens of the agent UI in the main window. */
+  help: boolean;
 }
 
-export const NO_FEATURES: MenuFeatures = { windows: false, copyKey: false, connectionInfo: false, lab: false, startAgent: false, autostart: null, pin: false };
+export const NO_FEATURES: MenuFeatures = { windows: false, copyKey: false, connectionInfo: false, lab: false, startAgent: false, autostart: null, pin: false, help: false };
 
 export interface MenuModel {
   colour: TrayColour;
@@ -201,6 +205,8 @@ export function buildTrayMenu(model: MenuModel, lang: Lang): MenuItemSpec[] {
       { type: 'action', action: 'window:maps', label: t(TRAY_TEXT.maps), enabled: up },
     );
   }
+  // dashboard.md 3.3: Help opens the guide in the main window (it is part of the agent's UI).
+  if (f.help) open.push({ type: 'action', action: 'help', label: t(TRAY_TEXT.help), enabled: up });
   groups.push(open);
 
   // ADR-0011: leaving survival needs no PIN from this app (an older agent may still ask; the controller then asks
@@ -211,8 +217,9 @@ export function buildTrayMenu(model: MenuModel, lang: Lang): MenuItemSpec[] {
     { type: 'radio', action: 'mode:online', label: t(TRAY_TEXT.online), checked: model.mode === 'online', enabled: canSwitch },
     { type: 'radio', action: 'mode:offline', label: t(TRAY_TEXT.offline), checked: model.mode === 'offline', enabled: canSwitch },
   ];
-  void inSurvival;
   groups.push([
+    // dashboard.md 3.3: in survival, "Leave survival mode…" opens the Mode screen, which asks Online or Offline.
+    ...(inSurvival && f.help ? [{ type: 'action', action: 'leave-survival', label: t(TRAY_TEXT.leaveSurvival), enabled: up } as const] : []),
     { type: 'submenu', label: t(TRAY_TEXT.mode), items: modeItems },
     // Always enabled, never asks for a PIN: anyone can switch to the offline setup in one click.
     { type: 'action', action: 'survival', label: t(TRAY_TEXT.survival), enabled: true },
@@ -466,6 +473,10 @@ export interface TrayActions {
   /** DSK-05: starts the agent; true when it was started. The result is the caller's to show. */
   startAgent?(): void | Promise<void>;
   autostart?: { get(): boolean; set(next: boolean): void | Promise<void> };
+  /** dashboard.md 3.3: shows the main window with the guide (`/portal/help`). */
+  openHelp?(): void | Promise<void>;
+  /** dashboard.md 3.3: shows the main window with the Mode screen (`/portal/manage/mode`). */
+  openManage?(): void | Promise<void>;
 }
 
 export interface TrayControllerDeps {
@@ -722,6 +733,7 @@ export class TrayController {
       startAgent: a.startAgent !== undefined,
       autostart: a.autostart ? a.autostart.get() : null,
       pin: this.#d.modes.canLeaveSurvival,
+      help: a.openHelp !== undefined && a.openManage !== undefined,
     };
   }
 
@@ -796,6 +808,10 @@ export class TrayController {
         if (confirmed) await this.#changeMode('survival');
         return;
       }
+      case 'help':
+        return void (await a.openHelp?.());
+      case 'leave-survival':
+        return void (await a.openManage?.());
       case 'copy-key':
         return void (await a.copyApiKey?.());
       case 'connection-info':

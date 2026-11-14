@@ -539,3 +539,27 @@ func TestConsecutiveRunsOfAPassingCheckNeverReportAGT099(t *testing.T) {
 		}
 	}
 }
+
+// A problem result carries the action of its code (doctor-codes.md section 1.7), so the Health
+// screen shows the fix button; a code without one has none, and what a check sets is replaced.
+func TestRunSetsTheActionOfTheCode(t *testing.T) {
+	r := newReg(t,
+		problemCheck("svc.kiwix", "SVC", true, Result{Code: SVC002}),
+		problemCheck("agt.config", "AGT", true, Result{Code: AGT001, Action: ActionEnsureRun}),
+	)
+	rep := mustRun(t, r, RunOptions{})
+	got := map[string]Action{}
+	for _, res := range rep.Results {
+		got[res.Code] = res.Action
+	}
+	if got[SVC002] != ActionRestartKiwix || got[AGT001] != "" {
+		t.Errorf("actions = %v, want %s for %s and none for %s", got, ActionRestartKiwix, SVC002, AGT001)
+	}
+	body, err := json.Marshal(rep.Results)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(body), `"action"`); n != 1 {
+		t.Errorf("%d action members in %s, want 1 (omitted when empty)", n, body)
+	}
+}

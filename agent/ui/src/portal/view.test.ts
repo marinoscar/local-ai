@@ -178,3 +178,34 @@ describe("StatusStore", () => {
     expect(h.opened).toEqual(["open"]);
   });
 });
+
+describe("viewFor: Manage screens (dashboard.md sections 3.1 and 5)", () => {
+  const screens = [
+    "manage/mode",
+    "manage/content",
+    "manage/models",
+    "manage/health",
+    "manage/system",
+  ] as const;
+  it("open for an operator session, in every mode", () => {
+    for (const mode of ["online", "offline", "survival"])
+      for (const s of screens)
+        expect(viewFor(s, status({ mode, session: "full" }))).toEqual({
+          kind: "screen",
+          screen: s,
+        });
+  });
+  it("say 'Open this in the Local AI app' for a Portal session, no session or no status yet", () => {
+    for (const s of screens) {
+      expect(viewFor(s, status({ session: "portal" }))).toEqual({ kind: "manage-locked", screen: s });
+      expect(viewFor(s, status({ session: "none" }))).toEqual({ kind: "manage-locked", screen: s });
+      expect(viewFor(s, null)).toEqual({ kind: "manage-locked", screen: s });
+    }
+  });
+  it("are real routes and Help needs nothing", () => {
+    expect(screenOf("/portal/manage/mode")).toBe("manage/mode");
+    expect(screenOf("/portal/manage/system/")).toBe("manage/system");
+    expect(screenOf("/portal/manage")).toBe("");
+    expect(viewFor("help", status({ session: "none" }))).toEqual({ kind: "screen", screen: "help" });
+  });
+});

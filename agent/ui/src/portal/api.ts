@@ -6,11 +6,20 @@ export class ApiError extends Error {
   readonly code: string;
   /** The one-sentence fix of the agent's error envelope, when it sent one. */
   readonly fix: string;
-  constructor(status: number, code: string, message: string, fix = "") {
+  /** The envelope's details (remaining_attempts, retry_after_s, pin_required …); {} when none. */
+  readonly details: Record<string, unknown>;
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    fix = "",
+    details: Record<string, unknown> = {},
+  ) {
     super(message);
     this.status = status;
     this.code = code;
     this.fix = fix;
+    this.details = details;
   }
 }
 
@@ -47,19 +56,26 @@ export async function apiFetch(
     let code = "";
     let message = res.statusText;
     let fix = "";
+    let details: Record<string, unknown> = {};
     try {
       const body = (await res.json()) as {
-        error?: { code?: string; message?: string; fix?: string };
+        error?: {
+          code?: string;
+          message?: string;
+          fix?: string;
+          details?: Record<string, unknown>;
+        };
         code?: string;
       };
       code = body.error?.code ?? body.code ?? "";
       message = body.error?.message ?? message;
       fix = body.error?.fix ?? "";
+      details = body.error?.details ?? {};
     } catch {
       // Not JSON: keep the status text.
     }
     if (res.status === 401 && code === CODE_SESSION_ENDED) endedHandler?.();
-    throw new ApiError(res.status, code, message, fix);
+    throw new ApiError(res.status, code, message, fix, details);
   }
   return res;
 }
@@ -72,4 +88,46 @@ export async function apiJSON<T>(path: string, init?: RequestInit): Promise<T> {
 /** startSurvival is the banner button: POST /api/v1/mode/survival (the browser adds Origin). */
 export async function startSurvival(): Promise<void> {
   await apiFetch("/api/v1/mode/survival", { method: "POST" });
+}
+
+/** The header that lifts an operator request to admin with a PIN grant (agent.md section 3.9 step 6). */
+export const PIN_GRANT_HEADER = "X-LocalAI-Pin-Grant";
+
+/**
+ * apiSend is a JSON call of a Manage button: method, path under /api/v1, an optional body and an
+ * optional PIN grant. It answers the parsed body, or null when the answer has none (204).
+ */
+export async function apiSend<T = unknown>(
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  path: string,
+  body?: unknown,
+  grant?: string,
+): Promise<T | null> {
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (grant) headers[PIN_GRANT_HEADER] = grant;
+  const res = await apiFetch(`/api/v1${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  return text === "" ? null : (JSON.parse(text) as T);
+}
+
+/** A failure in plain words for a screen: the code, the message and the one-sentence fix. */
+export interface Failure {
+  code: string;
+  message: string;
+  fix: string;
+}
+
+export function failureOf(e: unknown): Failure {
+  if (e instanceof ApiError)
+    return { code: e.code, message: e.message, fix: e.fix };
+  return {
+    code: "",
+    message: e instanceof Error ? e.message : String(e),
+    fix: "",
+  };
 }

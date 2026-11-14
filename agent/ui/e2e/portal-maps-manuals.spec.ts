@@ -34,11 +34,16 @@ test("with no manuals on disk the Manuals button opens the built-in help page", 
   await page.goto("/portal");
   await page.getByRole("button", { name: /Manuals/ }).click();
   await expect(page).toHaveURL(/\/portal\/help$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Emergency help");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Help");
+  // dashboard.md section 4.7: no terminal command outside the closed "For an expert" box.
+  await expect(page.getByRole("heading", { name: "In an emergency" })).toBeVisible();
+  await expect(page.getByText("aictl mode survival")).toBeHidden();
+  await expect(page.getByText("127.0.0.1:8888")).toHaveCount(0);
+  await page.getByText("For an expert").click();
   await expect(page.getByText("aictl mode survival")).toBeVisible();
   await expect(page.getByText("aictl ark import")).toBeVisible();
-  await expect(page.getByText("http://127.0.0.1:8888/library/")).toBeVisible();
-  await expect(page.getByText("LAI-SVC-001")).toBeVisible();
+  await expect(page.getByText("http://127.0.0.1:7070/library/", { exact: false })).toBeVisible();
+  await expect(page.getByText("LAI-SVC-001").first()).toBeVisible();
   await expect(page.locator(".help-emergency")).toHaveText("Emergency number: 911");
   await expect(page.getByText("If nothing works: restart the computer and wait 2 minutes.")).toBeVisible();
   await noSeriousViolations(page);
@@ -48,16 +53,17 @@ test("the help page is fully translated", async ({ page }) => {
   await setCaps(page, { manuals: { state: "unavailable" } });
   await page.goto("/portal/help");
   await page.getByRole("button", { name: "Español" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ayuda de emergencia");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ayuda");
   await expect(page.locator(".help-emergency")).toHaveText("Número de emergencias: 911");
   await expect(page.getByText("Si nada funciona: reinicie la computadora y espere 2 minutos.")).toBeVisible();
-  await expect(page.getByText("To start survival mode")).toHaveCount(0);
+  await expect(page.getByText("In an emergency")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "En una emergencia" })).toBeVisible();
   await noSeriousViolations(page);
 });
 
 test("the help page fetches nothing and works with the agent down", async ({ page }) => {
   await page.goto("/portal/help");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Emergency help");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Help");
   await page.request.get("/__down?on=1");
   const seen: string[] = [];
   page.on("request", (r) => seen.push(new URL(r.url()).pathname));
@@ -72,7 +78,7 @@ test("unavailable screens link to the help page", async ({ page }) => {
   await page.goto("/portal/maps");
   await expect(page.getByText("No offline map is installed. Plug in the ark drive.")).toBeVisible();
   await expect(page.getByText("Code: LAI-SVC-030")).toBeVisible();
-  await page.getByRole("button", { name: "Emergency help" }).click();
+  await page.getByRole("button", { name: "Help", exact: true }).last().click();
   await expect(page).toHaveURL(/\/portal\/help$/);
 });
 

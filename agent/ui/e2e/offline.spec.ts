@@ -50,10 +50,10 @@ test.beforeEach(async ({ page }) => {
 test("the guard really catches an outside request (the test is not blind)", async ({
   page,
 }) => {
-  await page.request.post("/__status", { data: { mode: "dashboard" } }); // "/" is then the plain page, not the redirect
   const attempted = await guard(page);
-  // A page without the Portal CSP: the request is not stopped by the browser, only by the guard.
-  await page.goto("/");
+  // A page without the Portal CSP (the fake's own JSON log): the request is not stopped by the
+  // browser, only by the guard.
+  await page.goto("/__seen");
   await page.evaluate(() =>
     fetch("http://203.0.113.9/x", { mode: "no-cors" }).catch(() => "blocked"),
   );

@@ -15,8 +15,28 @@ export const SCREENS = [
   "first-aid",
   "help",
   "music",
+  // Manage this computer (dashboard.md section 3.1): operator session only.
+  "manage/mode",
+  "manage/content",
+  "manage/models",
+  "manage/health",
+  "manage/system",
 ] as const;
 export type Screen = (typeof SCREENS)[number];
+
+/** The Manage screens, in the order of the Manage row (dashboard.md section 4.1). */
+export const MANAGE_SCREENS = [
+  "manage/mode",
+  "manage/content",
+  "manage/models",
+  "manage/health",
+  "manage/system",
+] as const;
+export type ManageScreen = (typeof MANAGE_SCREENS)[number];
+
+export function isManage(s: Screen | ""): s is ManageScreen {
+  return (MANAGE_SCREENS as readonly string[]).includes(s);
+}
 
 /** The music page's own address (agent.md section 3.11, issue #512): the agent serves the Portal there too. */
 export const MUSIC_PATH = "/music/";

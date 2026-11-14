@@ -17,6 +17,10 @@ import { Photo } from "./screens/Photo";
 import { Stub } from "./screens/Stub";
 import { Talk } from "./screens/Talk";
 import { Unavailable } from "./screens/Unavailable";
+import { ManageLocked } from "./manage/ManageFrame";
+import { manageBody } from "./manage/screens";
+import { isManage } from "./router";
+import "./styles/manage.css";
 import { useStatus, type PortalStatus } from "./status";
 import { viewFor } from "./view";
 
@@ -97,6 +101,9 @@ export function App() {
     case "unavailable":
       body = <Unavailable cap={view.cap} status={status as PortalStatus} />;
       break;
+    case "manage-locked":
+      body = <ManageLocked screen={view.screen} />;
+      break;
     default:
       body =
         view.screen === "chat" ? (
@@ -115,6 +122,8 @@ export function App() {
           <Brain status={status} />
         ) : view.screen === "music" ? (
           <Music status={status} />
+        ) : isManage(view.screen) && status ? (
+          manageBody(view.screen, status)
         ) : (
           (mapsManualsBody(view.screen, status) ?? <Stub screen={view.screen} />)
         );

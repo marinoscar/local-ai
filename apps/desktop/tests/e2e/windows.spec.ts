@@ -43,7 +43,7 @@ test.describe('the bridges', () => {
     const version = await run!.app.evaluate(({ app }) => app.getVersion());
     const host = await evaluateIn<string>(run!.app, agentPage, 'JSON.stringify({ keys: Object.keys(window.localaiDesktopHost), shell: typeof window.localaiDesktop, isDesktop: window.localaiDesktopHost.isDesktop, version: window.localaiDesktopHost.version, node: [typeof require, typeof process, typeof module, typeof Buffer] })');
     expect(JSON.parse(host)).toEqual({
-      keys: ['isDesktop', 'version', 'copyApiKey', 'openWindow', 'connectionInfo'],
+      keys: ['isDesktop', 'version', 'copyApiKey', 'openWindow', 'connectionInfo', 'runSystemAction'],
       shell: 'undefined',
       isDesktop: true,
       version,

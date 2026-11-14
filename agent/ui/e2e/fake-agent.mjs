@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { handleManage, resetManage } from "./fake-manage.mjs";
 import { handleMaps } from "./fake-maps.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -316,13 +317,24 @@ async function handleMusic(req, res, p) {
     music.songs = music.songs.filter((s) => s.id !== decodeURIComponent(m[1]));
     return ok(200, {}), true;
   }
-  if (p === "/api/v1/pin/verify" && req.method === "POST") {
-    const { pin } = JSON.parse((await readBody(req)) || "{}");
-    if (pin !== "4821") return fail(401, { code: "LAI-SEC-003", message: "That PIN is not right." }), true;
-    return ok(200, { grant: "pg_fake", expires_at: "2026-11-14T10:05:00Z" }), true;
-  }
+  // POST /api/v1/pin/verify is answered by the Manage fake (fake-manage/pin.mjs: the same PIN 4821 and grant).
   return false;
 }
+
+const manageCtx = {
+  getStatus: () => status,
+  setStatus: (next) => {
+    status = { ...status, ...next };
+  },
+  record: (entry) => seen.push(entry),
+  readBody,
+  json: (res, code, body) =>
+    send(res, code, JSON.stringify(body), { "Content-Type": "application/json" }),
+  emit: (type, data) => {
+    const frame = `event: ${type}\ndata: ${JSON.stringify({ type, data })}\n\n`;
+    for (const r of streams) r.write(frame);
+  },
+};
 
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
@@ -340,12 +352,10 @@ createServer(async (req, res) => {
       "Content-Security-Policy": CSP,
     });
   }
+  // Before the shared /__ controls: each Manage screen has its own (/__mode, /__pin, …).
+  if (p !== "/__reset" && (await handleManage(req, res, url, manageCtx))) return;
   if (p.startsWith("/__")) {
     if (p === "/__reset") {
-      // A stream left by an earlier test's page would make /__streams count it, so a test could emit before its
-      // own page listens: end them all (every spec resets before it opens its page).
-      for (const r of streams) r.end();
-      streams = [];
       status = defaultStatus();
       down = false;
       seen = [];
@@ -354,6 +364,10 @@ createServer(async (req, res) => {
       ensure = ensureView("needs_you", [piperStep("pending")]);
       ensureAnswer = 0;
       music = defaultMusic();
+      resetManage();
+      // Close the event streams of earlier pages, so "a stream is open" (/__streams) means this test's page.
+      for (const r of streams) r.end();
+      streams = [];
       return send(res, 200, "ok");
     }
     if (p === "/__ensure" && req.method === "POST") {
@@ -438,7 +452,9 @@ createServer(async (req, res) => {
     return send(res, 405, "no");
   }
   if (p === "/api/v1/mode/survival" && req.method === "POST") {
-    status = { ...status, mode: "survival", session: "portal" };
+    seen.push({ path: p, method: "POST" });
+    // The app's operator session stays; a browser gets the Portal session (survival-portal.md section 3.3).
+    status = { ...status, mode: "survival", session: status.session === "full" ? "full" : "portal" };
     return send(res, 200, "{}", { "Content-Type": "application/json" });
   }
   if (/^\/api\/v1\/models\/[^/]+\/load$/.test(p) && req.method === "POST") {
@@ -506,11 +522,8 @@ createServer(async (req, res) => {
       TYPES[extname(rel)] ?? "application/octet-stream",
     );
   }
-  if (p === "/") {
-    if (status.mode === "survival")
-      return send(res, 302, "", { Location: "/portal" });
-    return file(res, join(dist, "index.html"), TYPES[".html"]);
-  }
+  // Issue #497: "/" is the Portal's Home in every mode (agent/internal/api/spa.go).
+  if (p === "/") return send(res, 302, "", { Location: "/portal" });
   // kiwix-serve search: OpenSearch RSS, or its HTML page when format is not xml.
   if (p === "/library/search") {
     seen.push({

@@ -12,10 +12,14 @@ export interface Bilingual {
   es: string;
 }
 
-/** `auto` follows the operating system: any `es` locale (`es`, `es-CR`, `es_MX.UTF-8`) is Spanish, everything else English. */
-export function resolveLang(setting: LangSetting | string | undefined, osLocale: string | undefined): Lang {
-  if (setting === 'en' || setting === 'es') return setting;
-  return /^es([_-]|\.|$)/i.test((osLocale ?? '').trim()) ? 'es' : 'en';
+/**
+ * The app starts in English unless the person chose a language (dashboard.md 4.8, issue #501): `auto` (nothing chosen
+ * yet) is English whatever the operating system's locale; Spanish is one tap away and remembered as `es`. `osLocale` is
+ * kept for the callers and ignored.
+ */
+export function resolveLang(setting: LangSetting | string | undefined, osLocale?: string | undefined): Lang {
+  void osLocale;
+  return setting === 'es' ? 'es' : 'en';
 }
 
 export const pick = (text: Bilingual, lang: Lang): string => text[lang];
@@ -377,10 +381,8 @@ export const TRAY_TEXT = {
   online: { en: 'Online', es: 'En línea' },
   offline: { en: 'Offline', es: 'Sin conexión' },
   survival: { en: '⚠ Survival mode', es: '⚠ Modo supervivencia' },
-  leaveSurvival: {
-    en: 'Leave survival in the Survival Portal',
-    es: 'Para salir de supervivencia usa el Portal de Supervivencia',
-  },
+  leaveSurvival: { en: 'Leave survival mode…', es: 'Salir del modo supervivencia…' },
+  help: { en: 'Help', es: 'Ayuda' },
   copyKey: { en: 'Copy API key', es: 'Copiar la clave de la API' },
   connectionInfo: { en: 'Show connection info', es: 'Mostrar datos de conexión' },
   lab: { en: 'Lab (ai.marin.cr)', es: 'Laboratorio (ai.marin.cr)' },

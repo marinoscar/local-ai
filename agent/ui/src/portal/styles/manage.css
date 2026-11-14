@@ -1,0 +1,421 @@
+/* Manage this computer (dashboard.md). Classes only: the Portal CSP has no 'unsafe-inline'. */
+.manage-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.tab {
+  font: inherit;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 6px 16px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--fg);
+  cursor: pointer;
+}
+.tab-on {
+  background: var(--fg);
+  color: var(--panel);
+}
+.btn-danger {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #ffffff;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.field-label {
+  font-weight: 700;
+}
+.field-input {
+  font: inherit;
+  font-size: 1.4rem;
+  min-height: 52px;
+  max-width: 14rem;
+  padding: 4px 12px;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--fg);
+  letter-spacing: 0.3em;
+}
+.card {
+  border: 3px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 16px 20px;
+  margin: 0 0 16px;
+}
+.card-title {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+}
+.card-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+.muted {
+  color: #3d3d3d;
+}
+.expert {
+  margin-top: 12px;
+}
+.expert summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.expert code {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: #ececec;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+/* Home: the Manage row and the next-step line */
+.manage-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 20px 0 0;
+  padding-top: 12px;
+  border-top: 2px solid var(--line);
+}
+.manage-row-title {
+  margin: 0 8px 0 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.statusline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: auto;
+}
+.statusline-actions .btn {
+  min-height: 40px;
+  padding: 4px 16px;
+}
+.next-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 0;
+}
+/* Mode screen (#494) */
+.mode-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 16px;
+}
+.mode-card {
+  margin: 0;
+}
+.mode-on {
+  border-width: 5px;
+  border-color: var(--ok);
+}
+.mode-badge {
+  color: var(--ok);
+  font-size: 1rem;
+}
+.choice {
+  border: none;
+  margin: 12px 0;
+  padding: 0;
+}
+.choice-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  font-weight: 700;
+}
+.choice-row input {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+/* Help and the guide (#495) */
+.guide-h {
+  font-size: 1.35rem;
+  margin: 28px 0 10px;
+}
+.guide-can {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.guide-can li {
+  margin: 6px 0;
+}
+.guide-tasks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 12px;
+}
+.guide-task {
+  margin: 0;
+  padding: 10px 16px;
+}
+.guide-task-title {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 40px;
+  display: list-item;
+}
+.guide-task ol {
+  margin: 8px 0 4px;
+}
+.guide-task li {
+  margin: 6px 0;
+}
+.guide-expert div {
+  margin: 8px 0;
+}
+.guide-expert dd {
+  margin: 0;
+}
+
+/* ---- Offline content and drives (dashboard.md section 4.3, issue #496) ---- */
+.content-roots,
+.content-list,
+.content-drives,
+.content-active {
+}
+/* ---- AI models screen (#498, dashboard.md section 4.4) ---- */
+.model-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.content-root,
+.content-item {
+  display: flex;
+  gap: 8px;
+  padding: 6px 0;
+}
+.content-ok .mark {
+  color: var(--ok);
+}
+.content-warn .mark {
+  color: var(--warn);
+}
+.content-bad .mark {
+  color: var(--bad);
+}
+.content-item-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.content-group-title {
+  margin: 12px 0 4px;
+  font-size: 1.05rem;
+}
+.content-why {
+  margin: 8px 0 0;
+}
+.content-progress p,
+.content-last p,
+.content-drive p {
+  margin: 4px 0;
+}
+.content-active li {
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+.content-drive-name {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+}
+.content-blockers {
+  margin-top: 8px;
+}
+.content-prune-list {
+  max-height: 14rem;
+  overflow: auto;
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.model-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 6px 0;
+}
+.model-tag {
+  margin-left: 4px;
+}
+.model-actions {
+  margin-top: 10px;
+}
+.model-why {
+  margin: 6px 0 0;
+  font-style: italic;
+}
+.model-note {
+  margin-top: 10px;
+}
+.model-done {
+  font-weight: 700;
+  color: var(--ok);
+}
+.model-summary {
+  margin-bottom: 16px;
+}
+.model-group {
+  font-size: 1.3rem;
+  margin: 24px 0 10px;
+}
+.model-more {
+  margin: 8px 0 16px;
+}
+/* ---- end AI models screen ---- */
+/* ---- Health screen (#499, dashboard.md section 4.5) ---- */
+.health-working {
+  margin: 8px 0 12px;
+}
+.health-progress {
+  width: 100%;
+  max-width: 28rem;
+  height: 18px;
+  accent-color: var(--primary);
+}
+.health-ok {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--ok);
+}
+.health-bad {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--bad);
+}
+.health-h3 {
+  margin: 14px 0 6px;
+  font-size: 1.1rem;
+}
+.health-problem-title {
+  font-weight: 700;
+}
+.health-unit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.health-select {
+  font: inherit;
+  min-height: 48px;
+  padding: 4px 10px;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--fg);
+}
+.health-events {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 28rem;
+  overflow: auto;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+}
+.health-event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.health-event:last-child {
+  border-bottom: 0;
+}
+.health-event .mark {
+  font-weight: 700;
+  min-width: 1.2em;
+  text-align: center;
+}
+.health-event-error {
+  background: var(--bad-bg);
+}
+.health-event-warning {
+  background: var(--warn-bg);
+}
+.health-event-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.health-event-text {
+  flex: 1 1 16rem;
+  overflow-wrap: anywhere;
+}
+.health-drill-outcome {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+.health-drill-pass .health-drill-outcome,
+.health-drill-manual_pass .health-drill-outcome {
+  color: var(--ok);
+}
+.health-drill-fail .health-drill-outcome,
+.health-drill-manual_fail .health-drill-outcome {
+  color: var(--bad);
+}
+.health-drill-warn .health-drill-outcome {
+  color: var(--warn);
+}
+
+/* ---- System screen (issue #500, dashboard.md 4.6) ---- */
+.sys-item {
+  margin: 0 0 18px;
+}
+.sys-item-title {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+}
+.sys-versions {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.sys-version {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.sys-version dt {
+  font-weight: 700;
+  min-width: 10rem;
+}
+.sys-version dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.sys-services {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sys-service {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.sys-service-name {
+  font-weight: 700;
+  min-width: 9rem;
+}

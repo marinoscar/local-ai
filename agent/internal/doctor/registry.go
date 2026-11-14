@@ -55,6 +55,9 @@ type Result struct {
 	// situation, and then they are not translated.
 	Title string `json:"title,omitempty"`
 	Fix   string `json:"fix,omitempty"`
+	// Action is the button of the fix (doctor-codes.md section 1.7), "" when the code has none. The
+	// runner sets it from the table; what a check sets is ignored.
+	Action Action `json:"action,omitempty"`
 	// Details are the facts that make the result useful (battery_percent, problems[], ...). Never a
 	// secret.
 	Details map[string]any `json:"details,omitempty"`

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import en from "./en.json";
 import es from "./es.json";
 import { resolveLang, translate } from "./i18n";
+import { MANAGE_FILES } from "./manage";
 
 const placeholders = (s: string) =>
   [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
@@ -43,6 +44,52 @@ describe("translation files", () => {
   });
 });
 
+describe("Manage copy (dashboard.md section 9)", () => {
+  const spec = readFileSync(
+    resolve(__dirname, "../../../../../docs/specs/dashboard.md"),
+    "utf8",
+  );
+  const section = spec.slice(spec.indexOf("## 9. Copy"), spec.indexOf("## 10."));
+  const unescape = (c: string) => c.replace(/\\\|/g, "|");
+
+  it("each file pair has the same keys, placeholders and no empty value", () => {
+    for (const [name, e, s] of MANAGE_FILES) {
+      expect(Object.keys(s).sort(), name).toEqual(Object.keys(e).sort());
+      for (const k of Object.keys(e)) {
+        expect(placeholders(s[k]), k).toEqual(placeholders(e[k]));
+        expect(e[k].trim(), k).not.toBe("");
+        expect(s[k].trim(), k).not.toBe("");
+      }
+    }
+  });
+
+  it("no key is defined twice (across the files and the Portal's own table)", () => {
+    const seen = new Set(Object.keys(en));
+    for (const [name, e] of MANAGE_FILES)
+      for (const k of Object.keys(e)) {
+        expect(seen.has(k), `${name}: ${k}`).toBe(false);
+        seen.add(k);
+      }
+  });
+
+  it("are exactly the tables of the spec, file by file", () => {
+    for (const [name, e, s] of MANAGE_FILES) {
+      const start = section.indexOf(`<!-- copy:${name} -->`);
+      expect(start, `dashboard.md section 9 has no <!-- copy:${name} --> table`).toBeGreaterThan(-1);
+      const rest = section.slice(start);
+      const end = rest.indexOf("<!-- /copy -->");
+      const rows = [
+        ...rest.slice(0, end).matchAll(/^\| `([^`]+)` \| (.*) \| (.*) \|$/gm),
+      ];
+      expect(rows.map((r) => r[1]).sort(), name).toEqual(Object.keys(e).sort());
+      for (const [, key, en1, es1] of rows) {
+        expect(e[key], key).toBe(unescape(en1));
+        expect(s[key], key).toBe(unescape(es1));
+      }
+    }
+  });
+});
+
 describe("translate", () => {
   it("substitutes placeholders", () => {
     expect(translate("en", "status.brain", { name: "Qwen" })).toBe(
@@ -59,7 +106,7 @@ describe("translate", () => {
 });
 
 describe("resolveLang", () => {
-  it("prefers the stored choice, then the agent, then the browser, then English", () => {
+  it("prefers the stored choice, then the agent, then English; never the browser (#501)", () => {
     expect(
       resolveLang({ stored: "es", status: "en", navigator: "en-US" }),
     ).toBe("es");
@@ -68,7 +115,7 @@ describe("resolveLang", () => {
     ).toBe("es");
     expect(
       resolveLang({ stored: "xx", status: null, navigator: "es-MX" }),
-    ).toBe("es");
+    ).toBe("en");
     expect(resolveLang({ navigator: "fr-FR" })).toBe("en");
     expect(resolveLang({})).toBe("en");
   });

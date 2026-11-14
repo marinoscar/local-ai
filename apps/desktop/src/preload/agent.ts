@@ -1,5 +1,6 @@
 // Minimal preload bridge for agent pages: window.localaiDesktopHost (docs/specs/desktop.md section 3.5).
-// Exactly five members: `isDesktop`, `version`, `copyApiKey`, `openWindow`, `connectionInfo`. Nothing else, ever: the
+// Exactly six members: `isDesktop`, `version`, `copyApiKey`, `openWindow`, `connectionInfo`, `runSystemAction` (issue
+// #500: the System screen's privileged buttons; the page names an action, the main process picks the argv). Nothing else: the
 // agent UI is served by another program, so it gets the smallest surface that lets it adapt. The main process answers
 // only frames of http://127.0.0.1:7070 (src/main/ipc.ts). The channel names are repeated here (a sandboxed preload
 // cannot load a shared chunk); tests/unit/preload.test.ts proves they match CHANNELS.
@@ -13,6 +14,7 @@ const C = {
   openWindow: 'localai:host:open-window',
   connectionInfo: 'localai:host:connection-info',
   version: 'localai:host:version',
+  runSystemAction: 'localai:host:run-system-action',
 } as const;
 
 export interface HostIpcLike {
@@ -31,6 +33,7 @@ export function createHostBridge(ipc: HostIpcLike): LocalaiDesktopHost {
       ipc.send(C.openWindow, which);
     },
     connectionInfo: () => ipc.invoke(C.connectionInfo) as ReturnType<LocalaiDesktopHost['connectionInfo']>,
+    runSystemAction: (name) => ipc.invoke(C.runSystemAction, name) as ReturnType<LocalaiDesktopHost['runSystemAction']>,
   };
 }
 

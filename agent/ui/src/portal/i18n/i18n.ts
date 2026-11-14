@@ -1,17 +1,21 @@
 import { useSyncExternalStore } from "react";
 import en from "./en.json";
 import es from "./es.json";
+import { MANAGE_EN, MANAGE_ES } from "./manage";
 
 // Translation helper of the Portal (survival-portal.md sections 4.3 and 4.9). Every user-visible
 // string is a key of en.json / es.json; a lint rule forbids JSX text literals.
 
 export type Lang = "en" | "es";
-export type Key = keyof typeof en;
+export type Key = keyof typeof en | keyof typeof MANAGE_EN;
 export type Vars = Record<string, string | number>;
 
 export const LANG_KEY = "lai.portal.lang";
 
-const tables: Record<Lang, Record<string, string>> = { en, es };
+const tables: Record<Lang, Record<string, string>> = {
+  en: { ...en, ...MANAGE_EN },
+  es: { ...es, ...MANAGE_ES },
+};
 
 export function isLang(v: unknown): v is Lang {
   return v === "en" || v === "es";
@@ -22,19 +26,18 @@ export interface LangSources {
   stored?: string | null;
   /** status.language: the agent applied portal.language / the profile. */
   status?: string | null;
-  /** navigator.language, e.g. "es-MX". */
+  /** navigator.language, e.g. "es-MX". Ignored since issue #501; kept for callers. */
   navigator?: string | null;
 }
 
 /**
- * resolveLang is the initial language, in order: the stored choice, the language the agent reports,
- * the browser language, then English.
+ * resolveLang is the initial language, in order: the stored choice, the language the agent reports
+ * (the node's portal.language or profile setting), then English. The browser's language is not used:
+ * the app starts in English unless someone chose (dashboard.md section 4.8, issue #501).
  */
 export function resolveLang(src: LangSources): Lang {
   if (isLang(src.stored)) return src.stored;
   if (isLang(src.status)) return src.status;
-  const nav = (src.navigator ?? "").toLowerCase().split("-")[0];
-  if (isLang(nav)) return nav;
   return "en";
 }
 

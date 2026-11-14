@@ -190,8 +190,8 @@ Design target: **1366×768** with no scrolling on the home screen at 100 % text 
 ```
 - Buttons: 300×170 px, 4 columns × 2 rows, 24 px gaps. Number keys `1`–`8` open them; `F` focuses the first-aid row; `Esc` always returns home.
 - The status line is one sentence built from `capabilities` (§4.2): green dot "Ready", amber "Ready, with problems — see Status", red "Not ready — see Status". Colour rule: **red** if `chat` or `library` is `unavailable`; else **amber** if any capability is not `ready`; else **green**.
-- **Not in survival mode** (Portal opened from the Dashboard, or `kiosk: true`): a wide banner replaces the status line: "Survival mode is off. [ Start survival mode ]" (button calls `POST /api/v1/mode/survival`). Buttons that need a session (Chat, Photo, Talk, Switch brain) show a small lock and, when pressed without a full session, the dialog "To use this, start Survival mode or log in. [ Start survival mode ] [ Log in ]".
-- Locks and explanations are decided per route, so a deep link behaves like a button: a session-only screen (`/portal/chat`, `photo`, `talk`, `brain`) with `session: none` shows Home with the lock dialog (a third button, **Cancel**, and `Esc` return Home); an `unavailable` capability opens the explanation screen. Library and Maps are never locked. The status line is shown only in survival mode; its tick row is Library, Maps and Talk.
+- **Not in survival mode** (the Portal's Home is the Dashboard in every mode, [dashboard.md](dashboard.md) §4.1): the header names the mode ("Local AI · Online"), the status line stays, and an information banner under it says "Survival mode is off. [ Start survival mode ]" (button calls `POST /api/v1/mode/survival`). An operator session also sees the Manage row; a status that is not green adds, on Home only, the one next thing to do. Buttons that need a session (Chat, Photo, Talk, Switch brain) show a small lock and, when pressed without a full session, the dialog "To use this, start Survival mode or log in. [ Start survival mode ] [ Log in ]".
+- Locks and explanations are decided per route, so a deep link behaves like a button: a session-only screen (`/portal/chat`, `photo`, `talk`, `brain`) with `session: none` shows Home with the lock dialog (a third button, **Cancel**, and `Esc` return Home); an `unavailable` capability opens the explanation screen. Library and Maps are never locked. The status line is shown in every mode ([dashboard.md](dashboard.md) §4.1); its tick row is Library, Maps and Talk, and it ends with **Help** (`H`).
 - The battery indicator turns amber at ≤ 20 % and red with a full-width banner at ≤ 10 % on battery ("Battery very low. Plug in now or the computer will turn off.").
 
 #### 4.1.2 Chat (button 1)
@@ -355,7 +355,7 @@ Under the button a small line gives the typed command (`fix.orType`, "Or type in
 If the agent's API stops responding while the Portal is open, the SPA shows a full-width banner "Lost contact with the AI service. Trying again …" with one next step that works with the agent down, "If it stays, restart the computer; the printed survival card has the steps." (`banner.lostContactFix`) and the code `LAI-SVC-116`, and retries every 5 s. Its text is the Portal's own, because the agent cannot be asked. Library and Maps links still open (they fail separately if the agent is fully down). The survival runbook explains the direct Kiwix fallback at `http://127.0.0.1:8888/library/`.
 
 ### 4.3 Language
-- `portal.language: auto` resolves: `profile.survival.portal_language` (if `en`/`es`) → the desktop user's locale reported by ai-desktop (`LANG`) → the browser's `navigator.language` → `en`.
+- The first language is the person's stored choice, else `portal.language` / `profile.survival.portal_language` (if `en`/`es`), else **English**. Neither the browser's `navigator.language` nor the OS locale is used: the app starts in English unless someone chose ([dashboard.md](dashboard.md) §4.8, issue #501). The map viewer follows the same rule.
 - The toggle on the home screen switches instantly and is stored in `localStorage`.
 - The chosen language is sent on every API request as `X-LocalAI-UI-Language` (used by TTS fallback and for `title`/`fix` strings).
 - All copy is in `agent/ui/src/portal/i18n/{en,es}.json`. A CI test fails if a key exists in one file and not the other, or if any JSX text literal is not a translation key.
@@ -432,7 +432,7 @@ Photo system prompt:
 The prompt language follows the detected transcript language (Talk) or the UI language (Photo).
 
 ### 4.8 Built-in emergency page
-If `/docs/` is missing, the Manuals button opens `/portal/help`, embedded in the SPA (so it exists even with no content at all). It contains, in both languages: how to start survival mode, how to plug in and import from the AI-ARK drive, how to reach Kiwix directly, how to read a doctor code, the emergency number, and "If nothing works: restart the computer and wait 2 minutes." The text is part of the i18n files (`help.*` keys, §4.9). The page fetches nothing, so it works with no content roots and with the agent API down. The Manuals button opens it directly when `capabilities.manuals.state == "unavailable"`, and every unavailable-capability screen links to it.
+If `/docs/` is missing, the Manuals button opens `/portal/help`, embedded in the SPA (so it exists even with no content at all). It is the Help screen and guide of [dashboard.md](dashboard.md) §4.7, in both languages: what to do in an emergency, what each button does, the common tasks step by step with the exact button names (start and leave survival mode, copy from and eject the AI-ARK drive, check health, …), how to read a doctor code, the emergency number, and "If nothing works: restart the computer and wait 2 minutes." Typed commands and the direct library address appear only in a closed **For an expert** box. The text is part of the i18n files (`help.*` keys, §4.9, and `guide.*` keys, [dashboard.md](dashboard.md) §9.7). The page fetches nothing, so it works with no content roots and with the agent API down. The Manuals button opens it directly when `capabilities.manuals.state == "unavailable"`, and every unavailable-capability screen links to it.
 
 ### 4.9 Copy (all user-visible strings)
 
@@ -595,10 +595,7 @@ Keys are in `agent/ui/src/portal/i18n/`. Values below are the source of truth fo
 | `brain.speed.slow` | Slow | Lento |
 | `unavailable.title` | This isn't available right now | Esto no está disponible ahora |
 | `unavailable.manual` | Open the manual page | Abrir la página del manual |
-| `help.title` | Emergency help | Ayuda de emergencia |
-| `help.survival` | To start survival mode, press **Start survival mode** on the home screen, or open a terminal and type `aictl mode survival`. | Para iniciar el modo supervivencia, presione **Iniciar modo supervivencia** en la pantalla de inicio, o abra una terminal y escriba `aictl mode survival`. |
-| `help.drive` | Plug in the AI-ARK drive, then press **Import from drive** in the app, or type `aictl ark import`. | Conecte el disco AI-ARK y presione **Importar desde el disco** en la aplicación, o escriba `aictl ark import`. |
-| `help.library` | If the library button doesn't work, open `http://127.0.0.1:8888/library/` in the browser. | Si el botón de la biblioteca no funciona, abra `http://127.0.0.1:8888/library/` en el navegador. |
+| `help.title` | Help | Ayuda |
 | `help.codes` | A code like `LAI-SVC-001` comes with a one-sentence fix. Do what it says. The manual *Troubleshooting* has more. | Un código como `LAI-SVC-001` viene con una solución de una frase. Haga lo que dice. El manual *Solución de problemas* tiene más. |
 | `help.emergency` | Emergency number: {n} | Número de emergencias: {n} |
 | `help.lastResort` | If nothing works: restart the computer and wait 2 minutes. | Si nada funciona: reinicie la computadora y espere 2 minutos. |

@@ -15,6 +15,11 @@ const TITLE: Record<Exclude<Screen, "music">, Key> = {
   brain: "brain.title",
   "first-aid": "firstaid.title",
   help: "help.title",
+  "manage/mode": "manage.mode",
+  "manage/content": "manage.content",
+  "manage/models": "manage.models",
+  "manage/health": "manage.health",
+  "manage/system": "manage.system",
 };
 
 export function Stub({ screen }: { screen: Exclude<Screen, "music"> }) {

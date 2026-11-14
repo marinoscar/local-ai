@@ -56,6 +56,10 @@ import {
 import { type WindowManager, createElectronWindowFactory, createWindowManager, wireNavigationHooks } from './windows';
 import type { CloudLinkState, TopBarNotice } from '../shared/types';
 
+/** The guide and the Manage screens of the agent UI (dashboard.md 3.1, 3.3): the ⋮ menu and the tray open them. */
+const HELP_PATH = '/portal/help';
+const MANAGE_PATH = '/portal/manage/mode';
+
 export const MODULE = 'index' as const;
 
 /** Unpackaged builds only: the Vite dev server that electron-vite sets. A packaged app never reads it. */
@@ -425,6 +429,8 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     const template = buildMenuTemplate(
       { lang, linked: settings.cloud.linked, autostart: settings.autostart, checkForUpdates: settings.updates.checkForUpdates, updateLines: describeUpdateStatus(updates.status, lang) },
       {
+        help: () => void host.showAgentUi(HELP_PATH),
+        manage: () => void host.showAgentUi(MANAGE_PATH),
         connectionInfo: showConnectionInfo,
         ensure: showEnsure,
         connect: () => {
@@ -487,7 +493,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
         const outcome = await modes.setMode(target);
         return outcome.ok ? { ok: true } : { ok: false, code: outcome.code };
       } }),
-      ...createHostHandlers({ version, openChild: open, keys }),
+      ...createHostHandlers({ version, openChild: open, keys, systemActions, lang: () => lang }),
     },
     { policy, log },
   );
@@ -527,6 +533,14 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
           if (notificationPort.supported()) notificationPort.show(message, control.showMain);
         },
         showConnectionInfo,
+        openHelp: () => {
+          control.showMain();
+          void host.showAgentUi(HELP_PATH);
+        },
+        openManage: () => {
+          control.showMain();
+          void host.showAgentUi(MANAGE_PATH);
+        },
         autostart: { get: () => autostart.enabled, set: async (next) => void (await autostart.set(next)) },
         startAgent: async () => {
           const result = await handleErrorAction({ action: 'start-agent', code: 'LAI-DSK-004' }, errorActions);
