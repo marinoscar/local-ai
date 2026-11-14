@@ -1307,7 +1307,7 @@ export interface components {
             details?: Record<string, never>;
         };
         /**
-         * @description The button of a fix (doctor-codes.md section 1.7): a closed set. Present on an alert or a capability only when its code has one; not in the state pushed to the cloud.
+         * @description The button of a fix (doctor-codes.md section 1.7): a closed set. Present on an alert, a capability or a doctor result only when its code has one; not in the state pushed to the cloud.
          * @enum {string}
          */
         DoctorAction: "ark.import" | "ensure.run" | "service.restart:kiwix" | "service.restart:whisper" | "portal.brain";
@@ -2517,6 +2517,7 @@ export interface components {
                 severity: components["schemas"]["Severity"];
                 title: string;
                 fix: string;
+                action?: components["schemas"]["DoctorAction"];
                 details?: Record<string, never>;
             }[];
             passed: string[];
