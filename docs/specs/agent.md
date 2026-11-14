@@ -207,6 +207,11 @@ profile_overrides:                  # catalog.md §4 "Node overrides"
   remove_content: []
   budget_bytes: null                # null = use profile storage.budget_bytes
 
+workloads:                          # optional; catalog.md §4 "Workloads". Same name as a profile workload = replace it; new name = add
+  music:
+    label: {en: "Music", es: "Música"}
+    models: [acestep-v15-turbo]     # example id; the real one lands with #511 (music.md §3.5)
+
 catalog:
   channel: stable                   # stable | catalog-<CATALOG_VERSION> (pin) ; catalog.md §1
   base_url: https://raw.githubusercontent.com/marinoscar/local-ai   # used when not enrolled
@@ -305,6 +310,7 @@ ports:                              # canonical values (overview §3.4). Changin
   llama: 8080
   kiwix: 8888
   whisper: 8081
+  music: 8082                       # localai-music (music.md §3.3)
 
 logging:
   level: info                       # debug | info | warn | error
@@ -326,13 +332,15 @@ logging:
 | `llama.load_timeout_seconds` | integer 30..3600 | `300` |
 | `tailscale.serve_pattern` | `A` \| `B` \| `none` | `none` |
 | `cloud.url` | `https://` URL without path, or `http://127.0.0.1:<port>` with `dev_insecure: true`. A non-https URL is reported as a `details.problems[]` entry with `code: "LAI-CLD-062"` inside the `LAI-AGT-002` report (§8.5) | `https://ai.marin.cr` |
-| `cloud.allow` | each entry ∈ the 15 known job names (§4.8.6); unknown entries are a validation error | all 15 |
+| `cloud.allow` | each entry ∈ the 17 known job names (§4.8.6); unknown entries are a validation error | all 17 |
 | `cloud.concurrency` | 1..4 | 1 |
 | `cloud.poll.heartbeat_seconds` | integer 5..60 (the cloud handshake overrides it, clamped to the same range) | `15` |
 | `cloud.poll.claim_seconds` | integer 1..30 (same override rule) | `3` |
 | `cloud.poll.state_seconds` | integer 15..600 (same override rule) | `60` |
 | `ui.language` | `auto` \| `en` \| `es` | `auto` |
 | `ports.*` | 1024..65535, all distinct | canonical values |
+| `ports.music` | as `ports.*`; written into `/etc/localai/music.env` as `MUSIC_PORT` on the next music load | `8082` |
+| `workloads` | map; name `^[a-z][a-z0-9-]{1,31}$`; each `{label: {en, es}, models: [ids]}` with both labels non-empty and at least one model; an unknown model id is a non-blocking `LAI-CAT-020` problem (that workload is left out, the file loads), checked only when a catalog with models is loaded | `{}` (the profile's workloads only) |
 
 **Block ownership.** `sync` belongs to [ark-sync.md](ark-sync.md) §3.3; `kiwix`, `whisper`, `piper`, `maps` to [companion-services.md](companion-services.md) §3.1; `portal` to [survival-portal.md](survival-portal.md) §3.4. Their validation rules live there and their errors are reported as `LAI-AGT-002` with the block path; this spec only parses them into typed structs owned by those packages. The sync **schedule** is not a `node.yaml` key: it is the `OnCalendar=` of `localai-sync.timer` ([ark-sync.md](ark-sync.md) §3.7, nightly 03:15 with a 45 min random delay); an operator changes it with a systemd drop-in.
 
@@ -348,7 +356,7 @@ Unknown top-level keys are a **warning** (logged, `LAI-AGT-002` severity `warnin
 - The safe defaults are `cloud.url: ""` (no cloud, nothing allowed), `tailscale.manage: false`, canonical ports, `node.id: "unconfigured"`.
 
 **Hot reload.** The agent polls `node.yaml` every 10 s by mtime and size; a changed mtime with an identical sha256 is a touch and is ignored. On a change it parses and validates. An invalid edited file is ignored: the last valid config stays in effect and `LAI-AGT-002` is reported until a valid edit clears it. A file deleted while the agent runs also keeps the last config and reports `LAI-AGT-001`. Fields are classified as follows:
-- **Live** (applied the moment the file is accepted): `profile*`, `cloud.allow`, `cloud.poll`, `cloud.concurrency`, `sync.*`, `ui.*`, `portal.*`, `logging.level`, `tailscale.*` (re-reconcile), `llama.legacy_aliases` (regenerate the INI), `llama.load_timeout_seconds`, `catalog.*`, `update.*`, `node.display_name`, `node.public_host`, and the companion blocks `kiwix`, `whisper`, `piper`, `maps` (their packages decide what a change means).
+- **Live** (applied the moment the file is accepted): `profile*`, `cloud.allow`, `cloud.poll`, `cloud.concurrency`, `sync.*`, `ui.*`, `portal.*`, `logging.level`, `tailscale.*` (re-reconcile), `workloads` (re-resolved; the active workload is not reloaded), `llama.legacy_aliases` (regenerate the INI), `llama.load_timeout_seconds`, `catalog.*`, `update.*`, `node.display_name`, `node.public_host`, and the companion blocks `kiwix`, `whisper`, `piper`, `maps` (their packages decide what a change means).
 - **Agent restart** (`LAI-AGT-016`, target `agent`): `node.id`, `ports.*`, `cloud.url`. The effective config keeps the value the agent started with, so no component sees these change under it; the file's value is reported as pending until the file matches the running agent again. This also holds when the agent started on the safe defaults and the file is fixed later: `node.id` and `cloud.url` wait for a restart.
 - **Llama restart** (`LAI-AGT-016`, details target `llama`, **never automatic**): `llama.extra_env`, `llama.build`, `llama.commit`, `llama.backend`, `llama.cuda_arch`. The new value is in the effective config at once so the router can regenerate the unit and drop-in; it reaches llama only when the operator runs `aictl restart llama`.
 - **`llama.mode`** (`router` \| `single`) is the one llama setting the agent applies itself, because the orchestrator dispatches on it at once and a unit of the other mode would leave every load, unload and status call talking to the wrong kind of server: the change is reported as a llama restart (`LAI-AGT-016`, target `llama`, info), and the orchestrator switches in the background under `modelOpsMu`: regenerate the unit, `daemon-reload`, restart llama and restore the default ([llama-router.md](llama-router.md) §4.8.1). The same switch runs at agent start when `node.yaml` was edited while the agent was down.
@@ -574,6 +582,13 @@ Legend for **Auth**: `none` = anonymous allowed; `op` = operator; `portal` = the
 | POST | /drill/manual | admin | 5 s | 3.8.28 |
 | GET | /docs/index | op | 5 s | 3.8.29 |
 | GET ; PUT | /profile | op ; admin | 5 s / 30 s | 3.8.30 |
+| GET | /workloads | op | 5 s | 3.8.34 |
+| POST | /workloads/{name}/activate | op | 5 s, or with `wait: true` load_timeout × (n+2) + 60 s | 3.8.34 |
+| GET | /music/status | op | 5 s | 3.8.35 |
+| POST | /music/generate | op | 60 s (upload; the song runs after the answer) | 3.8.35 |
+| GET ; POST | /music/ops/{op_id} ; /music/ops/{op_id}/cancel | op | 5 s | 3.8.35 |
+| GET | /music/songs ; /music/songs/{id}/audio | op | 5 s / none (stream, Range) | 3.8.36 |
+| DELETE | /music/songs/{id} | admin | 10 s | 3.8.36 |
 
 #### 3.8.1 `GET /health`
 No auth. Never touches upstreams; answers from memory. Used by systemd checks, the desktop splash, the installer and self-update.
@@ -698,14 +713,14 @@ Catalog models (all engines) merged with local state. Query `?loadable=1` filter
 `?loadable` is `1`/`true` (keep `loadable: true`) or `0`/`false`/absent (keep all); `?engine` is `llama`, `whisper` or `piper`; any other value is `400 LAI-AGT-020` with `details.field`. The two filters combine. The merge reads cached values only (the router watcher's last poll, the hardware sample, the roots' manifests), so the route never waits for an upstream service. In `GET /models/{id}`, `files[].path` is the file's absolute path on the first root that holds a complete copy (`""` when the model is on no mounted root), and `preset` is the model's section of `models.ini` as the generator renders it (including `load-on-startup = true` for the default), `""` when the router has no section for it: not a llama model, no complete copy, or it does not fit this node. A model that would load if the router answered still has its section.
 
 #### 3.8.8 `POST /models/{id}/load`
-Body `{"wait": true, "unload_others": true}` (both optional, defaults shown). Orchestration: [llama-router.md](llama-router.md) §4.4.
+Body `{"wait": true, "unload_others": true}` (both optional, defaults shown). Orchestration: [llama-router.md](llama-router.md) §4.4. Any engine with an adapter is loaded through this route, `engine: acestep` included (llama-router.md §4.15): eviction may unload models of any engine, and `unloaded` lists them whatever their engine.
 ```json
 200 {"id": "qwen3.5-9b-q4km", "status": "loaded", "already_loaded": false, "load_ms": 7100,
      "unloaded": ["small-vlm-q4km"], "op_id": "op_7k2m9q4r8t1c"}
 202 {"id": "qwen3.5-9b-q4km", "status": "loading", "op_id": "op_7k2m9q4r8t1c"}          (wait: false)
 ```
 Both answers may add `warning: {code, message}` (`LAI-HW-005`, `LAI-HW-006`: the load went ahead although other programs hold much of the memory). The planner decides this at step 4, before the answer, so the `202` of `wait: false` carries the same `warning` as the `200` would; a client that does not wait (`aictl load --no-wait`, the Portal, the cloud) can show it, and `aictl` prints it with its fix. The field is absent when the load fits. *As built (#232):* `modelLoadingJSON` in `internal/api/models_ops.go` and `ModelLoading` in `api/openapi.yaml`. A Portal session's body is ignored and forced to `wait: false` ([survival-portal.md](survival-portal.md) §3.3). The handler is `internal/api/models_ops.go` over the orchestrator of [llama-router.md](llama-router.md) §4.4.1.
-Errors: `404 LAI-AGT-021`; `409 LAI-AGT-022` (another model operation running; `details.op_id` of the running one); `422 LAI-CAT-005` (does not fit, backend unsupported, or engine is not llama); `422 LAI-LLM-008` (files missing/unverified); `409 LAI-LLM-011` (`unload_others: false` and no room); `502 LAI-LLM-004`; `500 LAI-LLM-009` / `504 LAI-LLM-010` (failed/timed out, previous restored, `details.rolled_back: true`); `500 LAI-LLM-012` (rollback also failed).
+Errors: `404 LAI-AGT-021`; `409 LAI-AGT-022` (another model operation running; `details.op_id` of the running one); `422 LAI-CAT-005` (does not fit, or backend unsupported); `422 LAI-LLM-043` (the model's engine is not installed on this node; [llama-router.md](llama-router.md) §4.15); `500 LAI-LLM-040` / `504 LAI-LLM-041` (an `acestep` engine did not start or did not become ready; previous models restored); `422 LAI-LLM-008` (files missing/unverified); `409 LAI-LLM-011` (`unload_others: false` and no room); `502 LAI-LLM-004`; `500 LAI-LLM-009` / `504 LAI-LLM-010` (failed/timed out, previous restored, `details.rolled_back: true`); `500 LAI-LLM-012` (rollback also failed).
 
 #### 3.8.9 `POST /models/{id}/unload`
 Body `{}`. → `200 {"id": "…", "status": "unloaded", "already_unloaded": false, "op_id": "…"}`. Unloading the default model is allowed (the default stays recorded). In `survival` mode, unloading the last loaded LLM answers `409 LAI-AGT-023` unless the body has `"force": true`. A model that would not stop makes the agent restart llama (llama-router.md §4.5): the answer is still `200`, with `"restarted": true` and `"restored": [...]`. In `single` mode ([llama-router.md](llama-router.md) §4.8.1) unloading the served model is `409 LAI-AGT-023` (`details.mode: "single"`, `details.requires: "force"`) unless the body has `"force": true`, which stops the unit.
@@ -812,7 +827,7 @@ AGENT-14 details ([§3.8.31](#3831-internalstatusapi-and-internalportal-seams-ag
 - **`POST /services/kiwix/restart`, `POST /services/whisper/restart`** (auth `op`, or `portal`): the same restart, as two literal routes (more specific than the pattern, so `net/http` picks them), so that a Portal session can reach the **Restart the library** and **Restart speech** buttons ([survival-portal.md](survival-portal.md) §3.3) while `/services/{name}/{action}` stays `op` only: a Portal session can never restart `llama` or stop anything. The body is ignored. The answer, the errors, the audit line and the `op_id` are those above. A Portal session may restart 6 times per hour, both routes together (`429 LAI-SVC-117`).
 
 #### 3.8.23 `GET /logs`
-Query: `unit` ∈ `agent|llama|kiwix|whisper|sync|drill` (required; the short name, never a unit file name), `lines` 1..2000 (default 200), `since` (RFC 3339, optional; a `+` in an offset must be written `%2B`). Auth `op`; registered by `api.RegisterLogs`. Implementation: `journalctl -u <unit> -n <lines> [--since <t>] -o json --no-pager` through `execx` with a 5 s timeout and 4 MiB output cap (§4.3.5); each `MESSAGE` passes the scrubber (§4.11) **after** it is decoded, never on the raw line. →
+Query: `unit` ∈ `agent|llama|kiwix|whisper|music|sync|drill` (required; `music` is `localai-music.service`; the short name, never a unit file name), `lines` 1..2000 (default 200), `since` (RFC 3339, optional; a `+` in an offset must be written `%2B`). Auth `op`; registered by `api.RegisterLogs`. Implementation: `journalctl -u <unit> -n <lines> [--since <t>] -o json --no-pager` through `execx` with a 5 s timeout and 4 MiB output cap (§4.3.5); each `MESSAGE` passes the scrubber (§4.11) **after** it is decoded, never on the raw line. →
 ```json
 200 {"unit": "localai-llama.service", "lines": [{"at": "2026-11-02T08:00:12Z", "priority": 6, "message": "llama_server: model loaded"}], "truncated": false}
 ```
@@ -945,6 +960,46 @@ It reads the disk and the kit's manifests only (nothing is hashed, nothing chang
 
 **In the cloud snapshot.** The state snapshot carries an `ensure` block ([cloud-app.md](cloud-app.md) §3.6: `state`, `auto`, the sentence in English, `progress`, the `kind` and `step` of the next action, and the `id` and `status` of at most 16 parts; no path and no secret), built by `app.ensureSnapshot` over `View`. It is sent **only when the cloud's handshake lists `ensure.v1`** (an older cloud's strict schema would refuse the key); an older agent sends none and a newer cloud still accepts its snapshots. The cloud's "Install what's missing" button is the command `ensure.run` (§4.8.6), which calls the same start as `POST /ensure` with the safe default (`app.ensureJobs`).
 
+#### 3.8.34 `GET /workloads`, `POST /workloads/{name}/activate`
+A **workload** is a named set of models (catalog.md §4 "Workloads"; [ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md)). The behaviour (the diff, the rollback, survival) is [llama-router.md](llama-router.md) §4.16; this section is the HTTP contract.
+
+`GET /workloads` → the profile's workloads merged with `node.yaml` `workloads:` (a node entry replaces a profile entry of the same name), in profile order then node order:
+```json
+200 {"workloads": [
+      {"name": "coding", "label": {"en": "Coding", "es": "Programación"}, "models": ["qwen3.5-9b-q4km"],
+       "active": true, "fits": true, "missing": []},
+      {"name": "music", "label": {"en": "Music", "es": "Música"}, "models": ["acestep-v15-turbo"],
+       "active": false, "fits": true, "missing": []}],
+     "active": "coding"}
+```
+- `active` (per entry) is true when exactly that set is loaded (order ignored; survival models loaded beside it do not count against it). The top-level `active` is the name of the workload that was last activated **and** is still exactly loaded, else `null`.
+- `fits` is the static fit of the whole set together on this node: the one GPU budget of llama-router.md §4.15 with no other model kept, and `models_max` for the llama models. `missing` lists the ids that have no verified copy on any mounted root, or whose engine is not installed (`LAI-LLM-043`).
+- A workload with an unknown id is not listed (`LAI-CAT-020` is raised as an alert instead).
+
+`POST /workloads/{name}/activate`, body `{"wait": false, "force": false}` (both optional; strict decoding, an unknown key is `400 LAI-AGT-020`):
+```json
+202 {"op_id": "op_7k2m9q4r8t1c"}                                               (wait: false)
+200 {"op_id": "op_…", "active": "music", "loaded": ["acestep-v15-turbo"], "unloaded": ["qwen3.5-9b-q4km"]}   (wait: true)
+```
+- Progress is published on `/events` as `workload.progress` `{op_id, name, phase: unloading|loading, model, done, total}` and the end as `workload.done` `{op_id, name, result: ok|failed|rolled_back, code?, active}` (§3.10).
+- Errors: `404 LAI-LLM-050` (unknown workload); `409 LAI-AGT-022` (another model operation holds `modelOpsMu`; `details.op_id`); `409 LAI-LLM-053` (the node is in survival mode and `force` is false); `422 LAI-LLM-051` (the set does not fit this node; `details.models`); with `wait: true` also `500 LAI-LLM-052` (activation failed; the previous set was restored, `details.restored`, `details.cause` the code of the failed load) and `500 LAI-LLM-012` (nothing could be restored).
+- Audit `workload.activate` (`target.name`, `target.force`; `result` with the code). The cloud command `workload.activate` (§4.8.6) calls it with `wait: true`.
+- **In the cloud snapshot.** The state snapshot carries a `workloads` block (`active` and, per workload, `name`, `label`, `models`, `fits`, `missing`; [cloud-app.md](cloud-app.md) §3.6 `WorkloadsBlockV1`) **only when the cloud's handshake lists `workloads.v1`**, exactly as the `ensure` block (§3.8.33). The cloud's workload buttons are built from it.
+
+#### 3.8.35 Music: status, generate, operations
+The music engine and the song store are specified in [music.md](music.md) (authoritative: limits, queue, store, retention, failure codes). Routes are registered by `api.RegisterMusic` over `internal/music`. Logs and audit lines never carry lyrics, tags or sample bytes, only sizes and ids.
+
+- `GET /music/status` → `200 {"installed": true, "loaded_model": "acestep-v15-turbo", "engine_state": "ready", "queue": {"running": 0, "queued": 0, "max": 4}}`. `engine_state` ∈ `stopped`, `starting`, `ready`, `stopping`, `failed`; `installed` is false when the runtime is missing (`LAI-SVC-150`).
+- `POST /music/generate`, `multipart/form-data` (fields and limits in [music.md](music.md) §3.6: `lyrics`, `tags`, `duration_s`, `language`, `seed`, `variations`, optional `sample` with `sample_mode` and `strength`) → `202 {"op_id": "op_…", "song_ids": ["…"]}` (one id per variation, reserved at once). Errors: `409 LAI-SVC-151` (no music model is loaded; `details.hint: "workload:music"`), `429 LAI-SVC-153` (queue full), `400 LAI-SVC-154` or `413 LAI-SVC-154` (an input or the sample was rejected; `details.field`), `507 LAI-SVC-155` (not enough disk), `400 LAI-AGT-020` (a malformed form), `409 LAI-SVC-150` (runtime not installed). Audit `music.generate` (sizes, ids and `sample: true|false` only).
+- `GET /music/ops/{op_id}` → `200 {"state": "queued|running|done|failed|cancelled", "progress": 0.42, "song_ids": ["…"], "error": null}`; `error` is `{code, message}` (`LAI-SVC-152`, `LAI-SVC-155`, `LAI-SVC-158`, ...). Unknown id: `404 LAI-AGT-021`. Operations are kept 24 h after they end.
+- `POST /music/ops/{op_id}/cancel` → `200 {"state": "cancelled"}` (also when it had already ended: the state it ended in). Audit `music.cancel`.
+- Events (§3.10): `music.progress` and `music.done`, both `{op_id, state, progress, song_ids}`; `music.done` adds `code?` on a failure.
+
+#### 3.8.36 Music: songs
+- `GET /music/songs?limit=50&cursor=` (newest first; `limit` 1..200, default 50) → `200 {"songs": [{"id", "created_at", "title", "tags", "language", "duration_s", "model_id", "seed", "mime", "size_bytes", "origin": "local|cloud"}], "next_cursor": null}`. `title` is the first non-empty lyric line that is not a section tag (`[verse]`), else the tags, cut at 80 characters. The list is read from each song's `meta.json` ([music.md](music.md) §4.5); lyrics themselves are never in the list.
+- `GET /music/songs/{id}/audio` → the audio file with its `Content-Type`, `Accept-Ranges: bytes` and `Range` support (`http.ServeContent`); `?download=1` adds `Content-Disposition: attachment`. Unknown id: `404 LAI-AGT-021`.
+- `DELETE /music/songs/{id}` (**admin**, as `DELETE /models/{id}`, §3.8.12): a person confirms it in the UI and the desktop asks for the PIN. → `200 {"id": "…", "deleted": true, "bytes": 11534380}`; a song still being written is `409 LAI-AGT-022`; a repeated delete is `200` with `deleted: false`. Audit `music.song.delete`. Deleting a local song never deletes a copy the cloud holds.
+
 ### 3.9 Authentication and request checks
 
 #### 3.9.1 Middleware order (every request, TCP and socket)
@@ -1056,6 +1111,10 @@ data: {"id":1042,"type":"model.loaded","at":"2026-11-02T15:04:05Z","node":"ai-n3
 | `drill.started` | `{run_id, trigger, quick}` | drill ([drill.md](drill.md) §4.5) |
 | `drill.check_done` | `{run_id, id, result: pass\|warn\|fail\|skip, code?}` | drill |
 | `drill.done` | `{run_id, overall, survival_ready, trigger?, notice?: {en, es}}` (`notice` only for a scheduled run that completed: the desktop notification text, [drill.md](drill.md) §4.5) | drill |
+| `workload.progress` | `{op_id, name, phase: unloading\|loading, model, done, total}` ([llama-router.md](llama-router.md) §4.16) | router |
+| `workload.done` | `{op_id, name, result: ok\|failed\|rolled_back, code?, active}` | router |
+| `music.progress` | `{op_id, state, progress, song_ids}` (at most once per second per operation; [music.md](music.md) §4.4) | music |
+| `music.done` | `{op_id, state, progress, song_ids, code?}` | music |
 | `resync`, `shutdown` | see above | bus |
 
 #### 3.10.1 `internal/events` and the handler (AGENT-08)
@@ -1077,6 +1136,7 @@ data: {"id":1042,"type":"model.loaded","at":"2026-11-02T15:04:05Z","node":"ai-n3
 | `/maps/search`, `/maps/nearest` | none | in-memory place index | [companion-services.md](companion-services.md) §4.4.4 |
 | `GET` / `PUT` / `DELETE /maps/whereami` | none (`PUT`/`DELETE` need a same-origin `Origin`) | GPS / manual position | [companion-services.md](companion-services.md) §4.4.5 |
 | `/docs/` | none | files under `<root>/docs/` | §3.11.3 |
+| `/music/` | none (data needs session) | embedded `ui/dist` (the Music page of the SPA) | The page calls `/api/v1/music/*` and `/api/v1/workloads` with the session; audio plays from `/api/v1/music/songs/{id}/audio`. The engine port (8082) is **never** proxied ([music.md](music.md) §6) |
 
 All proxies: `httputil.ReverseProxy` with a `Rewrite` (not a `Director`: `Rewrite` strips the client's forwarding headers before the mount's code runs) that pins scheme/host to the loopback target, strips hop-by-hop headers, `X-Forwarded-*` and the client's credentials (`Authorization`, `X-Api-Key`, `Cookie`; §3.11.4), and flushes immediately (`FlushInterval: -1`, needed for streaming tokens). Timeouts, forwarded headers, body limit and the upstream-down status are **per-mount options**; a mount uses the defaults (600 s response timeout, no `X-Forwarded-*` added, 1 MiB body, upstream down → `502`) unless its spec says otherwise:
 
@@ -1216,6 +1276,7 @@ Each transition is an ordered list of **named, idempotent steps**. Each step fun
 | `sync_cancel` | offline, survival | Cancel running sync gracefully; `.part` files kept | 30 s | warn, continue |
 | `prober_stop` | offline, survival | Stop connectivity prober; set `connectivity: not_checked` | 1 s | — |
 | `tailscale_off` | offline, survival | Remove **our** serve listeners (§4.7.3) | 20 s | if `tailscaled` is not running, nothing is exposed: ok. Otherwise warn `LAI-NET-004`, continue, and retry every 60 s in the background until success while the mode is offline/survival |
+| `engines_stop` | survival | Stop every non-survival engine before the survival models load: stop `localai-music` and mark any `acestep` model unloaded (cancels running songs, `LAI-SVC-158`), under `modelOpsMu` with the 60 s wait of the survival loader ([llama-router.md](llama-router.md) §4.15.4) | 60 s | a stop that fails or times out is warned `LAI-LLM-042` and the step continues; it never fails survival |
 | `survival_models` | survival | Load profile `survival.models` in order, as many as `models_max` allows; slot 1 = first that loads; each with load timeout 300 s; a failure falls back to the next (`LAI-LLM-020`); none loads → `LAI-LLM-021` (critical) | 300 s × n | warn, continue |
 | `survival_services` | survival | `start` kiwix and whisper (and any in `survival.require_services`) | 60 s | warn `LAI-SVC-*`, continue |
 | `tailscale_on` | online | Apply the configured pattern (§4.7.2) | 30 s | `LAI-NET-003` (not logged in) / `LAI-NET-004`; continue |
@@ -1227,7 +1288,7 @@ Each transition is an ordered list of **named, idempotent steps**. Each step fun
 
 Step lists:
 - → `offline`: `link_stop, sync_cancel, prober_stop, tailscale_off, persist, emit`
-- → `survival`: `link_stop, sync_cancel, prober_stop, tailscale_off, survival_models, survival_services, persist, emit`
+- → `survival`: `link_stop, sync_cancel, prober_stop, tailscale_off, engines_stop, survival_models, survival_services, persist, emit`
 - → `online`: `tailscale_on, link_start, prober_start, persist, emit, sync_catchup`
 
 Survival entry never fails as a whole: every step error becomes a warning in `mode_transition.warnings` and in the `mode.changed` event, and the Portal shows them.
@@ -1281,13 +1342,14 @@ type Manager interface {
     Subscribe(ctx context.Context, units []string) (<-chan UnitState, error)
 }
 ```
-**Allowlist:** `localai-llama.service`, `localai-kiwix.service`, `localai-whisper.service`, `localai-sync.service`, `localai-sync.timer`, `localai-drill.service`, `localai-drill.timer`, `localai-agent.service` (restart only, used by self-update), `localai-agent-rollback.timer`/`.service` (stop only), `llama-qwen.service` (migration only), `tailscaled.service` (State only). Any other unit name → programming error (panic in tests, `LAI-AGT-099` in production).
+**Allowlist:** `localai-llama.service`, `localai-kiwix.service`, `localai-whisper.service`, `localai-music.service`, `localai-sync.service`, `localai-sync.timer`, `localai-drill.service`, `localai-drill.timer`, `localai-agent.service` (restart only, used by self-update), `localai-agent-rollback.timer`/`.service` (stop only), `llama-qwen.service` (migration only), `tailscaled.service` (State only). Any other unit name → programming error (panic in tests, `LAI-AGT-099` in production).
 
 The allowlist is **per unit and per verb**, enforced in one wrapper (`services.NewGuard`) that every implementation sits behind, so the D-Bus and systemctl paths cannot differ:
 
 | Unit | Verbs allowed |
 |---|---|
 | `localai-llama.service`, `localai-kiwix.service`, `localai-whisper.service`, `localai-sync.service`, `localai-sync.timer`, `localai-drill.service`, `localai-drill.timer` | `State`, `Subscribe`, `Start`, `Stop`, `Restart`, `Enable`, `Disable` |
+| `localai-music.service` | `State`, `Subscribe`, `Start`, `Stop`, `Restart` (**never** `Enable`: it is not started at boot; only the music engine adapter starts and stops it, [music.md](music.md) §4.2) |
 | `localai-agent.service` | `Restart` only (so not even `State`) |
 | `localai-agent-rollback.timer`, `localai-agent-rollback.service` | `Stop` only |
 | `llama-qwen.service` | `State`, `Start`, `Stop`, `Enable`, `Disable`, `Mask`, `Unmask` (the migration and its rollback, [llama-router.md](llama-router.md) §4.9; `enable --now` is `Enable` then `Start`) |
@@ -1649,6 +1711,8 @@ loop while state ∈ {linked, backoff(heartbeat only)} and mode == online:
 | `logs.tail` | `{unit, lines ≤ 500}` | `GET /logs` | result `lines` is an array of strings (`"<rfc3339> <message>"`), scrubbed |
 | `catalog.refresh` | `{}` | `POST /catalog/refresh` (fetches `GET …/localai/catalog`) | `accepted: false` + `rejected_code` (`LAI-CAT-002`) when lint fails |
 | `ensure.run` | `{}` | `POST /ensure` with the safe default (the automatic steps from the kit, no confirmation, no dry run: the same as the Portal's button; [§3.8.33](#3833-get-post-and-delete-ensure-adr-0010)). Returns at once; progress arrives in the snapshot's `ensure` block | result `{started, state, pending_steps}`; `started: false` when a pass was already running or nothing was missing. The engine's refusals end the command with their code (`LAI-SYN-005` a sync, verify or import run holds the slot, `LAI-AGT-022` a mode change, `LAI-AGT-024` the sync stack is not up). The cloud cannot confirm compiling or restarting a running service: the params are exactly `{}` |
+| `workload.activate` | `{name, force?}` | `POST /workloads/{name}/activate` with `wait: true` (§3.8.34) | result `{active}`; the errors of §3.8.34 (the failure text leads with their code) |
+| `music.generate` | `{request_id, lyrics, tags, duration_s, language, seed?, variations, sample?, sample_mode?, strength?, results}` | download the sample through `netx` and check its sha256 (`LAI-SVC-156`), run `POST /music/generate` locally, wait, PUT each song to its `results[i].put_url` (`LAI-SVC-157`), keep the local copy with `origin: cloud` ([music.md](music.md) §4.7) | result `{songs: [{index, sha256, size_bytes, mime, duration_s}]}` |
 | `agent.update` | `{version}` | self-update (§4.10) | result `{from_version, to_version, status}` with `status` ∈ `updated` \| `rolled_back` \| `already_current` ([cloud-app.md](cloud-app.md) §3.7); settled **after** the new binary passes its health check (`updated`), or by the restored old binary (`rolled_back`); in offline/survival the job fails with `LAI-AGT-023`. The decoder is AGENT-18, the executor and settle-after-health AGENT-19 (§10) |
 
 The cloud cannot request `survival`, `online`, PIN, token, enroll/unenroll, profile changes, content deletes or arbitrary commands: those types do not exist.
@@ -1686,7 +1750,7 @@ Per loop (register, handshake, heartbeat, claim, state push), independent. Full-
 #### 4.8.10 The command plane in code (AGENT-18)
 `cloud.NewClaimer(ClaimerDeps)` builds the claim loop; it is the link's `Deps.Claim` (`Start`, idempotent `Stop`, `Probe`) and `Claimer.Inflight` is the link's `Deps.Inflight`. The link and the claimer need each other, so the wiring (AGENT-20) creates the claimer, passes it to `cloud.New`, then calls `Claimer.Bind(link)`; a loop without a link does nothing. The handlers are `jobs.Handlers(jobs.Deps)` of `internal/cloud/jobs` (one strict decoder and one executor per job name, behind `cloud.Handler`), passed to `cloud.NewRegistry`. Nothing registers at init time and `app.go` is untouched until AGENT-20.
 
-- **What a node can run is the intersection of three sets:** the 14 names of `config.CloudJobNames()`, `cloud.allow`, and the handlers the registry holds. A job type whose dependency the wiring leaves out (`jobs.Deps` field `nil`) is not in the registry, so it is refused with `LAI-CLD-057` exactly like a type missing from `cloud.allow`, and the claim never asks for it. `agent.update` is always registered (see below).
+- **What a node can run is the intersection of three sets:** the 17 names of `config.CloudJobNames()`, `cloud.allow`, and the handlers the registry holds. A job type whose dependency the wiring leaves out (`jobs.Deps` field `nil`) is not in the registry, so it is refused with `LAI-CLD-057` exactly like a type missing from `cloud.allow`, and the claim never asks for it. `agent.update` is always registered (see below).
 - **Loop.** One claim per pass: the localai plane runs **one** command at a time whatever `cloud.concurrency` says (the cloud hands a node one running command there, [cloud-app.md](cloud-app.md) §4.4), the EAB plane up to `cloud.concurrency` and claims `limit = free slots`. Not online, no session or nothing allowed that the build can run: the loop waits 5 s; link `disabled`, `unenrolled`, `revoked` or `registering`: it waits for a wake-up (30 s fallback), and while `disabled` the heartbeat's `Probe` makes one claim without a long poll. Every claim outcome goes through `Link.ClaimResult` and the counters; a failed claim waits `Backoff` (§4.8.7, `Retry-After` honoured); a success resets it. Every pass waits on a timer or on the network, so the loop never spins. A cancelled long poll (`Stop`) is not a failure.
 - **Assignments are untrusted.** An id that does not match `^[A-Za-z0-9._:-]{1,128}$` is dropped (nothing could be settled for it), a second delivery of an id already in flight is ignored, more assignments than free slots are refused with `LAI-CLD-058` without running, and a `renewIntervalMs` outside 5 to 60 s is clamped.
 - **Decoding** (`cloud.DecodeParams`, then the type's own checks): the params must be an object of at most 64 KiB (`null` or none counts as `{}`); a key that is not a field is `unknown field` (compared exactly, not case-insensitively); a `null` value and a value of the wrong type are rejected; ids, roots, units and services are matched against the patterns of [cloud-app.md](cloud-app.md) §3.7 and the closed tables (`services.LogUnit`, the three service names). The failure text is `LAI-CLD-058: <path>: <problem>` with the path cut to 64 printable characters; nothing from the cloud is echoed raw. `model.delete` is decoded with `confirm == model_id` enforced by the agent. No decoder exists for survival, online, PIN, token, enroll, profile, content delete or any command.
