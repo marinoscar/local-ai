@@ -1236,6 +1236,239 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/music/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Music runtime, engine and queue
+         * @description Owned by music.md. `installed` is the music runtime (`/opt/localai/acestep/current`); `engine_state` and
+         *     `loaded_model` come from the acestep engine; `queue` counts the songs of this agent (`max` is
+         *     `MUSIC_MAX_QUEUE`, the songs that may wait behind the running one). agent.md section 3.8.
+         *
+         */
+        get: operations["getMusicStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/music/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make a song from lyrics and an optional sample
+         * @description Owned by music.md. The upload is `multipart/form-data` (limit 21 MiB). Text fields: `lyrics` (at most
+         *     8 KiB, `[verse]`/`[chorus]` tags allowed), `tags` (at most 512 bytes), `duration_s` (10 to 240, default
+         *     60), `language` (default `en`), `seed` (optional, 0 to 2147483647; the agent draws one when it is absent
+         *     and records it), `variations` (1 to 4, default 1).
+         *     An optional `sample` file (WAV, MP3, FLAC or Ogg by content, at most 20 MiB and 60 s) with
+         *     `sample_mode` (`sounds_like` default, or `same_song`) and `strength` (0 to 1; default 0.5 for
+         *     `sounds_like`, 1.0 for `same_song`). Lyrics or tags must be given. Unknown fields are refused. At most
+         *     `MUSIC_MAX_QUEUE` (4) operations may be queued or running. Audit `music.generate` (sizes and ids only).
+         *
+         *     Answers at once with the operation and the ids its songs will have; progress arrives on `/events` as
+         *     `music.progress` and `music.done`, and on `GET /music/ops/{op_id}`. Lyrics and sample bytes are never
+         *     logged. agent.md section 3.8.
+         *
+         */
+        post: operations["generateMusic"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/music/ops/{op_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The op_ id POST /music/generate returned. */
+                op_id: components["parameters"]["MusicOpId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The state of a song operation
+         * @description `error` is set for a failed operation (LAI-SVC-152 the engine failed or stopped, LAI-SVC-155 no disk
+         *     space, LAI-AGT-024 the agent stopped) and a cancelled one (LAI-SVC-158). `song_ids` are the songs saved
+         *     when `done`, the planned ids while it runs and empty otherwise. Finished operations are remembered
+         *     until the agent restarts (the last 128). agent.md section 3.8.
+         *
+         */
+        get: operations["getMusicOp"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/music/ops/{op_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The op_ id POST /music/generate returned. */
+                op_id: components["parameters"]["MusicOpId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a song operation
+         * @description Cancels a queued or running operation; it ends `cancelled` with LAI-SVC-158 and leaves no files.
+         *     Cancelling a finished operation changes nothing and answers its state. The body is `{}`. Audit
+         *     `music.cancel`. agent.md section 3.8.
+         *
+         */
+        post: operations["cancelMusicOp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/music/songs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The songs on this node, newest first
+         * @description Query `limit` (1 to 200, default 50) and `cursor` (the `next_cursor` of the previous page). `title` is
+         *     the first lyric line that is not a section tag, else the tags. agent.md section 3.8.
+         *
+         */
+        get: operations["listSongs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/music/songs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A song id, sng_ plus 12 base32 characters. */
+                id: components["parameters"]["SongId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a song
+         * @description Destructive: needs admin (the PIN), like `DELETE /models/{id}`. Removes the song's directory (audio and
+         *     meta.json) and answers the bytes freed. A repeated delete answers `deleted: false`. Audit
+         *     `music.song.delete`. agent.md section 3.8.
+         *
+         */
+        delete: operations["deleteSong"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/music/songs/{id}/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A song id, sng_ plus 12 base32 characters. */
+                id: components["parameters"]["SongId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The audio of a song
+         * @description The file as stored (`audio/wav` today). `Range` requests are answered `206`, so a player can seek.
+         *     `?download=1` sends `Content-Disposition: attachment`. agent.md section 3.8.
+         *
+         */
+        get: operations["getSongAudio"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workloads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the workloads
+         * @description The profile's workloads merged with `node.yaml` `workloads:` (same name replaces, a new name adds), sorted
+         *     by name. A workload that names a model the catalog does not have is left out (`LAI-CAT-020` is a doctor
+         *     finding instead). `active` per entry: exactly that set is loaded (survival models kept beside it in
+         *     survival mode do not count). Top-level `active`: the workload last activated while it is still exactly
+         *     loaded, else null. `fits`: the set passes the fit check; `missing`: its models with no verified copy.
+         *     agent.md section 3.8.34, llama-router.md section 4.16.
+         *
+         */
+        get: operations["listWorkloads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workloads/{name}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Switch the node to a workload
+         * @description Unloads the loaded models that are not in the set (never a survival model in survival mode), then loads
+         *     the missing ones, each through its engine (llama or acestep), under `modelOpsMu`. A failure restores the
+         *     previous set. With `wait: false` (the default) the answer is `202 {op_id}` and progress follows on
+         *     `/events` as `workload.progress` and `workload.done`. Music is refused in survival mode even with
+         *     `force` (409 LAI-AGT-023). agent.md section 3.8.34, llama-router.md section 4.16. Audit
+         *     `workload.activate`.
+         *
+         */
+        post: operations["activateWorkload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2647,6 +2880,108 @@ export interface components {
                 budget_bytes?: number | null;
             } | null;
         };
+        /** @description GET /music/status (owned by music.md). */
+        MusicStatus: {
+            installed: boolean;
+            loaded_model: string | null;
+            /** @enum {string} */
+            engine_state: "stopped" | "starting" | "ready" | "stopping" | "failed";
+            queue: {
+                running: number;
+                queued: number;
+                max: number;
+            };
+        };
+        MusicGenerateRequest: {
+            /** @description At most 8 KiB of UTF-8. Never logged. */
+            lyrics?: string;
+            tags?: string;
+            /** @default 60 */
+            duration_s: number;
+            /** @default en */
+            language: string;
+            seed?: number;
+            /** @default 1 */
+            variations: number;
+            /**
+             * Format: binary
+             * @description WAV, MP3, FLAC or Ogg, at most 20 MiB and 60 s.
+             */
+            sample?: string;
+            /**
+             * @default sounds_like
+             * @enum {string}
+             */
+            sample_mode: "sounds_like" | "same_song";
+            strength?: number;
+        };
+        MusicAccepted: {
+            op_id: string;
+            song_ids: string[];
+        };
+        /** @description GET /music/ops/{op_id}; the data of the music.progress and music.done events has the same fields plus op_id. */
+        MusicOp: {
+            /** @enum {string} */
+            state: "queued" | "running" | "done" | "failed" | "cancelled";
+            progress: number | null;
+            song_ids: string[];
+            error: {
+                code: string;
+                message: string;
+            } | null;
+        };
+        Song: {
+            id: string;
+            /** Format: date-time */
+            created_at: string;
+            title: string;
+            tags: string;
+            language: string;
+            duration_s: number;
+            model_id: string;
+            seed: number | null;
+            /** @enum {string} */
+            mime: "audio/wav" | "audio/mpeg" | "audio/flac" | "audio/ogg";
+            size_bytes: number;
+            /** @enum {string} */
+            origin: "local" | "cloud";
+        };
+        SongList: {
+            songs: components["schemas"]["Song"][];
+            next_cursor: string | null;
+        };
+        DeletedSong: {
+            id: string;
+            deleted: boolean;
+            bytes: number;
+        };
+        WorkloadsResponse: {
+            workloads: {
+                name: string;
+                label: {
+                    en: string;
+                    es: string;
+                };
+                models: string[];
+                active: boolean;
+                fits: boolean;
+                missing: string[];
+            }[];
+            active: string | null;
+        };
+        WorkloadActivateRequest: {
+            wait?: boolean;
+            force?: boolean;
+        };
+        WorkloadActivated: {
+            op_id: string;
+            active: string;
+            loaded: string[];
+            unloaded: string[];
+        };
+        WorkloadAccepted: {
+            op_id: string;
+        };
     };
     responses: {
         /** @description No content. Sets the cookie localai_session (43 base64url characters; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800). */
@@ -2802,6 +3137,10 @@ export interface components {
         RootId: string;
         ServiceName: "llama" | "kiwix" | "whisper";
         ServiceAction: "start" | "stop" | "restart";
+        /** @description The op_ id POST /music/generate returned. */
+        MusicOpId: string;
+        /** @description A song id, sng_ plus 12 base32 characters. */
+        SongId: string;
     };
     requestBodies: never;
     headers: {
@@ -4293,7 +4632,7 @@ export interface operations {
     getLogs: {
         parameters: {
             query: {
-                unit: "agent" | "llama" | "kiwix" | "whisper" | "sync" | "drill";
+                unit: "agent" | "llama" | "kiwix" | "whisper" | "music" | "sync" | "drill";
                 lines?: number;
                 /** @description RFC 3339. */
                 since?: string;
@@ -4837,6 +5176,336 @@ export interface operations {
             /** @description LAI-CAT-003 or LAI-CAT-004: the profile or an override is not in the catalog; nothing is written (details as for GET). */
             422: components["responses"]["Unprocessable"];
             500: components["responses"]["Internal"];
+            503: components["responses"]["Starting"];
+        };
+    };
+    getMusicStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The music status. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicStatus"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["Internal"];
+        };
+    };
+    generateMusic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["MusicGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description The song is queued. */
+            202: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicAccepted"];
+                };
+            };
+            /** @description LAI-SVC-154: a field or the sample is refused (details.field; details.reason: too_long, empty, out_of_range, invalid, not_an_integer, not_a_number, needs_sample, duplicate, unknown_field, unsupported_type, unknown_duration, or the engine's own reason with details.field engine); LAI-AGT-020 a malformed multipart body. */
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description LAI-SVC-151: music is not loaded (details.engine_state, details.hint workload:music); switch to the Music workload or load the music model. */
+            409: components["responses"]["Conflict"];
+            /** @description LAI-SVC-154 (details.reason too_large): the body is over 21 MiB or the sample over 20 MiB. */
+            413: components["responses"]["TooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description LAI-SVC-153: the music queue is full. */
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["Internal"];
+            /** @description LAI-SVC-152: the music engine refused the task. */
+            502: components["responses"]["BadGateway"];
+            503: components["responses"]["Starting"];
+            /** @description LAI-SVC-155: not enough disk space to save the songs (details.free_bytes, details.needed_bytes). */
+            507: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getMusicOp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The op_ id POST /music/generate returned. */
+                op_id: components["parameters"]["MusicOpId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The operation. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicOp"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["Internal"];
+        };
+    };
+    cancelMusicOp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The op_ id POST /music/generate returned. */
+                op_id: components["parameters"]["MusicOpId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmptyRequest"];
+            };
+        };
+        responses: {
+            /** @description The operation after the cancel request. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicOp"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["TooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            500: components["responses"]["Internal"];
+            503: components["responses"]["Starting"];
+        };
+    };
+    listSongs: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of songs. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SongList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["Internal"];
+        };
+    };
+    deleteSong: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A song id, sng_ plus 12 base32 characters. */
+                id: components["parameters"]["SongId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The song is gone. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedSong"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["TooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            500: components["responses"]["Internal"];
+            503: components["responses"]["Starting"];
+        };
+    };
+    getSongAudio: {
+        parameters: {
+            query?: {
+                download?: "1";
+            };
+            header?: never;
+            path: {
+                /** @description A song id, sng_ plus 12 base32 characters. */
+                id: components["parameters"]["SongId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The whole file. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    /** @description bytes */
+                    "Accept-Ranges"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/wav": string;
+                    "audio/mpeg": string;
+                    "audio/flac": string;
+                    "audio/ogg": string;
+                };
+            };
+            /** @description The requested range. */
+            206: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    /** @description bytes <first>-<last>/<size> */
+                    "Content-Range"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/wav": string;
+                    "audio/mpeg": string;
+                    "audio/flac": string;
+                    "audio/ogg": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["Internal"];
+        };
+    };
+    listWorkloads: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The workloads. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkloadsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["Internal"];
+        };
+    };
+    activateWorkload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["WorkloadActivateRequest"];
+            };
+        };
+        responses: {
+            /** @description The workload is active (wait true). */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkloadActivated"];
+                };
+            };
+            /** @description Accepted (wait false); the outcome follows on /events. */
+            202: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    "X-LocalAI-Op-Id": components["headers"]["XLocalAIOpId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkloadAccepted"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description LAI-LLM-050 there is no workload with this name. */
+            404: components["responses"]["NotFound"];
+            /** @description LAI-AGT-022 another model operation runs; LAI-LLM-053 survival mode without force; LAI-AGT-023 music in survival mode, or single-model mode. */
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["TooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description LAI-LLM-051 the set does not fit this node; LAI-LLM-043 an engine is not installed; LAI-LLM-008 files missing. */
+            422: components["responses"]["Unprocessable"];
+            /** @description LAI-LLM-052 the activation failed and the previous set was restored (wait true); LAI-LLM-012 nothing could be restored. */
+            500: components["responses"]["Internal"];
+            /** @description LAI-LLM-004 the AI model service is not answering. */
+            502: components["responses"]["Internal"];
             503: components["responses"]["Starting"];
         };
     };
