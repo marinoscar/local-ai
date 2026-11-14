@@ -5,7 +5,7 @@
 // Every number is a wire contract with the Go agent (`agent/internal/cloud/commands.go` `TypeLimits`): the lease is
 // what a claim grants, the hard cap is the longest the command may run counted from the claim (the agent's handler
 // deadline). A test pins both tables against each other's values.
-import { LOCALAI_PERMISSION_IDS } from '../localai.permissions';
+import { LOCALAI_PERMISSION_IDS, type LocalAiPermissionId } from '../localai.permissions';
 import { COMMANDS, type CommandParams, type CommandType } from '../contracts/commands';
 
 const SECOND = 1000;
@@ -23,8 +23,11 @@ export type CommandConfirmation =
   | 'show_version_change';
 
 export interface CommandPolicy {
-  /** The permission the sender needs (`lab:operate`, or `lab:admin` for the destructive types). */
-  readonly permission: typeof LOCALAI_PERMISSION_IDS.LAB_OPERATE | typeof LOCALAI_PERMISSION_IDS.LAB_ADMIN;
+  /**
+   * The permission the sender needs: `lab:operate`, `lab:admin` for the destructive types, and the E11 permissions for
+   * the two E11 types (`localai_workloads:write`, `localai_music:use`).
+   */
+  readonly permission: LocalAiPermissionId;
   /** The lease a claim grants and each renewal extends to, from now. */
   readonly leaseMs: number;
   /** How often the agent is told to renew (`renewIntervalMs`); the agent clamps it to 5 to 60 seconds. */
@@ -42,6 +45,8 @@ export interface CommandPolicy {
 
 const OPERATE = LOCALAI_PERMISSION_IDS.LAB_OPERATE;
 const ADMIN = LOCALAI_PERMISSION_IDS.LAB_ADMIN;
+const WORKLOADS = LOCALAI_PERMISSION_IDS.WORKLOADS_WRITE;
+const MUSIC = LOCALAI_PERMISSION_IDS.MUSIC_USE;
 
 /** The subject extractor for a type whose params carry one; typed against that type's own params. */
 function subjectOf<T extends CommandType>(pick: (params: CommandParams<T>) => string): (params: never) => string {
@@ -67,6 +72,12 @@ export const COMMAND_POLICY = {
   'localai.ensure.run': { permission: OPERATE, leaseMs: 30 * SECOND, renewIntervalMs: 10 * SECOND, hardCapMs: 300 * SECOND, queuedTtlMs: 1 * HOUR, maxAttempts: 1, dedupSubject: null, confirmation: 'none' },
   // A 5-minute lease and a 15-minute cap: the agent restarts itself mid-command and the new process renews (spec 5).
   'localai.agent.update': { permission: ADMIN, leaseMs: 300 * SECOND, renewIntervalMs: 60 * SECOND, hardCapMs: 900 * SECOND, queuedTtlMs: 24 * HOUR, maxAttempts: 1, dedupSubject: null, confirmation: 'show_version_change' },
+  // E11. A workload switch unloads and loads a set of models with `wait: true`: the model.load numbers. One active
+  // switch per node.
+  'localai.workload.activate': { permission: WORKLOADS, leaseMs: 60 * SECOND, renewIntervalMs: 20 * SECOND, hardCapMs: 600 * SECOND, queuedTtlMs: 15 * MINUTE, maxAttempts: 1, dedupSubject: null, confirmation: 'none' },
+  // E11. Download the sample, generate up to four songs of up to 240 s, upload each: a 30-minute cap. The signed URLs
+  // in the params live for the queued TTL plus the hard cap (`music/music-limits.ts`). One command per request.
+  'localai.music.generate': { permission: MUSIC, leaseMs: 60 * SECOND, renewIntervalMs: 20 * SECOND, hardCapMs: 1800 * SECOND, queuedTtlMs: 15 * MINUTE, maxAttempts: 1, dedupSubject: subjectOf<'localai.music.generate'>((p) => p.request_id), confirmation: 'none' },
 } as const satisfies Record<CommandType, CommandPolicy>;
 
 /** The policy of one command type. */
@@ -106,6 +117,12 @@ export interface CommandRequester {
 export function permissionFor(type: CommandType): CommandPolicy['permission'] {
   return COMMAND_POLICY[type].permission;
 }
+
+/**
+ * The types the generic `POST /nodes/:nodeId/commands` route refuses: their params carry signed object-storage URLs
+ * that only the cloud may mint, so they are queued by their own feature route (`/api/localai/music/requests`).
+ */
+export const FEATURE_ONLY_TYPES: ReadonlySet<CommandType> = new Set<CommandType>(['localai.music.generate']);
 
 /**
  * Whether the caller holds the permission the policy table names for `type`. Exact: `lab:admin` does not stand in

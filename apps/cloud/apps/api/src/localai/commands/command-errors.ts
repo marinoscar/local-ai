@@ -65,6 +65,17 @@ export function invalidCommandParams(error: ZodError | null, type: string): BadR
   });
 }
 
+/**
+ * `400` for a type the generic command route does not queue (`FEATURE_ONLY_TYPES`): its params carry signed URLs only
+ * the cloud mints, so it goes through its own feature route.
+ */
+export function featureOnlyCommand(type: string): BadRequestException {
+  return new BadRequestException({
+    message: 'This command is sent from its own page, not from the command list',
+    details: { reason: 'feature_only_command', type, route: type === 'localai.music.generate' ? '/api/localai/music/requests' : null },
+  });
+}
+
 /** The doctor code of a node in Offline or Survival mode, which takes no cloud commands. */
 export const LAI_CLD_NODE_OFFLINE_MODE = 'LAI-CLD-034';
 

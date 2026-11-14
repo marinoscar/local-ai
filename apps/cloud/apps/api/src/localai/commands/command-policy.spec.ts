@@ -1,9 +1,10 @@
 import { COMMAND_TYPES, COMMANDS, type CommandType } from '../contracts/commands';
 import { LOCALAI_PERMISSION_IDS } from '../localai.permissions';
 import { COMMAND_POLICY, dedupKeyFor, policyOf } from './command-policy';
+import { readCommandExamples } from '../../../test/fixtures/localai/command-examples';
 
 describe('the command policy table (spec 3.7)', () => {
-  it('lists exactly the registry\'s 15 types', () => {
+  it('lists exactly the registry\'s 17 types', () => {
     expect(Object.keys(COMMAND_POLICY).sort()).toEqual([...COMMAND_TYPES].sort());
   });
 
@@ -24,6 +25,8 @@ describe('the command policy table (spec 3.7)', () => {
     'localai.catalog.refresh': ['lab:operate', 60, 600, 60],
     'localai.agent.update': ['lab:admin', 300, 900, 24 * 60],
     'localai.ensure.run': ['lab:operate', 30, 300, 60],
+    'localai.workload.activate': ['localai_workloads:write', 60, 600, 15],
+    'localai.music.generate': ['localai_music:use', 60, 1800, 15],
   };
 
   it.each(Object.entries(TABLE))('%s: permission, lease, hard cap and queued TTL match the spec table', (type, [permission, lease, cap, ttl]) => {
@@ -42,10 +45,11 @@ describe('the command policy table (spec 3.7)', () => {
     expect(admin).toEqual(['localai.agent.update', 'localai.key.rotate', 'localai.mode.offline', 'localai.model.delete']);
   });
 
-  it('hard cap is the lease times ten, except model.load (600 s) and agent.update (900 s)', () => {
+  it('hard cap is the lease times ten, except model.load (600 s), agent.update (900 s) and music.generate (1800 s)', () => {
     for (const type of COMMAND_TYPES) {
       const { leaseMs, hardCapMs } = COMMAND_POLICY[type];
       if (type === 'localai.agent.update') expect(hardCapMs).toBe(900_000);
+      else if (type === 'localai.music.generate') expect(hardCapMs).toBe(1_800_000);
       else if (type === 'localai.model.load') expect(hardCapMs).toBe(600_000);
       else expect(hardCapMs).toBe(leaseMs * 10);
       expect(hardCapMs).toBeGreaterThan(leaseMs);
@@ -70,6 +74,11 @@ describe('the command policy table (spec 3.7)', () => {
       expect(dedupKeyFor('localai.model.delete', { model_id: 'gemma-4-26b-q4km' })).toBe('model.delete:gemma-4-26b-q4km');
       expect(dedupKeyFor('localai.service.restart', { service: 'llama' })).toBe('service.restart:llama');
       expect(dedupKeyFor('localai.logs.tail', { unit: 'agent' })).toBe('logs.tail:agent');
+      expect(dedupKeyFor('localai.music.generate', { request_id: '5d1c0b7e-2f43-4a51-9a0e-7b6c1d2e3f40' })).toBe('music.generate:5d1c0b7e-2f43-4a51-9a0e-7b6c1d2e3f40');
+    });
+
+    it('workload.activate has no subject: one switch at a time per node', () => {
+      expect(dedupKeyFor('localai.workload.activate', { name: 'music' })).toBe('workload.activate:-');
     });
 
     it('uses "-" for a type with no subject: one active command per node', () => {
@@ -79,7 +88,7 @@ describe('the command policy table (spec 3.7)', () => {
     });
 
     it('can always be built from the parsed example params of its type', () => {
-      const examples = require('../../../test/fixtures/localai/commands.examples.json') as Record<string, { params: unknown }>;
+      const examples = readCommandExamples<Record<string, { params: unknown }>>();
       for (const type of COMMAND_TYPES) {
         const params = COMMANDS[type].params.parse(examples[type].params);
         expect(dedupKeyFor(type, params).startsWith(`${type.replace('localai.', '')}:`)).toBe(true);

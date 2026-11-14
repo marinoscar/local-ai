@@ -3,8 +3,6 @@
 // agent. POST -> the agent claims it through the node route -> posts a result -> GET shows `succeeded`, with exactly
 // one `requested` and one `settled` audit row; a failure and an expiry each notify the requester once; cancel is a
 // conditional write that loses cleanly to a claim; the refusals read the node row and its model rows.
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { NodeCredentialService } from '@marinoscar/platform-api/nodes';
 
@@ -13,6 +11,7 @@ import { COMMAND_TYPES } from '../../src/localai/contracts/commands';
 import { CommandsSweepHandler } from '../../src/localai/commands/sweeper.job';
 import { createApp } from '../../src/main';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { readCommandExamples } from '../fixtures/localai/command-examples';
 
 const run = `${Date.now()}`;
 const MODEL = 'qwen3.6-35b-a3b-q4km';
@@ -20,7 +19,7 @@ const MODEL = 'qwen3.6-35b-a3b-q4km';
 const FIXTURE_MODEL = 'gemma-4-26b-q4km';
 const ALL = COMMAND_TYPES.map((type) => type.replace('localai.', ''));
 const loadResult = { model_id: MODEL, status: 'loaded', load_ms: 1000, unloaded: [], vram_used_mib: null, is_default: false };
-const examples = JSON.parse(readFileSync(join(__dirname, '../fixtures/localai/commands.examples.json'), 'utf8')) as Record<string, { params: Record<string, unknown> }>;
+const examples = readCommandExamples<Record<string, { params: Record<string, unknown> }>>();
 /** `model.delete` params for MODEL: the fixture's roots, the typed confirmation equal to the model id. */
 const deleteParams = { ...examples['localai.model.delete'].params, model_id: MODEL, confirm: MODEL };
 const ADMIN_ONLY = ['model.delete', 'mode.offline', 'key.rotate', 'agent.update'];

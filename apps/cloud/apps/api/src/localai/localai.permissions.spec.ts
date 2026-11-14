@@ -17,10 +17,10 @@ const ROW_ROLES: Readonly<Record<Row, readonly string[]>> = {
 
 /** The §3.4 matrix, written out in full on purpose: a change to a grant must change this table too. */
 const MATRIX: Readonly<Record<Row, Readonly<Record<string, boolean>>>> = {
-  'admin + org_admin': { 'lab:read': true, 'lab:operate': true, 'lab:admin': true, 'gateway:use': true, 'gateway:admin': true },
-  'org_admin only': { 'lab:read': true, 'lab:operate': true, 'lab:admin': false, 'gateway:use': true, 'gateway:admin': false },
-  contributor: { 'lab:read': true, 'lab:operate': true, 'lab:admin': false, 'gateway:use': true, 'gateway:admin': false },
-  viewer: { 'lab:read': true, 'lab:operate': false, 'lab:admin': false, 'gateway:use': false, 'gateway:admin': false },
+  'admin + org_admin': { 'lab:read': true, 'lab:operate': true, 'lab:admin': true, 'gateway:use': true, 'gateway:admin': true, 'localai_music:use': true, 'localai_music:delete': true, 'localai_workloads:write': true },
+  'org_admin only': { 'lab:read': true, 'lab:operate': true, 'lab:admin': false, 'gateway:use': true, 'gateway:admin': false, 'localai_music:use': true, 'localai_music:delete': true, 'localai_workloads:write': true },
+  contributor: { 'lab:read': true, 'lab:operate': true, 'lab:admin': false, 'gateway:use': true, 'gateway:admin': false, 'localai_music:use': true, 'localai_music:delete': false, 'localai_workloads:write': true },
+  viewer: { 'lab:read': true, 'lab:operate': false, 'lab:admin': false, 'gateway:use': false, 'gateway:admin': false, 'localai_music:use': false, 'localai_music:delete': false, 'localai_workloads:write': false },
 };
 
 const catalog = platformPermissionCatalog(PERMISSION_OPTIONS);
@@ -37,6 +37,9 @@ describe('LOCALAI_PERMISSIONS', () => {
       'lab:admin',
       'gateway:use',
       'gateway:admin',
+      'localai_music:use',
+      'localai_music:delete',
+      'localai_workloads:write',
     ]);
     expect(LOCALAI_PERMISSION_IDS).toEqual({
       LAB_READ: 'lab:read',
@@ -44,6 +47,9 @@ describe('LOCALAI_PERMISSIONS', () => {
       LAB_ADMIN: 'lab:admin',
       GATEWAY_USE: 'gateway:use',
       GATEWAY_ADMIN: 'gateway:admin',
+      MUSIC_USE: 'localai_music:use',
+      MUSIC_DELETE: 'localai_music:delete',
+      WORKLOADS_WRITE: 'localai_workloads:write',
     });
   });
 
@@ -53,6 +59,9 @@ describe('LOCALAI_PERMISSIONS', () => {
     ['lab:admin', 'system'],
     ['gateway:use', 'org'],
     ['gateway:admin', 'system'],
+    ['localai_music:use', 'org'],
+    ['localai_music:delete', 'org'],
+    ['localai_workloads:write', 'org'],
   ])('%s has the %s scope', (id, scope) => {
     const declared = Object.values(LOCALAI_PERMISSIONS).find((permission) => permission.id === id);
     expect(declared?.scope).toBe(scope);
@@ -65,7 +74,7 @@ describe('LOCALAI_PERMISSIONS', () => {
 
   it('is seeded after the platform permissions, in declaration order', () => {
     const names = catalog.permissions.map((permission) => permission.name);
-    const local = names.filter((name) => name.startsWith('lab:') || name.startsWith('gateway:'));
+    const local = names.filter((name) => name.startsWith('lab:') || name.startsWith('gateway:') || name.startsWith('localai_'));
     expect(local).toEqual(Object.values(LOCALAI_PERMISSIONS).map((permission) => permission.id));
     expect(names.slice(-local.length)).toEqual(local);
   });
@@ -76,8 +85,8 @@ describe('the seeded Local AI grants (spec §3.4 matrix)', () => {
     Object.entries(MATRIX[row]).map(([permission, allowed]) => [row, permission, allowed] as const),
   );
 
-  it('covers 4 role rows x 5 permissions', () => {
-    expect(cases).toHaveLength(20);
+  it('covers 4 role rows x 8 permissions', () => {
+    expect(cases).toHaveLength(32);
   });
 
   it.each(cases)('%s / %s -> %s', (row, permission, allowed) => {

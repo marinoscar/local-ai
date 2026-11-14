@@ -1,4 +1,4 @@
-// The five Local AI permissions (docs/specs/cloud-app.md §3.4), mapped onto the
+// The Local AI permissions (docs/specs/cloud-app.md §3.4; the three E11 ones: music and workloads), mapped onto the
 // platform's roles through `defaultGrants`. Pure data: `src/platform/permissions.ts`
 // adds it to the seeded catalog, so the seed (`prisma/seed.ts`) and the
 // registries (`src/platform/registrations.ts`) never disagree.
@@ -41,6 +41,25 @@ export const LOCALAI_PERMISSIONS = {
     scope: 'system',
     description: 'Manage every gateway key, model policies and usage',
     defaultGrants: ['admin'],
+  },
+  // E11 (creative workloads): make music on a node from the cloud, delete songs, switch a node's workload.
+  MUSIC_USE: {
+    id: 'localai_music:use',
+    scope: 'org',
+    description: 'Make music on a node and play or download the songs of the lab library',
+    defaultGrants: ['contributor', 'org_admin'],
+  },
+  MUSIC_DELETE: {
+    id: 'localai_music:delete',
+    scope: 'org',
+    description: 'Delete songs from the lab music library',
+    defaultGrants: ['org_admin'],
+  },
+  WORKLOADS_WRITE: {
+    id: 'localai_workloads:write',
+    scope: 'org',
+    description: "Switch a node's workload (the set of models it keeps loaded: coding, chat, speech, music)",
+    defaultGrants: ['contributor', 'org_admin'],
   },
 } as const satisfies PermissionDeclarationMap;
 
