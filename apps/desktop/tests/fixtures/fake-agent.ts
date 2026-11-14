@@ -63,6 +63,11 @@ export interface FakeAgent {
   suggestSurvival: boolean;
   /** Models reported by /status as loaded, and the default one. */
   models: { default: string | null; loaded: string[] };
+  /**
+   * Issue #515: what `GET /api/v1/music/status` says. `null` (the default): the route does not exist (404, an agent from
+   * before E11). The `/music/` page and a song's audio are always served.
+   */
+  music: { installed: boolean } | null;
   /** Answer the next mode change with this error instead of accepting it (then back to accepting). */
   failNextModeChange: { status: number; code: string; details?: Record<string, unknown> } | null;
   /** The PIN grant the fake accepts for leaving survival. Default: none is valid. */
@@ -120,6 +125,12 @@ fetch('/api/v1/status').then((r) => r.ok ? r.json() : Promise.reject(r.status)).
 );
 </script>`;
 
+/** Issue #515: the fake Music page (a sample picker, a song link) and a 44-byte WAV header with no samples. */
+export const MUSIC_HTML = `<!doctype html><meta charset="utf-8"><title>/music/</title><h1>/music/</h1>
+<input id="sample" type="file" accept="audio/*">
+<a id="song" href="/api/v1/music/songs/sng_1/audio" download>Download</a>`;
+export const FAKE_WAV = Buffer.from('UklGRiQAAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABAAZGF0YQAAAAA=', 'base64');
+
 export const PORTAL_HTML = '<!doctype html><meta charset="utf-8"><title>Survival Portal</title><h1 id="portal">Survival Portal</h1>';
 
 export function newFakeToken(): string {
@@ -156,6 +167,7 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     connectivity: { value: 'not_checked', none_since: null } as FakeAgent['connectivity'],
     suggestSurvival: false,
     models: { default: null, loaded: [] } as FakeAgent['models'],
+    music: null as FakeAgent['music'],
     failNextModeChange: null as FakeAgent['failNextModeChange'],
     validPinGrant: null as string | null,
     apiKey: randomBytes(32).toString('hex'),
@@ -286,6 +298,18 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     if (method === 'GET' && (path === '/' || path === '/portal' || path === '/portal/')) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(path === '/' ? DASHBOARD_HTML : PORTAL_HTML);
+      return;
+    }
+    // Issue #515: the Music page: a sample picker and a link that downloads a song.
+    if (method === 'GET' && path === '/music/') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(MUSIC_HTML);
+      return;
+    }
+    if (method === 'GET' && /^\/api\/v1\/music\/songs\/[A-Za-z0-9_-]+\/audio$/.test(path)) {
+      // A real agent wants the session; the fake only needs to send bytes as an attachment.
+      res.writeHead(200, { 'content-type': 'audio/wav', 'content-disposition': 'attachment; filename="song-1.wav"', 'content-length': String(FAKE_WAV.length) });
+      res.end(FAKE_WAV);
       return;
     }
     if (method === 'GET' && (path === '/chat/' || path === '/library/' || path === '/maps/')) {
@@ -544,6 +568,19 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
       return;
     }
 
+    if (method === 'GET' && path === '/api/v1/music/status') {
+      if (credential(req) === null) {
+        error(res, 401, 'LAI-SEC-001', 'Missing or invalid credentials');
+        return;
+      }
+      if (state.music === null) {
+        error(res, 404, 'LAI-AGT-021', 'Unknown route');
+        return;
+      }
+      json(res, 200, { installed: state.music.installed, loaded_model: null, engine_state: 'stopped', queue: { running: 0, queued: 0, max: 4 } });
+      return;
+    }
+
     if (method === 'GET' && path === '/api/v1/events') {
       const via = credential(req);
       if (via === null) {
@@ -640,6 +677,12 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
     },
     get models() {
       return state.models;
+    },
+    get music() {
+      return state.music;
+    },
+    set music(value: FakeAgent['music']) {
+      state.music = value;
     },
     set models(value: FakeAgent['models']) {
       state.models = value;
