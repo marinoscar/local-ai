@@ -687,9 +687,15 @@ type pmtilesHeader struct {
 	MinLat   *float64        `json:"min_lat"`
 	MaxLon   *float64        `json:"max_lon"`
 	MaxLat   *float64        `json:"max_lat"`
+	// Bounds is what pmtiles 1.x prints (1.31.2, the kit's version): [west, south, east, north] in
+	// degrees (issue #484: only the forms above were read, so every real extract had "no bounding box").
+	Bounds []float64 `json:"bounds"`
 }
 
 func (h pmtilesHeader) bounds() (b [4]float64, ok bool) {
+	if len(h.Bounds) == 4 {
+		return [4]float64{h.Bounds[0], h.Bounds[1], h.Bounds[2], h.Bounds[3]}, true
+	}
 	pick := func(e7, deg *float64) (float64, bool) {
 		switch {
 		case e7 != nil:

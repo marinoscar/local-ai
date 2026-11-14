@@ -720,6 +720,8 @@ func TestCheckPMTilesHeader(t *testing.T) {
 		hdr(`"mvt"`, "-924900001", "70099999", "-770099999", "185900001"),
 		// degrees instead of E7
 		`{"tile_type":"mvt","min_lon":-92.5,"min_lat":7,"max_lon":-77,"max_lat":18.6}`,
+		// what pmtiles 1.31.2 really prints (issue #484)
+		`{"tile_compression":"gzip","tile_type":"mvt","minzoom":0,"maxzoom":15,"bounds":[-92.5,7,-77,18.6],"center":[-84.75,12.8,0]}`,
 	}
 	for _, h := range ok {
 		if err := checkPMTilesHeader([]byte(h), want); err != nil {
@@ -736,6 +738,9 @@ func TestCheckPMTilesHeader(t *testing.T) {
 		hdr(`"mvt"`, "-925000000", "70000000", "-770200000", "186000000"),
 		hdr(`"mvt"`, "-925000000", "70000000", "-770000000", "185800000"),
 		`{"tile_type":"mvt"}`,
+		// a bounds array that is not four numbers, or too small
+		`{"tile_type":"mvt","bounds":[-92.5,7,-77]}`,
+		`{"tile_type":"mvt","bounds":[-92.4,7,-77,18.6]}`,
 		`not json`,
 		``,
 	}

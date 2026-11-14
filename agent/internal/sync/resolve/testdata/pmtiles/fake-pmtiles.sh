@@ -97,8 +97,10 @@ show)
     minlon=-900000000
     maxlat=150000000
   fi
-  printf '{"version":3,"root_offset":127,"root_length":29,"metadata_offset":156,"metadata_length":22,"leaf_directory_offset":178,"leaf_directory_length":0,"tile_data_offset":178,"tile_data_length":0,"addressed_tiles_count":0,"tile_entries_count":0,"tile_contents_count":0,"clustered":true,"internal_compression":"gzip","tile_compression":"gzip","tile_type":"%s","min_zoom":0,"max_zoom":15,"min_lon_e7":%s,"min_lat_e7":%s,"max_lon_e7":%s,"max_lat_e7":%s,"center_zoom":5,"center_lon_e7":-847500000,"center_lat_e7":128000000}\n' \
-    "$type" "$minlon" "$minlat" "$maxlon" "$maxlat"
+  # What the real pmtiles 1.31.2 prints (issue #484): degrees in a "bounds" array, west, south, east, north.
+  deg() { awk -v v="$1" 'BEGIN { printf "%.7g", v / 1e7 }'; }
+  printf '{\n    "tile_compression": "gzip",\n    "tile_type": "%s",\n    "minzoom": 0,\n    "maxzoom": 15,\n    "bounds": [\n        %s,\n        %s,\n        %s,\n        %s\n    ],\n    "center": [\n        -84.75,\n        12.8,\n        0\n    ]\n}\n' \
+    "$type" "$(deg "$minlon")" "$(deg "$minlat")" "$(deg "$maxlon")" "$(deg "$maxlat")"
   ;;
 *)
   echo "fake pmtiles: unknown command $cmd" >&2
