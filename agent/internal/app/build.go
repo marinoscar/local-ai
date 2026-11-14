@@ -681,6 +681,9 @@ func (d *Daemon) buildClaimPlane(sdeps statusapi.Deps) error {
 	if d.ark != nil { // the engine itself is built later in the start-up; the command looks at it when it runs
 		jd.Ensure = lazyEnsureJobs{d}
 	}
+	if d.music != nil { // music.generate (E11); workload.activate waits for the workloads engine (#509)
+		jd.Music = d.music
+	}
 	var recoverFn func(context.Context, cloud.InflightEntry) bool
 	if d.updater != nil {
 		recoverFn = d.updater.Recover
