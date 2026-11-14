@@ -1,10 +1,14 @@
 // The top bar (docs/specs/desktop.md 3.4): 48 px, always visible. Tabs "This computer" | "Lab" (Lab only when
 // connected), the status pill and mode chip, the three window buttons, Copy API key and the menu. It talks to the main
 // process only through `window.localaiDesktop`; buttons whose feature has not landed show "Not available yet.".
+// Look (ADR-0014, Corona): a dark bar (TOPBAR_BG) with the eclipse mark left of the tabs; the pill keeps its meaning with
+// the Corona status colours plus a mark (never colour alone); gold only on the selected tab's line and the strip's action.
 import { Box, Button, Chip, IconButton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Typography, useMediaQuery } from '@mui/material';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import type { ChildWindowName, DesktopStatus, Lang, LocalaiDesktop, Tab as TabName } from '../../shared/types';
-import { modeLabel, musicButtonFor, pillFor, selectedTab, stripFor, tabsFor } from './model';
+import markUrl from '@localai/ui/brand/mark.svg';
+import { TOPBAR_BG } from '../shared/theme';
+import { PILL_MARK, modeLabel, musicButtonFor, pillFor, selectedTab, stripFor, tabsFor } from './model';
 import { STRINGS, copiedText, copyFailedText, pick } from './strings';
 
 const NOTICE_MS = 7000;
@@ -69,9 +73,9 @@ export function TopBar({ bridge }: TopBarProps): ReactElement {
       <Box
         component="header"
         data-testid="survival-strip"
-        sx={{ height: 32, display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, overflow: 'hidden', borderBottom: 1, borderColor: 'divider', bgcolor: 'warning.light', color: 'common.black' }}
+        sx={{ height: 32, display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, overflow: 'hidden', borderBottom: 2, borderColor: 'warning.main', bgcolor: TOPBAR_BG, color: 'text.primary' }}
       >
-        <Typography component="h1" variant="body2" noWrap sx={{ fontWeight: 700, flexShrink: 0 }} data-testid="survival-label">
+        <Typography component="h1" variant="body2" noWrap sx={{ fontWeight: 700, flexShrink: 0, color: 'warning.main' }} data-testid="survival-label">
           {strip.label}
         </Typography>
         <Typography role={strip.banner ? 'alert' : undefined} variant="caption" noWrap data-testid="survival-banner" sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -83,7 +87,7 @@ export function TopBar({ bridge }: TopBarProps): ReactElement {
           value={lang}
           onChange={(_event, value: Lang | null) => setLang(value)}
           aria-label={pick(STRINGS.language, lang)}
-          sx={{ height: 24, flexShrink: 0, '& .MuiToggleButton-root': { py: 0, px: 1, fontSize: '0.75rem', color: 'inherit', borderColor: 'currentColor' } }}
+          sx={{ height: 24, flexShrink: 0, '& .MuiToggleButton-root': { py: 0, px: 1, fontSize: '0.75rem' } }}
         >
           <ToggleButton value="en" data-testid="lang-en" aria-label="English" lang="en">
             EN
@@ -92,11 +96,12 @@ export function TopBar({ bridge }: TopBarProps): ReactElement {
             ES
           </ToggleButton>
         </ToggleButtonGroup>
-        <Button size="small" variant="outlined" color="inherit" onClick={() => bridge?.setFullScreen(status?.survival?.fullScreen !== true)} data-testid="exit-fullscreen" sx={{ py: 0, minHeight: 24, whiteSpace: 'nowrap', flexShrink: 0, fontSize: '0.75rem' }}>
+        {/* The strip's main action is gold: "Back to the dashboard" while the Portal shows, otherwise the full-screen switch. */}
+        <Button size="small" variant={strip.showBack ? 'outlined' : 'contained'} onClick={() => bridge?.setFullScreen(status?.survival?.fullScreen !== true)} data-testid="exit-fullscreen" sx={{ py: 0, minHeight: 24, whiteSpace: 'nowrap', flexShrink: 0, fontSize: '0.75rem' }}>
           {strip.fullScreenLabel}
         </Button>
         {strip.showBack ? (
-          <Button size="small" variant="outlined" color="inherit" onClick={() => bridge?.closePortal()} data-testid="survival-back" sx={{ py: 0, minHeight: 24, whiteSpace: 'nowrap', flexShrink: 0, fontSize: '0.75rem' }}>
+          <Button size="small" variant="contained" onClick={() => bridge?.closePortal()} data-testid="survival-back" sx={{ py: 0, minHeight: 24, whiteSpace: 'nowrap', flexShrink: 0, fontSize: '0.75rem' }}>
             {pick(STRINGS.backToDashboard, lang)}
           </Button>
         ) : null}
@@ -111,7 +116,8 @@ export function TopBar({ bridge }: TopBarProps): ReactElement {
   const button = { size: 'small', color: 'inherit', sx: { minWidth: 0, px: compact ? 0.75 : 1.25, whiteSpace: 'nowrap', fontSize: compact ? '0.8125rem' : undefined } } as const;
 
   return (
-    <Box component="header" sx={{ height: 48, display: 'flex', alignItems: 'center', gap: 1, px: 1, overflow: 'hidden', borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+    <Box component="header" sx={{ height: 48, display: 'flex', alignItems: 'center', gap: 1, px: 1, overflow: 'hidden', borderBottom: 1, borderColor: 'divider', bgcolor: TOPBAR_BG }}>
+      <Box component="img" src={markUrl} alt="" aria-hidden="true" data-testid="mark" sx={{ width: 28, height: 28, flexShrink: 0, ml: 0.5 }} />
       <Tabs
         value={selectedTab(status)}
         onChange={(_event, value: TabName) => bridge?.showTab(value)}
@@ -130,12 +136,13 @@ export function TopBar({ bridge }: TopBarProps): ReactElement {
       <Chip
         size="small"
         color={PILL_COLOUR[pill.tone]}
+        icon={<Box component="span" aria-hidden="true" sx={{ fontWeight: 700, lineHeight: 1, '&&': { color: 'inherit', ml: compact ? 0 : 0.75, mr: compact ? 0 : -0.5 } }}>{PILL_MARK[pill.tone]}</Box>}
         label={compact ? '' : pill.label}
         aria-label={pill.label}
         title={pill.label}
         data-testid="pill"
         data-tone={pill.tone}
-        sx={compact ? { '& .MuiChip-label': { px: 0.75 }, minWidth: 24 } : undefined}
+        sx={compact ? { '& .MuiChip-label': { px: 0.5 }, minWidth: 24 } : undefined}
       />
       {mode ? <Chip size="small" variant="outlined" label={mode} data-testid="mode" /> : null}
       <Button {...button} onClick={open('chat')} data-testid="open-chat">

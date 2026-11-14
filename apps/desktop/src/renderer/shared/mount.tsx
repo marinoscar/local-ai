@@ -1,15 +1,12 @@
-// Shared bootstrap of every shell page (React 19 + MUI). The font is bundled from @fontsource, never fetched
-// (docs/specs/desktop.md section 3.1: no network assets).
+// Shared bootstrap of every shell page (React 19 + MUI) in the Corona dark theme (ADR-0014, ./theme.ts). The font is
+// bundled from @fontsource, never fetched (docs/specs/desktop.md section 3.1: no network assets).
 import '@fontsource/atkinson-hyperlegible/400.css';
 import '@fontsource/atkinson-hyperlegible/700.css';
-import { CssBaseline, ThemeProvider, Typography, createTheme } from '@mui/material';
+import { CssBaseline, ThemeProvider, Typography } from '@mui/material';
 import type { ReactElement } from 'react';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-
-const theme = createTheme({
-  typography: { fontFamily: '"Atkinson Hyperlegible", system-ui, sans-serif', button: { textTransform: 'none' } },
-});
+import { coronaTheme } from './theme';
 
 /** Mounts a shell page into #root. */
 export function mountPage(page: ReactElement): void {
@@ -17,7 +14,7 @@ export function mountPage(page: ReactElement): void {
   if (!root) throw new Error('shell page has no #root element');
   createRoot(root).render(
     <StrictMode>
-      <ThemeProvider theme={theme}>
+      <ThemeProvider theme={coronaTheme}>
         <CssBaseline />
         {page}
       </ThemeProvider>

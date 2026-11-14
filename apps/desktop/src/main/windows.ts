@@ -713,6 +713,12 @@ export interface ElectronFactoryOptions {
 }
 
 /** The real window behind each adapter, so a modal can name its parent. */
+/**
+ * The background of every window and view before its page paints: Corona's `bg` (packages/ui/brand/tokens.json,
+ * ADR-0014), so nothing flashes white on open. tests/unit/theme.test.ts keeps it equal to the token.
+ */
+export const WINDOW_BACKGROUND = '#07070A';
+
 const rawWindows = new WeakMap<object, BaseWindow>();
 
 function adaptMainWindow(win: BaseWindow): MainWindowLike {
@@ -777,6 +783,7 @@ export function createElectronWindowFactory(options: ElectronFactoryOptions): Wi
         minHeight: init.minHeight,
         title: init.title,
         show: false,
+        backgroundColor: WINDOW_BACKGROUND,
       });
       // No default menu bar: it would offer Reload and the DevTools in a packaged app.
       win.removeMenu();
@@ -784,13 +791,15 @@ export function createElectronWindowFactory(options: ElectronFactoryOptions): Wi
     },
     createView(kind) {
       const spec = VIEW_SPECS[kind];
-      return new WebContentsView({
+      const view = new WebContentsView({
         webPreferences: {
           ...hardenedWebPreferences(options.isPackaged),
           ...(spec.partition !== undefined ? { partition: spec.partition } : {}),
           preload: join(options.preloadDir, spec.preload),
         },
-      }) as unknown as ViewLike;
+      });
+      view.setBackgroundColor(WINDOW_BACKGROUND);
+      return view as unknown as ViewLike;
     },
     createChildWindow(init) {
       // Agent partition (the session cookie), no preload: the agent's own pages need no bridge here.
@@ -800,6 +809,7 @@ export function createElectronWindowFactory(options: ElectronFactoryOptions): Wi
         minWidth: 480,
         minHeight: 360,
         title: init.title,
+        backgroundColor: WINDOW_BACKGROUND,
         webPreferences: { ...hardenedWebPreferences(options.isPackaged), partition: PARTITIONS.agent },
       });
       win.removeMenu();
@@ -817,6 +827,7 @@ export function createElectronWindowFactory(options: ElectronFactoryOptions): Wi
         maximizable: false,
         fullscreenable: false,
         title: init.title,
+        backgroundColor: WINDOW_BACKGROUND,
         ...(raw ? { parent: raw, modal: true } : { alwaysOnTop: true }),
         webPreferences: { ...hardenedWebPreferences(options.isPackaged), preload: join(options.preloadDir, init.preload) },
       });

@@ -53,7 +53,7 @@ import {
   trayNoticeStore,
   trayUsable,
 } from './tray';
-import { type WindowManager, createElectronWindowFactory, createWindowManager, wireNavigationHooks } from './windows';
+import { type WindowManager, WINDOW_BACKGROUND, createElectronWindowFactory, createWindowManager, wireNavigationHooks } from './windows';
 import type { CloudLinkState, TopBarNotice } from '../shared/types';
 
 /** The guide and the Manage screens of the agent UI (dashboard.md 3.1, 3.3): the ⋮ menu and the tray open them. */
@@ -265,6 +265,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
         title: init.title,
         resizable: true,
         minimizable: false,
+        backgroundColor: WINDOW_BACKGROUND,
         webPreferences: { ...hardenedWebPreferences(app.isPackaged), preload: join(__dirname, '../preload/shell.js') },
       });
       win.removeMenu();
