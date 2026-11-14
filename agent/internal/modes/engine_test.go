@@ -22,7 +22,7 @@ import (
 func TestStepLists(t *testing.T) {
 	want := map[modes.Mode]string{
 		modes.Offline:  "link_stop,sync_cancel,prober_stop,tailscale_off,persist,emit",
-		modes.Survival: "link_stop,sync_cancel,prober_stop,tailscale_off,survival_models,survival_services,persist,emit",
+		modes.Survival: "link_stop,sync_cancel,prober_stop,tailscale_off,engines_stop,survival_models,survival_services,persist,emit",
 		modes.Online:   "tailscale_on,link_start,prober_start,persist,emit,sync_catchup",
 	}
 	for m, w := range want {

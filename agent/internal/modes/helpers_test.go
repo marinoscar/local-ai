@@ -287,6 +287,8 @@ func effectsOf(step string) []string {
 		return []string{"prober.stop"}
 	case modes.StepTailscaleOff:
 		return []string{"tailscale.off"}
+	case modes.StepEnginesStop:
+		return []string{"engines.stop"}
 	case modes.StepSurvivalModels:
 		return []string{"models.load"}
 	case modes.StepSurvivalService:

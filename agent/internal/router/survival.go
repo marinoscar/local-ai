@@ -49,9 +49,6 @@ func (o *Orchestrator) LoadSurvivalSet(ctx context.Context, skip []string) ([]ev
 	if in.Profile == nil || len(in.Profile.Survival.Models) == 0 {
 		return nil, errors.New("router: the node has no survival model list")
 	}
-	// Music and every other engine stop first: their graphics memory belongs to the survival models
-	// (modes.md section 2.2). A failure is a warning, never the end of survival.
-	engineWarns := o.StopEnginesForSurvival(ctx)
 	statuses, err := o.opt.Router.Models(ctx)
 	if err != nil {
 		return nil, err
@@ -77,7 +74,7 @@ func (o *Orchestrator) LoadSurvivalSet(ctx context.Context, skip []string) ([]ev
 		}
 	}
 
-	warns := engineWarns
+	var warns []events.Warning
 	for _, id := range list {
 		if count >= want {
 			break

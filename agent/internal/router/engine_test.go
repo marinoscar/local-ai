@@ -380,6 +380,9 @@ func TestSurvivalStopsMusicBeforeTheSurvivalModels(t *testing.T) {
 	e.set("music-l")
 	var callsAtStop []string
 	e.onStop = func() { callsAtStop = r.calls() }
+	if w := r.o.StopEnginesForSurvival(bg); len(w) != 0 {
+		t.Fatalf("engines_stop warnings: %v", w)
+	}
 	warns, err := r.o.LoadSurvivalSet(bg, nil)
 	if err != nil || len(warns) != 0 {
 		t.Fatalf("survival = %v, %v", warns, err)
@@ -394,12 +397,12 @@ func TestSurvivalGoesOnWhenMusicWillNotStop(t *testing.T) {
 	r, e := musicRig(t, orSurvival())
 	e.set("music-s")
 	e.stopErr = &EngineError{Code: CodeEngineNotFreed, Cause: "vram"}
-	warns, err := r.o.LoadSurvivalSet(bg, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	warns := r.o.StopEnginesForSurvival(bg)
 	if len(warns) != 1 || warns[0].Code != string(CodeEngineNotFreed) {
 		t.Fatalf("warnings: %+v", warns)
+	}
+	if _, err := r.o.LoadSurvivalSet(bg, nil); err != nil {
+		t.Fatal(err)
 	}
 	eqStrings(t, "llama loaded", r.loadedNow(), []string{"m-c"})
 	if !strings.Contains(r.logs.String(), string(CodeEngineNotFreed)) {
