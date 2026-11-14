@@ -510,6 +510,7 @@ Every string of the Manage screens, Home's additions and the guide lives in `age
 | `health.out.pass` | ✓ Passed. Everything needed in an emergency works. | ✓ Salió bien. Todo lo necesario en una emergencia funciona. |
 | `health.out.warn` | ! Passed with warnings. It works, but some things need attention. | ! Salió bien con avisos. Funciona, pero algunas cosas necesitan atención. |
 | `health.out.fail` | ✗ Failed. Something needed in an emergency does not work. | ✗ Falló. Algo necesario en una emergencia no funciona. |
+| `health.out.empty` | The last drill did not check anything, so it says nothing about this computer. Run a practice drill. | El último simulacro no revisó nada, así que no dice nada de esta computadora. Haga un simulacro de práctica. |
 | `health.out.aborted` | The drill was stopped before it ended. Everything was put back as it was. | El simulacro se detuvo antes de terminar. Todo volvió a quedar como estaba. |
 | `health.out.skipped` | The drill did not run. | El simulacro no se hizo. |
 | `health.out.manual_pass` | ✓ A "pull the plug" drill was recorded as passed. | ✓ Se registró un simulacro de "desconectar todo" que salió bien. |
