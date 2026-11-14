@@ -1,17 +1,18 @@
 /* The /music/ page (issue #512): the shared components' lai-* classes (packages/ui creative.css) in the Portal's
-   look. Classes only: the CSP has no 'unsafe-inline' (survival-portal.md section 4.11). */
+   look (Corona, ADR-0014). Classes only: the CSP has no 'unsafe-inline' (survival-portal.md section 4.11). */
 
 :is(.music, .workloads) .lai-studio,
 :is(.music, .workloads) .lai-library,
 :is(.music, .workloads) .lai-workloads {
   --lai-gap: 16px;
-  --lai-border: var(--line);
-  --lai-muted: #3a3a3a;
-  --lai-primary: var(--primary);
+  --lai-border: var(--line-strong);
+  --lai-muted: var(--muted);
+  --lai-primary: var(--gold);
+  --lai-primary-fg: var(--on-gold);
   --lai-danger: var(--bad);
   --lai-danger-bg: var(--bad-bg);
   --lai-info-bg: var(--info-bg);
-  --lai-radius: 10px;
+  --lai-radius: 12px;
   margin: 0 0 var(--gap);
 }
 
@@ -26,8 +27,8 @@
   font-weight: 700;
   min-height: 48px;
   padding: 8px 22px;
-  border-width: 3px;
-  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  background: var(--raised);
   color: var(--fg);
 }
 
@@ -38,20 +39,21 @@
 
 :is(.music, .workloads) .lai-btn-primary {
   background: var(--primary);
-  border-color: var(--primary);
-  color: #ffffff;
+  border-color: var(--gold);
+  color: var(--on-gold);
 }
 
 :is(.music, .workloads) .lai-btn-danger {
-  border-color: var(--bad);
+  border: 2px solid var(--bad);
+  background: var(--bad-bg);
   color: var(--bad);
 }
 
 :is(.music, .workloads) .lai-btn:focus-visible,
 :is(.music, .workloads) .lai-field :focus-visible,
 :is(.music, .workloads) .lai-more summary:focus-visible {
-  outline: 4px solid var(--focus);
-  outline-offset: 2px;
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
 }
 
 :is(.music, .workloads) .lai-field textarea,
@@ -59,8 +61,8 @@
 :is(.music, .workloads) .lai-field input[type="number"],
 :is(.music, .workloads) .lai-field input[type="password"],
 :is(.music, .workloads) .lai-field select {
-  border: 2px solid var(--line);
-  background: var(--panel);
+  border: 2px solid var(--line-field);
+  background: var(--field);
   color: var(--fg);
   min-height: 48px;
 }
@@ -76,17 +78,20 @@
 }
 
 :is(.music, .workloads) .lai-sample-mode {
-  border: 2px solid var(--line);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
 }
 
 :is(.music, .workloads) .lai-radio input[type="radio"] {
   width: 24px;
   height: 24px;
+  accent-color: var(--gold);
 }
 
 :is(.music, .workloads) .lai-song {
-  border: 3px solid var(--line);
-  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #17161d, #111015);
 }
 
 :is(.music, .workloads) .lai-error {
