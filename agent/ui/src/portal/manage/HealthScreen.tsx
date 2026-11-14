@@ -221,7 +221,7 @@ function EventsCard() {
             ))}
           </select>
         </label>
-        <button type="button" className="btn btn-primary" disabled={working} onClick={() => void show()}>
+        <button type="button" className="btn" disabled={working} onClick={() => void show()}>
           {t("health.events.show")}
         </button>
       </div>
@@ -404,7 +404,7 @@ function DrillCard({ survival }: { survival: boolean }) {
         ) : (
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn"
             disabled={survival || start.busy}
             aria-describedby={survival ? "health-drill-why" : undefined}
             onClick={() => setAsking(true)}

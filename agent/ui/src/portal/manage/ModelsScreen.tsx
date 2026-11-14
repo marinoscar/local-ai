@@ -99,9 +99,7 @@ function RowButtons({
           const cls =
             b === "delete"
               ? "btn"
-              : b === "use" || b === "download"
-                ? "btn btn-primary"
-                : "btn";
+              : "btn";
           return (
             <button
               key={b}

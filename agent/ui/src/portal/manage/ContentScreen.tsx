@@ -189,7 +189,7 @@ function RunCard({ mode, run, reload }: { mode: string; run: SyncRun | null; rel
         {running ? (
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn"
             disabled={act.busy || run?.state === "cancelling"}
             onClick={() => void go(() => contentApi.stop(), t("content.stop.done"))}
           >
@@ -484,7 +484,7 @@ function DriveRow({
         {rootId && d.state === "not_mounted" ? (
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn"
             disabled={act.busy}
             onClick={() => void simple(() => contentApi.mount(rootId), t("content.mount.done"))}
           >
@@ -492,7 +492,7 @@ function DriveRow({
           </button>
         ) : null}
         {rootId && d.state === "uninitialized" ? (
-          <button type="button" className="btn btn-primary" disabled={act.busy} onClick={() => setConfirm("init")}>
+          <button type="button" className="btn" disabled={act.busy} onClick={() => setConfirm("init")}>
             {t("content.init")}
           </button>
         ) : null}
