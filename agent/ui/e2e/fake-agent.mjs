@@ -216,6 +216,8 @@ createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
   const p = url.pathname;
   if (await handleMaps(req, res, url, CSP)) return;
+  // Before the shared /__ controls: each Manage screen has its own (/__mode, /__pin, …).
+  if (p !== "/__reset" && (await handleManage(req, res, url, manageCtx))) return;
   if (p.startsWith("/__")) {
     if (p === "/__reset") {
       status = defaultStatus();
@@ -267,7 +269,6 @@ createServer(async (req, res) => {
       });
     return send(res, 404, "not found");
   }
-  if (await handleManage(req, res, url, manageCtx)) return;
   if (p === "/api/v1/portal/status") {
     seen.push({ path: p, lang: req.headers["x-localai-ui-language"] ?? null });
     if (down)
