@@ -1,7 +1,7 @@
 # Spec: Music generation (ACE-Step engine, song store, music API)
 
 > **Status:** approved design · **Epic:** E11 (#504) · **Code:** `engines/acestep/` (the Python shim, package `localai_music_shim`), `agent/internal/music/` (queue, store, routes, cloud command), `agent/internal/music/engine` (the `acestep` engine adapter), `agent/ui/src/music/` · **Doctor area:** `LAI-SVC` (codes 150–179; 001–099 belong to [companion-services.md](companion-services.md), 100–149 to [survival-portal.md](survival-portal.md))
-> Canonical names: [overview.md](../architecture/overview.md) §3. Decisions: [ADR-0011](../decisions/0011-python-inference-engines.md) (Python engines on nodes), [ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md) (one GPU budget, workloads). Load and unload: [llama-router.md](llama-router.md) §4.15. Routes: [agent.md](agent.md) §3.8.35, §3.8.36.
+> Canonical names: [overview.md](../architecture/overview.md) §3. Decisions: [ADR-0012](../decisions/0012-python-inference-engines.md) (Python engines on nodes), [ADR-0013](../decisions/0013-on-demand-engines-one-gpu-budget.md) (one GPU budget, workloads). Load and unload: [llama-router.md](llama-router.md) §4.15. Routes: [agent.md](agent.md) §3.8.35, §3.8.36.
 > **The spike (#505) has not run yet.** Every fact that depends on the real ACE-Step program (its Python call, measured memory, timings, file names, hashes) is marked `TODO(#505)` and lives in one module of the shim (`backend.py`) and one catalog entry. Nothing here invents a measured number.
 
 ---
@@ -297,7 +297,7 @@ ACE-Step ships a Gradio web app. It is **optional, off by default, loopback only
 
 ## 6. Security considerations
 - **Loopback only.** The shim listens on `127.0.0.1:8082`; the unit has `IPAddressDeny=any` with `IPAddressAllow=localhost`, so the engine cannot reach the internet even if a library tries. The agent never proxies the port.
-- **No runtime downloads** ([ADR-0011](../decisions/0011-python-inference-engines.md)): the offline environment variables are set in the unit, weights come from the verified content root, the venv is built from the kit bundle with hashes.
+- **No runtime downloads** ([ADR-0012](../decisions/0012-python-inference-engines.md)): the offline environment variables are set in the unit, weights come from the verified content root, the venv is built from the kit bundle with hashes.
 - **Paths.** The shim accepts `sample_path` and `output_dir` only inside `MUSIC_WORK_DIR`, after resolving symlinks. The agent picks every path; nothing from a request becomes a path.
 - **Privacy.** Lyrics, tags and sample bytes never appear in logs, audit lines, events, doctor details or the cloud state snapshot: only sizes, hashes and ids. Lyrics are kept only in the song's `meta.json` (localai 0640). The sample is deleted after the song is made.
 - **Auth.** Every music route needs an operator session or token; deleting a song needs admin (the PIN in the desktop and the UI), like deleting a model. The Portal has no music routes.

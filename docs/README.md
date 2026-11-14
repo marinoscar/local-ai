@@ -19,6 +19,7 @@
 | [ark-sync.md](specs/ark-sync.md) | Scheduled sync, ark drive, readiness | E3 |
 | [companion-services.md](specs/companion-services.md) | Kiwix, whisper, piper, maps, vision | E4 |
 | [survival-portal.md](specs/survival-portal.md) | Offline big-button UI | E4 |
+| [dashboard.md](specs/dashboard.md) | Manage this computer from the app (the Dashboard in the Portal) and in-app help | E10 |
 | [installer.md](specs/installer.md) | `install-node.sh` (online/offline), laptop hardening | E5 |
 | [rebuild-kit.md](specs/rebuild-kit.md) | Offline rebuild materials | E5 |
 | [cloud-app.md](specs/cloud-app.md) | ai.marin.cr (EAB) | E6 |
@@ -31,7 +32,7 @@
 ## Doing a common task
 - Deploy or update the cloud app at `ai.marin.cr` (DNS, `deploy/cloud` branch, VPS install, backing up `SECRETS_ENCRYPTION_KEY`): [runbooks/10-lab-operations.md, Part 9](runbooks/10-lab-operations.md#part-9-deploying-and-updating-the-cloud). Design: [cloud-app.md §3.13](specs/cloud-app.md#313-deploy-laictl-deploy-to-the-vps). Installing and using the cloud CLI `laictl` (one-line installer, `deploy doctor|install|update`): [apps/cloud/apps/cli/README.md](../apps/cloud/apps/cli/README.md).
 
-- Make a song, or switch what a computer does (Coding, Music, ...): [runbooks/12-make-music-and-switch-workloads.md](runbooks/12-make-music-and-switch-workloads.md). Design: [music.md](specs/music.md), [ADR-0011](decisions/0011-python-inference-engines.md), [ADR-0012](decisions/0012-on-demand-engines-one-gpu-budget.md).
+- Make a song, or switch what a computer does (Coding, Music, ...): [runbooks/12-make-music-and-switch-workloads.md](runbooks/12-make-music-and-switch-workloads.md). Design: [music.md](specs/music.md), [ADR-0012](decisions/0012-python-inference-engines.md), [ADR-0013](decisions/0013-on-demand-engines-one-gpu-budget.md).
 
 ## Writing rules
 - Runbooks: numbered steps, exact commands or buttons, a "What you should see" after each step, and "If it doesn't work" with a doctor code. Write for someone who has never used a terminal. Spanish summaries are welcome for the survival runbook.

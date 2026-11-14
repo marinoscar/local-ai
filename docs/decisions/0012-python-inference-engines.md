@@ -1,4 +1,4 @@
-# ADR-0011: Python/PyTorch inference engines run on nodes as their own loopback services
+# ADR-0012: Python/PyTorch inference engines run on nodes as their own loopback services
 
 - **Status:** Accepted
 - **Date:** 2026-11-14

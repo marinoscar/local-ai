@@ -16,7 +16,7 @@ Every node serves its LLMs and VLMs through one `llama-server` process in **rout
 - the **migration** from today's hand-made `llama-qwen.service` with zero client changes;
 - the `/v1/models` output the gateway relies on;
 - the benchmark helper `aictl bench`;
-- the **engine adapters** that let other GPU engines (ACE-Step music, [music.md](music.md)) load and unload through the same orchestrator, with **one GPU budget** across engines (§4.15, [ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md));
+- the **engine adapters** that let other GPU engines (ACE-Step music, [music.md](music.md)) load and unload through the same orchestrator, with **one GPU budget** across engines (§4.15, [ADR-0013](../decisions/0013-on-demand-engines-one-gpu-budget.md));
 - **named workloads**, the one-button switch between sets of models (§4.16).
 
 ### Non-goals
@@ -810,7 +810,7 @@ Known limit: a router that restarts and brings the same models back within one p
 
 ### 4.15 Engine adapters and one GPU budget
 
-[ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md). Everything in §4.3 to §4.5 (fit, planner, lock, eviction, rollback, events, state, audit) applies to **every** engine; this section says only what an engine adds. Code: `internal/router/engine` (the interface and the `llama` adapter over the existing router client), `internal/music/engine` (the `acestep` adapter). One `modelOpsMu` serializes every load, unload, eviction and workload change of every engine (agent.md §4.9).
+[ADR-0013](../decisions/0013-on-demand-engines-one-gpu-budget.md). Everything in §4.3 to §4.5 (fit, planner, lock, eviction, rollback, events, state, audit) applies to **every** engine; this section says only what an engine adds. Code: `internal/router/engine` (the interface and the `llama` adapter over the existing router client), `internal/music/engine` (the `acestep` adapter). One `modelOpsMu` serializes every load, unload, eviction and workload change of every engine (agent.md §4.9).
 
 #### 4.15.1 The adapter
 ```go
@@ -871,7 +871,7 @@ The survival step `engines_stop` (agent.md §4.2.1, [modes.md](../architecture/m
 
 ### 4.16 Workloads (`router.Workloads`)
 
-[ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md). HTTP contract: agent.md §3.8.34; catalog shape: catalog.md §4 "Workloads".
+[ADR-0013](../decisions/0013-on-demand-engines-one-gpu-budget.md). HTTP contract: agent.md §3.8.34; catalog shape: catalog.md §4 "Workloads".
 
 **Resolution.** The profile's `workloads` merged with `node.yaml` `workloads` (same name: replaced as a whole; new name: added). An id the catalog does not have drops that workload with `LAI-CAT-020`. Resolution runs at start, on every catalog refresh and on every `node.yaml` change.
 

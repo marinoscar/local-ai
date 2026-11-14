@@ -203,14 +203,15 @@ export function buildTrayMenu(model: MenuModel, lang: Lang): MenuItemSpec[] {
   }
   groups.push(open);
 
-  // Leaving survival needs the PIN. Without the PIN prompt (DSK-08) the tray cannot do it and says where to.
+  // ADR-0011: leaving survival needs no PIN from this app (an older agent may still ask; the controller then asks
+  // for it when a PIN prompt exists, else the label below says where to go).
   const inSurvival = model.mode === 'survival';
-  const canSwitch = up && (!inSurvival || f.pin);
+  const canSwitch = up;
   const modeItems: MenuItemSpec[] = [
     { type: 'radio', action: 'mode:online', label: t(TRAY_TEXT.online), checked: model.mode === 'online', enabled: canSwitch },
     { type: 'radio', action: 'mode:offline', label: t(TRAY_TEXT.offline), checked: model.mode === 'offline', enabled: canSwitch },
   ];
-  if (inSurvival && !f.pin) modeItems.push({ type: 'separator' }, { type: 'label', label: t(TRAY_TEXT.leaveSurvival) });
+  void inSurvival;
   groups.push([
     { type: 'submenu', label: t(TRAY_TEXT.mode), items: modeItems },
     // Always enabled, never asks for a PIN: anyone can switch to the offline setup in one click.
@@ -343,8 +344,9 @@ export interface ModeControllerDeps {
 
 /**
  * The one place a mode change is requested: the tray menu and the `setMode` bridge of the shell pages both call it.
- * Online and offline carry the bearer token; survival carries nothing. Leaving survival needs a PIN grant, which is
- * used for this one request and dropped.
+ * Online and offline carry the bearer token; survival carries nothing. Leaving survival needs no PIN from this app
+ * (ADR-0011): the request is sent as it is, and only an older agent that still answers `pin_required` makes the
+ * controller ask for a PIN grant, used for that one request and dropped.
  */
 export class ModeController {
   readonly #deps: ModeControllerDeps;
@@ -356,23 +358,15 @@ export class ModeController {
     this.#log = deps.log ?? NULL_LOGGER;
   }
 
-  /** Whether survival can be left from here. */
+  /** Whether survival can be left from here: always (ADR-0011). */
   get canLeaveSurvival(): boolean {
-    return this.#deps.pin !== undefined;
+    return true;
   }
 
   async setMode(target: ModeTarget): Promise<ModeOutcome> {
-    if (target === 'survival') return this.#send(target);
-    let grant: string | undefined;
-    if (this.#deps.currentMode() === 'survival') {
-      // Known to need the PIN: do not make the agent audit a refusal.
-      const asked = await this.#grant();
-      if (!asked.ok) return asked.outcome;
-      grant = asked.grant;
-    }
-    const first = await this.#send(target, grant);
-    if (first.ok || !first.pinRequired || grant !== undefined) return first;
-    // The mode we knew was stale: the agent says the PIN is needed after all.
+    const first = await this.#send(target);
+    if (first.ok || !first.pinRequired || target === 'survival') return first;
+    // An agent older than ADR-0011 still wants the PIN to leave survival: ask once, if this app can.
     const asked = await this.#grant();
     if (!asked.ok) return asked.outcome;
     return this.#send(target, asked.grant);

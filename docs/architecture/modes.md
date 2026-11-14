@@ -64,7 +64,7 @@ All transitions are allowed in every direction. Each transition is an **ordered,
 
 ### 2.2 → `survival`
 1–4. Same as `offline`.
-4a. **Stop music first** (step `engines_stop`, [agent.md](../specs/agent.md) §4.2.1): stop `localai-music` and unload any `acestep` model **before** loading the survival models, so the survival models get the GPU ([ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md), [llama-router.md](../specs/llama-router.md) §4.15.4). Running songs end `cancelled`; finished songs stay. A stop that fails or hangs is the warning `LAI-LLM-042` and survival goes on: music **never** makes survival entry fail.
+4a. **Stop music first** (step `engines_stop`, [agent.md](../specs/agent.md) §4.2.1): stop `localai-music` and unload any `acestep` model **before** loading the survival models, so the survival models get the GPU ([ADR-0013](../decisions/0013-on-demand-engines-one-gpu-budget.md), [llama-router.md](../specs/llama-router.md) §4.15.4). Running songs end `cancelled`; finished songs stay. A stop that fails or hangs is the warning `LAI-LLM-042` and survival goes on: music **never** makes survival entry fail.
 5. Apply the profile's `survival` block (§3). Load the models in order and wait for `ready`, with a timeout of 300 s per model. A failure to load the preferred model falls back down the list (`LAI-LLM-020` warning, not fatal).
 6. Ensure `localai-kiwix` and `localai-whisper` are started. A missing content root produces a warning, shown in the Portal as "Library not available, see manual page X".
 7. Persist `mode: survival` and clear `mode_transition`.
@@ -80,7 +80,7 @@ Survival entry must **never** fail as a whole. Each sub-step that fails is repor
 5. If the last successful sync is older than 24 h, schedule a sync to start in 5 minutes. The operator may cancel it.
 
 ### 2.4 Permissions
-- CLI: `aictl mode …` requires the agent token, which members of `localai-operators` can read. Switching to `survival` **never** requires the PIN; anyone at the keyboard must be able to do it. Switching *out of* survival requires the PIN in the desktop/UI. The CLI accepts it from members of `localai-operators` without a PIN.
+- CLI: `aictl mode …` requires the agent token, which members of `localai-operators` can read. Switching to `survival` **never** requires the PIN; anyone at the keyboard must be able to do it. Switching *out of* survival needs **no PIN for an operator**: the CLI, the ai-desktop app (its agent token or a session made from it) and a socket peer in `localai-operators` may do it ([ADR-0011](../decisions/0011-full-control-from-the-app.md), which supersedes the earlier rule that the desktop/UI needs the PIN). A browser with only the Portal session, and the cloud, still need the PIN.
 - Cloud: an operator can switch a node to `offline`. The node then drops the link, so returning it to `online` must happen locally. The cloud UI warns about this. The cloud cannot command `survival`. Survival is a local decision.
 
 ## 3. Profile survival block

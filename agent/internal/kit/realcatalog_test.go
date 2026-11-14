@@ -30,6 +30,7 @@ var realKitDirs = map[string]string{
 	"kit-catalog":                        "kit/catalog",
 	"kit-agent-binaries":                 "kit/bin",
 	"kit-agent-source":                   "kit/src",
+	"kit-desktop":                        "kit/desktop",
 	"kit-llama-cpp":                      "kit/git/llama.cpp.git",
 	"kit-whisper-cpp":                    "kit/git/whisper.cpp.git",
 	"kit-local-ai-repo":                  "kit/git/local-ai.git",
@@ -44,7 +45,7 @@ var realKitDirs = map[string]string{
 
 func TestRealCatalogKitItemsPerProfile(t *testing.T) {
 	c := realCatalog(t)
-	all := []string{"kit-agent-binaries", "kit-agent-source", "kit-catalog", "kit-go-toolchain", "kit-kiwix-tools",
+	all := []string{"kit-agent-binaries", "kit-agent-source", "kit-catalog", "kit-desktop", "kit-go-toolchain", "kit-kiwix-tools",
 		"kit-llama-cpp", "kit-piper", "kit-pmtiles", "kit-whisper-cpp", "kit-debs-resolute-amd64"}
 	with := func(extra ...string) []string {
 		out := append(append([]string(nil), all...), extra...)

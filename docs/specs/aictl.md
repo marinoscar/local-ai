@@ -546,7 +546,7 @@ The lists are the target profile's `include` lists plus the node's `profile_over
 aictl workloads
 aictl workloads activate <name> [--force] [--no-wait]
 ```
-"Switch what this computer does" ([ADR-0012](../decisions/0012-on-demand-engines-one-gpu-budget.md), [llama-router.md](llama-router.md) §4.16). In the menu (§3.6) it is the first entry of **AI models ›**, so nobody has to type it. Offline: works (local).
+"Switch what this computer does" ([ADR-0013](../decisions/0013-on-demand-engines-one-gpu-budget.md), [llama-router.md](llama-router.md) §4.16). In the menu (§3.6) it is the first entry of **AI models ›**, so nobody has to type it. Offline: works (local).
 
 `aictl workloads` (`GET /workloads`): one line per workload, the active one first marked `●`, the label in the user's language, the name, and the models; a workload that cannot be activated says why.
 ```

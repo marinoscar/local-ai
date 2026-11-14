@@ -1,4 +1,4 @@
-# ADR-0012: On-demand engines share one GPU budget, switched by named workloads
+# ADR-0013: On-demand engines share one GPU budget, switched by named workloads
 
 - **Status:** Accepted
 - **Date:** 2026-11-14
@@ -7,7 +7,7 @@
 ## Context
 A node's GPU is shared. Until now one program owned it: the llama router ([ADR-0002](0002-llama-router-mode.md)), with whisper as a small, reserved guest ([companion-services.md](../specs/companion-services.md) §4.2.3). The fit rules of [llama-router.md](../specs/llama-router.md) §4.3.3 count the router's models and subtract what other programs already hold (`G_others`). The load orchestrator (§4.4) serializes every change under one lock, `modelOpsMu`, and rolls back on failure.
 
-Music generation ([ADR-0011](0011-python-inference-engines.md)) adds a second GPU engine that needs most of a consumer card while it runs. On an 8 to 16 GB node, a coding model and the music model do not fit together. A person should not have to know which model belongs to which engine, unload one by hand and load the other. They want to say "this computer makes music now", and later "back to coding".
+Music generation ([ADR-0012](0012-python-inference-engines.md)) adds a second GPU engine that needs most of a consumer card while it runs. On an 8 to 16 GB node, a coding model and the music model do not fit together. A person should not have to know which model belongs to which engine, unload one by hand and load the other. They want to say "this computer makes music now", and later "back to coding".
 
 Survival mode ([modes.md](../architecture/modes.md) §2.2) must keep working whatever ran before: it must get its models loaded even when the music engine is busy or broken.
 

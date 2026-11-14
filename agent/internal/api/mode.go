@@ -93,7 +93,7 @@ func (d ModeDeps) get(w http.ResponseWriter, r *http.Request) error {
 	out := modeInfoJSON{
 		Mode:               string(info.Mode),
 		AllowedTargets:     []string{},
-		LeaveRequiresAdmin: info.Mode == modes.Survival,
+		LeaveRequiresAdmin: false, // ADR-0011: an operator leaves survival without the PIN; the field stays for clients
 		Connectivity:       info.Connectivity,
 		SuggestSurvival:    info.SuggestSurvival,
 	}
@@ -146,10 +146,13 @@ func (d ModeDeps) change(w http.ResponseWriter, r *http.Request) error {
 	}
 	info := InfoFrom(r.Context())
 
-	// Leaving survival needs admin*: an admin, or a socket peer in localai-operators; anyone else
-	// needs the PIN (modes.md section 2.4). Entering survival never needs more than op.
+	// Leaving survival needs an operator, which the route already requires: the desktop app (its agent
+	// token or a session made from it), the CLI and a socket peer in localai-operators leave it without
+	// the PIN (ADR-0011, modes.md section 2.4). The Portal session never reaches this route, so a
+	// browser without the token still cannot leave survival; it needs a session and the PIN. Entering
+	// survival never needs more than op either.
 	cur := d.Engine.Info()
-	if cur.Effective == modes.Survival && target != modes.Survival && !info.Principal.Satisfies([]Level{AuthAdminStar}) {
+	if cur.Effective == modes.Survival && target != modes.Survival && !info.Principal.Satisfies([]Level{AuthOp}) {
 		d.auditDenied(info, cur.Effective, target)
 		return NewError(CodeAdminRequired, http.StatusForbidden, map[string]any{
 			"pin_required": true, "reason": "leaving_survival",
