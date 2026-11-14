@@ -9,7 +9,7 @@ const OPTIONS: { lang: Lang; label: string }[] = [
 export function LangToggle() {
   const cur = useLang();
   return (
-    <div className="seg" role="group" aria-label={t("talk.language")}>
+    <div className="seg seg-lang" role="group" aria-label={t("talk.language")}>
       {OPTIONS.map((o) => (
         <button
           key={o.lang}

@@ -13,6 +13,7 @@ const TYPES = {
   ".js": "text/javascript",
   ".css": "text/css",
   ".json": "application/json",
+  ".svg": "image/svg+xml",
 };
 
 // --- A valid PMTiles v3 archive with one z0 tile holding an "earth" polygon (the whole tile). ---

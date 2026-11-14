@@ -86,11 +86,12 @@ Auth levels are those of [agent.md](agent.md) §3.8 (route table). "PIN" means t
 ├──────────────────────────────────────────────────────────────────────────────────────────────┤
 │   (the eight big buttons of survival-portal.md §4.1.1)                                          │
 ├──────────────────────────────────────────────────────────────────────────────────────────────┤
-│ MANAGE THIS COMPUTER   [Mode] [Offline content] [AI models] [Health] [System]                 │
 │ FIRST AID  [CPR] [Choking] [Severe bleeding] [Burns] [Broken bone] [Snake bite] [More …]  (F) │
+│ MANAGE THIS COMPUTER   [Mode] [Offline content] [AI models] [Health] [System]                 │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 - **State first** (ADR-0009): the status line says green "Ready", amber "Ready, with problems" or red "Not ready", and when it is not green, the **one next thing** with its button (the first alert's action, else **Run a full check**).
+- The Manage row (operator session only) sits under the first-aid row, so Home fits 1366×768 at 100 % without scrolling ([survival-portal.md](survival-portal.md) §4.1.1); the look is Corona ([ADR-0014](../decisions/0014-corona-identity.md)).
 - In survival mode the header says SURVIVAL and a **Leave survival mode** button sits at the right of the status line (operator session only).
 - `M` opens Manage (the Mode screen), `H` opens Help; `Esc` returns Home from every screen. Each Manage screen starts with a row of tabs (Mode, Offline content, AI models, Health, System, Help), so moving between them never needs Home.
 - **As built (#497).** Code: `agent/ui/src/portal/manage/` (`ManageFrame`, `ManageLocked`, `ConfirmDialog`, `PinDialog` + `usePin`, `useAction`, `FailureNote`, one `<Name>Screen.tsx` per screen, `screens.tsx` the dispatcher), the gate in `view.ts` (`manage-locked` unless `session` is `full`), the Manage row in `screens/Home.tsx`, the next step and Help in `components/StatusLine.tsx`. The PIN grant is kept in memory only, until 30 s before it expires (`manage/pin.ts`). The Playwright fake keeps each screen's routes in `e2e/fake-manage/<name>.mjs`.

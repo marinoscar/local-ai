@@ -49,6 +49,34 @@ test("Home fills 1366x768 with no scrollbar at 100 %", async ({ page }) => {
   expect(box!.height).toBeGreaterThanOrEqual(169);
 });
 
+// The app's operator session adds the Manage row (dashboard.md section 4.1); it sits under the
+// first-aid row and Home still fits 1366x768 at 100 %, in survival and online (Corona, ADR-0014).
+for (const mode of ["survival", "online"] as const) {
+  test(`Home with the Manage row fits 1366x768 with no scrollbar (${mode})`, async ({
+    page,
+  }) => {
+    await setStatus(page, { mode, session: "full" });
+    await page.goto("/portal");
+    const manage = page.locator(".manage-row");
+    await expect(manage).toBeVisible();
+    const firstaid = await page.locator(".firstaid").boundingBox();
+    const row = await manage.boundingBox();
+    expect(firstaid!.y).toBeLessThan(row!.y);
+    const m = await page.evaluate(() => ({
+      sh: document.documentElement.scrollHeight,
+      ih: window.innerHeight,
+      sw: document.documentElement.scrollWidth,
+      iw: window.innerWidth,
+    }));
+    expect(m.sh).toBeLessThanOrEqual(m.ih);
+    expect(m.sw).toBeLessThanOrEqual(m.iw);
+    expect(row!.y + row!.height).toBeLessThanOrEqual(768);
+    const box = await page.locator(".big").first().boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(169);
+    await noSeriousViolations(page);
+  });
+}
+
 test("150 % text scrolls vertically, never horizontally", async ({ page }) => {
   await page.goto("/portal");
   await page.getByRole("button", { name: /150 %/ }).click();
