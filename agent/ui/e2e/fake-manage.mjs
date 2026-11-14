@@ -10,7 +10,8 @@ import * as models from "./fake-manage/models.mjs";
 import * as pin from "./fake-manage/pin.mjs";
 import * as system from "./fake-manage/system.mjs";
 
-const MODULES = [pin, mode, content, models, health, system];
+// models before content: both answer GET /ark/sync, models only while its own download runs.
+const MODULES = [pin, mode, models, content, health, system];
 
 export function resetManage() {
   for (const m of MODULES) m.reset();

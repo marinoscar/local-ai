@@ -111,6 +111,7 @@ Top: the readiness of each mounted root in one line ("Internal disk: ready" / "9
 
 ### 4.4 AI models
 A row per model: name, size, state (loaded, downloaded, not downloaded), "survival" tag. Buttons per §3.2. Delete explains "This removes the model from this computer. You can download it again later with the internet, or copy it from the AI-ARK drive." then asks the PIN.
+- **As built (#498).** Code: `agent/ui/src/portal/manage/ModelsScreen.tsx` over the rules in `manage/models.ts` (unit tests `models.test.ts`). State first: a line says which brain is in use and which starts with the computer. The list is `GET /models` (all engines), re-read every 10 s and every 1.5 s while a load, a download or another button runs. Rows: brains on this computer or in its plan first (in use, then on disk, then not downloaded), the rest of the catalog under a closed **More models** fold, speech models (whisper, piper) last with only **Download** and **Delete**. `status` reads `loaded`/`sleeping` "In use", `loading` "Loading …", `stored`/`unloaded` "On this computer", `failed` "On this computer. It could not start last time.", `absent` "Not downloaded". The **Survival brain** tag is `brain.choices[].survival` of the Portal status (the profile's `survival.models`); **Default** is `default`; "Fits this computer" unless `loadable_reason.code` is `LAI-CAT-005`, whose message is shown. A row shows only the buttons that apply (Use this brain or Unload, Make default, Download when absent, Delete when present); a disabled one names its reason under the buttons (`aria-describedby`): too big, the AI service is down (`LAI-LLM-004`), files not checked (`LAI-LLM-008`), already the default, download first, unload first, "Needs the internet" (any mode but online), another task or download running. **Use this brain** and **Unload** confirm first; the load is `POST /models/{id}/load {"wait": false, "unload_others": true}`, then the list is polled until the model is in use: `failed`, or `loading` that ended otherwise, or no `loading` seen in 30 s is `LAI-LLM-009`, more than 300 s is `LAI-LLM-010`. **Download** confirms with the size, posts `{}` and follows `GET /ark/sync` for the answer's `sync_run_id` (the item's `bytes_done`/`bytes_total` as a percent; a run that is not this one shows "Downloading …"), ending when the model is `present` or the run ends (an item `failed`, or `skipped` with a code, is the failure with that code). **Delete** shows the sentence above and the size, then the PIN (`usePin`), then `DELETE /models/{id}?root=internal&keep_last=true` with the grant: it removes the copy on this computer's own disk only, never the AI-ARK drive's. When that is the last verified copy (`409 LAI-SYN-044`) a second confirmation ("This is the last copy … you can only get it back with the internet") sends `keep_last=false`, as `aictl delete --allow-last-copy` does; an answer with an empty `deleted` says the model was only on a drive. Every failure is `FailureNote` (code, message, fix) under its row. The Playwright fake is `e2e/fake-manage/models.mjs` (`POST /__models?fail=<op>`).
 
 ### 4.5 Health
 **Run a full check** shows the doctor's checks: passed count, then each problem with its code, title, fix and fix button. **Show recent events** lists the last 50 log lines as sentences (time, what, code), never raw JSON. **Run a practice drill** runs the drill ([drill.md](drill.md)) with progress and shows the last result.
@@ -375,6 +376,72 @@ Every string of the Manage screens, Home's additions and the guide lives in `age
 | Key | English | Español |
 |---|---|---|
 | `models.title` | AI models | Modelos de IA |
+| `models.lead` | The brains (AI models) of this computer. Choose which one answers, which one starts with the computer, and download or remove them. | Los cerebros (modelos de IA) de esta computadora. Elija cuál responde, cuál arranca con la computadora, y descárguelos o bórrelos. |
+| `models.inUseNow` | In use now: {name} | En uso ahora: {name} |
+| `models.noneInUse` | No brain is in use. Chat will not answer until you press Use this brain on one of them. | No hay ningún cerebro en uso. El chat no responderá hasta que presione Usar este cerebro en uno de ellos. |
+| `models.defaultIs` | Starts with the computer: {name} | Arranca con la computadora: {name} |
+| `models.noDefault` | No brain is set to start with the computer. Press Make default on one of them. | Ningún cerebro arranca con la computadora. Presione Hacer predeterminado en uno de ellos. |
+| `models.listFailed` | The list of models could not be read. | No se pudo leer la lista de modelos. |
+| `models.retry` | Try again | Intentar de nuevo |
+| `models.empty` | No AI model is known on this computer. | Esta computadora no conoce ningún modelo de IA. |
+| `models.more` | More models (not planned for this computer): {n} | Más modelos (no previstos para esta computadora): {n} |
+| `models.speech` | Speech models (for Talk) | Modelos de voz (para Hablar) |
+| `models.state.inUse` | In use | En uso |
+| `models.state.loading` | Loading … | Cargando … |
+| `models.state.onComputer` | On this computer | En esta computadora |
+| `models.state.failed` | On this computer. It could not start last time. | En esta computadora. No pudo iniciar la última vez. |
+| `models.state.absent` | Not downloaded | Sin descargar |
+| `models.state.downloading` | Downloading … | Descargando … |
+| `models.state.downloadingPct` | Downloading … {pct} % | Descargando … {pct} % |
+| `models.size` | Size: {size} | Tamaño: {size} |
+| `models.fits` | Fits this computer | Cabe en esta computadora |
+| `models.tooBig` | Too big for this computer: {reason} | Demasiado grande para esta computadora: {reason} |
+| `models.tag.default` | Default | Predeterminado |
+| `models.tag.survival` | Survival brain | Cerebro de supervivencia |
+| `models.tag.speech` | Speech | Voz |
+| `models.use` | Use this brain | Usar este cerebro |
+| `models.unload` | Unload | Detener |
+| `models.makeDefault` | Make default | Hacer predeterminado |
+| `models.download` | Download | Descargar |
+| `models.delete` | Delete | Borrar |
+| `models.why.tooBig` | Too big for this computer | Demasiado grande para esta computadora |
+| `models.why.serviceDown` | The AI service is not running. Open Health and run a full check. | El servicio de IA no está funcionando. Abra Salud y haga una revisión completa. |
+| `models.why.notChecked` | Its files are not checked yet. Open Offline content and check the content. | Sus archivos todavía no se revisaron. Abra Contenido sin conexión y revise el contenido. |
+| `models.why.cannotStart` | This computer cannot start it now | Esta computadora no puede iniciarlo ahora |
+| `models.why.busy` | Wait for the current task to finish | Espere a que termine la tarea en curso |
+| `models.why.isDefault` | This is already the default | Ya es el predeterminado |
+| `models.why.downloadFirst` | Download it first | Descárguelo primero |
+| `models.why.unloadFirst` | It is in use. Press Unload first. | Está en uso. Presione Detener primero. |
+| `models.why.downloadRunning` | Wait for the current download to finish | Espere a que termine la descarga en curso |
+| `models.confirmUse.title` | Use {name}? | ¿Usar {name}? |
+| `models.confirmUse.line1` | The brain in use now stops, and questions in progress stop too. | El cerebro en uso se detiene, y las preguntas en curso también. |
+| `models.confirmUse.line2` | Starting a brain takes about a minute. | Iniciar un cerebro tarda cerca de un minuto. |
+| `models.confirmUnload.title` | Unload {name}? | ¿Detener {name}? |
+| `models.confirmUnload.line1` | Chat, Photo and Talk will not answer until a brain is in use again. | Chat, Foto y Hablar no responderán hasta que haya otra vez un cerebro en uso. |
+| `models.confirmDownload.title` | Download {name}? | ¿Descargar {name}? |
+| `models.confirmDownload.line1` | It needs {size} of disk space and the internet. | Necesita {size} de espacio en disco e internet. |
+| `models.confirmDownload.line2` | It can take a long time. You can keep using the computer while it downloads. | Puede tardar mucho. Puede seguir usando la computadora mientras se descarga. |
+| `models.confirmDelete.title` | Delete {name}? | ¿Borrar {name}? |
+| `models.confirmDelete.line1` | This removes the model from this computer. You can download it again later with the internet, or copy it from the AI-ARK drive. | Esto borra el modelo de esta computadora. Puede descargarlo de nuevo más tarde con internet, o copiarlo desde el disco AI-ARK. |
+| `models.confirmDelete.line2` | It frees {size}. | Libera {size}. |
+| `models.confirmLast.title` | This is the last copy | Esta es la última copia |
+| `models.confirmLast.line1` | There is no other checked copy of {name} on this computer or on a connected AI-ARK drive. | No hay otra copia revisada de {name} en esta computadora ni en un disco AI-ARK conectado. |
+| `models.confirmLast.line2` | If you delete it, you can only get it back with the internet. | Si la borra, solo podrá recuperarla con internet. |
+| `models.confirmLast.ok` | Delete the last copy | Borrar la última copia |
+| `models.pinWhy` | Deleting {name} needs the admin PIN. | Borrar {name} necesita el PIN de administrador. |
+| `models.working.use` | Starting {name} … this takes about a minute. | Iniciando {name} … tarda cerca de un minuto. |
+| `models.done.use` | {name} is in use. | {name} está en uso. |
+| `models.done.unload` | {name} was unloaded. | {name} se detuvo. |
+| `models.done.default` | {name} will start each time the computer starts. | {name} arrancará cada vez que arranque la computadora. |
+| `models.done.downloadStarted` | The download of {name} started. | Empezó la descarga de {name}. |
+| `models.done.download` | {name} is downloaded and checked. | {name} está descargado y revisado. |
+| `models.done.delete` | {name} was removed from this computer. | {name} se borró de esta computadora. |
+| `models.loadFailed` | {name} could not start. The previous brain was started again. | {name} no pudo iniciar. Se volvió a iniciar el cerebro anterior. |
+| `models.loadFailedFix` | Choose a smaller brain, or open Health and run a full check. | Elija un cerebro más pequeño, o abra Salud y haga una revisión completa. |
+| `models.loadTimeout` | {name} did not start in 5 minutes. | {name} no inició en 5 minutos. |
+| `models.downloadFailed` | The download of {name} did not finish. | La descarga de {name} no terminó. |
+| `models.downloadFailedFix` | Check the internet and press Download again. Offline content shows more. | Revise internet y presione Descargar otra vez. Contenido sin conexión muestra más. |
+| `models.notOnDisk` | {name} is not on this computer's own disk (only on a drive). Nothing was removed. | {name} no está en el disco propio de esta computadora (solo en un disco externo). No se borró nada. |
 <!-- /copy -->
 
 ### 9.5 Health

@@ -195,6 +195,9 @@
 .content-list,
 .content-drives,
 .content-active {
+}
+/* ---- AI models screen (#498, dashboard.md section 4.4) ---- */
+.model-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -247,3 +250,37 @@
   margin: 8px 0;
   overflow-wrap: anywhere;
 }
+.model-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 6px 0;
+}
+.model-tag {
+  margin-left: 4px;
+}
+.model-actions {
+  margin-top: 10px;
+}
+.model-why {
+  margin: 6px 0 0;
+  font-style: italic;
+}
+.model-note {
+  margin-top: 10px;
+}
+.model-done {
+  font-weight: 700;
+  color: var(--ok);
+}
+.model-summary {
+  margin-bottom: 16px;
+}
+.model-group {
+  font-size: 1.3rem;
+  margin: 24px 0 10px;
+}
+.model-more {
+  margin: 8px 0 16px;
+}
+/* ---- end AI models screen ---- */
