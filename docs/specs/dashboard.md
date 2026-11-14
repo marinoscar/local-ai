@@ -435,8 +435,8 @@ Every string of the Manage screens, Home's additions and the guide lives in `age
 | `guide.task.update.3` | It also happens by itself every night while the computer is Online. | También ocurre solo cada noche mientras la computadora está En línea. |
 | `guide.task.import.title` | Copy everything from the AI-ARK drive | Copiar todo desde el disco AI-ARK |
 | `guide.task.import.1` | Plug in the AI-ARK drive and wait one minute. | Conecte el disco AI-ARK y espere un minuto. |
-| `guide.task.import.2` | On Home, press **Offline content**. The drive appears under **Drives**. | En el inicio, presione **Contenido sin conexión**. El disco aparece en **Discos**. |
-| `guide.task.import.3` | Press **Copy from this drive**. Nothing on this computer is deleted. | Presione **Copiar desde este disco**. No se borra nada de esta computadora. |
+| `guide.task.import.2` | On Home, press **Offline content**. The drive appears under **AI-ARK drives**. | En el inicio, presione **Contenido sin conexión**. El disco aparece en **Discos AI-ARK**. |
+| `guide.task.import.3` | Press **Copy from this drive**. Nothing on this computer is deleted. | Presione **Copiar de este disco**. No se borra nada de esta computadora. |
 | `guide.task.eject.title` | Remove the AI-ARK drive safely | Retirar el disco AI-ARK con seguridad |
 | `guide.task.eject.1` | On Home, press **Offline content**. | En el inicio, presione **Contenido sin conexión**. |
 | `guide.task.eject.2` | Next to the drive, press **Eject safely**. | Junto al disco, presione **Expulsar con seguridad**. |
