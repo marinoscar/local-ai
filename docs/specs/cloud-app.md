@@ -78,6 +78,7 @@ npm run platform:check && npm run typecheck && npm test && npm run build
 ```
 
 Notes:
+- `--theme "#2e7d32"` was the starter's green at creation. The app now wears **Corona** ([ADR-0014](../decisions/0014-corona-identity.md)): see §3.11, "Theme".
 - `--cli laictl` names the app's EAB CLI. It is the starter's `appctl`, renamed so it cannot be confused with `aictl` on the nodes. Everywhere EAB docs say `appctl`, this app runs `laictl` (for example `laictl deploy install`). The CLI's state dir is `~/.laictl/` and its env prefix is `LAICTL_`.
 - Platform package versions stay **exactly pinned** as the starter writes them. Renovate moves them as one group (the starter's `renovate.json`). Copy that rule into the repo-root `renovate.json` with `"matchFileNames": ["apps/cloud/**"]`.
 - `apps/cloud/AGENTS.md` and `apps/cloud/CLAUDE.md` (from the starter) stay. They add EAB rules on top of the repo-root `AGENTS.md`. The repo root wins on conflict.
@@ -1038,6 +1039,8 @@ Registered before `SettingsModule.forRoot()` (`apps/api/src/localai/localai.sett
 ### 3.11 UI pages (web, `apps/cloud/apps/web/src/localai/`)
 
 Routes added to `App.tsx` inside the packaged shell; navigation entries in `apps/web/src/config/navigation`. All pages poll their API every 5 s while visible (no SSE in v1). Colours use MUI palette tokens; colour is never the only signal (each colour has a word and an icon). Shared node-card and status-chip components come from `@localai/ui` (`packages/ui`).
+
+**Theme (Corona, [ADR-0014](../decisions/0014-corona-identity.md)).** `apps/web/src/theme.ts` builds the platform shell's two themes from the tokens of [`packages/ui/brand/tokens.json`](../../packages/ui/brand/tokens.json) (copied, because the web app builds from `apps/cloud` alone; `apps/web/src/__tests__/theme.test.ts` fails when they drift and checks every text colour at 4.5:1 or more). Dark: background `#07070A`, paper `#111015`, text `#F5EFE3`/`#B3ACBF`, divider `#2A2833`, primary gold `#F2B544` with `#1A1206` text, status green/amber/red/blue from the tokens, a 3 px gold focus ring. Light stays selectable from the shell's toggle, with a darker gold primary `#8A5A00` (5.9:1 on white). The app **opens dark**: the platform's `ShellRoot` defaults to `system` and has no prop for another default, so `main.tsx` stores `dark` under the shell's key `theme_mode` before the first render when this browser holds no choice yet (a stored choice is never overwritten). `identity.json` `themeColor` and `backgroundColor` are `#07070a`: they colour the browser bar, the manifest and the installed app's splash, not the brand accent. The favicon and the icon master (`apps/web/public/favicon.svg`, `icons/source.svg`) are the eclipse of [`packages/ui/brand/icon.svg`](../../packages/ui/brand/icon.svg), with a solid `themeColor` plate so `scripts/rename.mjs` still finds its anchor. The font stays the platform's: Atkinson Hyperlegible is not bundled in the cloud app, and no font is fetched from a CDN.
 
 **Health and colour rules** (computed server-side in `GET /api/localai/nodes`, see §4.5):
 
