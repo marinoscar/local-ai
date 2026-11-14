@@ -13,7 +13,7 @@ import (
 
 // overviewLayout is overview.md section 3.3, directories only, in the order it lists them.
 var overviewLayout = []string{
-	"models", "speech", "speech/whisper", "speech/piper", "kiwix", "maps", "maps/assets", "kit", "docs",
+	"models", "speech", "speech/whisper", "speech/piper", "music", "kiwix", "maps", "maps/assets", "kit", "docs",
 	".trash", ".staging",
 }
 

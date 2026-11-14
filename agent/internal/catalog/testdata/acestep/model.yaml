@@ -1,0 +1,22 @@
+
+  # A complete engine acestep entry (E11, catalog.md section 2). It is an EXAMPLE for the tests: the
+  # real entry ships only after the ACE-Step spike (#505) has measured it, and the sha256 values here
+  # are test tokens, never real ones.
+  - id: acestep-v15-turbo
+    display_name: "ACE-Step 1.5 Turbo"
+    summary: "Makes songs from lyrics and a style description."
+    summary_es: "Crea canciones a partir de una letra y una descripción del estilo."
+    engine: acestep
+    roles: [music]
+    languages: [en, es, multi]
+    license: apache-2.0
+    survival_tier: 3
+    source:
+      type: huggingface
+      repo: org-alpha/acestep-v15-turbo
+      revision: 0123456789abcdef0123456789abcdef01234567
+    files:
+      - {kind: acestep, name: "acestep-v15-turbo/model.safetensors", size_bytes: 4800000000, sha256: "@sha:e@"}
+      - {kind: acestep, name: "acestep-v15-turbo/config.json", size_bytes: 4096, sha256: "@sha:f@"}
+      - {kind: acestep, name: "vae/diffusion_pytorch_model.safetensors", size_bytes: 330000000, sha256: "@sha:0@"}
+    requirements: {backends: [cuda], min_vram_mib: 8000, min_ram_mib: 16384, min_disk_bytes: 5200000000}

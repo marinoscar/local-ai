@@ -45,4 +45,9 @@ const (
 	CodeProfile = doctor.CAT018
 	// CodeLayout: CATALOG_VERSION missing or malformed, or the file layout is wrong.
 	CodeLayout = doctor.CAT019
+
+	// CodeWorkloadModel: a workload (profile or node.yaml) references an unknown model id.
+	CodeWorkloadModel = doctor.CAT020
+	// CodeAcestepLayout: an engine acestep model has an invalid file layout or requirements.
+	CodeAcestepLayout = doctor.CAT021
 )
