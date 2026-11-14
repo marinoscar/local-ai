@@ -151,6 +151,25 @@ type EnsureReport struct {
 // EnsureStepReport is one part: its id and status.
 type EnsureStepReport struct{ ID, Status string }
 
+// WorkloadsSource is GET /workloads in the words of the snapshot (E11); the app implements it over the
+// orchestrator.
+type WorkloadsSource interface {
+	Workloads(ctx context.Context) *WorkloadsReport
+}
+
+// WorkloadsReport is what a WorkloadsSource answers; nil when the orchestrator is not up.
+type WorkloadsReport struct {
+	Active string
+	Items  []WorkloadReport
+}
+
+// WorkloadReport is one workload.
+type WorkloadReport struct {
+	Name, LabelEN, LabelES string
+	Models, Missing        []string
+	Fits                   bool
+}
+
 // SnapshotOptions configure a SnapshotBuilder.
 type SnapshotOptions struct {
 	// Status is required.
@@ -164,6 +183,8 @@ type SnapshotOptions struct {
 	Drill   DrillSource
 	// Ensure is the install engine's picture; nil leaves the block out.
 	Ensure EnsureSource
+	// Workloads is the node's workloads; nil leaves the block out.
+	Workloads WorkloadsSource
 	// BootID is a fresh UUID per agent process; required.
 	BootID string
 	Now    func() time.Time
@@ -224,6 +245,8 @@ type BuildOpts struct {
 	// Ensure adds the ensure block: set only when the cloud's handshake lists FeatureEnsure, because an older
 	// cloud's strict schema refuses the key (a 400 on every push).
 	Ensure bool
+	// Workloads adds the workloads block, only when the handshake lists FeatureWorkloads.
+	Workloads bool
 }
 
 // BuildWith is Build with options.
@@ -279,6 +302,9 @@ func (sb *SnapshotBuilder) BuildWith(ctx context.Context, o BuildOpts) (*Built, 
 	snap.Drill, pendingDrill = sb.snapDrill(drillAccepted)
 	if o.Ensure {
 		snap.Ensure = sb.snapEnsure(ctx)
+	}
+	if o.Workloads {
+		snap.Workloads = sb.snapWorkloads(ctx)
 	}
 
 	dropped := scrubValue(reflect.ValueOf(&snap), "")
@@ -652,6 +678,50 @@ func (sb *SnapshotBuilder) snapEnsure(ctx context.Context) *SnapEnsure {
 		out.Steps = append(out.Steps, SnapEnsureStep{
 			ID: cut(s.ID, 64), Status: oneOf(s.Status, "pending", "ok", "pending", "waiting", "needs_confirm", "blocked", "running", "done", "failed", "cancelled"),
 		})
+	}
+	return out
+}
+
+// workloadNameRe is the name rule of WorkloadsBlockV1.
+var workloadNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
+
+// snapWorkloads builds the workloads block within WorkloadsBlockV1's limits: at most 16 workloads of
+// at most 8 model ids each, labels cut at 64 characters; a workload whose name breaks the rule is left
+// out, and an active name that is not listed is sent as null.
+func (sb *SnapshotBuilder) snapWorkloads(ctx context.Context) *SnapWorkloads {
+	if sb.o.Workloads == nil {
+		return nil
+	}
+	r := sb.o.Workloads.Workloads(ctx)
+	if r == nil {
+		return nil
+	}
+	ids := func(in []string) []string {
+		out := []string{}
+		for _, id := range in {
+			if len(out) == 8 {
+				break
+			}
+			out = append(out, cut(id, 64))
+		}
+		return out
+	}
+	out := &SnapWorkloads{Items: []SnapWorkload{}}
+	for _, w := range r.Items {
+		if len(out.Items) == 16 {
+			break
+		}
+		if !workloadNameRe.MatchString(w.Name) {
+			continue
+		}
+		out.Items = append(out.Items, SnapWorkload{
+			Name: w.Name, Label: SnapWorkloadLabel{EN: cut(w.LabelEN, 64), ES: cut(w.LabelES, 64)},
+			Models: ids(w.Models), Fits: w.Fits, Missing: ids(w.Missing),
+		})
+		if w.Name == r.Active {
+			a := w.Name
+			out.Active = &a
+		}
 	}
 	return out
 }

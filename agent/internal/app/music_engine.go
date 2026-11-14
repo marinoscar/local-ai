@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 
+	"github.com/marinoscar/local-ai/agent/internal/cloud"
+
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/hardware"
@@ -126,4 +128,23 @@ func (d *Daemon) musicEngineModels() []router.EngineModel {
 		return nil
 	}
 	return d.acestep.Cached()
+}
+
+// workloadsSnapshot is the cloud snapshot's workloads block (cloud.WorkloadsSource) over the
+// orchestrator's GET /workloads view.
+type workloadsSnapshot struct{ d *Daemon }
+
+var _ cloud.WorkloadsSource = workloadsSnapshot{}
+
+func (w workloadsSnapshot) Workloads(ctx context.Context) *cloud.WorkloadsReport {
+	if w.d.c == nil || w.d.c.Orchestrator == nil {
+		return nil
+	}
+	v := w.d.c.Orchestrator.Workloads(ctx)
+	r := &cloud.WorkloadsReport{Active: v.Active}
+	for _, x := range v.Workloads {
+		r.Items = append(r.Items, cloud.WorkloadReport{Name: x.Name, LabelEN: x.Label.EN, LabelES: x.Label.ES,
+			Models: x.Models, Missing: x.Missing, Fits: x.Fits})
+	}
+	return r
 }

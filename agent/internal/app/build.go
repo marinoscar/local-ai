@@ -353,6 +353,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	var snap cloud.SnapshotOptions
 	snap.Drill = reporter
 	snap.Ensure = ensureSnapshot{d} // the engine is built after the link; the source looks at it when asked
+	snap.Workloads = workloadsSnapshot{d}
 	if d.ark != nil {
 		snap.Ark, snap.Sync = d.ark.ready.CloudSource(), adapt.CloudSync{Engine: d.ark.engine}
 	}
