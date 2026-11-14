@@ -78,6 +78,8 @@ func (f *fakeEngine) Stop(_ context.Context, id string) error {
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, "stop "+id)
 	if f.stopErr != nil {
+		// The real adapter records the model unloaded when it stopped but did not free its memory.
+		f.resident = map[string]bool{}
 		return f.stopErr
 	}
 	f.resident = map[string]bool{}
@@ -251,10 +253,27 @@ func TestEngineStartFailsRollsBack(t *testing.T) {
 	}
 }
 
-func TestMusicThatWillNotFreeItsMemoryFailsTheLanguageModelLoad(t *testing.T) {
+// llama-router.md section 4.15.3 step 4: an eviction that ends in LAI-LLM-042 is a warning, not a
+// load failure.
+func TestMusicThatWillNotFreeItsMemoryIsAWarning(t *testing.T) {
 	r, e := musicRig(t)
 	e.set("music-l")
 	e.stopErr = &EngineError{Code: CodeEngineNotFreed, Cause: "vram"}
+	res, err := r.o.Load(bg, "m-a", true, true, sysActor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eqStrings(t, "unloaded", res.Unloaded, []string{"music-l"})
+	eqStrings(t, "router calls", r.calls(), []string{"load m-a"})
+	if !r.alerts.has("raise", CodeEngineNotFreed, catalog.EngineAcestep) {
+		t.Error("LAI-LLM-042 was not raised")
+	}
+}
+
+func TestMusicThatWillNotStopFailsTheLanguageModelLoad(t *testing.T) {
+	r, e := musicRig(t)
+	e.set("music-l")
+	e.stopErr = errors.New("dbus gone")
 	_, err := r.o.Load(bg, "m-a", true, true, sysActor)
 	oe := opErrOf(t, err)
 	if oe.Code != CodeEngineNotFreed || oe.Details["unloading"] != "music-l" {
@@ -283,9 +302,9 @@ func TestEngineUnloadThatDoesNotFreeMemoryIs042(t *testing.T) {
 	r, e := musicRig(t)
 	e.set("music-s")
 	e.stopErr = &EngineError{Code: CodeEngineNotFreed, Cause: "vram"}
-	_, err := r.o.Unload(bg, "music-s", false, sysActor)
-	if oe := opErrOf(t, err); oe.Code != CodeEngineNotFreed || oe.HTTPStatus() != http.StatusInternalServerError {
-		t.Fatalf("err = %v", err)
+	res, err := r.o.Unload(bg, "music-s", false, sysActor)
+	if err != nil || res.Warning == nil || res.Warning.Code != CodeEngineNotFreed {
+		t.Fatalf("unload = %+v, %v", res, err)
 	}
 	if !r.alerts.has("raise", CodeEngineNotFreed, catalog.EngineAcestep) {
 		t.Error("LAI-LLM-042 was not raised")

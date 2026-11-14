@@ -31,6 +31,9 @@ type UnloadResult struct {
 	// Restored are the models loaded again afterwards.
 	Restarted bool
 	Restored  []string
+	// Warning is LAI-LLM-042 when a model of another engine stopped but did not free its memory in
+	// time (E11); nil otherwise.
+	Warning *Reason
 }
 
 // Unload unloads a model: llama-router.md section 4.5. It is UnloadWith with no lock wait.

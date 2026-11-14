@@ -243,10 +243,18 @@ func (e Env) withoutEngines(engineMiB int64) Env {
 	return e
 }
 
-// stopAny stops a model on its engine ("" or llama: the router).
+// stopAny stops a model on its engine ("" or llama: the router). An engine that stops but does not
+// free its memory in time (LAI-LLM-042) is a warning, not a failure (llama-router.md section 4.15.3
+// step 4): the alert is raised, the model counts as unloaded and the caller goes on.
 func (o *Orchestrator) stopAny(ctx context.Context, in Inputs, engine, id string) *loadFailure {
 	if a, ok := o.adapter(engine); ok {
 		if err := a.Stop(ctx, id); err != nil {
+			var ee *EngineError
+			if errors.As(err, &ee) && ee.Code == CodeEngineNotFreed {
+				o.log.Warn("an engine did not stop cleanly; going on", "engine", engine, "model", id, "code", string(CodeEngineNotFreed), "error", err)
+				o.raise(CodeEngineNotFreed, engine, map[string]any{"model": id})
+				return nil
+			}
 			return engineFailure(err, id)
 		}
 		return nil
@@ -585,13 +593,18 @@ func (o *Orchestrator) unloadEngine(ctx context.Context, req UnloadRequest, a En
 	}
 	t := o.clock.Now()
 	if err := a.Stop(ctx, req.ID); err != nil {
+		var ee *EngineError
+		if !errors.As(err, &ee) || ee.Code != CodeEngineNotFreed {
+			oe := opErr(CodeEngineNotFreed, http.StatusInternalServerError,
+				"The model was asked to stop but its program did not stop.", map[string]any{"model": req.ID, "op_id": hold.OpID}, err)
+			o.auditWrite(ctx, audit.ActionModelUnload, req.Actor, req.ID, hold.OpID, oe)
+			return res, oe
+		}
+		// LAI-LLM-042 is a warning (llama-router.md section 4.15.3): the model is recorded unloaded.
 		o.raise(CodeEngineNotFreed, a.Engine(), map[string]any{"model": req.ID})
-		oe := opErr(CodeEngineNotFreed, http.StatusInternalServerError,
-			"The model was asked to stop but its program did not stop cleanly or free the graphics memory.",
-			map[string]any{"model": req.ID, "op_id": hold.OpID}, err)
-		o.log.Warn("an engine did not stop cleanly", "op_id", hold.OpID, "model", req.ID, "engine", a.Engine(), "code", string(oe.Code), "error", err)
-		o.auditWrite(ctx, audit.ActionModelUnload, req.Actor, req.ID, hold.OpID, oe)
-		return res, oe
+		o.log.Warn("an engine did not stop cleanly", "op_id", hold.OpID, "model", req.ID, "engine", a.Engine(), "code", string(CodeEngineNotFreed), "error", err)
+		res.Warning = &Reason{Code: CodeEngineNotFreed, Message: "The music engine stopped but did not free all its graphics memory in time.",
+			MessageES: "El motor de música se detuvo pero no liberó a tiempo toda su memoria gráfica."}
 	}
 	o.publish(events.TypeModelUnloaded, hold.OpID, events.ModelUnloaded{Model: req.ID, Reason: events.UnloadRequest})
 	o.log.Info("model unloaded", "op_id", hold.OpID, "model", req.ID, "engine", a.Engine(), "duration_ms", ms(o.clock.Now().Sub(t)))
