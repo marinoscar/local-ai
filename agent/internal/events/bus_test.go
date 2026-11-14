@@ -817,6 +817,8 @@ func examples() map[string]any {
 		TypeDrillStarted:        DrillStarted{RunID: "drill-1", Trigger: "manual", Quick: true},
 		TypeDrillCheckDone:      DrillCheckDone{RunID: "drill-1", ID: "check-a", Result: "warn", Code: "LAI-DRL-001"},
 		TypeDrillDone:           DrillDone{RunID: "drill-1", Overall: "pass", SurvivalReady: true},
+		TypeMusicProgress:       MusicOp{OpID: "op_7k2m9q4r8t1c", State: "running", Progress: &progress, SongIDs: []string{"sng_aaaaaaaaaaaa"}},
+		TypeMusicDone:           MusicOp{OpID: "op_7k2m9q4r8t1c", State: "failed", SongIDs: []string{}, Code: "LAI-SVC-152"},
 	}
 }
 
