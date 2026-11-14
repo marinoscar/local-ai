@@ -184,10 +184,11 @@ Design target: **1366×768** with no scrolling on the home screen at 100 % text 
 │ │  place search     │ │  computer         │ │  72 %, 2 h 25 min │ │  model            │       │
 │ └───────────────────┘ └───────────────────┘ └───────────────────┘ └───────────────────┘       │
 ├──────────────────────────────────────────────────────────────────────────────────────────────┤
-│ FIRST AID  [CPR] [Choking] [Severe bleeding] [Burns] [Broken bone] [Snake bite] [More …]  (F) │
+│ FIRST AID  [CPR (heart not beating)] [Choking] [Severe bleeding] [Shock] [Burns]   [More …]  (F) │
 │ This is not a doctor. If any phone works, call 911.                                           │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+- The first-aid row shows the first **five** available entries and **More …** (the full grid, §4.1.10), so it stays on one line at 1366 px with the real entry names ("CPR (heart not beating)").
 - An operator session adds the Manage row ([dashboard.md](dashboard.md) §4.1) **under** the first-aid row, so Home with both still fits 1366×768 at 100 % without scrolling, in survival and online (the rows are tightened, the text is not shrunk).
 - Buttons: 300×170 px, 4 columns × 2 rows, 24 px gaps between columns and 16 px between rows. Number keys `1`–`8` open them; `F` focuses the first-aid row; `Esc` always returns home.
 - The status line is one sentence built from `capabilities` (§4.2): green dot "Ready", amber "Ready, with problems — see Status", red "Not ready — see Status". Colour rule: **red** if `chat` or `library` is `unavailable`; else **amber** if any capability is not `ready`; else **green**.

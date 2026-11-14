@@ -40,9 +40,16 @@ export function arrowNav(e: KeyboardEvent<HTMLElement>): void {
   items[Math.min(items.length - 1, Math.max(0, i + dir))]?.focus();
 }
 
-/** The first-aid row of Home (survival-portal.md section 4.1.1): the first six available entries and "More". */
+/** How many first-aid entries Home shows before "More". */
+export const FIRST_AID_ON_HOME = 5;
+
+/**
+ * The first-aid row of Home (survival-portal.md section 4.1.1): the first five available entries and
+ * "More", so the row stays on one line at 1366 px with the real entry names ("CPR (heart not
+ * beating)") and Manage stays on screen. The full grid is one key away (F, More).
+ */
 export function FirstAidRow({ status }: { status: PortalStatus | null }) {
-  const entries = availableEntries(status).slice(0, 6);
+  const entries = availableEntries(status).slice(0, FIRST_AID_ON_HOME);
   return (
     <div className="firstaid">
       <nav
