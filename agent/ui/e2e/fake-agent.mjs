@@ -228,6 +228,9 @@ createServer(async (req, res) => {
       ensure = ensureView("needs_you", [piperStep("pending")]);
       ensureAnswer = 0;
       resetManage();
+      // Close the event streams of earlier pages, so "a stream is open" (/__streams) means this test's page.
+      for (const r of streams) r.end();
+      streams = [];
       return send(res, 200, "ok");
     }
     if (p === "/__ensure" && req.method === "POST") {
