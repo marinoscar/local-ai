@@ -83,6 +83,8 @@ var helpES = map[string]string{
 	"token rotate":           "Crea un token nuevo del agente.",
 	"ui-code":                "Imprime un código de un solo uso para entrar a la página web local.",
 	"unload":                 "Descarga un modelo para liberar memoria gráfica.",
+	"workloads":              "Muestra para qué se puede configurar este equipo (programación, conversación, música), o lo cambia.",
+	"workloads activate":     "Cambia este equipo a un uso: los modelos que no están en él se detienen y los que faltan se inician.",
 	"update":                 "Instala una versión más nueva del agente (necesita internet; si la nueva falla, se vuelve a poner la anterior).",
 	"verify-release":         "Comprueba una carpeta de versión (firma y sumas de verificación) sin internet.",
 	"version":                "Muestra las versiones de aictl y del agente.",

@@ -73,6 +73,9 @@ type loadOp struct {
 	// already loading (started by someone else) and only has to be waited for.
 	evict    []string
 	waitOnly bool
+	// engineOf maps an evicted model of another engine (music) to its engine; llama models are not
+	// in it.
+	engineOf map[string]string
 	warn     *Reason
 	started  time.Time
 	// sg is set for a load in single mode (llama-router.md section 4.8): the load is a restart of
@@ -102,6 +105,13 @@ func (op *loadOp) release() {
 func (o *Orchestrator) LoadWith(ctx context.Context, req LoadRequest) (LoadResult, error) {
 	if o.isClosing() {
 		return LoadResult{}, ErrInterrupted
+	}
+	if in := o.opt.Inputs(); in.Catalog != nil {
+		if m, ok := findModel(in.Catalog, req.ID); ok && m.Engine != catalog.EngineLlama {
+			if a, ok := o.adapter(m.Engine); ok {
+				return o.loadEngine(ctx, req, in, m, a)
+			}
+		}
 	}
 	op, early, err := o.prepareLoad(ctx, req)
 	if err != nil || early != nil {
@@ -147,7 +157,7 @@ func (o *Orchestrator) prepareLoad(ctx context.Context, req LoadRequest) (*loadO
 	if !ok {
 		return nil, nil, errNotFound(req.ID)
 	}
-	if m.Engine != "llama" {
+	if m.Engine != catalog.EngineLlama {
 		return nil, nil, errNotLlama(req.ID, m.Engine)
 	}
 	_, present := o.locate(in, m)
@@ -184,6 +194,9 @@ func (o *Orchestrator) prepareLoad(ctx context.Context, req LoadRequest) (*loadO
 		if err != nil || early != nil {
 			return nil, early, err
 		}
+		if err := o.planEnginesSingle(ctx, op, present); err != nil {
+			return nil, nil, err
+		}
 		keep = true
 		return op, nil, nil
 	}
@@ -204,8 +217,13 @@ func (o *Orchestrator) prepareLoad(ctx context.Context, req LoadRequest) (*loadO
 	case cur.Status == StatusLoading:
 		op.waitOnly = true
 	default:
-		plan, warn, perr := in.Fit.Plan(Candidate{ID: m.ID, Requirements: m.Requirements, Present: present},
-			loadedFrom(in, st, statuses, m.ID), req.UnloadOthers)
+		eng, engMiB := o.engineResidents(ctx, in, st)
+		op.engineOf = map[string]string{}
+		for _, l := range eng {
+			op.engineOf[l.ID] = l.Engine
+		}
+		plan, warn, perr := in.Fit.withoutEngines(engMiB).Plan(Candidate{ID: m.ID, Requirements: m.Requirements, Present: present},
+			append(loadedFrom(in, st, statuses, m.ID), eng...), req.UnloadOthers)
 		if perr != nil {
 			var pe *PlanError
 			if errors.As(perr, &pe) {
@@ -240,7 +258,7 @@ func (o *Orchestrator) touch(id string) {
 // run is steps 5 to 8.
 func (op *loadOp) run(ctx context.Context) (LoadResult, error) {
 	if op.sg != nil {
-		return op.runSingle(ctx)
+		return op.runSingleEngines(ctx)
 	}
 	o, id := op.o, op.model.ID
 	res := LoadResult{ID: id, Status: "loaded", OpID: op.opID, Unloaded: []string{}, Warning: op.warn}
@@ -249,7 +267,7 @@ func (op *loadOp) run(ctx context.Context) (LoadResult, error) {
 	var evicted []string
 	for _, e := range op.evict {
 		t := o.clock.Now()
-		if f := o.stopOne(ctx, e, o.opt.Timing.EvictTimeout); f != nil {
+		if f := op.stopEvicted(ctx, e); f != nil {
 			o.log.Warn("could not evict a model", "op_id", op.opID, "model", e, "phase", "evict", "cause", f.kind, "duration_ms", ms(o.clock.Now().Sub(t)))
 			return op.fail(ctx, f, evicted)
 		}
@@ -317,7 +335,8 @@ func (op *loadOp) fail(ctx context.Context, f *loadFailure, evicted []string) (L
 		o.setLastLoad(id, op.opID, state.LoadInterrupted, 0)
 		return res, ErrInterrupted
 	}
-	nothing := len(rb.loaded) == 0
+	// A music model that would not stop still runs: that is not a node without models (E11).
+	nothing := len(rb.loaded) == 0 && f.kind != kindEngineStop
 	result := state.LoadFailed
 	if f.timeout() {
 		result = state.LoadTimeout
@@ -385,6 +404,18 @@ func (o *Orchestrator) rollback(ctx context.Context, op *loadOp, evicted []strin
 	tried := map[string]bool{id: true}
 	for _, e := range order {
 		tried[e] = true
+		if eng := op.engineOf[e]; eng != "" {
+			if f := o.startAny(ctx, op.in, eng, e); f == nil {
+				rb.restored = append(rb.restored, e)
+				o.publish(events.TypeModelLoaded, op.opID, events.ModelLoaded{Model: e})
+			} else if f.kind == kindInterrupted {
+				rb.interrupted = true
+				return rb
+			} else {
+				o.log.Warn("could not restore a model", "op_id", op.opID, "model", e, "phase", "rollback", "cause", f.kind)
+			}
+			continue
+		}
 		o.restoreOne(ctx, op, e, &rb)
 		if rb.interrupted {
 			return rb

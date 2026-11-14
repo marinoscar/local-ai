@@ -65,8 +65,15 @@ export interface SnapshotEnsure {
   steps: Array<{ id: string; status: 'ok' | 'pending' | 'waiting' | 'needs_confirm' | 'blocked' | 'running' | 'done' | 'failed' | 'cancelled' }>;
 }
 
+/** E11: the snapshot's `workloads` block (WorkloadsBlockV1), present when the node's agent reports `workloads.v1`. */
+export interface SnapshotWorkloads {
+  active: string | null;
+  items: Array<{ name: string; label: { en: string; es: string }; models: string[]; fits: boolean; missing: string[] }>;
+}
+
 export interface NodeSnapshot {
   mode?: string;
+  workloads?: SnapshotWorkloads;
   llama?: { build?: string; backend?: string; router?: string; models_max?: number };
   hardware?: { gpus?: Array<{ name: string; vram_total_mib: number; vram_used_mib: number }> };
   models?: SnapshotModel[];

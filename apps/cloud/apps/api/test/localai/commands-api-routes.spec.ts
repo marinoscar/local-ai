@@ -4,8 +4,6 @@
 // `prisma.localaiCommand`. This proves the RBAC matrix per command type, the refusal table with its doctor codes,
 // the 201/200 split, cancel, the wire shape and the settled-command wiring (one audit row, one notification). The
 // SQL itself is `commands-api.db.spec.ts`.
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import fastifyCookie from '@fastify/cookie';
 import { JwtService } from '@nestjs/jwt';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -19,18 +17,21 @@ import { AppModule } from '../../src/app.module';
 import { CommandClaimRepository } from '../../src/localai/commands/claim.sql';
 import { COMMAND_SETTLED_CHANNEL, LOCALAI_CLOCK } from '../../src/localai/commands/command-events';
 import { LOCALAI_COMMAND_NOTIFIER } from '../../src/localai/commands/command-notifier';
-import { COMMAND_POLICY } from '../../src/localai/commands/command-policy';
+import { COMMAND_POLICY, FEATURE_ONLY_TYPES } from '../../src/localai/commands/command-policy';
 import { COMMAND_TYPES, type CommandType } from '../../src/localai/contracts/commands';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { PrismaSystemService } from '../../src/prisma/prisma-system.service';
 import { clearMockUsers, installBaseMocks, registerMockUser, type FixtureRole } from '../ai-conformance/mock-users';
 import { prismaMock, resetPrismaMock } from '../ai-conformance/prisma.mock';
 import { FakeClock, FakeCommandStore, StoreClaimRepository } from './support/fake-command-store';
+import { readCommandExamples } from '../fixtures/localai/command-examples';
 
-const EXAMPLES = JSON.parse(readFileSync(join(__dirname, '../fixtures/localai/commands.examples.json'), 'utf8')) as Record<CommandType, { params: Record<string, unknown> }>;
+const EXAMPLES = readCommandExamples<Record<CommandType, { params: Record<string, unknown> }>>();
 const NODE_ROW = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5';
 const MODEL = 'qwen3.6-35b-a3b-q4km';
 const ADMIN_TYPES = COMMAND_TYPES.filter((type) => COMMAND_POLICY[type].permission === 'lab:admin');
+/** The types the generic route queues: music.generate is queued by `/api/localai/music/requests` only (its own spec). */
+const GENERIC_TYPES = COMMAND_TYPES.filter((type) => !FEATURE_ONLY_TYPES.has(type));
 
 const clock = new FakeClock(new Date('2026-11-02T15:04:00.000Z'));
 const store = new FakeCommandStore(clock);
@@ -111,7 +112,7 @@ describe('Local AI command routes for the UI over HTTP', () => {
       expect((await send('DELETE', '/commands/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', null)).statusCode).toBe(401);
     });
 
-    it.each(COMMAND_TYPES)('%s: viewer 403, contributor %s, admin 201', async (type) => {
+    it.each(GENERIC_TYPES)('%s: viewer 403, contributor %s, admin 201', async (type) => {
       const short = type.replace('localai.', '');
       const params = EXAMPLES[type].params;
       expect((await post(token('viewer'), short, params)).statusCode).toBe(403);

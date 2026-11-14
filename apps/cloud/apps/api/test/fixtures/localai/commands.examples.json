@@ -178,5 +178,59 @@
       "to_version": "0.2.0",
       "status": "updated"
     }
+  },
+  "localai.workload.activate": {
+    "params": {
+      "name": "music",
+      "force": false
+    },
+    "result": {
+      "active": "music"
+    }
+  },
+  "localai.music.generate": {
+    "params": {
+      "request_id": "5d1c0b7e-2f43-4a51-9a0e-7b6c1d2e3f40",
+      "lyrics": "[verse]\nPerson A walks to the river\n[chorus]\nLa la la",
+      "tags": "folk, acoustic guitar, warm",
+      "duration_s": 60,
+      "language": "en",
+      "seed": 1234,
+      "variations": 2,
+      "sample": {
+        "url": "https://storage.example.test/bucket/localai-music/5d1c0b7e-2f43-4a51-9a0e-7b6c1d2e3f40/sample.wav?X-Amz-Signature=example",
+        "sha256": "<sha256:0>",
+        "mime": "audio/wav",
+        "size_bytes": 480044
+      },
+      "sample_mode": "sounds_like",
+      "strength": 0.5,
+      "results": [
+        {
+          "put_url": "https://storage.example.test/bucket/localai-music/5d1c0b7e-2f43-4a51-9a0e-7b6c1d2e3f40/song-0?X-Amz-Signature=example"
+        },
+        {
+          "put_url": "https://storage.example.test/bucket/localai-music/5d1c0b7e-2f43-4a51-9a0e-7b6c1d2e3f40/song-1?X-Amz-Signature=example"
+        }
+      ]
+    },
+    "result": {
+      "songs": [
+        {
+          "index": 0,
+          "sha256": "<sha256:1>",
+          "size_bytes": 11520044,
+          "mime": "audio/wav",
+          "duration_s": 60.0
+        },
+        {
+          "index": 1,
+          "sha256": "<sha256:2>",
+          "size_bytes": 11520044,
+          "mime": "audio/wav",
+          "duration_s": 60.0
+        }
+      ]
+    }
   }
 }

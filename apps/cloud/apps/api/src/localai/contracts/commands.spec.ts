@@ -11,14 +11,15 @@ import {
   ResultRequestSchema,
   SettleResponseSchema,
 } from './command-wire';
+import { readCommandExamples } from '../../../test/fixtures/localai/command-examples';
 
 const fixtures = join(__dirname, '../../../test/fixtures/localai');
 const read = <T = unknown>(name: string): T => JSON.parse(readFileSync(join(fixtures, name), 'utf8')) as T;
-const examples = read<Record<string, { params: unknown; result: unknown }>>('commands.examples.json');
+const examples = readCommandExamples<Record<string, { params: unknown; result: unknown }>>();
 
 describe('COMMANDS registry', () => {
-  it('is the closed set of 15 types, each with a shared example', () => {
-    expect(COMMAND_TYPES).toHaveLength(15);
+  it('is the closed set of 17 types, each with a shared example', () => {
+    expect(COMMAND_TYPES).toHaveLength(17);
     expect(Object.keys(examples).sort()).toEqual([...COMMAND_TYPES].sort());
   });
 
@@ -100,6 +101,79 @@ describe('COMMANDS registry', () => {
   it('a result never carries a secret-shaped field: key.rotate allows only the fingerprint', () => {
     const keys = Object.keys((COMMANDS['localai.key.rotate'].result as unknown as { shape: Record<string, unknown> }).shape);
     expect(keys.sort()).toEqual(['cloud_synced', 'fingerprint', 'rotated_at']);
+  });
+});
+
+describe('the E11 commands: workload.activate and music.generate (E11 contract section 6)', () => {
+  const music = COMMANDS['localai.music.generate'];
+  const example = examples['localai.music.generate'].params as Record<string, any>;
+  const without = (key: string) => Object.fromEntries(Object.entries(example).filter(([k]) => k !== key));
+
+  it('workload.activate: a name and an optional force, nothing else; the result names the active workload', () => {
+    const { params, result } = COMMANDS['localai.workload.activate'];
+    expect(params.parse({ name: 'coding' })).toEqual({ name: 'coding' });
+    expect(params.safeParse({ name: 'music', force: true }).success).toBe(true);
+    for (const bad of ['', 'a', 'Music', '../music', 'music_x', 'a'.repeat(33), 'music now']) expect(params.safeParse({ name: bad }).success).toBe(false);
+    expect(params.safeParse({ name: 'chat-photos' }).success).toBe(true);
+    expect(params.safeParse({ name: 'music', wait: true }).success).toBe(false);
+    expect(result.safeParse({ active: 'music' }).success).toBe(true);
+    expect(result.safeParse({ active: null }).success).toBe(false);
+  });
+
+  it('music.generate: an instrumental request with no sample parses (lyrics may be empty)', () => {
+    const plain = { ...without('sample'), lyrics: '', results: example.results.slice(0, 1), variations: 1 };
+    delete (plain as Record<string, unknown>).sample_mode;
+    delete (plain as Record<string, unknown>).strength;
+    expect(music.params.safeParse(plain).success).toBe(true);
+  });
+
+  it('music.generate: one result URL per variation, 1 to 4', () => {
+    expect(music.params.safeParse({ ...example, variations: 1 }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, variations: 5, results: Array(5).fill(example.results[0]) }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, variations: 0, results: [] }).success).toBe(false);
+  });
+
+  it('music.generate: lyrics up to 8192 characters and tags up to 512 (the bytes are checked by the form and the node)', () => {
+    expect(music.params.safeParse({ ...example, lyrics: 'a'.repeat(8192) }).success).toBe(true);
+    expect(music.params.safeParse({ ...example, lyrics: 'a'.repeat(8193) }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, tags: 't'.repeat(512) }).success).toBe(true);
+    expect(music.params.safeParse({ ...example, tags: 't'.repeat(513) }).success).toBe(false);
+  });
+
+  it('music.generate: duration 10 to 240 s, a two-letter language, a non-negative 31-bit seed', () => {
+    for (const ok of [10, 240]) expect(music.params.safeParse({ ...example, duration_s: ok }).success).toBe(true);
+    for (const bad of [9, 241, 60.5]) expect(music.params.safeParse({ ...example, duration_s: bad }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, language: 'english' }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, language: 'pt-BR' }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, seed: -1 }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, seed: 2147483648 }).success).toBe(false);
+    expect(music.params.safeParse(without('seed')).success).toBe(true);
+  });
+
+  it('music.generate: the URLs are https only, and the sample is a 20 MiB at most wav/mp3/flac/ogg with a sha256', () => {
+    const http = example.results[0].put_url.replace('https://', 'http://');
+    expect(music.params.safeParse({ ...example, results: [{ put_url: http }, example.results[1]] }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, sample: { ...example.sample, url: example.sample.url.replace('https://', 'http://') } }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, sample: { ...example.sample, size_bytes: 20 * 1024 * 1024 + 1 } }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, sample: { ...example.sample, mime: 'video/mp4' } }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, sample: { ...example.sample, sha256: 'abc' } }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, sample: { ...example.sample, extra: 1 } }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, results: [{ put_url: example.results[0].put_url, method: 'PUT' }, example.results[1]] }).success).toBe(false);
+  });
+
+  it('music.generate: sample_mode and strength need a sample; strength is 0 to 1', () => {
+    expect(music.params.safeParse(without('sample')).success).toBe(false);
+    expect(music.params.safeParse({ ...example, strength: 1.5 }).success).toBe(false);
+    expect(music.params.safeParse({ ...example, sample_mode: 'remix' }).success).toBe(false);
+  });
+
+  it('music.generate result: at most 4 songs, each with its index 0-3, sha256, size, mime and a positive duration', () => {
+    const songs = (examples['localai.music.generate'].result as { songs: Array<Record<string, unknown>> }).songs;
+    expect(music.result.safeParse({ songs: [] }).success).toBe(true);
+    expect(music.result.safeParse({ songs: [{ ...songs[0], index: 4 }] }).success).toBe(false);
+    expect(music.result.safeParse({ songs: [{ ...songs[0], duration_s: 0 }] }).success).toBe(false);
+    expect(music.result.safeParse({ songs: [{ ...songs[0], sha256: 'abc' }] }).success).toBe(false);
+    expect(music.result.safeParse({ songs: [{ ...songs[0], path: '/var/lib/localai/music/songs/x/audio.wav' }] }).success).toBe(false);
   });
 });
 

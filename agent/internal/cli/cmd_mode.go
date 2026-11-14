@@ -119,6 +119,8 @@ func modeStepLabel(l Lang, step string) string {
 		return pick(l, "Stopping the running sync", "Deteniendo la sincronización en curso")
 	case "tailscale_off":
 		return pick(l, "Unpublishing this node from the tailnet", "Quitando este nodo de la tailnet")
+	case "engines_stop":
+		return pick(l, "Stopping music to free the graphics memory", "Deteniendo la música para liberar la memoria gráfica")
 	case "survival_models":
 		return pick(l, "Starting the models", "Iniciando los modelos")
 	case "survival_services":

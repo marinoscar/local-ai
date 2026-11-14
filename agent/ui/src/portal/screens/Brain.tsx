@@ -1,5 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "../styles/status-brain.css";
+import "@localai/ui/creative.css";
+import "../styles/music.css";
+import { LangProvider } from "@localai/ui/music";
+import { WorkloadSwitcher } from "@localai/ui/workloads";
+import { MUSIC_WORKLOAD } from "../music/agent";
+import { mt } from "../music/i18n/i18n";
+import { musicTransports } from "../music/transports";
 import { announce } from "../components/LiveRegion";
 import { brainChoices, isRunning, speedOf } from "../brains";
 import { useBrainSwitch } from "../hooks/useBrainSwitch";
@@ -124,6 +131,39 @@ function Switcher({
   return null;
 }
 
+/**
+ * The named workloads (E11, issue #512): "Now: Coding" and one button per workload, under the brain list. Only with a
+ * full session outside survival: the workloads routes need an operator, and survival keeps its brain.
+ */
+function Workloads() {
+  const lang = useLang();
+  const tr = useMemo(musicTransports, []);
+  const [active, setActive] = useState<string | null>(null);
+  return (
+    <div className="workloads">
+      <LangProvider lang={lang}>
+        <WorkloadSwitcher
+          transport={tr.workloads}
+          headingLevel={2}
+          onActivated={(name) => {
+            setActive(name);
+            void refreshStatus();
+          }}
+        />
+      </LangProvider>
+      <div className="actions">
+        <button
+          type="button"
+          className={active === MUSIC_WORKLOAD ? "btn btn-primary" : "btn"}
+          onClick={() => navigate("music")}
+        >
+          {mt("music.open")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Switch brain (survival-portal.md section 4.1.9). */
 export function Brain({ status }: { status: PortalStatus }) {
   useLang();
@@ -183,6 +223,9 @@ export function Brain({ status }: { status: PortalStatus }) {
         </ul>
       )}
       <p>{t("brain.note")}</p>
+      {status.session === "full" && status.mode !== "survival" ? (
+        <Workloads />
+      ) : null}
       <div className="actions">
         <button type="button" className="btn" onClick={() => navigate("")}>
           {t("common.home")}

@@ -114,6 +114,7 @@ func TestModeStepLabels(t *testing.T) {
 		{"link_stop", "Stopping cloud connection", "Deteniendo la conexión con la nube"},
 		{"sync_cancel", "Stopping the running sync", "Deteniendo la sincronización en curso"},
 		{"tailscale_off", "Unpublishing this node from the tailnet", "Quitando este nodo de la tailnet"},
+		{"engines_stop", "Stopping music to free the graphics memory", "Deteniendo la música para liberar la memoria gráfica"},
 		{"survival_models", "Starting the models", "Iniciando los modelos"},
 		{"survival_services", "Starting the library and speech", "Iniciando la biblioteca y la voz"},
 		{"tailscale_on", "Publishing this node on the tailnet", "Publicando este nodo en la tailnet"},

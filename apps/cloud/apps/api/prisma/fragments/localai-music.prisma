@@ -1,0 +1,95 @@
+// Local AI music (E11, docs/specs/cloud-app.md sections 3.5 and 3.9, docs/specs/music.md). Field names, enums and @map
+// names are permanent. This fragment declares no raw-SQL index: every index below is expressible in Prisma.
+//
+// Rules that Prisma cannot express, kept here so a reader of the schema sees them:
+//   - The lyrics are NOT a column: they travel once, in the command's params (`localai_commands.params`), and the
+//     command history redacts them. A request keeps only `title` (the first lyric line or the tags, at most 120
+//     characters) for the library.
+//   - The sample and every song live in object storage under the deployment-scoped prefix `localai-music/`
+//     (`<prefix><request id>/sample.<ext>` and `<prefix><request id>/song-<index>`). `storage_key` is the truth; it is
+//     server-chosen, never a client's string.
+//   - A song row exists from the request on (status `pending`), so its signed PUT URL is scoped to exactly one key.
+//     The command result marks it `ready` (with sha256, size, mime and duration) or `failed`.
+//   - The back-relations on LocalaiNode (`musicRequests`) and LocalaiCommand (`musicRequest`) are declared in
+//     localai.prisma, beside those models (same app, so no `extend model`).
+
+enum LocalaiMusicRequestStatus {
+  queued
+  running
+  succeeded
+  failed
+  expired
+  cancelled
+}
+
+enum LocalaiMusicSongStatus {
+  pending
+  ready
+  failed
+}
+
+// ---------------------------------------------------------------------------
+// One "make music" request: the node, the command that carries it, and the form's settings (never the lyrics).
+// ---------------------------------------------------------------------------
+model LocalaiMusicRequest {
+  id            String                    @id @default(uuid()) @db.Uuid
+  nodeId        String                    @map("node_id") @db.Uuid
+  commandId     String?                   @unique @map("command_id") @db.Uuid
+  requestedById String?                   @map("requested_by_id") @db.Uuid
+  status        LocalaiMusicRequestStatus @default(queued)
+  title         String
+  tags          String
+  lyricsBytes   Int                       @map("lyrics_bytes")
+  durationS     Int                       @map("duration_s")
+  language      String
+  seed          BigInt?
+  variations    Int
+  sampleMode    String?                   @map("sample_mode")
+  strength      Float?
+  sampleKey     String?                   @unique @map("sample_key")
+  sampleMime    String?                   @map("sample_mime")
+  sampleBytes   Int?                      @map("sample_bytes")
+  sampleSha256  String?                   @map("sample_sha256")
+  errorCode     String?                   @map("error_code")
+  errorMessage  String?                   @map("error_message")
+  createdAt     DateTime                  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime                  @updatedAt @map("updated_at") @db.Timestamptz
+  finishedAt    DateTime?                 @map("finished_at") @db.Timestamptz
+
+  node        LocalaiNode        @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  command     LocalaiCommand?    @relation(fields: [commandId], references: [id], onDelete: SetNull)
+  requestedBy User?              @relation("LocalaiMusicRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  songs       LocalaiMusicSong[]
+
+  @@index([requestedById, createdAt])
+  @@index([status, createdAt])
+  @@index([nodeId, createdAt])
+  @@map("localai_music_requests")
+}
+
+// ---------------------------------------------------------------------------
+// One song of a request (one per variation). The library lists the `ready` ones across every node.
+// ---------------------------------------------------------------------------
+model LocalaiMusicSong {
+  id         String                 @id @default(uuid()) @db.Uuid
+  requestId  String                 @map("request_id") @db.Uuid
+  index      Int
+  status     LocalaiMusicSongStatus @default(pending)
+  storageKey String                 @unique @map("storage_key")
+  mime       String?
+  sizeBytes  Int?                   @map("size_bytes")
+  sha256     String?
+  durationS  Float?                 @map("duration_s")
+  createdAt  DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  readyAt    DateTime?              @map("ready_at") @db.Timestamptz
+
+  request LocalaiMusicRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, index])
+  @@index([status, createdAt])
+  @@map("localai_music_songs")
+}
+
+extend model User {
+  localaiMusicRequests LocalaiMusicRequest[] @relation("LocalaiMusicRequestedBy")
+}

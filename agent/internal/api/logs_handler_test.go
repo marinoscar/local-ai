@@ -135,7 +135,7 @@ func TestLogsUnitValidation(t *testing.T) {
 		if e.Error.Details["field"] != "unit" || e.Error.Details["reason"] != "unknown_unit" {
 			t.Errorf("unit=%q: details = %v", unit, e.Error.Details)
 		}
-		if allowed, _ := e.Error.Details["allowed"].([]any); len(allowed) != 6 {
+		if allowed, _ := e.Error.Details["allowed"].([]any); len(allowed) != 7 {
 			t.Errorf("unit=%q: allowed = %v", unit, e.Error.Details["allowed"])
 		}
 	}

@@ -3,7 +3,7 @@
 // object-key prefix registry. The provider, bucket, region and credential are
 // runtime settings (`/admin/settings/storage`): no environment variable.
 //
-// The app's key prefixes (none yet) are declared in `./storage-prefixes.ts`; the
+// The app's key prefixes (the Local AI music samples and songs) are declared in `./storage-prefixes.ts`; the
 // profile-image adapters are the host ports the slice replaces.
 import type { ApiSlice } from '../slices/slice';
 

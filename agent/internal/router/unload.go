@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/audit"
+	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/state"
 )
@@ -30,6 +31,9 @@ type UnloadResult struct {
 	// Restored are the models loaded again afterwards.
 	Restarted bool
 	Restored  []string
+	// Warning is LAI-LLM-042 when a model of another engine stopped but did not free its memory in
+	// time (E11); nil otherwise.
+	Warning *Reason
 }
 
 // Unload unloads a model: llama-router.md section 4.5. It is UnloadWith with no lock wait.
@@ -50,7 +54,10 @@ func (o *Orchestrator) UnloadWith(ctx context.Context, req UnloadRequest) (Unloa
 	}
 	in := o.opt.Inputs()
 	m, inCatalog := findModel(in.Catalog, req.ID)
-	if inCatalog && m.Engine != "llama" {
+	if inCatalog && m.Engine != catalog.EngineLlama {
+		if a, ok := o.adapter(m.Engine); ok {
+			return o.unloadEngine(ctx, req, a)
+		}
 		err := errNotLlama(req.ID, m.Engine)
 		o.auditWrite(ctx, audit.ActionModelUnload, req.Actor, req.ID, "", err)
 		return UnloadResult{}, err

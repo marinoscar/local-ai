@@ -23,6 +23,9 @@ var (
 type Source struct {
 	// Root is the content root ("/srv/localai", "/media/<user>/AI-ARK/localai"), KitDir its kit folder.
 	Root, KitDir string
+	// File and SHA256 are the one file a step installs and its sha256 in the kit's record (an engine's
+	// wheel bundle); empty for the other steps.
+	File, SHA256 string
 }
 
 // Kit answers what the rebuild kit can supply. Every answer comes from the kit verifier of
@@ -39,6 +42,9 @@ type Kit interface {
 	// WhisperSource says whether the kit holds the whisper.cpp source of the commit (so a build is
 	// possible); an empty commit means the pinned one.
 	WhisperSource(ctx context.Context, w WhisperWant) (bool, error)
+	// Engine is the newest verified wheel bundle of a Python engine ("acestep") for a backend: the source
+	// (File and SHA256 set) and its version.
+	Engine(ctx context.Context, engine, backend string) (Source, string, error)
 }
 
 // WhisperWant describes the whisper build this computer would use.
@@ -59,6 +65,9 @@ type Machine interface {
 	WhisperInstalled() bool
 	// ServiceActive says whether the unit of a service is running ("kiwix").
 	ServiceActive(ctx context.Context, service string) bool
+	// EngineVersion is the version of a Python engine's runtime in use for the backend ("" when there
+	// is none, or it is built for another backend).
+	EngineVersion(engine, backend string) string
 }
 
 // Installer performs the allowlisted actions. Each method verifies what it installs again right before it
@@ -75,6 +84,9 @@ type Installer interface {
 	BuildWhisper(ctx context.Context) error
 	// RestartService restarts a service (only kiwix, only with a confirmation).
 	RestartService(ctx context.Context, service string) error
+	// InstallEngine builds a Python engine's runtime ("acestep") from its verified wheel bundle, offline.
+	// It never touches a running engine: the new runtime is used at its next start.
+	InstallEngine(ctx context.Context, engine string, src Source, version, backend string) (ToolOutcome, error)
 }
 
 // ToolOutcome is what InstallTool did.

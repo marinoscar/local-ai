@@ -198,6 +198,24 @@ A node installs what is missing from the rebuild kit **by itself** after every s
 
 ---
 
+## Music or switching doesn't work
+
+The steps are in [12-make-music-and-switch-workloads.md](12-make-music-and-switch-workloads.md). By code:
+- `LAI-SVC-150` (music program not installed) or `LAI-LLM-043` (a model's engine is not installed): press **Install what's missing**, or `aictl ensure`.
+- `LAI-SVC-151` (music is not running): switch the computer to **Music** first (runbook 12, Part 1).
+- `LAI-SVC-152` (the music program stopped during a song), `LAI-LLM-040` (it did not start), `LAI-LLM-041` (it took too long to start): switch to **Music** again and retry; if it repeats, `aictl logs --unit music`.
+- `LAI-SVC-153` (four songs already waiting): wait for one to finish.
+- `LAI-SVC-154` (sample or lyrics refused): a WAV, MP3, FLAC or Ogg sample under 20 MB and 60 seconds; shorter lyrics.
+- `LAI-SVC-155` (disk almost full): delete songs you no longer need, then see [Disk full](#disk-full).
+- `LAI-SVC-156`, `LAI-SVC-157` (a request from ai.marin.cr could not get the sample or send the song back): send it again; a song that could not be sent stays on the node.
+- `LAI-SVC-158` (song cancelled): nothing to do.
+- `LAI-SVC-159` (graphics driver too old for music): `aictl doctor` shows the driver; update it from the kit.
+- `LAI-LLM-042` (the graphics memory was not freed): nothing to do now; if the next model will not load, restart the computer.
+- `LAI-LLM-050` (no such workload): `aictl workloads` lists the names. `LAI-LLM-051` (does not fit this graphics card): choose another workload. `LAI-LLM-052` (the switch failed; the previous models were started again): try once more. `LAI-LLM-053` (refused in Survival mode): music waits until the emergency is over.
+- `LAI-CAT-020` (a workload names a model the catalog does not have) or `LAI-CAT-021` (the music model's files are laid out wrong): report it to the lab owner; `aictl ark verify --item <model-id> --wait` fetches the files again.
+
+---
+
 ## Battery
 
 **You see:** `LAI-HW-012` (on battery), `LAI-HW-013` (below 20 %), `LAI-HW-014` (below 10 %), `LAI-SVC-111`/`112` in the Portal, or the laptop turned off by itself.
@@ -428,6 +446,7 @@ Each code is `LAI-<AREA>-<NNN>`. The registry of all codes is [doctor-codes.md](
 | Ark sync | `LAI-SYN` | Nightly downloads and checks | [ark-sync.md §8](../specs/ark-sync.md#8-doctor-codes) | [Sync red](#sync-red) |
 | Ark drive | `LAI-ARK` | The AI-ARK drive and content folders | [ark-sync.md §8](../specs/ark-sync.md#8-doctor-codes) | [The ark drive is not found](#the-ark-drive-is-not-found) |
 | Companion services (001–099) | `LAI-SVC` | Library, speech, voice, maps, vision | [companion-services.md §8](../specs/companion-services.md#8-doctor-codes) | [No library](#no-library), [Talk or photo](#talk-or-photo-doesnt-work), [Maps](#maps-dont-work) |
+| Music (150–179) | `LAI-SVC` | Making songs | [music.md §8](../specs/music.md#8-doctor-codes-lai-svc-block-150179) | [Music or switching](#music-or-switching-doesnt-work) |
 | Survival Portal (100–149) | `LAI-SVC` | The big-button screen | [survival-portal.md §8](../specs/survival-portal.md#8-doctor-codes-lai-svc-100--149) | [Chat says error](#chat-says-error), [Battery](#battery) |
 | Network / Tailscale | `LAI-NET` | Tailnet publishing, internet checks | [agent.md §8.2](../specs/agent.md#82-lai-net--network-and-tailscale) | [Cloud shows node offline](#cloud-shows-node-offline), [Laptop sleeps](#laptop-sleeps-or-drops-off-the-network) |
 | Cloud link (node side, 050–069) | `LAI-CLD` | The node's connection to ai.marin.cr | [agent.md §8.5](../specs/agent.md#85-lai-cld-050069--agent-side-cloud-link-client) | [Cloud shows node offline](#cloud-shows-node-offline) |

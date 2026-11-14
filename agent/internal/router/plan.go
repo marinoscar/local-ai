@@ -9,7 +9,11 @@ import (
 
 // Loaded is a model the router has loaded (status loaded or loading), as the planner sees it.
 type Loaded struct {
-	ID           string
+	ID string
+	// Engine is the catalog engine that holds the model; "" means llama (the router). The count rule
+	// counts the models of the candidate's engine only; the graphics and RAM rules count every engine
+	// (one GPU budget across engines, E11).
+	Engine       string
 	Requirements catalog.Requirements
 	// LastUsed is state.models.last_used; the zero time (never used) is the oldest.
 	LastUsed time.Time
@@ -50,7 +54,7 @@ func (s Shortfall) Any() bool { return s.Count || s.GPU || s.RAM }
 // A unified-memory node is a vulkan node, so it must satisfy both the GPU and the RAM rule.
 func (e Env) DynamicFit(m Candidate, keep, evicted []Loaded) Shortfall {
 	var s Shortfall
-	s.Count = len(keep)+1 > e.modelsMax()
+	s.Count = sameEngine(m.Engine, keep)+1 > e.engineMax(m.Engine)
 	if e.gpuBackend() {
 		sum := m.Requirements.MinVRAMMiB + e.GOthersMiB + e.WhisperReserveMiB + e.MarginMiB
 		for _, k := range keep {
@@ -110,8 +114,58 @@ func (e Env) Plan(m Candidate, loaded []Loaded, unloadOthers bool) (evict []stri
 		if !unloadOthers {
 			return nil, nil, &PlanError{Reason: reasonNoRoom()}
 		}
-		evict = append(evict, keep[0].ID)
+		// Only the count is short: evicting a model of another engine would not help, so the least
+		// recently used model of the candidate's own engine goes (E11).
+		victim := 0
+		if !short.GPU && !short.RAM {
+			victim = -1
+			for j, k := range keep {
+				if engineOf(k.Engine) == engineOf(m.Engine) {
+					victim = j
+					break
+				}
+			}
+			if victim < 0 {
+				return nil, nil, &PlanError{Reason: reasonNoRoom()}
+			}
+		}
+		evict = append(evict, keep[victim].ID)
+		order = append(append(append([]Loaded{}, order[:i]...), keep[victim]), removeAt(keep, victim)...)
 	}
+}
+
+// engineOf names the engine of a model; "" is llama.
+func engineOf(engine string) string {
+	if engine == "" {
+		return catalog.EngineLlama
+	}
+	return engine
+}
+
+// sameEngine counts the models of keep that run on engine.
+func sameEngine(engine string, keep []Loaded) int {
+	n := 0
+	for _, k := range keep {
+		if engineOf(k.Engine) == engineOf(engine) {
+			n++
+		}
+	}
+	return n
+}
+
+// engineMax is the number of models one engine runs at once: models_max for llama, one for any
+// other engine (the music engine holds one model, E11).
+func (e Env) engineMax(engine string) int {
+	if engineOf(engine) == catalog.EngineLlama {
+		return e.modelsMax()
+	}
+	return 1
+}
+
+func removeAt(l []Loaded, i int) []Loaded {
+	out := make([]Loaded, 0, len(l)-1)
+	out = append(out, l[:i]...)
+	return append(out, l[i+1:]...)
 }
 
 // evictionOrder returns the loaded models without m itself and without duplicate IDs, least

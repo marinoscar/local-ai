@@ -27,6 +27,7 @@ var LayoutDirs = []string{
 	"speech",
 	"speech/whisper",
 	"speech/piper",
+	"music",
 	"kiwix",
 	"maps",
 	"maps/assets",

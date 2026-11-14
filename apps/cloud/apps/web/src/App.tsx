@@ -1,6 +1,6 @@
 import { APP_NAME } from '@app/shared';
 import { Box, CircularProgress, Typography } from '@mui/material';
-import { Fragment, Suspense, type ComponentType } from 'react';
+import { Fragment, Suspense, useMemo, type ComponentType } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { DoctorPage } from '@marinoscar/platform-web/doctor/ui';
 import {
@@ -24,7 +24,7 @@ import type { ReactElement } from 'react';
 
 import { api, platformApi } from './api';
 import { ADMIN_SECTIONS } from './config/adminSections';
-import { NAVIGATION } from './config/navigation';
+import { localizedNavigation } from './config/navigation';
 import { USER_SETTINGS_SECTIONS } from './config/userSettingsSections';
 import { AuditPage } from './localai/audit/AuditPage';
 import { CatalogPage } from './localai/catalog/CatalogPage';
@@ -36,7 +36,8 @@ import { LabOverviewPage } from './localai/lab/LabOverviewPage';
 import { Route53KeyPage } from './localai/vps/Route53KeyPage';
 import { AddNodeWizard } from './localai/wizard/AddNodeWizard';
 import { NodeDetailPage } from './localai/node/NodeDetailPage';
-import { LanguageProvider } from './i18n/LanguageProvider';
+import { MusicPage } from './localai/music/MusicPage';
+import { LanguageProvider, useLanguage } from './i18n/LanguageProvider';
 import { LanguageSwitch } from './i18n/LanguageSwitch';
 import { AppPlatformHost } from './platformHost';
 import {
@@ -96,13 +97,15 @@ function Slot({ components }: { components: readonly ComponentType[] }) {
 
 /** The platform shell: AppBar, navigation rail or bottom bar (by width), user menu, and what the enabled slices slot in. */
 function AppShell() {
+  const { lang } = useLanguage();
+  const navigation = useMemo(() => localizedNavigation(lang), [lang]);
   return (
     <ShellLayout
-      navigation={NAVIGATION}
+      navigation={navigation}
       brand={APP_NAME}
       appBar={
         <ShellAppBar
-          navigation={NAVIGATION}
+          navigation={navigation}
           brand={APP_NAME}
           actions={
             <>
@@ -112,7 +115,7 @@ function AppShell() {
           }
           userMenu={
             <ShellUserMenu
-              navigation={NAVIGATION}
+              navigation={navigation}
               items={(close) => sliceUserMenuItems.map((item, index) => <Fragment key={index}>{item(close)}</Fragment>)}
             />
           }
@@ -191,6 +194,8 @@ export function AppRoutes() {
           <Route path="gateway/models" element={<Gate permission="gateway:use"><ModelsPage /></Gate>} />
           {/* The gateway usage (section 3.8): GET /api/localai/gateway/usage needs gateway:use too (all=1 needs gateway:admin). */}
           <Route path="gateway/usage" element={<Gate permission="gateway:use"><UsagePage /></Gate>} />
+          {/* Music (E11, #514): localai_music:use is the permission /api/localai/music/* enforces. */}
+          <Route path="music" element={<Gate permission="localai_music:use"><MusicPage /></Gate>} />
           <Route path="settings" element={<Hub sections={USER_SETTINGS_SECTIONS} hubKey="user-settings-hub" title="Settings" subtitle="Manage your account preferences." />} />
           <Route path="settings/tokens" element={<UserTokensPage />} />
           <Route path="admin/settings" element={<Hub sections={ADMIN_SECTIONS} hubKey="admin-settings-hub" title="Administration" subtitle="Users, background jobs and the health of this deployment." />} />

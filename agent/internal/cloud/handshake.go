@@ -26,6 +26,9 @@ const (
 	// FeatureEnsure: the state snapshot may carry the `ensure` block ("Install what's missing", ADR-0010) and the
 	// cloud may queue `localai.ensure.run`.
 	FeatureEnsure = "ensure.v1"
+	// FeatureWorkloads: the state snapshot may carry the `workloads` block (E11, cloud-app.md section 3.6
+	// WorkloadsBlockV1); the cloud knows localai.workload.activate and localai.music.generate.
+	FeatureWorkloads = "workloads.v1"
 	// FeatureHostVitals is EAB's serverFeatures entry that lets heartbeats carry host, power and events.
 	FeatureHostVitals = "node_host_vitals"
 )

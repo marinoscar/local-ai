@@ -14,6 +14,7 @@ export const SCREENS = [
   "brain",
   "first-aid",
   "help",
+  "music",
   // Manage this computer (dashboard.md section 3.1): operator session only.
   "manage/mode",
   "manage/content",
@@ -37,8 +38,12 @@ export function isManage(s: Screen | ""): s is ManageScreen {
   return (MANAGE_SCREENS as readonly string[]).includes(s);
 }
 
+/** The music page's own address (agent.md section 3.11, issue #512): the agent serves the Portal there too. */
+export const MUSIC_PATH = "/music/";
+
 /** screenOf maps a location path to a screen name; '' is Home. Unknown paths are Home. */
 export function screenOf(pathname: string): Screen | "" {
+  if (pathname === "/music" || pathname === MUSIC_PATH) return "music";
   const rest = pathname.replace(/^\/portal\/?/, "").replace(/\/+$/, "");
   return (SCREENS as readonly string[]).includes(rest) ? (rest as Screen) : "";
 }

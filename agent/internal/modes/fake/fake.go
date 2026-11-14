@@ -184,6 +184,8 @@ func (t *Tailscale) Off(ctx context.Context) ([]modes.Warning, error) {
 type Models struct {
 	Rec   *Recorder
 	LoadB Behavior
+	// StopWarns are the warnings of StopEnginesForSurvival.
+	StopWarns []modes.Warning
 
 	mu    sync.Mutex
 	skips [][]string
@@ -196,6 +198,14 @@ func (m *Models) LoadSurvivalSet(ctx context.Context, skip []string) ([]modes.Wa
 	m.mu.Unlock()
 	m.Rec.Add("models.load")
 	return m.LoadB.run(ctx)
+}
+
+// StopEnginesForSurvival implements modes.EngineStopper; StopWarns are its warnings.
+func (m *Models) StopEnginesForSurvival(context.Context) []modes.Warning {
+	m.Rec.Add("engines.stop")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]modes.Warning(nil), m.StopWarns...)
 }
 
 // Skips returns the skip list of each call, oldest first.

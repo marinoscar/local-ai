@@ -26,7 +26,7 @@ import (
 // TypePrefix is the namespace of the Local AI job types on the cloud: "localai.model.load".
 const TypePrefix = "localai."
 
-// The 15 job names, without the prefix: the closed set the agent accepts (config.CloudJobNames).
+// The 17 job names, without the prefix: the closed set the agent accepts (config.CloudJobNames).
 const (
 	TypeStatusRefresh   = "status.refresh"
 	TypeModelLoad       = "model.load"
@@ -44,6 +44,12 @@ const (
 	TypeAgentUpdate     = "agent.update"
 	// TypeEnsureRun is "Install what's missing" (ADR-0010): POST /ensure with the safe default.
 	TypeEnsureRun = "ensure.run"
+	// TypeWorkloadActivate switches the node to a named workload (E11, #513): POST
+	// /workloads/{name}/activate with wait: true.
+	TypeWorkloadActivate = "workload.activate"
+	// TypeMusicGenerate makes songs for the cloud (E11, #513): the sample comes and the songs go by
+	// signed URL.
+	TypeMusicGenerate = "music.generate"
 )
 
 // Limits are the per-type timings of cloud-app.md section 3.7.
@@ -57,7 +63,7 @@ type Limits struct {
 }
 
 // TypeLimits returns the limits of a job name (without the prefix) and false for a name that is not
-// one of the 15. The lease column of cloud-app.md section 3.7: 30 s, 60 s or 300 s; the hard cap is
+// one of the 17. The lease column of cloud-app.md section 3.7: 30 s, 60 s or 300 s; the hard cap is
 // the lease times ten, except model.load (600 s) and agent.update (900 s).
 func TypeLimits(name string) (Limits, bool) {
 	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
@@ -70,6 +76,10 @@ func TypeLimits(name string) (Limits, bool) {
 		return Limits{Lease: ms(60000), HardCap: ms(600000)}, true
 	case TypeAgentUpdate:
 		return Limits{Lease: ms(300000), HardCap: ms(900000)}, true
+	case TypeWorkloadActivate: // cloud-app.md section 3.7: lease 60 s, hard cap 900 s
+		return Limits{Lease: ms(60000), HardCap: ms(900000)}, true
+	case TypeMusicGenerate: // cloud-app.md section 3.7: lease 60 s, hard cap 3600 s
+		return Limits{Lease: ms(60000), HardCap: ms(3600000)}, true
 	}
 	return Limits{}, false
 }

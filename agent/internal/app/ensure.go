@@ -135,6 +135,7 @@ func (s *ensureStack) facts() ensure.Facts {
 	f.Codename, f.Arch = s.d.ark.facts.release()
 	w := whisperOf(cfg)
 	f.WhisperCommit, f.WhisperBackend = w.Commit, w.Backend
+	f.MusicWanted = s.d.musicWanted() // engine.acestep (E11, #511)
 	return f
 }
 

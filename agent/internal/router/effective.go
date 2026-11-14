@@ -113,7 +113,7 @@ func (p ManifestPresence) Present(root string, m *catalog.Model) bool {
 
 // itemDir is where the sync engine keeps a model on a root (overview.md section 3.3, ark-sync.md section
 // 4.11): llama models in models/<id>, whisper models in speech/whisper/<id>, piper voices in
-// speech/piper/<id>.
+// speech/piper/<id>, acestep (music) models in music/<id> (E11).
 func itemDir(root string, m *catalog.Model) string {
 	base := strings.TrimRight(root, "/")
 	switch m.Engine {
@@ -121,6 +121,8 @@ func itemDir(root string, m *catalog.Model) string {
 		return base + "/speech/whisper/" + m.ID
 	case "piper":
 		return base + "/speech/piper/" + m.ID
+	case catalog.EngineAcestep:
+		return base + "/music/" + m.ID
 	}
 	return modelDir(root, m.ID)
 }

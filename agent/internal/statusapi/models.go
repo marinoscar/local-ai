@@ -47,6 +47,9 @@ type ModelMerger struct {
 	Presence router.Presence
 	// WhisperReserveMiB is W_res of the fit rules (llama-router.md section 4.3.1); nil means 0.
 	WhisperReserveMiB func() int64
+	// EngineModels is the cached picture of the engines other than llama (E11: the music engine),
+	// no I/O: the models they hold. nil means none, and their models are stored or absent.
+	EngineModels func() []router.EngineModel
 }
 
 var _ ModelView = (*ModelMerger)(nil)
@@ -100,6 +103,13 @@ func (m *ModelMerger) Models(lang string) ModelsView {
 	}
 	routerDown := haveRouter && rv.Stale && rv.Err != ""
 
+	engineHeld := map[string]router.EngineModel{}
+	if m.EngineModels != nil {
+		for _, em := range m.EngineModels() {
+			engineHeld[em.ID] = em
+		}
+	}
+
 	inProfile := InProfileModels(cs.Catalog, prof, cfg.Profile, cfg.ProfileOverrides)
 
 	rows := make([]ModelRow, 0, len(cs.Catalog.Models))
@@ -142,6 +152,9 @@ func (m *ModelMerger) Models(lang string) ModelsView {
 			row.Aliases = nonNil(ms.Aliases)
 		}
 		row.Status = modelStatus(cm, row.Present, ms, listed)
+		if cm.Engine == catalog.EngineAcestep {
+			row.Status = engineStatus(row.Present, engineHeld, cm.ID)
+		}
 		row.Loaded = row.Status == ModelLoaded
 		if ll := st.Models.LastLoad; ll != nil && ll.ID == cm.ID && ll.Result == state.LoadOK && ll.LoadMS > 0 {
 			ms := ll.LoadMS
@@ -185,6 +198,21 @@ func modelStatus(cm *catalog.Model, present bool, ms router.ModelStatus, listed 
 		return ModelLoading
 	case router.StatusSleeping:
 		return ModelSleeping
+	}
+	return ModelUnloaded
+}
+
+// engineStatus is the status of a model of an engine other than llama (E11): loading while the engine
+// starts it, loaded when it is ready, else unloaded (a verified copy is on disk) or absent.
+func engineStatus(present bool, held map[string]router.EngineModel, id string) string {
+	if em, ok := held[id]; ok {
+		if em.Ready {
+			return ModelLoaded
+		}
+		return ModelLoading
+	}
+	if !present {
+		return ModelAbsent
 	}
 	return ModelUnloaded
 }

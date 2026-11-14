@@ -122,6 +122,37 @@ func (s *lintState) lintProfile(d profileDoc, modelIDs, contentIDs map[string]bo
 		s.modelRef(f, indexPath("survival.models", i), id, modelIDs, inInclude)
 	}
 	s.modelRef(f, "survival.default_model", p.Survival.DefaultModel, modelIDs, inInclude)
+	s.lintWorkloads(f, p, modelIDs, inInclude)
+}
+
+// lintWorkloads checks the workloads of a profile (catalog.md section 4, "Workloads"): a name of
+// lowercase letters, digits and dashes, at least one model, no model twice, every model known
+// (LAI-CAT-020) and listed in include.models (LAI-CAT-018). Whether a workload fits a node is
+// decided at activation time (LAI-LLM-051): it depends on the hardware.
+func (s *lintState) lintWorkloads(f string, p *Profile, modelIDs, inInclude map[string]bool) {
+	for _, name := range sortedKeys(p.Workloads) {
+		w := p.Workloads[name]
+		wp := joinPath("workloads", name)
+		if !WorkloadNameRe.MatchString(name) {
+			s.add(f, CodeProfile, wp, "workload name %q must match %s", truncate(name, 40), WorkloadNameRe.String())
+		}
+		if len(w.Models) == 0 {
+			s.add(f, CodeProfile, joinPath(wp, "models"), "a workload must list at least one model")
+		}
+		seen := map[string]bool{}
+		for i, id := range w.Models {
+			mp := indexPath(joinPath(wp, "models"), i)
+			switch {
+			case seen[id]:
+				s.add(f, CodeProfile, mp, "model %q is listed twice", truncate(id, 70))
+			case modelIDs != nil && !modelIDs[id]:
+				s.add(f, CodeWorkloadModel, mp, "unknown model id %q", truncate(id, 70))
+			case !inInclude[id]:
+				s.add(f, CodeProfile, mp, "%q must also be listed in include.models", truncate(id, 70))
+			}
+			seen[id] = true
+		}
+	}
 }
 
 // hint says when an unknown id exists in the other namespace.

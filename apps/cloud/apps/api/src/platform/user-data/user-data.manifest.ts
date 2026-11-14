@@ -36,6 +36,7 @@ export const APP_USER_DATA_MODELS: readonly UserDataModelHint<Prisma.ModelName>[
   { model: 'LocalaiNode', keep: 'Lab node state: deployment infrastructure that outlives the user who added it.' },
   { model: 'LocalaiCatalogVersion', keep: 'Lab model catalog: a deployment-wide version history.' },
   { model: 'LocalaiCommand', keep: 'Lab command history: an audit view of what was asked of a node.' },
+  { model: 'LocalaiMusicRequest', keep: 'Lab music library: the songs of a request belong to the lab and stay when the person who asked leaves.' },
   // A user's own gateway keys (`lai_...`): deleted with the user's credentials; the usage history that names them stays (key_id becomes NULL).
   { model: 'LocalaiGatewayKey', category: 'credentials' },
 ];

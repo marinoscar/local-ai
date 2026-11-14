@@ -85,25 +85,27 @@ func baseStatus() statusapi.Status {
 }
 
 type rig struct {
-	t      *testing.T
-	ctx    context.Context
-	srv    *fake.Server
-	clk    *fake.Clock
-	link   *Link
-	cfg    *config.Store
-	st     *state.Store
-	bus    *events.Bus
-	alerts *doctor.Manager
-	status *fakeStatus
-	models *fakeModels
-	ark    *fakeArk
-	drill  *fakeDrill
-	hw     *fakeHW
-	ws     *watchState
-	logs   *syncBuf
-	dir    string
-	online atomic.Bool
-	deps   Deps
+	t    *testing.T
+	ctx  context.Context
+	srv  *fake.Server
+	clk  *fake.Clock
+	link *Link
+	cfg  *config.Store
+	st   *state.Store
+	bus  *events.Bus
+	// busSubs is the bus's subscriber count before the link runs; the link's eventLoop adds one.
+	busSubs int
+	alerts  *doctor.Manager
+	status  *fakeStatus
+	models  *fakeModels
+	ark     *fakeArk
+	drill   *fakeDrill
+	hw      *fakeHW
+	ws      *watchState
+	logs    *syncBuf
+	dir     string
+	online  atomic.Bool
+	deps    Deps
 
 	credPath, linkPath, keyPath, nodePath string
 }
@@ -229,6 +231,7 @@ func newRig(t *testing.T, opts ...rigOpt) *rig {
 	if err != nil {
 		t.Fatal(err)
 	}
+	r.busSubs = r.bus.Counters().Subscribers
 	t.Cleanup(func() {
 		c, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -340,6 +343,20 @@ func (r *rig) enroll() api.CloudEnrolled {
 		r.t.Fatalf("enroll: %v", err)
 	}
 	return res
+}
+
+// waitEventLoop blocks (in real time) until the link's eventLoop has subscribed to the bus. Its loops
+// start in their own goroutines at enroll, so an event published before then is never seen: a test
+// that publishes to wake the state loop waits for this first.
+func (r *rig) waitEventLoop() {
+	r.t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for r.bus.Counters().Subscribers <= r.busSubs {
+		if time.Now().After(deadline) {
+			r.t.Fatalf("the link's event loop never subscribed (subscribers %d)", r.bus.Counters().Subscribers)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 // waitState blocks until the link is in want.

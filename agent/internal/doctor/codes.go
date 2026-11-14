@@ -99,6 +99,15 @@ const (
 	LLM029 = "LAI-LLM-029"
 	LLM030 = "LAI-LLM-030"
 	LLM031 = "LAI-LLM-031"
+	// E11: engines and workloads (go-core)
+	LLM040 = "LAI-LLM-040"
+	LLM041 = "LAI-LLM-041"
+	LLM042 = "LAI-LLM-042"
+	LLM043 = "LAI-LLM-043"
+	LLM050 = "LAI-LLM-050"
+	LLM051 = "LAI-LLM-051"
+	LLM052 = "LAI-LLM-052"
+	LLM053 = "LAI-LLM-053"
 
 	// LAI-CAT
 	CAT001 = "LAI-CAT-001"
@@ -119,6 +128,9 @@ const (
 	CAT017 = "LAI-CAT-017"
 	CAT018 = "LAI-CAT-018"
 	CAT019 = "LAI-CAT-019"
+	// E11: workloads and the acestep file layout (go-core)
+	CAT020 = "LAI-CAT-020"
+	CAT021 = "LAI-CAT-021"
 
 	// LAI-NET
 	NET001 = "LAI-NET-001"
@@ -316,6 +328,17 @@ const (
 	SVC116 = "LAI-SVC-116"
 	SVC117 = "LAI-SVC-117"
 	SVC118 = "LAI-SVC-118"
+	// E11: music (go-core: 150, 159; go-music: 151..158; docs/specs/music.md section 8)
+	SVC150 = "LAI-SVC-150"
+	SVC151 = "LAI-SVC-151"
+	SVC152 = "LAI-SVC-152"
+	SVC153 = "LAI-SVC-153"
+	SVC154 = "LAI-SVC-154"
+	SVC155 = "LAI-SVC-155"
+	SVC156 = "LAI-SVC-156"
+	SVC157 = "LAI-SVC-157"
+	SVC158 = "LAI-SVC-158"
+	SVC159 = "LAI-SVC-159"
 
 	// LAI-GW
 	GW001 = "LAI-GW-001"
@@ -883,6 +906,54 @@ var table = []Code{
 		Fix:      Msg{EN: "Nothing to do", ES: "No hay que hacer nada"},
 	},
 	{
+		ID:       LLM040,
+		Severity: Error,
+		Title:    Msg{EN: "Engine failed to start (unit start failed)", ES: "El motor no pudo arrancar (falló el inicio de la unidad)"},
+		Fix:      Msg{EN: "Run `aictl logs --unit music` and `aictl doctor`; the previous models were started again", ES: "Ejecute `aictl logs --unit music` y `aictl doctor`; los modelos anteriores se iniciaron otra vez"},
+	},
+	{
+		ID:       LLM041,
+		Severity: Error,
+		Title:    Msg{EN: "Engine did not become ready in time", ES: "El motor no estuvo listo a tiempo"},
+		Fix:      Msg{EN: "Try again; if it repeats, run `aictl logs --unit music`. The previous models were started again", ES: "Inténtelo otra vez; si se repite, ejecute `aictl logs --unit music`. Los modelos anteriores se iniciaron otra vez"},
+	},
+	{
+		ID:       LLM042,
+		Severity: Warning,
+		Title:    Msg{EN: "Engine did not free GPU memory / stop cleanly", ES: "El motor no liberó la memoria gráfica o no se detuvo bien"},
+		Fix:      Msg{EN: "Nothing to do now; if graphics memory stays full, restart the computer", ES: "Por ahora no hay que hacer nada; si la memoria gráfica sigue llena, reinicie el equipo"},
+	},
+	{
+		ID:       LLM043,
+		Severity: Error,
+		Title:    Msg{EN: "Model's engine is not installed on this node", ES: "El motor del modelo no está instalado en este nodo"},
+		Fix:      Msg{EN: "Press **Install what's missing**, or run `aictl ensure`", ES: "Pulse **Instalar lo que falta**, o ejecute `aictl ensure`"},
+	},
+	{
+		ID:       LLM050,
+		Severity: Error,
+		Title:    Msg{EN: "Unknown workload", ES: "Uso desconocido"},
+		Fix:      Msg{EN: "Run `aictl workloads` to see the names this computer has", ES: "Ejecute `aictl workloads` para ver los nombres que tiene este equipo"},
+	},
+	{
+		ID:       LLM051,
+		Severity: Warning,
+		Title:    Msg{EN: "Workload does not fit this node's GPU", ES: "Este uso no cabe en la tarjeta gráfica de este nodo"},
+		Fix:      Msg{EN: "Choose another workload, or remove a model from it in `node.yaml` `workloads:`", ES: "Elija otro uso, o quite un modelo de él en `node.yaml` `workloads:`"},
+	},
+	{
+		ID:       LLM052,
+		Severity: Error,
+		Title:    Msg{EN: "Workload activation failed; previous models restored", ES: "No se pudo activar el uso; se restauraron los modelos anteriores"},
+		Fix:      Msg{EN: "Try again; if it repeats, run `aictl doctor` and `aictl logs --unit llama`", ES: "Inténtelo otra vez; si se repite, ejecute `aictl doctor` y `aictl logs --unit llama`"},
+	},
+	{
+		ID:       LLM053,
+		Severity: Warning,
+		Title:    Msg{EN: "Workload change refused in survival mode (use force)", ES: "Cambio de uso rechazado en modo supervivencia (use forzar)"},
+		Fix:      Msg{EN: "Leave survival mode first, or confirm the change on this computer", ES: "Salga primero del modo supervivencia, o confirme el cambio en este equipo"},
+	},
+	{
 		ID:       CAT001,
 		Severity: Error,
 		Title:    Msg{EN: "Catalog file can't be parsed", ES: "No se puede analizar el archivo del catálogo"},
@@ -989,6 +1060,18 @@ var table = []Code{
 		Severity: Error,
 		Title:    Msg{EN: "Lint: `CATALOG_VERSION` missing or not `YYYY.MM.DD-N`, or wrong file layout", ES: "Lint: falta `CATALOG_VERSION` o no es `AAAA.MM.DD-N`, o la estructura de archivos es incorrecta"},
 		Fix:      Msg{EN: "Fix the YAML at the reported path", ES: "Corrija el YAML en la ruta indicada"},
+	},
+	{
+		ID:       CAT020,
+		Severity: Error,
+		Title:    Msg{EN: "Workload references an unknown model id", ES: "Un uso hace referencia a un id de modelo desconocido"},
+		Fix:      Msg{EN: "Fix the workload in the profile or in `node.yaml` `workloads:`; `aictl models` lists the valid ids", ES: "Corrija el uso en el perfil o en `node.yaml` `workloads:`; `aictl models` lista los ids válidos"},
+	},
+	{
+		ID:       CAT021,
+		Severity: Error,
+		Title:    Msg{EN: "`acestep` model has an invalid file layout", ES: "El modelo `acestep` tiene una estructura de archivos no válida"},
+		Fix:      Msg{EN: "Run `aictl ark verify --item <model id>` to fetch it again; if the catalog entry is wrong, fix it in the repo", ES: "Ejecute `aictl ark verify --item <model id>` para descargarlo otra vez; si la entrada del catálogo está mal, corríjala en el repositorio"},
 	},
 	{
 		ID:       NET001,
@@ -2104,6 +2187,66 @@ var table = []Code{
 		Severity: Warning,
 		Title:    Msg{EN: "No usable AI-ARK drive is connected to copy from", ES: "No hay una unidad AI-ARK utilizable conectada para copiar"},
 		Fix:      Msg{EN: "Plug in the AI-ARK drive, wait a minute, then press **Copy from the AI-ARK drive** again.", ES: "Conecte la unidad AI-ARK, espere un minuto y presione otra vez **Copiar desde la unidad AI-ARK**."},
+	},
+	{
+		ID:       SVC150,
+		Severity: Error,
+		Title:    Msg{EN: "Music runtime not installed", ES: "El programa de música no está instalado"},
+		Fix:      Msg{EN: "Press **Install what's missing**, or run `aictl ensure`.", ES: "Pulse **Instalar lo que falta**, o ejecute `aictl ensure`."},
+	},
+	{
+		ID:       SVC151,
+		Severity: Warning,
+		Title:    Msg{EN: "Music is not loaded", ES: "La música no está cargada"},
+		Fix:      Msg{EN: "Press **Switch to Music**, or run `aictl workloads activate music`.", ES: "Pulse **Cambiar a Música**, o ejecute `aictl workloads activate music`."},
+	},
+	{
+		ID:       SVC152,
+		Severity: Error,
+		Title:    Msg{EN: "Music engine crashed during a song", ES: "El motor de música falló durante una canción"},
+		Fix:      Msg{EN: "Press **Switch to Music** again and retry; if it repeats, run `aictl logs --unit music`.", ES: "Pulse **Cambiar a Música** otra vez y reintente; si se repite, ejecute `aictl logs --unit music`."},
+	},
+	{
+		ID:       SVC153,
+		Severity: Warning,
+		Title:    Msg{EN: "Music queue full", ES: "La cola de música está llena"},
+		Fix:      Msg{EN: "Wait for a song to finish, then try again.", ES: "Espere a que termine una canción y vuelva a intentarlo."},
+	},
+	{
+		ID:       SVC154,
+		Severity: Warning,
+		Title:    Msg{EN: "Sample or input rejected (type/size/length)", ES: "Muestra o datos rechazados (tipo, tamaño o duración)"},
+		Fix:      Msg{EN: "Use a WAV, MP3, FLAC or Ogg sample under 20 MB and 60 seconds, and keep the lyrics short.", ES: "Use una muestra WAV, MP3, FLAC u Ogg de menos de 20 MB y 60 segundos, y acorte la letra."},
+	},
+	{
+		ID:       SVC155,
+		Severity: Error,
+		Title:    Msg{EN: "Not enough disk space to save the song", ES: "No hay espacio en disco suficiente para guardar la canción"},
+		Fix:      Msg{EN: "Delete songs you no longer need, or free space on the disk, then try again.", ES: "Borre canciones que ya no necesite, o libere espacio en el disco, y vuelva a intentarlo."},
+	},
+	{
+		ID:       SVC156,
+		Severity: Error,
+		Title:    Msg{EN: "Cloud request: sample download or checksum failed", ES: "Solicitud de la nube: falló la descarga o la suma de control de la muestra"},
+		Fix:      Msg{EN: "Send the request again from ai.marin.cr; if it repeats, upload the sample again.", ES: "Envíe la solicitud otra vez desde ai.marin.cr; si se repite, suba la muestra de nuevo."},
+	},
+	{
+		ID:       SVC157,
+		Severity: Error,
+		Title:    Msg{EN: "Cloud request: song upload failed", ES: "Solicitud de la nube: falló la subida de la canción"},
+		Fix:      Msg{EN: "The song is kept on this computer; check the internet connection and send the request again.", ES: "La canción quedó en esta computadora; revise la conexión a internet y envíe la solicitud otra vez."},
+	},
+	{
+		ID:       SVC158,
+		Severity: Info,
+		Title:    Msg{EN: "Song cancelled", ES: "Canción cancelada"},
+		Fix:      Msg{EN: "Nothing to do.", ES: "Nada que hacer."},
+	},
+	{
+		ID:       SVC159,
+		Severity: Error,
+		Title:    Msg{EN: "GPU driver/CUDA too old for the music runtime", ES: "El controlador de la tarjeta gráfica o CUDA es demasiado antiguo para el programa de música"},
+		Fix:      Msg{EN: "Run `aictl doctor` to see the driver version, then update the graphics driver from the rebuild kit.", ES: "Ejecute `aictl doctor` para ver la versión del controlador y actualice el controlador gráfico desde el kit."},
 	},
 	{
 		ID:       GW001,

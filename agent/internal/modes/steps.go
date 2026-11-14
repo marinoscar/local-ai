@@ -50,6 +50,7 @@ var (
 	defSyncCancel     = stepDef{name: StepSyncCancel, fn: (*Engine).stepSyncCancel, failCode: CodeStepFailed}
 	defProberStop     = stepDef{name: StepProberStop, fn: (*Engine).stepProberStop, failCode: CodeStepFailed}
 	defTailscaleOff   = stepDef{name: StepTailscaleOff, fn: (*Engine).stepTailscaleOff, failCode: CodeTailscaleServe}
+	defEnginesStop    = stepDef{name: StepEnginesStop, fn: (*Engine).stepEnginesStop, failCode: CodeStepFailed}
 	defSurvivalModels = stepDef{name: StepSurvivalModels, fn: (*Engine).stepSurvivalModels, failCode: CodeNoModel}
 	defSurvivalSvcs   = stepDef{name: StepSurvivalService, fn: (*Engine).stepSurvivalServices, failCode: CodeStepFailed}
 	defTailscaleOn    = stepDef{name: StepTailscaleOn, fn: (*Engine).stepTailscaleOn, failCode: CodeTailscaleServe}
@@ -66,7 +67,7 @@ func stepsFor(target Mode) []stepDef {
 	case Offline:
 		return []stepDef{defLinkStop, defSyncCancel, defProberStop, defTailscaleOff, defPersist, defEmit}
 	case Survival:
-		return []stepDef{defLinkStop, defSyncCancel, defProberStop, defTailscaleOff, defSurvivalModels, defSurvivalSvcs, defPersist, defEmit}
+		return []stepDef{defLinkStop, defSyncCancel, defProberStop, defTailscaleOff, defEnginesStop, defSurvivalModels, defSurvivalSvcs, defPersist, defEmit}
 	case Online:
 		return []stepDef{defTailscaleOn, defLinkStart, defProberStart, defPersist, defEmit, defSyncCatchup}
 	}
@@ -139,6 +140,15 @@ func (e *Engine) stepTailscaleOff(ctx context.Context, _ *Transition) ([]Warning
 		e.stopOffRetry()
 	}
 	return ws, err
+}
+
+// stepEnginesStop stops the music engine (every engine other than llama) so its graphics memory is
+// free for the survival models. It never fails survival.
+func (e *Engine) stepEnginesStop(ctx context.Context, _ *Transition) ([]Warning, error) {
+	if s, ok := e.d.Models.(EngineStopper); ok && e.d.Models != nil {
+		return s.StopEnginesForSurvival(ctx), nil
+	}
+	return nil, nil
 }
 
 func (e *Engine) stepSurvivalModels(ctx context.Context, t *Transition) ([]Warning, error) {

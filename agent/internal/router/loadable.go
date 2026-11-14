@@ -18,10 +18,11 @@ type Loadability struct {
 //
 // Every engine is judged. A whisper or piper model has no graphics-memory requirement in the
 // rules (the catalog says 0 for them), so only the backend and the memory rules apply: whatever
-// min_vram_mib such an entry declares is ignored.
+// min_vram_mib such an entry declares is ignored. An acestep (music) model's graphics memory counts
+// like a llama model's: it shares the GPU with them (E11).
 func (e Env) Loadable(m *catalog.Model, present bool) (bool, *Reason) {
 	req := m.Requirements
-	if m.Engine != "llama" {
+	if m.Engine != catalog.EngineLlama && m.Engine != catalog.EngineAcestep {
 		req.MinVRAMMiB = 0
 	}
 	return e.StaticFit(Candidate{ID: m.ID, Requirements: req, Present: present})

@@ -4,7 +4,7 @@
 import { Box, Button, Chip, IconButton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Typography, useMediaQuery } from '@mui/material';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import type { ChildWindowName, DesktopStatus, Lang, LocalaiDesktop, Tab as TabName } from '../../shared/types';
-import { modeLabel, pillFor, selectedTab, stripFor, tabsFor } from './model';
+import { modeLabel, musicButtonFor, pillFor, selectedTab, stripFor, tabsFor } from './model';
 import { STRINGS, copiedText, copyFailedText, pick } from './strings';
 
 const NOTICE_MS = 7000;
@@ -107,6 +107,7 @@ export function TopBar({ bridge }: TopBarProps): ReactElement {
   const pill = pillFor(status, lang);
   const mode = modeLabel(status?.mode ?? null, lang);
   const tabs = tabsFor(status);
+  const music = musicButtonFor(status, lang);
   const button = { size: 'small', color: 'inherit', sx: { minWidth: 0, px: compact ? 0.75 : 1.25, whiteSpace: 'nowrap', fontSize: compact ? '0.8125rem' : undefined } } as const;
 
   return (
@@ -145,6 +146,17 @@ export function TopBar({ bridge }: TopBarProps): ReactElement {
       </Button>
       <Button {...button} onClick={open('maps')} data-testid="open-maps">
         {pick(STRINGS.maps, lang)}
+      </Button>
+      <Button
+        {...button}
+        sx={{ ...button.sx, ...(music.enabled ? {} : { color: 'text.disabled' }) }}
+        aria-disabled={music.enabled ? undefined : true}
+        title={music.hint ?? undefined}
+        onClick={music.enabled ? open('music') : () => say(music.hint ?? '')}
+        data-testid="open-music"
+        data-state={music.state}
+      >
+        {pick(STRINGS.music, lang)}
       </Button>
       <Button {...button} variant="outlined" onClick={() => void copyKey()} data-testid="copy-key">
         {pick(compact ? STRINGS.copyKeyShort : STRINGS.copyKey, lang)}

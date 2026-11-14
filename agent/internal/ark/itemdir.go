@@ -24,6 +24,8 @@ const (
 	EngineLlama   = "llama"
 	EngineWhisper = "whisper"
 	EnginePiper   = "piper"
+	// EngineAcestep is the music engine (E11); its models live in music/<id>.
+	EngineAcestep = "acestep"
 )
 
 // MapAssetsID is the one maps item that is a fixed directory (maps/assets/) instead of maps/<id>/.
@@ -48,6 +50,7 @@ type ItemRef struct {
 //	model, engine llama    models/<id>
 //	model, engine whisper  speech/whisper/<id>
 //	model, engine piper    speech/piper/<id>
+//	model, engine acestep  music/<id>
 //	kiwix                  kiwix/<id>
 //	maps                   maps/<id>   (map-assets: maps/assets)
 //	kit                    kit/<subdir>
@@ -68,6 +71,8 @@ func ItemDir(ref ItemRef) (string, error) {
 			return path.Join("speech", "whisper", ref.ID), nil
 		case EnginePiper:
 			return path.Join("speech", "piper", ref.ID), nil
+		case EngineAcestep:
+			return path.Join("music", ref.ID), nil
 		}
 		return "", fmt.Errorf("ark: model %s has unknown engine %q", ref.ID, ref.Engine)
 	case manifest.KindKiwix:
@@ -220,7 +225,7 @@ func ScanRoot(ctx context.Context, fsys config.FS, root Root) ([]ScannedItem, []
 	step := func() bool { return ctx.Err() == nil }
 
 	try("docs")
-	for _, parent := range []string{"models", "speech/whisper", "speech/piper", "kiwix", "maps"} {
+	for _, parent := range []string{"models", "speech/whisper", "speech/piper", "music", "kiwix", "maps"} {
 		for _, rel := range children(parent) {
 			if !step() {
 				return nil, nil, ctx.Err()

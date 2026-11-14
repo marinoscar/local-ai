@@ -33,6 +33,12 @@ const (
 	TypeDrillStarted        = "drill.started"
 	TypeDrillCheckDone      = "drill.check_done"
 	TypeDrillDone           = "drill.done"
+	// E11 workloads (go-core): agent.md section 3.10, llama-router.md section 4.16.
+	TypeWorkloadProgress = "workload.progress"
+	TypeWorkloadDone     = "workload.done"
+	// Music (E11, docs/specs/music.md): the progress and the end of a song operation.
+	TypeMusicProgress = "music.progress"
+	TypeMusicDone     = "music.done"
 
 	// TypeResync tells a client its picture may be stale: re-read /status. The bus owns it (Resync
 	// and the replay rules of Subscribe); Publish refuses it.
@@ -93,6 +99,36 @@ type ModelLoading struct {
 	// llama-router.md section 4.8): the model in use stops at once and inference is down until the
 	// new one is ready, so the downtime equals the load time. Absent in router mode.
 	Restart bool `json:"restart,omitempty"`
+}
+
+// Phases of workload.progress and results of workload.done.
+const (
+	WorkloadUnloading  = "unloading"
+	WorkloadLoading    = "loading"
+	WorkloadOK         = "ok"
+	WorkloadFailed     = "failed"
+	WorkloadRolledBack = "rolled_back"
+)
+
+// WorkloadProgress is the data of workload.progress: one model of an activation starts to unload or
+// load (done of total steps finished so far).
+type WorkloadProgress struct {
+	OpID  string `json:"op_id"`
+	Name  string `json:"name"`
+	Phase string `json:"phase"`
+	Model string `json:"model"`
+	Done  int    `json:"done"`
+	Total int    `json:"total"`
+}
+
+// WorkloadDone is the data of workload.done. Active is the active workload afterwards (null when
+// none); Code is set when the activation failed.
+type WorkloadDone struct {
+	OpID   string  `json:"op_id"`
+	Name   string  `json:"name"`
+	Result string  `json:"result"`
+	Code   string  `json:"code,omitempty"`
+	Active *string `json:"active"`
 }
 
 // ModelLoaded is the data of model.loaded.
@@ -262,6 +298,17 @@ type DrillNotice struct {
 	ES string `json:"es"`
 }
 
+// MusicOp is the data of music.progress and music.done (E11): an operation of POST /music/generate.
+// State is queued, running, done, failed or cancelled; Progress is 0 to 1 when the engine reports it;
+// Code is the doctor code of a failed or cancelled operation. Never lyrics or sample bytes.
+type MusicOp struct {
+	OpID     string   `json:"op_id"`
+	State    string   `json:"state"`
+	Progress *float64 `json:"progress"`
+	SongIDs  []string `json:"song_ids"`
+	Code     string   `json:"code,omitempty"`
+}
+
 // ResyncData is the data of resync. Reason is ResyncGap or ResyncRestart.
 type ResyncData struct {
 	Reason string `json:"reason"`
@@ -291,6 +338,10 @@ var payloads = map[string]reflect.Type{
 	TypeDrillStarted:        reflect.TypeOf(DrillStarted{}),
 	TypeDrillCheckDone:      reflect.TypeOf(DrillCheckDone{}),
 	TypeDrillDone:           reflect.TypeOf(DrillDone{}),
+	TypeWorkloadProgress:    reflect.TypeOf(WorkloadProgress{}),
+	TypeWorkloadDone:        reflect.TypeOf(WorkloadDone{}),
+	TypeMusicProgress:       reflect.TypeOf(MusicOp{}),
+	TypeMusicDone:           reflect.TypeOf(MusicOp{}),
 }
 
 // Types returns every publishable event type, sorted. resync and shutdown are not in the list: the

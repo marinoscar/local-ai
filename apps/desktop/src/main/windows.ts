@@ -24,11 +24,12 @@ export const TOP_BAR_HEIGHT = 48;
 export const BOUNDS_SAVE_DELAY_MS = 500;
 const AGENT_ORIGIN = `http://${AGENT_HOST}:${AGENT_PORT}`;
 
-/** The child windows: where they open and how big. `chat/`, `library/` and `maps/` are the agent UI's own paths. */
+/** The child windows: where they open and how big. `chat/`, `library/`, `maps/` and `music/` are the agent UI's own paths. */
 export const CHILD_WINDOWS: Readonly<Record<ChildWindowName, { path: string; width: number; height: number; title: { en: string; es: string } }>> = {
   chat: { path: '/chat/', width: 1000, height: 780, title: { en: 'Local AI: Chat', es: 'Local AI: Chat' } },
   library: { path: '/library/', width: 1100, height: 800, title: { en: 'Local AI: Library', es: 'Local AI: Biblioteca' } },
   maps: { path: '/maps/', width: 1100, height: 800, title: { en: 'Local AI: Maps', es: 'Local AI: Mapas' } },
+  music: { path: '/music/', width: 1100, height: 820, title: { en: 'Local AI: Music', es: 'Local AI: Música' } },
 };
 
 // ---------------------------------------------------------------------------------------------------------------------

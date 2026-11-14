@@ -9,6 +9,7 @@ import { Reader } from "./screens/Reader";
 import { ChatInterstitial } from "./screens/ChatInterstitial";
 import { Brain } from "./screens/Brain";
 import { Home } from "./screens/Home";
+import { Music } from "./screens/Music";
 import { Status } from "./screens/Status";
 import { LockDialog } from "./screens/LockDialog";
 import { mapsManualsBody, useHelpRedirect } from "./screens/mapsManuals";
@@ -119,6 +120,8 @@ export function App() {
           <Status status={status} />
         ) : view.screen === "brain" && status ? (
           <Brain status={status} />
+        ) : view.screen === "music" ? (
+          <Music status={status} />
         ) : isManage(view.screen) && status ? (
           manageBody(view.screen, status)
         ) : (
