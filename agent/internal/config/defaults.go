@@ -19,6 +19,8 @@ const (
 	DefaultLlamaPort   = 8080
 	DefaultKiwixPort   = 8888
 	DefaultWhisperPort = 8081
+	// DefaultMusicPort is the music engine's shim (localai-music.service), loopback only (E11).
+	DefaultMusicPort = 8082
 )
 
 // DefaultCloudURL is the cloud app's address when node.yaml does not set cloud.url.
@@ -59,7 +61,7 @@ func Defaults() Config {
 		},
 		Update:  UpdateBlock{Repo: "marinoscar/local-ai", Channel: "stable"},
 		UI:      UIBlock{Language: "auto"},
-		Ports:   PortsBlock{Agent: DefaultAgentPort, Llama: DefaultLlamaPort, Kiwix: DefaultKiwixPort, Whisper: DefaultWhisperPort},
+		Ports:   PortsBlock{Agent: DefaultAgentPort, Llama: DefaultLlamaPort, Kiwix: DefaultKiwixPort, Whisper: DefaultWhisperPort, Music: DefaultMusicPort},
 		Logging: LoggingBlock{Level: "info"},
 	}
 }

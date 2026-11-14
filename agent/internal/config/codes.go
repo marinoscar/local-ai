@@ -17,6 +17,8 @@ const (
 	CodeProfileMissing = doctor.CAT003
 	// CodeCloudURLNotHTTPS: cloud.url must start with https://.
 	CodeCloudURLNotHTTPS = doctor.CLD062
+	// CodeWorkloadModel: a node.yaml workload references a model id the catalog does not have.
+	CodeWorkloadModel = doctor.CAT020
 	// CodeSecretPermissions: a secret file had unsafe permissions (they were fixed).
 	CodeSecretPermissions = doctor.SEC009
 )

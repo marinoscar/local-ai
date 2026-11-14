@@ -42,7 +42,7 @@ func TestExampleParsesWithNoProblems(t *testing.T) {
 	if !reflect.DeepEqual(c.Allow, config.CloudJobNames()) {
 		t.Errorf("cloud.allow differs from the 15 known names: %v", c.Allow)
 	}
-	if cfg.Ports != (config.PortsBlock{Agent: 7070, Llama: 8080, Kiwix: 8888, Whisper: 8081}) {
+	if cfg.Ports != (config.PortsBlock{Agent: 7070, Llama: 8080, Kiwix: 8888, Whisper: 8081, Music: 8082}) {
 		t.Errorf("ports wrong: %+v", cfg.Ports)
 	}
 	if cfg.UI.Language != "auto" || cfg.Logging.Level != "info" || cfg.Update.Repo != "marinoscar/local-ai" || cfg.Update.Channel != "stable" {
@@ -154,7 +154,7 @@ func TestDetectionHooksFillBackendAndCommitOnlyWhenAbsent(t *testing.T) {
 func TestSafeDefaults(t *testing.T) {
 	c := config.SafeDefaults()
 	if !c.SafeDefaults || c.CloudEnabled() || c.Tailscale.Manage || c.Node.ID != "unconfigured" ||
-		c.Ports != (config.PortsBlock{Agent: 7070, Llama: 8080, Kiwix: 8888, Whisper: 8081}) {
+		c.Ports != (config.PortsBlock{Agent: 7070, Llama: 8080, Kiwix: 8888, Whisper: 8081, Music: 8082}) {
 		t.Errorf("safe defaults wrong: %+v", c)
 	}
 	if len(c.Cloud.Allow) != 0 {
