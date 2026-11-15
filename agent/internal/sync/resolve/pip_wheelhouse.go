@@ -22,6 +22,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/sync/download"
 	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
+	"github.com/marinoscar/local-ai/agent/internal/untar"
 )
 
 // PipWheelhouse is the pip_wheelhouse resolver (ark-sync.md section 4.9.11, rebuild-kit.md section 3.2.2): the
@@ -191,10 +192,6 @@ func (p *PipWheelhouse) Produce(ctx context.Context, req Request) (Product, erro
 	if p.Env.Downloader == nil || p.Repo == nil {
 		return Product{}, fail(CodeApt, nil, "no downloader or repository source is configured")
 	}
-	tar, err := p.Env.tool("tar")
-	if err != nil {
-		return Product{}, err
-	}
 	git := ""
 	for _, b := range w.src.Builds {
 		if b.RepoPath == "" {
@@ -248,7 +245,7 @@ func (p *PipWheelhouse) Produce(ctx context.Context, req Request) (Product, erro
 	}
 
 	// The wheels sync builds, offline.
-	built, err := p.build(ctx, req, w, lock, staging, tar, git, filepath.Join(treeDir, filepath.FromSlash(pyRel)), wheels, repoDir)
+	built, err := p.build(ctx, req, w, lock, staging, git, filepath.Join(treeDir, filepath.FromSlash(pyRel)), wheels, repoDir)
 	if err != nil {
 		return Product{}, err
 	}
@@ -610,7 +607,7 @@ type builtWheel struct {
 // build makes the wheels of the builds, offline: unpack the pinned Python into <staging>/build, a build venv with
 // the lock's build backends, the sources (a shallow fetch of each pinned commit, or the repo_path tree), then
 // `pip wheel --no-deps --no-build-isolation --no-index` per build.
-func (p *PipWheelhouse) build(ctx context.Context, req Request, w wheelhouse, lock PipLock, staging, tar, git, pyTar, wheels, repoDir string) ([]builtWheel, error) {
+func (p *PipWheelhouse) build(ctx context.Context, req Request, w wheelhouse, lock PipLock, staging, git, pyTar, wheels, repoDir string) ([]builtWheel, error) {
 	if len(w.src.Builds) == 0 {
 		return nil, nil
 	}
@@ -625,8 +622,15 @@ func (p *PipWheelhouse) build(ctx context.Context, req Request, w wheelhouse, lo
 	env := []string{"PATH=" + execx.FixedPath, "HOME=" + home, "LC_ALL=C.UTF-8", "PIP_NO_INDEX=1", "PIP_NO_CACHE_DIR=1",
 		"PIP_DISABLE_PIP_VERSION_CHECK=1", "PYTHONDONTWRITEBYTECODE=1", "SOURCE_DATE_EPOCH=946684800",
 		"http_proxy=" + whNoProxy, "https_proxy=" + whNoProxy, "HTTP_PROXY=" + whNoProxy, "HTTPS_PROXY=" + whNoProxy, "no_proxy=", "NO_PROXY="}
-	if err := p.step(ctx, "unpacking the Python", tar, whUnpackTimeout, env, "-xzf", pyTar, "-C", work, "--no-same-owner"); err != nil {
-		return nil, err
+	// In-process, not the tar program: GNU tar 1.35 needs openat2, which the agent's sandbox refuses (untar).
+	uctx, cancel := context.WithTimeout(ctx, whUnpackTimeout)
+	_, err := untar.ExtractTarGz(uctx, pyTar, work, untar.Limits{})
+	cancel()
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil, err
+		}
+		return nil, fail(CodeApt, err, "unpacking the Python failed: %v", err)
 	}
 	py := filepath.Join(work, "python", "bin", "python3")
 	if fi, err := os.Stat(py); err != nil || fi.IsDir() {

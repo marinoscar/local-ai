@@ -12,6 +12,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/execx"
 	"github.com/marinoscar/local-ai/agent/internal/kit"
 	"github.com/marinoscar/local-ai/agent/internal/svc/acestep"
+	"github.com/marinoscar/local-ai/agent/internal/untar/untartest"
 )
 
 // The engine.acestep step over a kit fixture: the wheelhouse kit-engine-acestep-cuda at kit/engines/acestep/ (a
@@ -21,14 +22,14 @@ const whVersion = "1.5.0-ab12cd34"
 
 func wheelhouseFiles(version string) map[string][]byte {
 	return map[string][]byte{
-		version + "/python/cpython-3.12.16+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz": []byte("python"),
+		version + "/python/cpython-3.12.16+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz": untartest.PythonTarball(),
 		version + "/wheels/torch-2.10.0+cu128-cp312-cp312-manylinux_2_28_x86_64.whl":              []byte("torch"),
 		version + "/wheels/localai_music_shim-0.1.0-py3-none-any.whl":                             []byte("shim"),
 		version + "/requirements.lock":                                                            []byte("torch==2.10.0+cu128 --hash=sha256:x\n"),
 	}
 }
 
-// engineRunner fakes tar (unpacks python/bin/python3), venv (bin/python) and pip.
+// engineRunner fakes venv (bin/python) and pip; the Python tarball is a real one, unpacked in-process.
 func engineRunner(fail string) func(c execx.Cmd) (execx.Result, error) {
 	return func(c execx.Cmd) (execx.Result, error) {
 		argv := filepath.Base(c.Path) + " " + strings.Join(c.Args, " ")
@@ -36,10 +37,6 @@ func engineRunner(fail string) func(c execx.Cmd) (execx.Result, error) {
 			return execx.Result{ExitCode: 1, Stderr: []byte("boom")}, nil
 		}
 		switch {
-		case filepath.Base(c.Path) == "tar":
-			dst := c.Args[len(c.Args)-2]
-			_ = os.MkdirAll(filepath.Join(dst, "python", "bin"), 0o755)
-			_ = os.WriteFile(filepath.Join(dst, "python", "bin", "python3"), []byte("#!/bin/sh\n"), 0o755)
 		case len(c.Args) == 3 && c.Args[1] == "venv":
 			_ = os.MkdirAll(filepath.Join(c.Args[2], "bin"), 0o755)
 			_ = os.WriteFile(filepath.Join(c.Args[2], "bin", "python"), []byte("#!/bin/sh\n"), 0o755)
