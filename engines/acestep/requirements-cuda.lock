@@ -3,10 +3,6 @@
 # pip install --no-index --find-links <kit wheels> --require-hashes (music.md section 3.1).
 # repo-tree-sha256: engines/acestep beecb04ab9092d5ac041277946f99f8044169dd2f7aed6dd12078f90075b353c
 # build-requires: hatchling pathspec pluggy trove-classifiers packaging tomlkit setuptools
-# unresolved: torch==2.10.0+cu128 (download.pytorch.org)
-# unresolved: torchao==0.16.0+cu128 (download.pytorch.org)
-# unresolved: torchaudio==2.10.0+cu128 (download.pytorch.org)
-# unresolved: torchvision==0.25.0+cu128 (download.pytorch.org)
 absl-py==2.5.1 --hash=sha256:721200f2f0e9960f2ca9dc3a2a706b201f5f75d812c158f059cbbe29eeafbdb8
 accelerate==1.15.0 --hash=sha256:97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec
 aiofiles==24.1.0 --hash=sha256:b4ec55f4195e3eb5d7abd1bf7e061763e864dd4954231fb8539a0ef8bb8260e5
@@ -128,9 +124,13 @@ tensorboard-data-server==0.7.2 --hash=sha256:ef687163c24185ae9754ed5650eb5bc4d84
 tokenizers==0.22.2 --hash=sha256:369cc9fc8cc10cb24143873a0d95438bb8ee257bb80c71989e3ee290e8d72c67
 toml==0.10.2 --hash=sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b
 tomlkit==0.13.3 --hash=sha256:c89c649d79ee40629a9fda55f8ace8c6a1b42deb912b2a8fd8d942ddadb606b0
+torch==2.10.0+cu128 --hash=sha256:628e89bd5110ced7debee2a57c69959725b7fbc64eab81a39dd70e46c7e28ba5
 torch-einops-utils==0.2.6 --hash=sha256:292cba91371b9c9c7ef5607090231f0bbe2bbcfcbbaa5969d92daaffce28f608
+torchao==0.16.0+cu128 --hash=sha256:eda63ff11519c563d2f664b11e52cd7dcd0d7ff34c88cdfdef330e409d3f253f
+torchaudio==2.10.0+cu128 --hash=sha256:d26b91a173cee6db9abff68b48d64236950ffc5628d06448ecdd7ac56841e10a
 torchcodec==0.17.0 --hash=sha256:defd5f0901999c9e981f6465a0f4aac8b5a5147e38e539b77c0711c015cf5349
 torchmetrics==1.9.0 --hash=sha256:bfdcbff3dd1d96b3374bb2496eb39f23c4b28b8a845b6a18c313688e0d2d9ca1
+torchvision==0.25.0+cu128 --hash=sha256:1255a0ca2bf987acf9f103b96c5c4cfe3415fc4a1eef17fa08af527a04a4f573
 tqdm==4.70.1 --hash=sha256:c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73
 transformers==4.57.6 --hash=sha256:4c9e9de11333ddfe5114bc872c9f370509198acf0b87a832a0ab9458e2bd0550
 triton==3.6.0 --hash=sha256:74caf5e34b66d9f3a429af689c1c7128daba1d8208df60e81106b115c00d6fca
