@@ -54,9 +54,11 @@ func TestWheelhouseItemIsValid(t *testing.T) {
 	}
 	// Every pin is part of the version: a change of any of them is a new runtime.
 	for name, change := range map[string]func(*ContentSource){
-		"lock":   func(s *ContentSource) { s.SHA256 = strings.Repeat("0", 64) },
-		"python": func(s *ContentSource) { s.Files = []URLFile{{URL: s.Files[0].URL, SHA256: strings.Repeat("1", 64), Name: s.Files[0].Name}} },
-		"index":  func(s *ContentSource) { s.Indexes = []string{"https://other.example.test/simple"} },
+		"lock": func(s *ContentSource) { s.SHA256 = strings.Repeat("0", 64) },
+		"python": func(s *ContentSource) {
+			s.Files = []URLFile{{URL: s.Files[0].URL, SHA256: strings.Repeat("1", 64), Name: s.Files[0].Name}}
+		},
+		"index": func(s *ContentSource) { s.Indexes = []string{"https://other.example.test/simple"} },
 		"build": func(s *ContentSource) {
 			s.Builds = append([]WheelBuild{}, s.Builds...)
 			s.Builds[0].Commit = strings.Repeat("a", 40)
