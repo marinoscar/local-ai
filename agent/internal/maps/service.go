@@ -17,8 +17,8 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/maps/places"
-	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
+	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 )
 
 // ServiceName is the name of the maps service in the health supervisor and in GET /services.
