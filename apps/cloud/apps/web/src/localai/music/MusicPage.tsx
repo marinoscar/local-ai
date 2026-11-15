@@ -141,6 +141,7 @@ export function MusicPage({ nodesPollMs = 5000, libraryPollMs = 15000, requestPo
         key={prompt ? `prompt-${prompt.id}` : `new-${blankForm}`}
         nodeId={node?.nodeId ?? null}
         ready={node?.readiness === 'ready'}
+        autoDuration={node?.autoDuration ?? true}
         prompt={prompt}
         assist={assist}
         onCreated={onCreated}
