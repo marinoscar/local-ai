@@ -152,19 +152,15 @@ func (p *PipWheelhouse) checkGitURL(raw string) error {
 	return nil
 }
 
-// Resolve implements plan.Resolver: the version is what the catalog pins; no network.
+// Resolve implements plan.Resolver: the version is what the catalog pins; no network. It is deliberately not a
+// plan.LocalResolver: with no network the planner takes the same version from plan.FromCatalog and keeps the
+// present copy, and nothing is built offline (Produce needs the indexes).
 func (p *PipWheelhouse) Resolve(_ context.Context, it plan.CatalogItem) (plan.Resolved, error) {
 	w, err := p.item(it)
 	if err != nil {
 		return plan.Resolved{}, err
 	}
 	return plan.Resolved{Version: w.version, SortKey: w.version, SizeBytes: it.Content.ExpectedSizeBytes}, nil
-}
-
-// ResolveLocal implements plan.LocalResolver: the version needs no network, so an offline plan knows it too.
-func (p *PipWheelhouse) ResolveLocal(ctx context.Context, it plan.CatalogItem, _ []string) (plan.Resolved, bool) {
-	r, err := p.Resolve(ctx, it)
-	return r, err == nil
 }
 
 // Produce implements Producer.

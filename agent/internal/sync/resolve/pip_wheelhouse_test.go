@@ -469,6 +469,10 @@ func TestWheelhouseOfflineTouchesNothing(t *testing.T) {
 	if fc, ok := plan.FromCatalog(r.it, whCatalogVersion); !ok || fc.Version != r.version() {
 		t.Errorf("FromCatalog = %+v, %v", fc, ok)
 	}
+	// Nothing is planned as a local build: offline, the present copy is kept and nothing runs.
+	if _, ok := any(r.p).(plan.LocalResolver); ok {
+		t.Error("the wheelhouse resolver offers an offline build")
+	}
 }
 
 func TestWheelhouseRefusals(t *testing.T) {
