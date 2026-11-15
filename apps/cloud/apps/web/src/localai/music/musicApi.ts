@@ -7,8 +7,11 @@ import type { CommandView } from '../api/types';
 export type MusicReadiness = 'ready' | 'can_load' | 'too_little_vram' | 'offline' | 'no_music';
 export type MusicStage = 'queued' | 'generating' | 'done' | 'failed' | 'expired' | 'cancelled';
 export type SampleMode = 'sounds_like' | 'same_song';
-/** How the song gets its words (#568): the person's own, written by the cloud's AI, or none (an instrumental). */
-export type LyricsMode = 'mine' | 'ai' | 'instrumental';
+/**
+ * How the song gets its words (#568, #570): Automatic (the default: the box's lyrics, else the cloud's AI writes them
+ * at Make the song when music AI is available, else none), the person's own, written by the AI now, or none.
+ */
+export type LyricsMode = 'auto' | 'mine' | 'ai' | 'instrumental';
 
 export interface WorkloadItem {
   name: string;
@@ -129,9 +132,17 @@ export interface MusicPromptInput {
   uiLanguage: 'en' | 'es';
 }
 
-/** Whether the AI helpers work for this person now (`GET /assist`). */
+/** Why music AI is not available: the AI is off, "Use AI for music" is off, or no model resolves for the person. */
+export type MusicAiReason = 'ai_off' | 'music_ai_off' | 'no_model';
+
+/** Whether music AI works for this person now (`GET /assist`), else the reason and the API's one-sentence fix. */
 export interface MusicAssist {
-  ai: { available: true; reason: null } | { available: false; reason: 'ai_off' | 'no_model' };
+  ai: { enabled: true; reason: null; fix: null } | { enabled: false; reason: MusicAiReason; fix: string };
+}
+
+/** "Use AI for music" (`GET`/`PUT /api/localai/music/ai-settings`, ai_config:read / ai_config:write). */
+export interface MusicAiSettings {
+  aiEnabled: boolean;
 }
 
 /** What the form sends (the multipart field names of `POST /api/localai/music/requests`). */
@@ -217,6 +228,8 @@ export const updatePrompt = (id: string, input: Partial<MusicPromptInput> & { re
 export const deletePrompt = (id: string): Promise<{ id: string; deleted: true }> =>
   api.delete<{ id: string; deleted: true }>(`${music}/prompts/${encodeURIComponent(id)}`, { body: JSON.stringify({ confirm: id }) });
 export const getAssist = (): Promise<MusicAssist> => api.get<MusicAssist>(`${music}/assist`);
+export const getMusicAiSettings = (): Promise<MusicAiSettings> => api.get<MusicAiSettings>(`${music}/ai-settings`);
+export const putMusicAiSettings = (value: MusicAiSettings): Promise<MusicAiSettings> => api.put<MusicAiSettings>(`${music}/ai-settings`, value);
 export const suggestTitle = (input: { lyrics: string; description: string; lyricsMode: LyricsMode; language: string; uiLanguage: 'en' | 'es' }): Promise<{ title: string; source: 'ai' | 'generated' }> =>
   api.post<{ title: string; source: 'ai' | 'generated' }>(`${music}/title-suggestion`, input);
 export const suggestLyrics = (input: { description: string; language: string; title?: string }): Promise<{ lyrics: string; source: 'ai' }> =>
