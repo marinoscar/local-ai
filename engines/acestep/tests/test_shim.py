@@ -258,6 +258,19 @@ class SelfTestTests(unittest.TestCase):
     """--self-test is what the offline install runs before it moves current (music.md section 3.1)."""
 
     def test_self_test_passes_without_a_gpu(self) -> None:
+        from unittest import mock
+
         from localai_music_shim.__main__ import main
 
-        self.assertEqual(main(["--self-test"]), 0)
+        with mock.patch("localai_music_shim.backend._import_acestep", return_value=object()):
+            self.assertEqual(main(["--self-test"]), 0)
+
+    def test_self_test_fails_when_the_runtime_cannot_be_imported(self) -> None:
+        """A runtime with ACE-Step or torch missing must never become current (#511)."""
+        from unittest import mock
+
+        from localai_music_shim.__main__ import main
+
+        with mock.patch("localai_music_shim.backend._import_acestep", side_effect=ModuleNotFoundError("No module named 'acestep'")), \
+                mock.patch("sys.stderr"):
+            self.assertEqual(main(["--self-test"]), 1)

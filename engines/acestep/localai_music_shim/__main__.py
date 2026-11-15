@@ -15,12 +15,19 @@ from .tasks import TaskManager
 
 def self_test() -> int:
     """--self-test (music.md section 3.1): import every module the engine needs, with no GPU work and no
-    network, so the offline install can refuse a runtime that cannot start. The ACE-Step import itself
-    is checked by the real backend when it is present (TODO(#505))."""
+    network, so the offline install can refuse a runtime that cannot start: the shim's modules, then
+    ACE-Step's API with torch and the rest of the runtime (#511)."""
     import importlib
 
     for mod in ("localai_music_shim.backend", "localai_music_shim.config", "localai_music_shim.server", "localai_music_shim.tasks"):
         importlib.import_module(mod)
+    from localai_music_shim import backend
+
+    try:
+        backend._import_acestep()
+    except Exception as e:  # noqa: BLE001 - any import failure means the runtime cannot start
+        print(f"self-test failed: the music runtime cannot be imported ({type(e).__name__}: {e})", file=sys.stderr)
+        return 1
     print("self-test ok")
     return 0
 
