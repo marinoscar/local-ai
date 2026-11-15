@@ -12,7 +12,13 @@ import {
   ZoomButtons,
   type NearestKind,
 } from "./Controls";
-import { containingMap, inBounds, parseCoordinates } from "./coords";
+import { containingMap, inBounds, parseCoordinates, startView } from "./coords";
+
+/** The map's own height is not known before it mounts: the window less the viewer's bars above and below it. */
+const VIEWER_CHROME_PX = 260;
+function mapAreaHeight(): number {
+  return Math.max(200, window.innerHeight - VIEWER_CHROME_PX);
+}
 import { setLang, t, useLang, type Key } from "./lang";
 import { MapView, type MapApi, type View } from "./MapView";
 import { Picker } from "./Picker";
@@ -69,11 +75,7 @@ export function App() {
           return;
         }
         const pos = await getPosition();
-        let start: View = {
-          lat: map.center[1],
-          lon: map.center[0],
-          zoom: map.center[2],
-        };
+        let start: View = startView(map, window.innerWidth, mapAreaHeight());
         let chosen = map;
         if (pos && pos.lat !== null && pos.lon !== null) {
           const home = inBounds(pos.lat, pos.lon, map.bounds)
@@ -212,7 +214,8 @@ export function App() {
           const m = catalog.maps.find((x) => x.id === id);
           if (!m) return;
           setMapId(id);
-          goTo(m.center[1], m.center[0], m.center[2]);
+          const v = startView(m, window.innerWidth, mapAreaHeight());
+          goTo(v.lat, v.lon, v.zoom);
         }} />
         <button
           type="button"
