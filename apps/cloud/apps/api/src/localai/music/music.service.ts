@@ -38,6 +38,7 @@ import {
   unknownSong,
 } from './music-errors';
 import { extensionOf, musicSettingsOf, strengthFor, type MusicLyricsMode, type MusicRequestFields, type MusicSettings, type SniffedAudio } from './music-input';
+import { MusicAssistService } from './music-assist.service';
 import { MusicPromptsService, sampleOfPrompt, type PromptFields, type StoredSample } from './music-prompts.service';
 import { MUSIC_MAX_ACTIVE_PER_USER, MUSIC_MAX_PER_HOUR_PER_USER, MUSIC_PENDING_URL, MUSIC_PLAY_URL_TTL_S } from './music-limits';
 import { MUSIC_OBJECT_STORE, MusicStorageNotConfigured, sampleKey, songKey, type MusicObjectStore } from './music-store';
@@ -53,10 +54,11 @@ import {
   type RequestRow,
 } from './music.views';
 
-/** Who asks: the user and the effective permissions of the credential. */
+/** Who asks: the user, the effective permissions of the credential and the active organization (its AI policy). */
 export interface MusicRequester {
   userId: string;
   permissions: readonly string[];
+  orgId?: string | null;
 }
 
 /** The sample as the controller read it: the bytes (at most 20 MiB) and their type, read from the bytes. */
@@ -95,6 +97,7 @@ export class MusicService {
     private readonly prisma: PrismaService,
     private readonly commands: CommandsService,
     private readonly prompts: MusicPromptsService,
+    private readonly assist: MusicAssistService,
     @Inject(MUSIC_OBJECT_STORE) private readonly store: MusicObjectStore,
     @Inject(LOCALAI_CLOCK) private readonly clock: LocalaiClock,
     @Inject(AUDIT_SINK) private readonly audit: AuditSink,
@@ -163,8 +166,9 @@ export class MusicService {
         strength: stored ? (prompt.strength ?? undefined) : undefined,
         upload: null,
         reuse: stored,
-        save: async () => {
-          await this.prompts.touch(prompt.id);
+        // The prompt is not changed, except that lyrics the AI wrote now (Automatic mode) are kept on it.
+        save: async (fields) => {
+          await this.prompts.touch(prompt.id, fields.lyrics !== prompt.lyrics ? fields.lyrics : undefined);
           return { promptId: prompt.id, released: null };
         },
       },
@@ -176,7 +180,9 @@ export class MusicService {
   /**
    * One request. In order: the node exists (404), is enrolled (409 LAI-CLD-035) and not in Offline or Survival mode
    * (422 LAI-CLD-034); the person is within their limits (429 LAI-SVC-153); storage answers and signs https URLs (503
-   * otherwise); an uploaded sample is stored (or a stored one reused); the prompt is saved; one pending song row per
+   * otherwise); Automatic mode with empty lyrics asks the AI for them (#570: written lyrics are sent and saved on the
+   * prompt; without music AI the song has no vocals; an AI failure is 502 and nothing is stored); an uploaded sample is
+   * stored (or a stored one reused); the prompt is saved; one pending song row per
    * variation, each with the request's title; the command is queued with placeholder URLs (signed at the claim);
    * audited `localai.music.requested`. The request keeps the title and settings it used, whatever its prompt becomes.
    */
@@ -199,6 +205,24 @@ export class MusicService {
     try {
       const probe = await this.store.signedPut(keys[0], 60);
       if (!probe.startsWith('https://')) throw musicStorageUnavailable('not_https');
+    } catch (error) {
+      throw this.storageError(error);
+    }
+
+    // Automatic lyrics (#570), after every cheap refusal and before anything is stored. Never logged: lengths only.
+    let settings = job.settings;
+    let autoLyrics: 'written' | 'instrumental' | null = null;
+    if (settings.autoLyrics) {
+      const auto = await this.assist.autoLyrics({ userId: requester.userId, orgId: requester.orgId }, { description: settings.description, language: job.language });
+      if (auto.source === 'ai') {
+        settings = { ...settings, lyricsSent: auto.lyrics, lyricsStored: auto.lyrics };
+        autoLyrics = 'written';
+      } else {
+        autoLyrics = 'instrumental';
+      }
+    }
+
+    try {
       if (job.upload && sampleObject) await this.store.put(sampleObject.key, job.upload.bytes, job.upload.audio.mime);
     } catch (error) {
       throw this.storageError(error);
@@ -206,7 +230,6 @@ export class MusicService {
 
     const sampleMode = hasSample ? (job.sampleMode ?? 'sounds_like') : undefined;
     const strength = strengthFor(sampleMode, job.strength, hasSample);
-    const { settings } = job;
     const params: CommandParams<'localai.music.generate'> = {
       request_id: requestId,
       lyrics: settings.lyricsSent,
@@ -288,7 +311,7 @@ export class MusicService {
     await this.prisma.localaiMusicRequest.update({ where: { id: requestId }, data: { commandId } });
 
     this.logger.log(
-      `music request ${requestId} queued for ${node.nodeId}: command_id=${commandId} prompt_id=${saved.promptId} variations=${job.variations} lyrics_mode=${settings.lyricsMode} lyrics_bytes=${lyricsBytes} sample_bytes=${sampleObject?.bytes ?? 0}`,
+      `music request ${requestId} queued for ${node.nodeId}: command_id=${commandId} prompt_id=${saved.promptId} variations=${job.variations} lyrics_mode=${settings.lyricsMode}${autoLyrics ? ` auto_lyrics=${autoLyrics}` : ''} lyrics_bytes=${lyricsBytes} sample_bytes=${sampleObject?.bytes ?? 0}`,
     );
     await this.recordAudit({
       action: AUDIT_MUSIC_REQUESTED,
@@ -302,6 +325,7 @@ export class MusicService {
         variations: job.variations,
         durationS: job.durationS,
         lyricsMode: settings.lyricsMode,
+        ...(autoLyrics ? { autoLyrics } : {}),
         hasSample,
         ...(sampleMode ? { sampleMode } : {}),
         ...(sampleObject ? { sampleBytes: sampleObject.bytes } : {}),

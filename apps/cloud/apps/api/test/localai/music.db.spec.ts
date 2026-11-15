@@ -286,6 +286,41 @@ describe('the prompt history and titles (#568)', () => {
   });
 });
 
+describe('Use AI for music and Automatic lyrics (#570)', () => {
+  const DESCRIPTION = 'a quiet song about Person B and the rain';
+  const send = (method: 'GET' | 'PUT' | 'PATCH', url: string, bearer: string | null, payload?: unknown) =>
+    app.inject({ method, url, headers: auth(bearer), payload: payload as never });
+
+  afterAll(async () => {
+    await send('PUT', '/api/localai/music/ai-settings', tokens.admin, { aiEnabled: false });
+  });
+
+  it('the switch is off by default, an administrator turns it on, and the platform\'s own settings route cannot', async () => {
+    expect((await send('GET', '/api/localai/music/ai-settings', tokens.admin)).json().data).toEqual({ aiEnabled: false });
+    expect((await send('GET', '/api/localai/music/ai-settings', tokens.contributor)).statusCode).toBe(403);
+    expect((await send('PUT', '/api/localai/music/ai-settings', tokens.contributor, { aiEnabled: true })).statusCode).toBe(403);
+    // The second door stays shut: system_settings:write cannot set it.
+    expect((await send('PATCH', '/api/system-settings', tokens.admin, { localaiMusic: { aiEnabled: true } })).statusCode).toBe(400);
+
+    const put = await send('PUT', '/api/localai/music/ai-settings', tokens.admin, { aiEnabled: true });
+    expect([put.statusCode, put.json().data]).toEqual([200, { aiEnabled: true }]);
+    expect((await send('GET', '/api/localai/music/ai-settings', tokens.admin)).json().data).toEqual({ aiEnabled: true });
+  });
+
+  it('with the cloud AI off, assist says so first, and empty Automatic lyrics make a song with no vocals; the enum column holds auto', async () => {
+    await send('PUT', '/api/localai/music/ai-settings', tokens.admin, { aiEnabled: true });
+    expect((await api('GET', '/music/assist', tokens.contributor)).json().data).toEqual({ ai: { enabled: false, reason: 'ai_off', fix: 'Turn on AI in Settings → AI.' } });
+    const n = await enrolled();
+    const made = await submit(tokens.contributor, { nodeId: n.nodeId, description: DESCRIPTION, lyrics_mode: 'auto' });
+    expect(made.statusCode).toBe(201);
+    const request = made.json().data;
+    const command = await prisma.localaiCommand.findUniqueOrThrow({ where: { id: request.commandId } });
+    expect((command.params as { lyrics: string }).lyrics).toBe('[Instrumental]');
+    expect(await prisma.localaiMusicPrompt.findUniqueOrThrow({ where: { id: request.promptId } })).toMatchObject({ lyricsMode: 'auto', lyrics: '' });
+    expect(await prisma.localaiMusicRequest.findUniqueOrThrow({ where: { id: request.id } })).toMatchObject({ lyricsMode: 'auto' });
+  });
+});
+
 describe('the workload switch', () => {
   it('queues workload.activate from the snapshot\'s workloads; an unreported workload is 422 LAI-LLM-050', async () => {
     const n = await enrolled();

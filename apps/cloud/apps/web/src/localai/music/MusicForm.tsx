@@ -1,6 +1,7 @@
-// The "make a song" form (docs/specs/cloud-app.md section 3.11, music.md section 3.7, #514, #568): a Title with
-// "Suggest a title", "Describe your song" (required), how the song gets its words (Use my lyrics / Write lyrics for me
-// / No vocals), the lyrics, an optional sample with "Sounds like this" / "Same song, my lyrics", and More options
+// The "make a song" form (docs/specs/cloud-app.md section 3.11, music.md section 3.7, #514, #568, #570): a Title with
+// "Suggest a title", "Describe your song" (required), how the song gets its words (Automatic, the default / Use my
+// lyrics / Write lyrics now / No vocals), the lyrics (optional in Automatic: a one-line hint says whether the AI will
+// write them at Make the song or the song will have no vocals), an optional sample with "Sounds like this" / "Same song, my lyrics", and More options
 // (length, language, versions, seed, strength). The limits are the API's (description 500 characters and 512 bytes,
 // lyrics 8 KiB, title 80 characters, sample 20 MB), checked here first so nothing is uploaded in vain; the API checks
 // again.
@@ -54,7 +55,7 @@ import {
   type MusicRequest,
   type SampleMode,
 } from './musicApi';
-import { aiUnavailableText, formatBytes, refusalText } from './musicText';
+import { autoLyricsHint, formatBytes, musicAiOffText, refusalText } from './musicText';
 
 export interface MusicFormProps {
   nodeId: string | null;
@@ -80,7 +81,7 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
   const [title, setTitle] = useState(prompt?.title ?? '');
   const [titleNote, setTitleNote] = useState<string | null>(null);
   const [description, setDescription] = useState(prompt?.description ?? '');
-  const [lyricsMode, setLyricsMode] = useState<LyricsMode>(prompt?.lyricsMode ?? 'mine');
+  const [lyricsMode, setLyricsMode] = useState<LyricsMode>(prompt?.lyricsMode ?? 'auto');
   const [lyrics, setLyrics] = useState(prompt?.lyrics ?? '');
   const [sample, setSample] = useState<File | null>(null);
   const [removeSaved, setRemoveSaved] = useState(false);
@@ -97,7 +98,7 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
 
   const savedSample = prompt?.hasSample === true && !removeSaved;
   const hasSample = sample !== null || savedSample;
-  const aiOn = assist?.ai.available === true;
+  const aiOn = assist?.ai.enabled === true;
   const lyricsBytes = utf8Bytes(lyrics);
   const descriptionChars = charCount(description);
   const durationN = Number(duration);
@@ -118,7 +119,7 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
   ].filter((issue): issue is string => issue !== null);
   const missing = [
     description.trim() === '' ? t('Describe your song.', 'Describa su canción.') : null,
-    needsLyrics && lyrics.trim() === ''
+    (lyricsMode === 'mine' || lyricsMode === 'ai') && lyrics.trim() === ''
       ? lyricsMode === 'ai'
         ? t('Press "Write the lyrics", or write them yourself.', 'Pulse "Escribir la letra", o escríbala usted.')
         : t('Write your lyrics, or choose "No vocals".', 'Escriba su letra, o elija "Sin voz".')
@@ -242,11 +243,12 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
       <FormControl>
         <FormLabel id="music-lyrics-mode">{t('Lyrics', 'Letra')}</FormLabel>
         <RadioGroup aria-labelledby="music-lyrics-mode" value={lyricsMode} onChange={(event) => setLyricsMode(event.target.value as LyricsMode)}>
+          <FormControlLabel value="auto" control={<Radio />} label={t('Automatic (recommended)', 'Automático (recomendado)')} />
           <FormControlLabel value="mine" control={<Radio />} label={t('Use my lyrics', 'Usar mi letra')} />
-          <FormControlLabel value="ai" control={<Radio />} label={t('Write lyrics for me', 'Escribir la letra por mí')} disabled={!aiOn} />
+          <FormControlLabel value="ai" control={<Radio />} label={t('Write lyrics now', 'Escribir la letra ahora')} disabled={!aiOn} />
           <FormControlLabel value="instrumental" control={<Radio />} label={t('No vocals (instrumental)', 'Sin voz (instrumental)')} />
         </RadioGroup>
-        {!aiOn ? <FormHelperText data-testid="ai-off-reason">{aiUnavailableText(assist, t)}</FormHelperText> : null}
+        {!aiOn ? <FormHelperText data-testid="ai-off-reason">{musicAiOffText(assist, t)}</FormHelperText> : null}
       </FormControl>
       {lyricsMode === 'ai' ? (
         <Box>
@@ -266,9 +268,15 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
           helperText={`${lyricsBytes} / ${LYRICS_MAX_BYTES} ${t('bytes. Use [verse] and [chorus] to mark the parts.', 'bytes. Use [verse] y [chorus] para marcar las partes.')}`}
           error={lyricsBytes > LYRICS_MAX_BYTES}
         />
-      ) : (
+      ) : null}
+      {lyricsMode === 'auto' ? (
+        <Typography variant="body2" color="text.secondary" data-testid="lyrics-hint" aria-live="polite">
+          {autoLyricsHint(assist, lyrics, t)}
+        </Typography>
+      ) : null}
+      {!needsLyrics ? (
         <Typography color="text.secondary">{t('The song is made without singing.', 'La canción se hace sin canto.')}</Typography>
-      )}
+      ) : null}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <FormLabel htmlFor={sampleId}>{t('Sample (optional): a song or a hum, up to 20 MB', 'Muestra (opcional): una canción o un tarareo, hasta 20 MB')}</FormLabel>
         {savedSample && !sample ? (

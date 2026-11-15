@@ -22,7 +22,8 @@ import { COMMAND_SETTLED_CHANNEL, LOCALAI_CLOCK } from '../../src/localai/comman
 import { LOCALAI_COMMAND_NOTIFIER } from '../../src/localai/commands/command-notifier';
 import { COMMANDS } from '../../src/localai/contracts/commands';
 import { ClaimService } from '../../src/localai/commands/claim.service';
-import { MUSIC_AI, type MusicAiAsk, type MusicAiAvailability } from '../../src/localai/music/music-ai';
+import { MUSIC_AI, MusicAiUnavailable, type MusicAiAsk, type MusicAiCaller } from '../../src/localai/music/music-ai';
+import { SettingsMusicAiSwitch } from '../../src/localai/music/music-ai-switch';
 import { MUSIC_PENDING_URL } from '../../src/localai/music/music-limits';
 import { MUSIC_OBJECT_STORE, MusicStorageNotConfigured, type MusicObjectStore } from '../../src/localai/music/music-store';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -79,18 +80,44 @@ class FakeStore implements MusicObjectStore {
 }
 const objects = new FakeStore();
 
-/** The cloud's AI as the music helpers see it: off, on (answers `answer`) or failing. */
+/**
+ * The cloud's AI as the music helpers see it: off, on (answers `answer`), failing, no model for the person, or a model
+ * that resolves but whose call finds no key (`gone`). The music switch ("Use AI for music") is `musicSwitch`.
+ */
 const ai = {
-  state: 'off' as 'off' | 'on' | 'error',
+  state: 'off' as 'off' | 'on' | 'error' | 'no_model' | 'gone',
   answer: '',
   asked: [] as MusicAiAsk[],
-  async availability(): Promise<MusicAiAvailability> {
-    return ai.state === 'off' ? { available: false, reason: 'ai_off' } : { available: true, reason: null };
+  callers: [] as MusicAiCaller[],
+  async aiEnabled(): Promise<boolean> {
+    return ai.state !== 'off';
   },
-  async ask(_userId: string, ask: MusicAiAsk): Promise<string> {
+  async modelResolves(): Promise<boolean> {
+    return ai.state !== 'no_model';
+  },
+  async ask(caller: MusicAiCaller, ask: MusicAiAsk): Promise<string> {
     ai.asked.push(ask);
+    ai.callers.push(caller);
     if (ai.state === 'error') throw Object.assign(new Error('the provider said Person B harbour'), { code: 'AI_PROVIDER_ERROR' });
+    if (ai.state === 'gone') throw new MusicAiUnavailable('no_model');
     return ai.answer;
+  },
+};
+
+/** "Use AI for music": the deployment's value, as the switch route and the assist read it. */
+const musicSwitch = {
+  on: true,
+  writes: [] as Array<{ aiEnabled: boolean; actor: string }>,
+  async isOn(): Promise<boolean> {
+    return musicSwitch.on;
+  },
+  async deploymentValue() {
+    return { aiEnabled: musicSwitch.on };
+  },
+  async setDeploymentValue(aiEnabled: boolean, actor: string) {
+    musicSwitch.writes.push({ aiEnabled, actor });
+    musicSwitch.on = aiEnabled;
+    return { aiEnabled };
   },
 };
 
@@ -118,6 +145,8 @@ describe('Local AI music routes over HTTP', () => {
       .useValue(objects)
       .overrideProvider(MUSIC_AI)
       .useValue(ai)
+      .overrideProvider(SettingsMusicAiSwitch)
+      .useValue(musicSwitch)
       .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie, { secret: 'test-secret' });
@@ -152,6 +181,9 @@ describe('Local AI music routes over HTTP', () => {
     ai.state = 'off';
     ai.answer = '';
     ai.asked.length = 0;
+    ai.callers.length = 0;
+    musicSwitch.on = true;
+    musicSwitch.writes.length = 0;
     clock.set(new Date('2026-11-14T12:00:00.000Z'));
     node = { id: NODE_ROW, nodeId: 'ai-n2', displayName: 'Node ai-n2', phase: 'enrolled', mode: 'online', lastState: { workloads: WORKLOADS } };
     prismaMock.localaiNode.findUnique.mockImplementation(async ({ where }: { where: { nodeId?: string } }) => (where.nodeId === 'ai-n2' ? node : null));
@@ -175,7 +207,7 @@ describe('Local AI music routes over HTTP', () => {
 
   const token = (role: FixtureRole) => registerMockUser(jwt, role).accessToken;
   const auth = (accessToken: string | null) => (accessToken ? { authorization: `Bearer ${accessToken}` } : {});
-  const send = (method: 'GET' | 'POST' | 'DELETE', url: string, accessToken: string | null, payload?: unknown) =>
+  const send = (method: 'GET' | 'POST' | 'DELETE' | 'PUT', url: string, accessToken: string | null, payload?: unknown) =>
     app.inject({ method, url: `/api/localai/music${url}`, headers: auth(accessToken), payload: payload as never });
   const activate = (accessToken: string | null, nodeId: string, name: string, payload: unknown = {}) =>
     app.inject({ method: 'POST', url: `/api/localai/nodes/${nodeId}/workloads/${name}/activate`, headers: auth(accessToken), payload: payload as never });
@@ -742,7 +774,7 @@ describe('Local AI music routes over HTTP', () => {
       expect([refused.statusCode, refused.json().details.reason]).toEqual([400, 'lyrics_required']);
     });
 
-    describe('Suggest a title and Write lyrics for me', () => {
+    describe('Suggest a title and Write lyrics now', () => {
       const run = async <T>(fn: () => Promise<T>) => {
         const restoreLogger = enableNestLogging();
         const output = captureOutput();
@@ -758,7 +790,7 @@ describe('Local AI music routes over HTTP', () => {
       it('AI off: the generated title, source "generated"; lyrics are 409 with a reason and a fix; assist says off', async () => {
         ai.state = 'off';
         const contributor = token('contributor');
-        expect((await send('GET', '/assist', contributor)).json().data).toEqual({ ai: { available: false, reason: 'ai_off' } });
+        expect((await send('GET', '/assist', contributor)).json().data).toEqual({ ai: { enabled: false, reason: 'ai_off', fix: 'Turn on AI in Settings → AI.' } });
         const title = await send('POST', '/title-suggestion', contributor, { lyrics: `[verse]\n${SECRET_LINE}`, description: DESCRIPTION });
         expect([title.statusCode, title.json().data]).toEqual([200, { title: 'Person B Keeps A Secret By The Harbour', source: 'generated' }]);
         expect((await send('POST', '/title-suggestion', contributor, { lyrics: 'ignored', lyricsMode: 'instrumental', description: 'calm piano, rain' })).json().data.title).toBe('Calm Piano');
@@ -771,7 +803,7 @@ describe('Local AI music routes over HTTP', () => {
       it('AI on: the model\'s title (source "ai") and lyrics, with no key, description or lyrics in a log line', async () => {
         ai.state = 'on';
         const contributor = token('contributor');
-        expect((await send('GET', '/assist', contributor)).json().data).toEqual({ ai: { available: true, reason: null } });
+        expect((await send('GET', '/assist', contributor)).json().data).toEqual({ ai: { enabled: true, reason: null, fix: null } });
         ai.answer = '"Harbour Secrets"\nA title about...';
         const title = await run(() => send('POST', '/title-suggestion', contributor, { lyrics: `[verse]\n${SECRET_LINE}`, description: DESCRIPTION, language: 'es' }));
         expect(title.result.json().data).toEqual({ title: 'Harbour Secrets', source: 'ai' });
@@ -819,6 +851,154 @@ describe('Local AI music routes over HTTP', () => {
         expect((await send('POST', '/title-suggestion', contributor, { description: DESCRIPTION, model: 'gpt' })).statusCode).toBe(400);
         expect((await send('POST', '/title-suggestion', contributor, { lyrics: 'a'.repeat(8193) })).statusCode).toBe(400);
         expect(ai.asked).toHaveLength(0);
+      });
+
+      it('assist in every state (#570): AI off, then Use AI for music off, then no model, else enabled; each with its fix', async () => {
+        const contributor = token('contributor');
+        const states: Array<[typeof ai.state, boolean, unknown]> = [
+          ['off', true, { enabled: false, reason: 'ai_off', fix: 'Turn on AI in Settings → AI.' }],
+          // AI off wins over the music switch: the first thing to fix is named first.
+          ['off', false, { enabled: false, reason: 'ai_off', fix: 'Turn on AI in Settings → AI.' }],
+          ['on', false, { enabled: false, reason: 'music_ai_off', fix: 'Turn on Use AI for music in Settings → AI.' }],
+          ['no_model', false, { enabled: false, reason: 'music_ai_off', fix: 'Turn on Use AI for music in Settings → AI.' }],
+          ['no_model', true, { enabled: false, reason: 'no_model', fix: 'Add a provider and model in Settings → AI.' }],
+          ['on', true, { enabled: true, reason: null, fix: null }],
+        ];
+        for (const [state, on, expected] of states) {
+          ai.state = state;
+          musicSwitch.on = on;
+          const response = await send('GET', '/assist', contributor);
+          expect([state, on, response.statusCode, response.json().data]).toEqual([state, on, 200, { ai: expected }]);
+        }
+      });
+
+      it('Use AI for music off: no AI title, and Write lyrics now is 409 ai_music_off with its fix; nothing is asked', async () => {
+        ai.state = 'on';
+        musicSwitch.on = false;
+        const contributor = token('contributor');
+        expect((await send('POST', '/title-suggestion', contributor, { description: DESCRIPTION })).json().data.source).toBe('generated');
+        const lyrics = await send('POST', '/lyrics-suggestion', contributor, { description: DESCRIPTION });
+        expect([lyrics.statusCode, lyrics.json().details]).toEqual([409, { reason: 'ai_music_off', fix: 'Turn on Use AI for music in Settings → AI.' }]);
+        ai.state = 'no_model';
+        musicSwitch.on = true;
+        const noModel = await send('POST', '/lyrics-suggestion', contributor, { description: DESCRIPTION });
+        expect([noModel.statusCode, noModel.json().details]).toEqual([409, { reason: 'ai_no_model', fix: 'Add a provider and model in Settings → AI.' }]);
+        expect(ai.asked).toHaveLength(0);
+      });
+    });
+
+    describe('Automatic lyrics (#570)', () => {
+      const auto = (extra: Record<string, string> = {}) => form({ lyrics_mode: 'auto', lyrics: '', ...extra });
+      const WRITTEN = '[verse]\nThe tide comes in\n[chorus]\nHold the line';
+
+      it('is the default of a saved prompt', async () => {
+        const owner = token('contributor');
+        expect((await send('POST', '/prompts', owner, { description: DESCRIPTION })).json().data.lyricsMode).toBe('auto');
+      });
+
+      it('music AI on: empty lyrics are written by the AI at Make song, sent to the node and saved on the prompt; no text in a log line', async () => {
+        ai.state = 'on';
+        ai.answer = WRITTEN;
+        const owner = registerMockUser(jwt, 'contributor');
+        const restoreLogger = enableNestLogging();
+        const output = captureOutput();
+        let response;
+        try {
+          response = await submit(owner.accessToken, auto({ language: 'es' }));
+        } finally {
+          output.restore();
+          restoreLogger();
+        }
+        expect(response.statusCode).toBe(201);
+        const created = response.json().data;
+        expect(created).toMatchObject({ lyricsMode: 'auto' });
+        expect(ai.asked).toHaveLength(1);
+        expect(ai.asked[0].instructions).toContain('Spanish');
+        expect(ai.callers[0]).toMatchObject({ userId: owner.id });
+        expect(COMMANDS['localai.music.generate'].params.parse(musicCommands()[0].params).lyrics).toBe(WRITTEN);
+        // The written lyrics are on the prompt, to read, edit and remake; the mode stays Automatic.
+        expect((await send('GET', `/prompts/${created.promptId}`, owner.accessToken)).json().data).toMatchObject({ lyricsMode: 'auto', lyrics: WRITTEN });
+        expect(audits('localai.music.requested')[0].meta).toMatchObject({ lyricsMode: 'auto', autoLyrics: 'written' });
+        expect(output.text()).toContain('auto_lyrics=written');
+        expect(output.text()).not.toMatch(/tide|Hold the line|Person A|ballad/);
+
+        // Made again, the saved lyrics are used as they are: the AI is not asked again.
+        const again = await send('POST', `/prompts/${created.promptId}/make`, owner.accessToken, { nodeId: 'ai-n2' });
+        expect(again.statusCode).toBe(201);
+        expect(ai.asked).toHaveLength(1);
+        expect(COMMANDS['localai.music.generate'].params.parse(musicCommands()[1].params).lyrics).toBe(WRITTEN);
+      });
+
+      it('lyrics in the box are used as written, in Automatic mode too; the AI is not asked', async () => {
+        ai.state = 'on';
+        const owner = token('contributor');
+        expect((await submit(owner, auto({ lyrics: LYRICS }))).statusCode).toBe(201);
+        expect(COMMANDS['localai.music.generate'].params.parse(musicCommands()[0].params).lyrics).toBe(LYRICS);
+        expect(ai.asked).toHaveLength(0);
+      });
+
+      it.each([
+        ['AI off', 'off', true],
+        ['Use AI for music off', 'on', false],
+        ['no model', 'no_model', true],
+        ['no key found at call time', 'gone', true],
+      ] as const)('music AI unavailable (%s): empty lyrics mean no vocals; the prompt keeps no lyrics', async (_name, state, on) => {
+        ai.state = state;
+        musicSwitch.on = on;
+        const owner = registerMockUser(jwt, 'contributor');
+        const response = await submit(owner.accessToken, auto());
+        expect(response.statusCode).toBe(201);
+        expect(COMMANDS['localai.music.generate'].params.parse(musicCommands()[0].params).lyrics).toBe('[Instrumental]');
+        expect((await send('GET', `/prompts/${response.json().data.promptId}`, owner.accessToken)).json().data).toMatchObject({ lyricsMode: 'auto', lyrics: '' });
+        expect(audits('localai.music.requested')[0].meta).toMatchObject({ autoLyrics: 'instrumental' });
+      });
+
+      it('the AI failing is 502 before anything is stored: no prompt, no sample, no command', async () => {
+        ai.state = 'error';
+        const owner = token('contributor');
+        const response = await submit(owner, auto(), sample());
+        expect([response.statusCode, response.json().details.reason]).toEqual([502, 'ai_failed']);
+        expect(response.json().message).toMatch(/No vocals/);
+        expect(musicCommands()).toHaveLength(0);
+        expect(music.prompts).toHaveLength(0);
+        expect(objects.calls.filter((call) => call.startsWith('put '))).toEqual([]);
+      });
+
+      it('a saved Automatic prompt with no lyrics, made from My prompts: the AI writes them and they are saved on it', async () => {
+        ai.state = 'on';
+        ai.answer = WRITTEN;
+        const owner = token('contributor');
+        const draft = (await send('POST', '/prompts', owner, { description: DESCRIPTION })).json().data;
+        const made = await send('POST', `/prompts/${draft.id}/make`, owner, { nodeId: 'ai-n2' });
+        expect(made.statusCode).toBe(201);
+        expect(COMMANDS['localai.music.generate'].params.parse(musicCommands()[0].params).lyrics).toBe(WRITTEN);
+        expect((await send('GET', `/prompts/${draft.id}`, owner)).json().data).toMatchObject({ lyricsMode: 'auto', lyrics: WRITTEN });
+      });
+    });
+
+    describe('the Use AI for music switch (#570)', () => {
+      it('GET and PUT /ai-settings: ai_config:read and ai_config:write (an administrator), 401 without a session, 403 otherwise', async () => {
+        for (const role of [null, 'viewer', 'contributor'] as const) {
+          const accessToken = role ? token(role) : null;
+          const expected = role ? 403 : 401;
+          expect([role, (await send('GET', '/ai-settings', accessToken)).statusCode]).toEqual([role, expected]);
+          expect([role, (await send('PUT', '/ai-settings', accessToken, { aiEnabled: true })).statusCode]).toEqual([role, expected]);
+        }
+        expect(musicSwitch.writes).toEqual([]);
+        const admin = registerMockUser(jwt, 'admin');
+        musicSwitch.on = false;
+        expect((await send('GET', '/ai-settings', admin.accessToken)).json().data).toEqual({ aiEnabled: false });
+        const put = await send('PUT', '/ai-settings', admin.accessToken, { aiEnabled: true });
+        expect([put.statusCode, put.json().data]).toEqual([200, { aiEnabled: true }]);
+        expect(musicSwitch.writes).toEqual([{ aiEnabled: true, actor: admin.id }]);
+      });
+
+      it('validates the body: a boolean, nothing else', async () => {
+        const admin = token('admin');
+        for (const body of [{}, { aiEnabled: 'yes' }, { aiEnabled: true, model: 'x' }]) {
+          expect((await send('PUT', '/ai-settings', admin, body)).statusCode).toBe(400);
+        }
+        expect(musicSwitch.writes).toEqual([]);
       });
     });
 

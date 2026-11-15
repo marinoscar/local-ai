@@ -1,9 +1,14 @@
-// "Suggest a title" and "Write lyrics for me" (#568), over the `MUSIC_AI` port (`music-ai.ts`).
+// "Suggest a title", "Write lyrics now" (#568) and the Automatic lyrics of "Make song" (#570), over the `MUSIC_AI` port
+// and the "Use AI for music" switch (`music-ai.ts`).
 //
-// Title: always answers. With the cloud's AI on and a model that resolves for the person, the model proposes a short
-// title (`source: "ai"`); otherwise, and on ANY AI error or an empty answer, the deterministic generated title
-// (`source: "generated"`, `generatedTitle`). Lyrics: only with AI (409 when it is off, 502 when it fails), cut to the
-// 8 KiB the node takes.
+// Status (`GET /assist`): enabled only when the AI slice's switch is on, "Use AI for music" is on and a model resolves
+// for the person; otherwise the FIRST failing one is the reason, with its fix (`MUSIC_AI_FIXES`).
+//
+// Title: always answers. With music AI enabled, the model proposes a short title (`source: "ai"`); otherwise, and on
+// ANY AI error or an empty answer, the deterministic generated title (`source: "generated"`, `generatedTitle`).
+// Lyrics: only with music AI (409 when it is not available, 502 when it fails), cut to the 8 KiB the node takes.
+// Automatic (`autoLyrics`): music AI enabled -> the model's lyrics (502 when it fails, so a person who was told "the AI
+// writes them" never gets a silent instrumental); not available -> no vocals.
 //
 // Privacy: the description, the lyrics and the model's answer are never logged, traced or audited here; a log line
 // carries the user id, the outcome and lengths or an error's NAME only.
@@ -11,7 +16,18 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { utf8Bytes } from '../contracts/commands';
 import { musicAiFailed, musicAiUnavailable } from './music-errors';
-import { MUSIC_AI, MusicAiUnavailable, type MusicAiAvailability, type MusicAiPort } from './music-ai';
+import {
+  MUSIC_AI,
+  MUSIC_AI_SWITCH,
+  MusicAiUnavailable,
+  musicAiOff,
+  musicAiOn,
+  type MusicAiAvailability,
+  type MusicAiCaller,
+  type MusicAiPort,
+  type MusicAiReason,
+  type MusicAiSwitch,
+} from './music-ai';
 import { generatedTitle, tidyTitle, type UiLanguage } from './music-input';
 import { MUSIC_LYRICS_MAX_BYTES } from './music-limits';
 
@@ -19,6 +35,9 @@ export interface TitleSuggestion {
   title: string;
   source: 'ai' | 'generated';
 }
+
+/** What Automatic mode made of empty lyrics: the model's lyrics, or no vocals (and why). */
+export type AutoLyrics = { source: 'ai'; lyrics: string } | { source: 'instrumental'; reason: MusicAiReason };
 
 const LANGUAGE_NAMES: Record<string, string> = { en: 'English', es: 'Spanish' };
 const languageName = (code: string): string => LANGUAGE_NAMES[code] ?? code;
@@ -47,25 +66,32 @@ const errorName = (error: unknown): string => {
 export class MusicAssistService {
   private readonly logger = new Logger(MusicAssistService.name);
 
-  constructor(@Inject(MUSIC_AI) private readonly ai: MusicAiPort) {}
+  constructor(
+    @Inject(MUSIC_AI) private readonly ai: MusicAiPort,
+    @Inject(MUSIC_AI_SWITCH) private readonly musicSwitch: MusicAiSwitch,
+  ) {}
 
-  /** `GET /assist`: whether the AI helpers work for this person now. Never throws (an error reads as "off"). */
-  async status(userId: string): Promise<{ ai: MusicAiAvailability }> {
+  /** `GET /assist`: whether music AI works for this person now, else the reason and its fix. Never throws (an error reads as "AI off"). */
+  async status(caller: MusicAiCaller): Promise<{ ai: MusicAiAvailability }> {
     try {
-      return { ai: await this.ai.availability(userId) };
+      if (!(await this.ai.aiEnabled(caller))) return { ai: musicAiOff('ai_off') };
+      if (!(await this.musicSwitch.isOn(caller.orgId))) return { ai: musicAiOff('music_ai_off') };
+      if (!(await this.ai.modelResolves(caller))) return { ai: musicAiOff('no_model') };
+      return { ai: musicAiOn() };
     } catch (error) {
-      this.logger.warn(`music AI availability check failed for user ${userId} (${errorName(error)})`);
-      return { ai: { available: false, reason: 'ai_off' } };
+      this.logger.warn(`music AI availability check failed for user ${caller.userId} (${errorName(error)})`);
+      return { ai: musicAiOff('ai_off') };
     }
   }
 
   /** `POST /title-suggestion`: a model's title with AI, else the generated one. Never fails for an AI reason. */
-  async suggestTitle(userId: string, input: { lyrics: string; description: string; uiLanguage: UiLanguage; language: string }): Promise<TitleSuggestion> {
+  async suggestTitle(caller: MusicAiCaller, input: { lyrics: string; description: string; uiLanguage: UiLanguage; language: string }): Promise<TitleSuggestion> {
+    const userId = caller.userId;
     const generated: TitleSuggestion = { title: generatedTitle(input.lyrics, input.description, input.uiLanguage), source: 'generated' };
-    const { ai } = await this.status(userId);
-    if (!ai.available) return generated;
+    const { ai } = await this.status(caller);
+    if (!ai.enabled) return generated;
     try {
-      const answer = await this.ai.ask(userId, {
+      const answer = await this.ai.ask(caller, {
         instructions: [
           'You name songs. Answer with ONE short song title and nothing else: no quotes, no explanation, at most 8 words.',
           `Write the title in ${languageName(input.language)}.`,
@@ -87,13 +113,39 @@ export class MusicAssistService {
     }
   }
 
-  /** `POST /lyrics-suggestion`: lyrics written by the model for the description (409 without AI, 502 on failure). */
-  async suggestLyrics(userId: string, input: { description: string; language: string; title?: string }): Promise<{ lyrics: string; source: 'ai' }> {
-    const { ai } = await this.status(userId);
-    if (!ai.available) throw musicAiUnavailable(ai.reason);
+  /** `POST /lyrics-suggestion` ("Write lyrics now"): lyrics written by the model for the description (409 without music AI, 502 on failure). */
+  async suggestLyrics(caller: MusicAiCaller, input: { description: string; language: string; title?: string }): Promise<{ lyrics: string; source: 'ai' }> {
+    const { ai } = await this.status(caller);
+    if (!ai.enabled) throw musicAiUnavailable(ai.reason);
+    try {
+      return { lyrics: await this.write(caller, input), source: 'ai' };
+    } catch (error) {
+      if (error instanceof MusicAiUnavailable) throw musicAiUnavailable(error.reason);
+      throw error;
+    }
+  }
+
+  /**
+   * Automatic mode at "Make song" time, for empty lyrics: with music AI enabled the model writes them (502 when it
+   * fails); otherwise, or when the call finds no model or key after all, the song has no vocals.
+   */
+  async autoLyrics(caller: MusicAiCaller, input: { description: string; language: string; title?: string }): Promise<AutoLyrics> {
+    const { ai } = await this.status(caller);
+    if (!ai.enabled) return { source: 'instrumental', reason: ai.reason };
+    try {
+      return { source: 'ai', lyrics: await this.write(caller, input) };
+    } catch (error) {
+      if (error instanceof MusicAiUnavailable) return { source: 'instrumental', reason: error.reason };
+      throw error;
+    }
+  }
+
+  /** The model's lyrics for the description, tidied. Throws `MusicAiUnavailable` when the call finds AI unavailable, 502 on any other failure. */
+  private async write(caller: MusicAiCaller, input: { description: string; language: string; title?: string }): Promise<string> {
+    const userId = caller.userId;
     let lyrics: string;
     try {
-      const answer = await this.ai.ask(userId, {
+      const answer = await this.ai.ask(caller, {
         instructions: [
           `You write song lyrics in ${languageName(input.language)}. Answer with the lyrics only, no title line and no explanation.`,
           'Mark the parts with section tags on their own line: [verse], [chorus], [bridge], [outro]. Keep it to a song of two to four minutes.',
@@ -105,7 +157,7 @@ export class MusicAssistService {
       lyrics = tidyLyrics(answer);
     } catch (error) {
       this.logger.warn(`music lyrics suggestion for user ${userId} failed (${errorName(error)})`);
-      if (error instanceof MusicAiUnavailable) throw musicAiUnavailable(error.reason);
+      if (error instanceof MusicAiUnavailable) throw error;
       throw musicAiFailed();
     }
     if (lyrics === '') {
@@ -113,6 +165,6 @@ export class MusicAssistService {
       throw musicAiFailed();
     }
     this.logger.log(`music lyrics suggestion for user ${userId}: bytes=${utf8Bytes(lyrics)}`);
-    return { lyrics, source: 'ai' };
+    return lyrics;
   }
 }

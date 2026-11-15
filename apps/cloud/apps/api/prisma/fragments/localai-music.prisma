@@ -32,6 +32,15 @@ enum LocalaiMusicSongStatus {
   failed
 }
 
+// How a song gets its words (#568, #570): `auto` (the default: the box's lyrics, else the cloud's AI writes them at
+// "Make song" time when music AI is available, else no vocals), `mine`, `ai` ("Write lyrics now") or `instrumental`.
+enum LocalaiMusicLyricsMode {
+  auto
+  mine
+  ai
+  instrumental
+}
+
 // ---------------------------------------------------------------------------
 // One "make music" request: the node, the command that carries it, its prompt (if not deleted) and the settings it
 // actually used (never the lyrics).
@@ -56,7 +65,7 @@ model LocalaiMusicRequest {
   sampleBytes   Int?                      @map("sample_bytes")
   sampleSha256  String?                   @map("sample_sha256")
   promptId      String?                   @map("prompt_id") @db.Uuid
-  lyricsMode    String?                   @map("lyrics_mode")
+  lyricsMode    LocalaiMusicLyricsMode?   @map("lyrics_mode")
   errorCode     String?                   @map("error_code")
   errorMessage  String?                   @map("error_message")
   createdAt     DateTime                  @default(now()) @map("created_at") @db.Timestamptz
@@ -104,14 +113,15 @@ model LocalaiMusicSong {
 // ---------------------------------------------------------------------------
 // One saved prompt of a person's music history (#568): what they typed, to edit, make again or delete. Owned by one
 // user (deleted with them); read by that user only. Deleting a prompt keeps its songs (`prompt_id` becomes NULL).
-// `lyrics_mode` is `mine`, `ai` or `instrumental`; `description` is sent to the node as the command's `tags`.
+// `lyrics_mode` is `auto`, `mine`, `ai` or `instrumental`; `description` is sent to the node as the command's `tags`. In
+// `auto` mode the lyrics the AI wrote at "Make song" time are saved here, so the owner sees, edits and remakes them.
 // ---------------------------------------------------------------------------
 model LocalaiMusicPrompt {
   id           String    @id @default(uuid()) @db.Uuid
   ownerId      String    @map("owner_id") @db.Uuid
   title        String
   description  String
-  lyricsMode   String    @map("lyrics_mode")
+  lyricsMode   LocalaiMusicLyricsMode @default(auto) @map("lyrics_mode")
   lyrics       String
   durationS    Int       @map("duration_s")
   language     String
