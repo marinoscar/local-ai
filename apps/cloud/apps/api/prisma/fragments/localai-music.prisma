@@ -45,7 +45,8 @@ model LocalaiMusicRequest {
   title         String
   tags          String
   lyricsBytes   Int                       @map("lyrics_bytes")
-  durationS     Int                       @map("duration_s")
+  /// The length the node was asked for; null: Auto (#571), the node's engine picked it.
+  durationS     Int?                      @map("duration_s")
   language      String
   seed          BigInt?
   variations    Int
@@ -113,7 +114,8 @@ model LocalaiMusicPrompt {
   description  String
   lyricsMode   String    @map("lyrics_mode")
   lyrics       String
-  durationS    Int       @map("duration_s")
+  /// null: Auto (#571).
+  durationS    Int?      @map("duration_s")
   language     String
   seed         BigInt?
   variations   Int
