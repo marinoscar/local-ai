@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Loopback HTTP shim between the Local AI agent and ACE-Step (epic E11)"
 readme = "README.md"
 requires-python = ">=3.10"
-# Standard library only. ACE-Step and torch come from the runtime's wheel bundle
+# Standard library only. ACE-Step and torch come from the kit's wheelhouse
 # (kit/engines/acestep/<version>/), installed with pip install --no-index.
 dependencies = []
 

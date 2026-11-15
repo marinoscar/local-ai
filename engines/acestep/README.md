@@ -6,7 +6,8 @@ it listens on `127.0.0.1` only.
 
 - Package: `localai_music_shim`, run as `python -m localai_music_shim`.
 - Standard library only (`http.server`). ACE-Step and its dependencies come from the runtime venv
-  (`/opt/localai/acestep/current/venv`), installed offline from the kit's wheel bundle.
+  (`/opt/localai/acestep/current/venv`), installed offline from the kit's wheelhouse
+  (`kit/engines/acestep/<version>/`, which ark sync fills; this package is built into one of its wheels).
 - Settings come from `/etc/localai/music.env`, which the agent writes: `MUSIC_PORT` (8082),
   `MUSIC_MODEL_ID`, `MUSIC_MODEL_DIR`, `MUSIC_WORK_DIR`, `MUSIC_DEVICE`, `MUSIC_DTYPE`,
   `MUSIC_MAX_QUEUE` (4). `MUSIC_BACKEND=fake` swaps ACE-Step for a fake that writes a short tone
@@ -38,6 +39,16 @@ overlay in `MUSIC_WORK_DIR/_model`, and ACE-Step's own log kept free of lyrics. 
 
 `MUSIC_BACKEND=acestep` (the default) is the real engine and needs the runtime venv and the weights in
 `MUSIC_MODEL_DIR`; its unit tests (`tests/test_backend.py`) use a fake ACE-Step API and need neither.
+
+## The pinned runtime
+
+`requirements-cuda.in` pins every package of the runtime (the spike's venv, plus the build backends);
+`scripts/release/lock-acestep.sh` turns it into `requirements-cuda.lock`, one wheel and its sha256 per line,
+read from the package indexes. The lock also records the tree hash of this folder (`repo-tree-sha256`): after
+editing the shim, run `scripts/release/lock-acestep.sh --shim-only`, put the printed sha256 into
+`catalog/ark.yaml` (`kit-engine-acestep-cuda`, `source.sha256`) and bump `catalog/CATALOG_VERSION`; the Go test
+`TestRealCatalogWheelhousesMatchTheRepository` fails until they agree. How ark sync and ensure use them:
+[`docs/specs/rebuild-kit.md`](../../docs/specs/rebuild-kit.md) section 3.2.2.
 
 ## Tests
 
