@@ -39,15 +39,16 @@ import (
 
 // Input limits (E11 contract section 3).
 const (
-	MaxLyricsBytes   = 8 << 10
-	MaxTagsBytes     = 512
-	MinDurationS     = 10
-	MaxDurationS     = 240
-	DefaultDurationS = 60
-	MaxVariations    = 4
-	DefaultLanguage  = "en"
-	DefaultMaxQueue  = 4
-	MaxSeed          = 1<<31 - 1
+	MaxLyricsBytes = 8 << 10
+	MaxTagsBytes   = 512
+	MinDurationS   = 10
+	MaxDurationS   = 240
+	// AutoGuessS is the length the disk guard assumes for an Auto song (DurationS nil, #571): the cap.
+	AutoGuessS      = MaxDurationS
+	MaxVariations   = 4
+	DefaultLanguage = "en"
+	DefaultMaxQueue = 4
+	MaxSeed         = 1<<31 - 1
 )
 
 // Sample modes.
@@ -328,12 +329,14 @@ func (s *Service) inWork(path string) bool {
 // ---------------------------------------------------------------------------------------------------
 // Generate
 
-// GenerateRequest is one song request. Zero values take the defaults (duration 60, language en, one
+// GenerateRequest is one song request. Zero values take the defaults (Auto length, language en, one
 // variation, sounds_like with strength 0.5, or 1.0 for same_song).
 type GenerateRequest struct {
-	Lyrics     string
-	Tags       string
-	DurationS  int
+	Lyrics string
+	Tags   string
+	// DurationS is the asked length in seconds (10 to 240); nil is Auto (#571): the engine picks it from
+	// the lyrics and the style.
+	DurationS  *int
 	Language   string
 	Seed       *int64
 	Variations int
@@ -371,11 +374,24 @@ func sampleErr(err error) error {
 	return api.NewError(doctor.SVC154, status, map[string]any{"field": "sample", "reason": se.Reason})
 }
 
+// guessSeconds is the length the disk guard counts: the asked one, or the cap for Auto.
+func (r *GenerateRequest) guessSeconds() int {
+	if r.DurationS == nil {
+		return AutoGuessS
+	}
+	return *r.DurationS
+}
+
+// durationLog is the length for the log line: the number, or "auto".
+func (r *GenerateRequest) durationLog() any {
+	if r.DurationS == nil {
+		return "auto"
+	}
+	return *r.DurationS
+}
+
 // normalize fills the defaults and checks the limits.
 func (r *GenerateRequest) normalize() error {
-	if r.DurationS == 0 {
-		r.DurationS = DefaultDurationS
-	}
 	if r.Language == "" {
 		r.Language = DefaultLanguage
 	}
@@ -396,7 +412,7 @@ func (r *GenerateRequest) normalize() error {
 		return inputError("tags", "too_long")
 	case strings.TrimSpace(r.Lyrics) == "" && strings.TrimSpace(r.Tags) == "":
 		return inputError("lyrics", "empty")
-	case r.DurationS < MinDurationS || r.DurationS > MaxDurationS:
+	case r.DurationS != nil && (*r.DurationS < MinDurationS || *r.DurationS > MaxDurationS):
 		return inputError("duration_s", "out_of_range")
 	case !languageRE.MatchString(r.Language):
 		return inputError("language", "invalid")
@@ -476,7 +492,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Accepted, 
 	if state != EngineReady {
 		return Accepted{}, notLoaded(state)
 	}
-	if err := s.diskGuard(int64(req.Variations) * int64(req.DurationS) * bytesPerSecond); err != nil {
+	if err := s.diskGuard(int64(req.Variations) * int64(req.guessSeconds()) * bytesPerSecond); err != nil {
 		return Accepted{}, err
 	}
 
@@ -550,7 +566,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Accepted, 
 	s.mu.Unlock()
 
 	s.log.Info("song requested", "op_id", o.id, "origin", req.Origin, "lyrics_bytes", len(req.Lyrics), "tags_bytes", len(req.Tags),
-		"duration_s", req.DurationS, "variations", req.Variations, "sample_bytes", info.Bytes, "language", req.Language)
+		"duration_s", req.durationLog(), "variations", req.Variations, "sample_bytes", info.Bytes, "language", req.Language)
 	sampleUsed := "false"
 	if sample != "" {
 		sampleUsed = "true"

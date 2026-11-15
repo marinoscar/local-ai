@@ -53,9 +53,10 @@ type Health struct {
 
 // TaskRequest is the body of POST /v1/tasks.
 type TaskRequest struct {
-	Lyrics     string   `json:"lyrics"`
-	Tags       string   `json:"tags"`
-	DurationS  int      `json:"duration_s"`
+	Lyrics string `json:"lyrics"`
+	Tags   string `json:"tags"`
+	// DurationS null is Auto (#571); the shim treats an absent field as 60, so it is always sent.
+	DurationS  *int     `json:"duration_s"`
 	Language   string   `json:"language"`
 	Seed       *int64   `json:"seed"`
 	Variations int      `json:"variations"`

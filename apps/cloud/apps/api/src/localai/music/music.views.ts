@@ -33,7 +33,8 @@ export interface MusicRequestView {
   promptId: string | null;
   lyricsMode: string | null;
   lyricsBytes: number;
-  durationS: number;
+  /** The length the node was asked for; null for Auto (#571), the node's engine chose it (the songs carry it). */
+  durationS: number | null;
   language: string;
   seed: number | null;
   variations: number;
@@ -82,6 +83,8 @@ export interface MusicNodeView {
   activeWorkload: string | null;
   /** The node's workloads from its last snapshot; null for an agent that does not report them (older than E11). */
   workloads: Array<{ name: string; label: { en: string; es: string }; fits: boolean; missing: string[] }> | null;
+  /** The node picks a song's length itself (#571, `music.auto_duration`); false: an Auto request is sent as 60 s. */
+  autoDuration: boolean;
   lastStateAt: string | null;
 }
 
@@ -102,7 +105,8 @@ export interface MusicPromptSummary {
 /** One saved prompt, for its owner: everything the form needs to load it. */
 export interface MusicPromptView extends MusicPromptSummary {
   lyrics: string;
-  durationS: number;
+  /** null: Auto (#571). */
+  durationS: number | null;
   language: string;
   seed: number | null;
   variations: number;
@@ -272,7 +276,7 @@ export const CreatePromptBodySchema = z
     description: DescriptionText.refine((value) => value.trim() !== '', { message: 'describe the song' }),
     lyricsMode: MusicLyricsMode.default('auto'),
     lyrics: LyricsText.default(''),
-    durationS: Duration.default(60),
+    durationS: Duration.nullable().default(null), // null: Auto (#571)
     language: MusicLanguage.default('en'),
     seed: Seed.nullable().optional(),
     variations: Variations.default(1),
@@ -291,7 +295,7 @@ export const UpdatePromptBodySchema = z
     description: DescriptionText.refine((value) => value.trim() !== '', { message: 'describe the song' }).optional(),
     lyricsMode: MusicLyricsMode.optional(),
     lyrics: LyricsText.optional(),
-    durationS: Duration.optional(),
+    durationS: Duration.nullable().optional(),
     language: MusicLanguage.optional(),
     seed: Seed.nullable().optional(),
     variations: Variations.optional(),
@@ -311,7 +315,7 @@ export const MakePromptBodySchema = z
       .object({
         variations: Variations.optional(),
         seed: Seed.nullable().optional(),
-        durationS: Duration.optional(),
+        durationS: Duration.nullable().optional(), // null: Auto for this song; left out: the prompt's
         language: MusicLanguage.optional(),
       })
       .strict()

@@ -28,6 +28,8 @@ export interface MusicNode {
   activeWorkload: string | null;
   /** From the node's last snapshot; null for an agent that does not report workloads. */
   workloads: WorkloadItem[] | null;
+  /** The node picks a song's length itself (#571); false: an Auto song is sent to it as 1 minute. */
+  autoDuration: boolean;
   lastStateAt: string | null;
 }
 
@@ -53,7 +55,8 @@ export interface MusicRequest {
   promptId: string | null;
   lyricsMode: LyricsMode | null;
   lyricsBytes: number;
-  durationS: number;
+  /** The length the node was asked for; null: Auto (#571), the songs carry the length it chose. */
+  durationS: number | null;
   language: string;
   seed: number | null;
   variations: number;
@@ -107,7 +110,8 @@ export interface MusicPromptSummary {
 /** One saved prompt, everything the form loads. */
 export interface MusicPrompt extends MusicPromptSummary {
   lyrics: string;
-  durationS: number;
+  /** null: Auto (#571). */
+  durationS: number | null;
   language: string;
   seed: number | null;
   variations: number;
@@ -123,7 +127,8 @@ export interface MusicPromptInput {
   description: string;
   lyricsMode: LyricsMode;
   lyrics: string;
-  durationS: number;
+  /** null: Auto (#571). */
+  durationS: number | null;
   language: string;
   seed: number | null;
   variations: number;
@@ -157,7 +162,8 @@ export interface MusicRequestInput {
   promptId?: string;
   /** Do not reuse the saved prompt's sample (and drop it from the prompt). */
   removeSample?: boolean;
-  durationS: number;
+  /** null: Auto (#571), the field is left out and the cloud decides what the node is sent. */
+  durationS: number | null;
   language: string;
   variations: number;
   seed?: number;
@@ -192,7 +198,7 @@ export function createMusicRequest(input: MusicRequestInput): Promise<MusicReque
   form.append('ui_language', input.uiLanguage);
   if (input.promptId) form.append('promptId', input.promptId);
   if (input.removeSample) form.append('remove_sample', 'true');
-  form.append('duration_s', String(input.durationS));
+  if (input.durationS !== null) form.append('duration_s', String(input.durationS));
   form.append('language', input.language);
   form.append('variations', String(input.variations));
   if (input.seed !== undefined) form.append('seed', String(input.seed));

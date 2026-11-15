@@ -329,6 +329,22 @@ describe("agentMusic", () => {
     expect((g.get("sample") as File).name).toBe("s.wav");
   });
 
+  it("leaves duration_s out for an Auto length (#571)", () => {
+    const f = generateForm({
+      lyrics: "[verse]\nhi",
+      tags: "calm",
+      duration_s: null,
+      language: "es",
+      seed: null,
+      variations: 1,
+      sample: null,
+      sample_mode: null,
+      strength: null,
+    });
+    expect(f.has("duration_s")).toBe(false);
+    expect([...f.keys()].sort()).toEqual(["language", "lyrics", "tags", "variations"].sort());
+  });
+
   it("posts the song and answers the operation", async () => {
     const h = harness({
       "POST /api/v1/music/generate": () =>

@@ -40,7 +40,10 @@ const submit = (bearer: string, fields: Record<string, string>, sample?: Buffer)
   return app.inject({ method: 'POST', url: '/api/localai/music/requests', headers: { ...auth(bearer), ...body.headers }, payload: body.payload });
 };
 
-async function enrolled(workloads: unknown = { active: 'coding', items: [{ name: 'music', label: { en: 'Music', es: 'Música' }, models: ['acestep-v15-turbo'], fits: true, missing: [] }] }) {
+async function enrolled(
+  workloads: unknown = { active: 'coding', items: [{ name: 'music', label: { en: 'Music', es: 'Música' }, models: ['acestep-v15-turbo'], fits: true, missing: [] }] },
+  features?: string[],
+) {
   counter += 1;
   const nodeId = `ai-m${counter}-${run}`;
   const minted = await credentials.createCredential(userIds.admin, { name: `${nodeId} credential` } as never);
@@ -64,12 +67,14 @@ async function enrolled(workloads: unknown = { active: 'coding', items: [{ name:
     method: 'POST',
     url: '/api/nodes/register',
     headers: { authorization: `Bearer ${minted.token}` },
-    payload: { name: nodeId, hostname: 'host-beta', platform: 'linux/amd64', cliVersion: 'aiagent/0.1.0', eligibleTypes: ['localai.music.generate'], concurrency: 1, capabilities: { localai: { schema: 1, agent_version: '0.1.0' } } },
+    payload: { name: nodeId, hostname: 'host-beta', platform: 'linux/amd64', cliVersion: 'aiagent/0.1.0', eligibleTypes: ['localai.music.generate'], concurrency: 1, capabilities: { localai: { schema: 1, agent_version: '0.1.0', ...(features ? { features } : {}) } } },
   });
   const worker = (registered.json() as { data: { node: { id: string } } }).data.node.id;
   const agent = (path: string, payload: unknown) =>
     app.inject({ method: 'POST', url: `/api/nodes/${worker}/localai/commands/${path}`, headers: { authorization: `Bearer ${minted.token}` }, payload: payload as never });
-  return { rowId: node.id, nodeId, agent };
+  /** The handshake, as the agent sends it right after register: the binding guard links the worker row (workerNodeId). */
+  const handshake = () => app.inject({ method: 'GET', url: `/api/nodes/${worker}/localai/config`, headers: { authorization: `Bearer ${minted.token}` } });
+  return { rowId: node.id, nodeId, agent, handshake };
 }
 
 async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean): Promise<T> {
@@ -265,6 +270,32 @@ describe('the prompt history and titles (#568)', () => {
     const audit = await prisma.auditEvent.findMany({ where: { targetType: 'localai_music_prompt', targetId: prompt.id }, orderBy: { createdAt: 'asc' } });
     expect(audit.map((entry) => entry.action)).toEqual(['localai.music.prompt_created', 'localai.music.prompt_updated', 'localai.music.prompt_deleted']);
     expect(JSON.stringify(audit)).not.toMatch(/Person B|Rain Song|Other words|guitar/);
+  });
+
+  it('Auto length (#571): a node that registered music.auto_duration gets no duration_s and the rows keep NULL; an older one is sent 60', async () => {
+    const fresh = await enrolled(undefined, ['music.auto_duration']);
+    expect((await fresh.handshake()).statusCode).toBe(200);
+    const made = (await submit(tokens.contributor, { nodeId: fresh.nodeId, description: DESCRIPTION, lyrics_mode: 'instrumental' })).json().data;
+    expect(made.durationS).toBeNull();
+    const command = await prisma.localaiCommand.findUniqueOrThrow({ where: { id: made.commandId } });
+    expect(command.params).not.toHaveProperty('duration_s');
+    expect((await prisma.localaiMusicRequest.findUniqueOrThrow({ where: { id: made.id } })).durationS).toBeNull();
+    expect((await prisma.localaiMusicPrompt.findUniqueOrThrow({ where: { id: made.promptId } })).durationS).toBeNull();
+    const nodes = (await api('GET', '/music/nodes', tokens.contributor)).json().data as Array<{ nodeId: string; autoDuration: boolean }>;
+    expect(nodes.find((entry) => entry.nodeId === fresh.nodeId)?.autoDuration).toBe(true);
+
+    // Cancelled, so the person's limit of requests waiting is not what this test meets.
+    expect((await api('POST', `/music/requests/${made.id}/cancel`, tokens.contributor)).statusCode).toBeLessThan(300);
+    const old = await enrolled();
+    expect((await old.handshake()).statusCode).toBe(200);
+    const answer = await submit(tokens.contributor, { nodeId: old.nodeId, description: DESCRIPTION, lyrics_mode: 'instrumental' });
+    expect(answer.statusCode).toBe(201);
+    const sent = answer.json().data;
+    expect(sent.durationS).toBe(60);
+    expect((await prisma.localaiCommand.findUniqueOrThrow({ where: { id: sent.commandId } })).params).toMatchObject({ duration_s: 60 });
+    expect((await prisma.localaiMusicPrompt.findUniqueOrThrow({ where: { id: sent.promptId } })).durationS).toBeNull();
+    // Leave nothing waiting for the next tests' limits.
+    expect((await api('POST', `/music/requests/${sent.id}/cancel`, tokens.contributor)).statusCode).toBeLessThan(300);
   });
 
   it('instrumental sends [Instrumental]; a deleted user takes their prompts but not the lab\'s songs', async () => {

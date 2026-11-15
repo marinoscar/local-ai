@@ -17,21 +17,37 @@ type Capabilities struct {
 // accepts (the LAI-CLD-057 hint); State is the reduced snapshot of the capabilities fallback and is
 // present only while the cloud has no state endpoint.
 type LocalaiCapabilities struct {
-	Schema         int           `json:"schema"`
-	AgentVersion   string        `json:"agent_version"`
-	Backend        string        `json:"backend"`
-	Profile        string        `json:"profile"`
-	LlamaBuild     string        `json:"llama_build"`
-	LlamaMode      string        `json:"llama_mode"`
-	ModelsMax      int           `json:"models_max"`
-	GPU            string        `json:"gpu,omitempty"`
-	VRAMTotalMiB   int64         `json:"vram_total_mib"`
-	RAMTotalMiB    int64         `json:"ram_total_mib"`
-	CatalogVersion string        `json:"catalog_version,omitempty"`
-	ServePattern   string        `json:"serve_pattern"`
-	PublicHost     string        `json:"public_host,omitempty"`
-	Allow          []string      `json:"allow"`
-	State          *ReducedState `json:"state,omitempty"`
+	Schema         int      `json:"schema"`
+	AgentVersion   string   `json:"agent_version"`
+	Backend        string   `json:"backend"`
+	Profile        string   `json:"profile"`
+	LlamaBuild     string   `json:"llama_build"`
+	LlamaMode      string   `json:"llama_mode"`
+	ModelsMax      int      `json:"models_max"`
+	GPU            string   `json:"gpu,omitempty"`
+	VRAMTotalMiB   int64    `json:"vram_total_mib"`
+	RAMTotalMiB    int64    `json:"ram_total_mib"`
+	CatalogVersion string   `json:"catalog_version,omitempty"`
+	ServePattern   string   `json:"serve_pattern"`
+	PublicHost     string   `json:"public_host,omitempty"`
+	Allow          []string `json:"allow"`
+	// Features names what this agent's commands understand beyond their first version, so the cloud can
+	// keep sending an older node what it knows (cloud-app.md section 3.7). EAB stores capabilities as an
+	// opaque object and the cloud reads it from the worker row, so a new entry needs no handshake.
+	Features []string      `json:"features"`
+	State    *ReducedState `json:"state,omitempty"`
+}
+
+// The entries of capabilities.localai.features.
+const (
+	// FeatureMusicAutoDuration: localai.music.generate accepts params without duration_s, and then the engine
+	// picks the song's length (#571). A node that does not list it is sent duration_s: 60.
+	FeatureMusicAutoDuration = "music.auto_duration"
+)
+
+// agentFeatures is capabilities.localai.features: fixed by the build, the same on every node.
+func agentFeatures() []string {
+	return []string{FeatureMusicAutoDuration}
 }
 
 // statusBuildOptions are the options every cloud-bound status read uses: English, no counters.
@@ -46,6 +62,7 @@ func BuildCapabilities(st statusapi.Status, cfg config.Config) (Capabilities, []
 		ModelsMax: clampInt(st.Models.ModelsMax, 1, 16), RAMTotalMiB: st.Hardware.RAMTotalMiB,
 		ServePattern: oneOf(cfg.Tailscale.ServePattern, "none", "A", "B", "none"),
 		Allow:        append([]string{}, cfg.Cloud.Allow...),
+		Features:     agentFeatures(),
 	}
 	if st.Hardware.GPU != nil {
 		c.GPU = cut(*st.Hardware.GPU, 128)

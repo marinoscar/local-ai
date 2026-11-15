@@ -47,7 +47,8 @@ class LoadInfo:
 class GenerateRequest:
     lyrics: str
     tags: str
-    duration_s: float
+    # None is Auto (#571): the engine picks the length from the lyrics and the caption.
+    duration_s: Optional[float]
     language: str
     seed: Optional[int]
     variations: int
@@ -63,6 +64,28 @@ class Output:
     duration_s: float
     sample_rate: int
     mime: str = "audio/wav"
+
+
+# Auto length (#571). ACE-Step 1.5 chooses the length itself when GenerationParams.duration is <= 0 (its
+# default is -1.0): the 5 Hz LM writes a duration into its chain-of-thought metadata, which then drives the
+# DiT (acestep/inference.py at ca1e85fe: the duration docstring, the -1.0 default, _update_metadata_from_lm).
+ENGINE_AUTO_DURATION = -1.0
+# The shim's own estimate, used where the engine cannot pick (AceStepBackend.AUTO_BY_ENGINE off) and as the
+# reported length when the output cannot be measured: about 4 s per sung line plus 10 s, within 30 to 240 s;
+# an instrumental (no lyric line) is 60 s.
+ESTIMATE_PER_LINE_S = 4.0
+ESTIMATE_PAD_S = 10.0
+ESTIMATE_MIN_S, ESTIMATE_MAX_S = 30.0, 240.0
+ESTIMATE_INSTRUMENTAL_S = 60.0
+
+
+def estimate_duration(lyrics: str) -> float:
+    """The shim's length estimate for an Auto song: 4 s per lyric line that is not a [section] tag, plus 10 s,
+    clamped to 30..240 s; 60 s for an instrumental. Never reads the text beyond counting lines."""
+    lines = [ln for ln in lyrics.splitlines() if ln.strip() and not ln.strip().startswith("[")]
+    if not lines:
+        return ESTIMATE_INSTRUMENTAL_S
+    return max(ESTIMATE_MIN_S, min(ESTIMATE_MAX_S, len(lines) * ESTIMATE_PER_LINE_S + ESTIMATE_PAD_S))
 
 
 ProgressFn = Callable[[float], None]
@@ -180,6 +203,9 @@ class AceStepBackend:
                   "TRITON_CACHE_DIR": "triton", "TORCHINDUCTOR_CACHE_DIR": "inductor"}
     OFFLOAD_TO_CPU = True
     OFFLOAD_DIT_TO_CPU = True
+    # Auto length (#571): True passes ENGINE_AUTO_DURATION and lets ACE-Step's LM choose; False passes the
+    # shim's estimate_duration instead (the fallback if a pinned ACE-Step ever stops choosing well).
+    AUTO_BY_ENGINE = True
 
     def __init__(self, settings: Settings, api: Optional[Callable[[], Any]] = None) -> None:
         self.settings = settings
@@ -278,7 +304,7 @@ class AceStepBackend:
                 "lyrics": "[Instrumental]" if instrumental else req.lyrics,
                 "instrumental": instrumental,
                 "vocal_language": language,
-                "duration": float(req.duration_s),
+                "duration": self._duration(req),
                 "inference_steps": self.STEPS,
                 "shift": self.SHIFT,
                 "seed": seed,
@@ -321,9 +347,25 @@ class AceStepBackend:
             os.replace(src, path)
             shutil.rmtree(scratch, ignore_errors=True)
             rate = int(audio.get("sample_rate") or _wav_rate(path))
-            outputs.append(Output(path=path, duration_s=_audio_seconds(path, req.duration_s), sample_rate=rate))
+            outputs.append(Output(path=path, duration_s=_audio_seconds(path, self._expected(req)), sample_rate=rate))
             progress((v + 1) / n)
         return outputs
+
+    def _duration(self, req: GenerateRequest) -> float:
+        """GenerationParams.duration: the asked length, or for Auto the engine's own choice (or the estimate).
+        A same_song cover is as long as its sample whatever is passed (ACE-Step locks cover to the source)."""
+        if req.duration_s is not None:
+            return float(req.duration_s)
+        return ENGINE_AUTO_DURATION if self.AUTO_BY_ENGINE else estimate_duration(req.lyrics)
+
+    def _expected(self, req: GenerateRequest) -> float:
+        """The length to report only when the output file cannot be measured: the sample's for a cover, the
+        asked one, else the estimate. The real length of the file always wins (_audio_seconds)."""
+        if req.sample_path and req.sample_mode == "same_song":
+            return _audio_seconds(req.sample_path, req.duration_s or estimate_duration(req.lyrics))
+        if req.duration_s is not None:
+            return float(req.duration_s)
+        return estimate_duration(req.lyrics)
 
 
 def _import_acestep() -> Any:

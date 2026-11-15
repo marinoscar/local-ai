@@ -138,7 +138,7 @@ class TaskManager:
             self._lock.notify_all()
         log.info(
             "task %s queued (lyrics_bytes=%d variations=%d duration_s=%s sample=%s)",
-            task.id, len(req.lyrics.encode("utf-8")), req.variations, req.duration_s, bool(req.sample_path),
+            task.id, len(req.lyrics.encode("utf-8")), req.variations, "auto" if req.duration_s is None else req.duration_s, bool(req.sample_path),
         )
         return task.id
 

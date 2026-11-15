@@ -37,7 +37,7 @@ func TestGenerateRequests(t *testing.T) {
 					t.Fatalf("op = %+v", v)
 				}
 				req := r.shim.Requests[0]
-				if req.SamplePath != nil || req.Variations != 2 || req.DurationS != 30 || req.Language != "es" || *req.Seed != 7 {
+				if req.SamplePath != nil || req.Variations != 2 || req.DurationS == nil || *req.DurationS != 30 || req.Language != "es" || *req.Seed != 7 {
 					t.Fatalf("task = %+v", req)
 				}
 				m, _, err := r.svc.Song(v.SongIDs[1])

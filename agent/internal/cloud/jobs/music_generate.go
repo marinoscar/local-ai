@@ -64,7 +64,7 @@ type MusicGenerateParams struct {
 	RequestID  string
 	Lyrics     string
 	Tags       string
-	DurationS  int
+	DurationS  *int // nil: Auto (#571), the field omitted or null
 	Language   string
 	Seed       *int64
 	Variations int
@@ -131,7 +131,7 @@ func decodeMusicGenerate(raw json.RawMessage) (MusicGenerateParams, error) {
 		ok   bool
 	}{
 		{"request_id", w.RequestID != nil}, {"lyrics", w.Lyrics != nil}, {"tags", w.Tags != nil},
-		{"duration_s", w.DurationS != nil}, {"language", w.Language != nil}, {"variations", w.Variations != nil},
+		{"language", w.Language != nil}, {"variations", w.Variations != nil},
 		{"results", w.Results != nil},
 	} {
 		if err := required(r.path, r.ok); err != nil {
@@ -145,8 +145,8 @@ func decodeMusicGenerate(raw json.RawMessage) (MusicGenerateParams, error) {
 		return p, bad("lyrics", "must be UTF-8 text of at most 8 KiB")
 	case !utf8.ValidString(*w.Tags) || len(*w.Tags) > music.MaxTagsBytes:
 		return p, bad("tags", "must be UTF-8 text of at most 512 bytes")
-	case *w.DurationS < music.MinDurationS || *w.DurationS > music.MaxDurationS:
-		return p, bad("duration_s", "must be 10 to 240")
+	case w.DurationS != nil && (*w.DurationS < music.MinDurationS || *w.DurationS > music.MaxDurationS):
+		return p, bad("duration_s", "must be null or 10 to 240")
 	case !language2.MatchString(*w.Language):
 		return p, bad("language", "must be a two-letter language code")
 	case w.Seed != nil && (*w.Seed < 0 || *w.Seed > music.MaxSeed):
@@ -157,7 +157,7 @@ func decodeMusicGenerate(raw json.RawMessage) (MusicGenerateParams, error) {
 		return p, bad("results", "must have one entry per variation")
 	}
 	p = MusicGenerateParams{
-		RequestID: strings.ToLower(*w.RequestID), Lyrics: *w.Lyrics, Tags: *w.Tags, DurationS: *w.DurationS,
+		RequestID: strings.ToLower(*w.RequestID), Lyrics: *w.Lyrics, Tags: *w.Tags, DurationS: w.DurationS,
 		Language: *w.Language, Seed: w.Seed, Variations: *w.Variations, Strength: w.Strength,
 	}
 	for i, r := range w.Results {

@@ -18,6 +18,7 @@ export function musicNode(partial: Partial<MusicNode> = {}): MusicNode {
     musicModels: ['acestep-v15-turbo'],
     activeWorkload: 'music',
     workloads: WORKLOADS,
+    autoDuration: true,
     lastStateAt: '2026-11-14T12:00:00.000Z',
     ...partial,
   };

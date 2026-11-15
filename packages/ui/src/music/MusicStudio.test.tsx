@@ -27,7 +27,9 @@ describe('MusicStudio', () => {
     expect(screen.getByRole('heading', { name: 'Make a song' })).toBeTruthy();
     expect(screen.getByLabelText('Lyrics').tagName).toBe('TEXTAREA');
     expect(screen.getByLabelText('Style')).toBeTruthy();
-    expect((screen.getByLabelText('Length in seconds') as HTMLInputElement).value).toBe('60');
+    // Length defaults to Auto (#571): the seconds field appears only after "Set the length".
+    expect((screen.getByLabelText('Auto') as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByLabelText('Length in seconds')).toBeNull();
     expect((screen.getByLabelText('Language of the singing') as HTMLSelectElement).value).toBe('en');
     expect(screen.getByLabelText('Sample song (optional)')).toBeTruthy();
     expect(screen.getByText('More options').tagName).toBe('SUMMARY');
@@ -51,6 +53,7 @@ describe('MusicStudio', () => {
   it('checks the form before sending: the fields are marked, the code is shown and nothing is sent', () => {
     const tr = new FakeMusic();
     render(<MusicStudio transport={tr} />);
+    fireEvent.click(screen.getByLabelText('Set the length'));
     fill('Length in seconds', '5');
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
     expect(tr.generated).toHaveLength(0);
@@ -63,6 +66,37 @@ describe('MusicStudio', () => {
     expect(lyrics.getAttribute('aria-invalid')).toBe('true');
     // The keyboard lands on the first problem.
     expect(document.activeElement).toBe(lyrics);
+  });
+
+  it('sends Auto by default and a set length when the person chooses one (#571)', async () => {
+    const tr = new FakeMusic();
+    render(<MusicStudio transport={tr} />);
+    fill('Lyrics', 'My words');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    expect(tr.generated[0]?.duration_s).toBeNull();
+    await act(async () => tr.generateResult?.reject(err('LAI-SVC-153')));
+    fireEvent.click(screen.getByLabelText('Set the length'));
+    expect((screen.getByLabelText('Length in seconds') as HTMLInputElement).value).toBe('60');
+    fill('Length in seconds', '120');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    expect(tr.generated[1]?.duration_s).toBe(120);
+    await act(async () => tr.generateResult?.reject(err('LAI-SVC-153')));
+    // Back to Auto: a bad number left in the hidden field does not block the song.
+    fill('Length in seconds', '5');
+    fireEvent.click(screen.getByLabelText('Auto'));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    expect(tr.generated[2]?.duration_s).toBeNull();
+  });
+
+  it('labels the length in Spanish', () => {
+    render(
+      <LangProvider lang="es">
+        <MusicStudio transport={new FakeMusic()} />
+      </LangProvider>,
+    );
+    expect(screen.getByText('Duración')).toBeTruthy();
+    expect((screen.getByLabelText('Automática') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByLabelText('Elegir la duración')).toBeTruthy();
   });
 
   it('rejects a sample of the wrong type or size', () => {
@@ -89,7 +123,7 @@ describe('MusicStudio', () => {
     expect(soundsLike.checked).toBe(true);
     expect(screen.getByText('How closely to follow the sample: 50 %')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-    expect(tr.generated[0]).toMatchObject({ sample_mode: 'sounds_like', strength: 0.5, lyrics: 'My words', duration_s: 60, variations: 1, seed: null });
+    expect(tr.generated[0]).toMatchObject({ sample_mode: 'sounds_like', strength: 0.5, lyrics: 'My words', duration_s: null, variations: 1, seed: null });
     expect(tr.generated[0]?.sample?.name).toBe('sample.wav');
     await act(async () => tr.generateResult?.reject(err('LAI-SVC-153')));
 
