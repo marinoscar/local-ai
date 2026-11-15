@@ -132,6 +132,7 @@ JSON over HTTP/1.1; every body is UTF-8 JSON; unknown fields in a request are re
 - `/health` `error` carries a short English reason for the agent's logs (for example `out of graphics memory`); it never carries lyrics.
 - The ACE-Step call itself sits in **one** module, `engines/acestep/localai_music_shim/backend.py`, behind an interface with a fake backend for tests (it writes a short tone of the requested length). The real backend uses ACE-Step's Python API (`acestep.inference.generate_music`), loads with both CPU offloads (a 12 GB card needs them, #505), and cancels at the next progress call (a few seconds).
 - **Model overlay.** ACE-Step rewrites the model's `.py` files at every load, and `MUSIC_MODEL_DIR` is read-only, so at load the shim builds `MUSIC_WORK_DIR/_model/`: a symlink to every file of the model, except the `.py` files, which are copied. It is rebuilt at each load and also holds ACE-Step's small caches (`ACESTEP_PROJECT_ROOT`); the verified files are never written.
+- **Caches.** The unit's home folder is read-only (`ProtectSystem=strict`; only `/var/lib/localai/music` is writable), so before ACE-Step is imported the shim points every run-time cache into `MUSIC_WORK_DIR/_cache/`: `HF_HOME`, `HF_MODULES_CACHE` (transformers writes the model's remote-code modules there at load), `XDG_CACHE_HOME`, `TRITON_CACHE_DIR` and `TORCHINDUCTOR_CACHE_DIR` (#564). Nothing is downloaded into it: the hub stays offline.
 - **Engine log.** ACE-Step logs the whole prompt at INFO and prints tracebacks with local variables; the shim keeps its log at WARNING, one line per record, without tracebacks, and drops any line that carries a lyric line or the tags of the running song (§6).
 
 ### 3.5 Catalog entry (example)
@@ -246,7 +247,7 @@ For each operation, in order:
 - The song id is chosen by the agent, sortable by time, and matches `^[A-Za-z0-9_-]{8,64}$`; clients treat it as opaque.
 - **Retention: a song is kept until a person deletes it.** Nothing expires, sync never touches the store, and the store is not part of the ark drive. `DELETE /music/songs/{id}` (admin, agent.md §3.8.36) removes the directory.
 - The sample itself is **not kept**: only its hash and size are recorded. The person's audio stays only as long as the song needs it.
-- At agent start, a `work/` directory older than 24 h is removed (an interrupted operation; `work/_model`, the engine's model overlay of §3.4, is left alone), and a song directory without a valid `meta.json` is listed as damaged in `aictl doctor` (no code of its own: `LAI-AGT-099` details) and never deleted automatically.
+- At agent start, a `work/` directory older than 24 h is removed (an interrupted operation; `work/_model` and `work/_cache`, the engine's model overlay and caches of §3.4, are left alone), and a song directory without a valid `meta.json` is listed as damaged in `aictl doctor` (no code of its own: `LAI-AGT-099` details) and never deleted automatically.
 - `GET /music/songs` reads the `meta.json` files (cached, refreshed when the directory changes). Lyrics are in `meta.json` for the person; the list and every log omit them.
 
 ### 4.6 Survival mode

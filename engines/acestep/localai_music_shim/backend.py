@@ -173,6 +173,11 @@ class AceStepBackend:
     STEPS = 8
     SHIFT = 3.0
     OVERLAY = "_model"
+    # CACHE holds what transformers, torch and triton write at run time (remote-code modules, kernels). The
+    # unit's home folder is read-only (ProtectSystem=strict), so every cache goes under the work folder (#564).
+    CACHE = "_cache"
+    CACHE_VARS = {"HF_HOME": "hf", "HF_MODULES_CACHE": "hf/modules", "XDG_CACHE_HOME": "xdg",
+                  "TRITON_CACHE_DIR": "triton", "TORCHINDUCTOR_CACHE_DIR": "inductor"}
     OFFLOAD_TO_CPU = True
     OFFLOAD_DIT_TO_CPU = True
 
@@ -198,6 +203,15 @@ class AceStepBackend:
         for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE", "HF_HUB_DISABLE_TELEMETRY"):
             os.environ.setdefault(name, "1")
         os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
+        # Before the import: transformers reads HF_HOME and HF_MODULES_CACHE when it is imported.
+        cache = os.path.join(self.settings.work_dir, self.CACHE)
+        try:
+            for name, sub in self.CACHE_VARS.items():
+                path = os.path.join(cache, sub)
+                os.makedirs(path, mode=0o750, exist_ok=True)
+                os.environ[name] = path
+        except OSError as exc:
+            raise BackendError(f"the engine's cache folder could not be made ({type(exc).__name__})") from exc
         try:
             self._api = self._api_loader()
         except Exception as exc:  # noqa: BLE001 - any import failure means "runtime not installed"

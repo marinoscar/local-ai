@@ -165,6 +165,26 @@ class AceStepBackendTests(unittest.TestCase):
         self.assertEqual(os.environ.get("HF_HUB_OFFLINE"), "1")
         self.assertEqual(os.environ.get("TRANSFORMERS_OFFLINE"), "1")
 
+    def test_every_cache_is_in_the_work_folder_before_the_import(self):
+        """The unit's home is read-only: transformers' module cache and torch/triton kernels go to work/_cache (#564)."""
+        seen: dict[str, str | None] = {}
+        api = FakeAPI()
+
+        def loader() -> Any:
+            for name in AceStepBackend.CACHE_VARS:
+                seen[name] = os.environ.get(name)
+            return api
+
+        os.environ["HF_HOME"] = "/var/lib/localai/.cache/huggingface"  # what the unit's HOME would give
+        r = self.rig(api)
+        r.backend._api_loader = loader
+        r.backend.load()
+        cache = os.path.join(r.work, AceStepBackend.CACHE)
+        for name, value in seen.items():
+            self.assertIsNotNone(value, name)
+            self.assertTrue(value.startswith(cache + os.sep), f"{name}={value}")
+            self.assertTrue(os.path.isdir(value), name)
+
     def test_overlay_never_writes_through_to_the_model(self):
         r = self.rig(FakeAPI())
         dst = os.path.join(r.work, "ovl")
