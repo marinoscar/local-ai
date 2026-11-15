@@ -30,7 +30,7 @@ import (
 )
 
 // The pip_wheelhouse producer against a fake origin (the repository tarball at the catalog tag, a PEP 503 index,
-// the wheel and Python files) and a fake runner for tar, python, pip and git (ark-sync.md section 4.9.10).
+// the wheel and Python files) and a fake runner for tar, python, pip and git (ark-sync.md section 4.9.11).
 
 const whCatalogVersion = "2026.11.15-1"
 

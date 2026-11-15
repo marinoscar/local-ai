@@ -155,7 +155,7 @@ A music model is a set of PyTorch weights run by the ACE-Step engine ([music.md]
 **Rules (lint-enforced):**
 - `engine: acestep` requires `roles` to contain `music`, at least one `files[kind=acestep]` entry, and only files of kind `acestep`. It has no `llama` block and no `client_hints`.
 - An `acestep` file `name` is a relative path with **at most one** directory level (`<dir>/<file>`); no `..`, no leading `/`, no deeper nesting. The files are stored under `music/<model-id>/<name>` in the content root ([overview.md](../architecture/overview.md) §3.3), not under `models/`.
-- `requirements.min_vram_mib` must be greater than 0 and `requirements.backends` must be `[cuda]` (the only backend with a wheel bundle, ADR-0012).
+- `requirements.min_vram_mib` must be greater than 0 and `requirements.backends` must be `[cuda]` (the only backend with a wheelhouse, `kit-engine-acestep-cuda`; ADR-0012, ADR-0015).
 - A breach of these rules is `LAI-CAT-021` (the layout of an `acestep` model is invalid). The agent raises the same code at run time when the files present in `music/<model-id>/` do not match the entry (a file missing or an extra directory level), and refuses to load the model.
 - `min_vram_mib` is measured as for any model (§2): on the target node while a song of the default length is generated, plus 10 %.
 
@@ -174,7 +174,7 @@ content:
     languages: [en]
     license: "CC BY-SA 4.0"
     source:
-      type: kiwix                        # kiwix | url | pmtiles_extract | apt_closure | git_mirror | github_release | repo_docs
+      type: kiwix                        # kiwix | url | pmtiles_extract | apt_closure | git_mirror | github_release | repo_docs | pip_wheelhouse
       # kiwix: resolves the newest dated file matching the book name by parsing the Kiwix download directory listing at base_url (ark-sync.md §4.9.2)
       book: wikipedia_en_all_nopic       # Kiwix book name (without date)
       base_url: https://lb.download.kiwix.org/zim/wikipedia/   # the origin host the OPDS entries link to (see section 3.1)
@@ -285,7 +285,7 @@ content:
 
 **Rules:** `id` follows the same format as models. A `kiwix` item with `version_policy: latest` must have `refresh_days ≥ 30`. A `pmtiles_extract` item must have a bbox with min < max. A `kit` or `docs` item is always survival tier 1.
 
-**More rules enforced by lint** (all `LAI-CAT-015` unless noted). `kind` and `source.type` agree: `kiwix` uses `kiwix`; `maps` uses `pmtiles_extract`, `url` or `github_release`; `kit` uses `git_mirror`, `apt_closure`, `url`, `github_release` or `repo_docs` (the last only for `kit-catalog`, the kit copy of the catalog, [rebuild-kit.md](rebuild-kit.md) §3.2); `docs` uses `repo_docs`. A `kiwix` item with `version_policy: pinned` or `checksum: pinned` needs the `pinned` block. A `bbox` has four numbers inside longitude -180..180 and latitude -90..90. A key that the source type does not use is a schema problem (`LAI-CAT-010`), except the optional fields `extract`, `extra_repos`, `checksum`, `trust`, `sidecar_url`, `url` and `files`, whose misuse is `LAI-CAT-016`. `survival_tier` may be left out: `Tier()` then returns 1 for `kit` and `docs` items and 3 for the rest (the first to be dropped by the budget planner). A `kit` or `docs` item that declares a tier must declare 1.
+**More rules enforced by lint** (all `LAI-CAT-015` unless noted). `kind` and `source.type` agree: `kiwix` uses `kiwix`; `maps` uses `pmtiles_extract`, `url` or `github_release`; `kit` uses `git_mirror`, `apt_closure`, `url`, `github_release`, `pip_wheelhouse` or `repo_docs` (the last only for `kit-catalog`, the kit copy of the catalog, [rebuild-kit.md](rebuild-kit.md) §3.2); `docs` uses `repo_docs`. A `kiwix` item with `version_policy: pinned` or `checksum: pinned` needs the `pinned` block. A `bbox` has four numbers inside longitude -180..180 and latitude -90..90. A key that the source type does not use is a schema problem (`LAI-CAT-010`), except the optional fields `extract`, `extra_repos`, `checksum`, `trust`, `sidecar_url`, `url` and `files`, whose misuse is `LAI-CAT-016`. `survival_tier` may be left out: `Tier()` then returns 1 for `kit` and `docs` items and 3 for the rest (the first to be dropped by the budget planner). A `kit` or `docs` item that declares a tier must declare 1.
 
 **Source types** (each has exactly one resolver in [ark-sync.md](ark-sync.md) §4.9; adding a type means adding a resolver there):
 | `source.type` | File | Resolver |
@@ -297,6 +297,7 @@ content:
 | `github_release` | ark.yaml | ark-sync.md §4.9.4 |
 | `git_mirror` | ark.yaml | ark-sync.md §4.9.6 |
 | `apt_closure` | ark.yaml | ark-sync.md §4.9.7 |
+| `pip_wheelhouse` | ark.yaml | ark-sync.md §4.9.11 (the offline install set of a Python engine, `kit-engine-<engine>-<backend>`; rebuild-kit.md §3.2.2) |
 | `repo_docs` | ark.yaml | ark-sync.md §4.9.8 (`docs-bundle` renders `docs/`; the kit item `kit-catalog` writes `kit/catalog/`: catalog files and `CATALOG_VERSION`, from the same tag tarball; rebuild-kit.md §3.2.1) |
 
 **Optional fields** (lint-enforced):
@@ -304,6 +305,7 @@ content:
 - `extra_repos` (`apt_closure` only): list of `{name, uri, suite, components, key}`. `key` must name a keyring embedded in the agent ([rebuild-kit.md](rebuild-kit.md) §3.4); lint rejects unknown key names.
 - `files[].name` (`url` items with a `files` list): the path of the file inside the item folder, a clean relative path whose elements are plain names (`release/SHA256SUMS`). Optional; the default is the last element of the URL path. It is how a file whose release name the sync engine reserves in every item folder (`SHA256SUMS`, `MANIFEST.json`) becomes a file of the item, and how a file lands in a sub-folder; lint rejects an absolute path, `..`, an empty element, the reserved names without a folder, and two files of one item with the same path (`LAI-CAT-010`). The field is additive: an agent older than this change rejects a catalog that uses it (strict decoding, `LAI-CAT-010`) and keeps its installed one. An item's version stays the front of its first file's sha256, so put the file that identifies the release first. The one use today is `kit-agent-binaries` ([rebuild-kit.md](rebuild-kit.md) §3.2.1).
 - `checksum` on `url` items: `pinned` (default; `sha256` required per file), `sidecar` (`sidecar_url` names a `SHA256SUMS`-style file; used by `kit-ubuntu-iso-<ver>`, rebuild-kit.md §4.1.7) or `computed`. `checksum: computed` requires `trust: tofu`, and lint allows `tofu` only on `kind: maps` data items such as `places-central-america`.
+- `pip_wheelhouse` items (`kind: kit` only). The id is `kit-engine-<engine>-<backend>` with a known engine (`acestep`) and backend (`LAI-CAT-015`). Fields, all checked by lint: `version` (a plain version, `1.5.0`), `lock` (a clean path in this repository ending in `.lock`) with `sha256` (its pinned sha256, `LAI-CAT-011`), `files` (exactly one entry, an https URL with a pinned `sha256` and `name: python/<file>.tar.gz`: the standalone Python), `indexes` (one or more plain https PEP 503 index URLs, tried in order), and `builds` (optional; each is either `{url, commit, subdirectory?}`, an https git URL with a 40-hex `commit`, or `{repo_path}`, a folder of this repository; never both, `LAI-CAT-015`). Any other source key is `LAI-CAT-010`. Example and meaning of each field: [rebuild-kit.md](rebuild-kit.md) §3.2.2. The item's version is derived from these pins (`<version>-<8 hex>`), so it needs no network.
 - `portal_links` (`kiwix` only): `key` unique across the catalog, `article` non-empty, `es_item` (if set) must be an existing `kiwix` item and then `es_article` is required.
 - Kit item ids: `kit-debs-<codename>-<arch>` and `kit-nvidia-<codename>-<arch>-<branch>`. `<codename>` is the Ubuntu codename of the nodes that use the item (`resolute` = 26.04 LTS today); lint checks that the id matches `source.codename`/`source.arch`. A node whose codename has no item gets `LAI-KIT-042`.
 

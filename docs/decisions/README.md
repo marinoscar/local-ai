@@ -15,8 +15,9 @@ Each ADR records one decision, its context and the alternatives rejected. To cha
 | [0009](0009-optimized-for-humans.md) | Everything is optimized for humans: nothing to memorize, menus over flags, state first | Accepted |
 | [0010](0010-the-agent-keeps-the-node-complete.md) | The agent keeps the node complete: it installs what the kit holds, safely, and one button does it on demand | Accepted |
 | [0011](0011-full-control-from-the-app.md) | Full control from the app (the Dashboard in the Portal, built-in help); no PIN to leave survival mode at the computer, the PIN guards deletes | Accepted |
-| [0012](0012-python-inference-engines.md) | Python/PyTorch inference engines run on nodes as their own loopback services, from a pinned venv built offline from the kit | Accepted |
+| [0012](0012-python-inference-engines.md) | Python/PyTorch inference engines run on nodes as their own loopback services, from a pinned venv built offline from the kit | Accepted (delivery superseded by 0015) |
 | [0013](0013-on-demand-engines-one-gpu-budget.md) | On-demand engines share one GPU budget, switched by named workloads; survival always wins | Accepted |
 | [0014](0014-corona-identity.md) | Corona: one dark theme (gold corona on near-black) and a total-solar-eclipse icon for the Portal, ai-desktop and the cloud app | Accepted |
+| [0015](0015-engine-runtime-wheelhouse.md) | A Python engine's runtime is a kit wheelhouse that ark sync fills, with a pinned standalone Python | Accepted (supersedes the delivery part of 0012) |
 
 Template: copy [0000-template.md](0000-template.md).

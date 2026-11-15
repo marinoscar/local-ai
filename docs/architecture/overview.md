@@ -97,7 +97,7 @@
 | `/opt/localai/whisper.cpp/{builds/<commit>-<backend>,current}` | root 0755 | whisper.cpp builds |
 | `/opt/localai/piper/{<version>,current}` | root 0755 | Piper TTS binary + its libs |
 | `/opt/localai/kiwix-tools/{<version>,current}` | root 0755 | `kiwix-serve`, `kiwix-manage` (static release binaries) |
-| `/opt/localai/acestep/<version>/venv`, `/opt/localai/acestep/current` | root 0755 | ACE-Step music runtime: a pinned Python venv built offline from the kit's wheel bundle (`pip install --no-index`), plus the shim `localai_music_shim`; `current` is a symlink to the active `<version>` ([music.md](../specs/music.md) §3.1, [ADR-0012](../decisions/0012-python-inference-engines.md)) |
+| `/opt/localai/acestep/<version>/python`, `/opt/localai/acestep/<version>/venv`, `/opt/localai/acestep/current` | root 0755 | ACE-Step music runtime: the pinned standalone Python (`python/`) and a venv of it built offline from the kit's wheelhouse (`pip install --no-index`), plus the shim `localai_music_shim`; `current` is a symlink to the active `<version>` ([music.md](../specs/music.md) §3.1, [ADR-0012](../decisions/0012-python-inference-engines.md)) |
 | `/opt/localai/pmtiles/{<version>,current}` | root 0755 | `pmtiles` CLI (go-pmtiles static release binary), used by sync for map extracts and `pmtiles verify` ([ark-sync.md](../specs/ark-sync.md) §4.9) |
 | `/etc/localai/` | root:localai 0751 | Configuration. Others may pass through (never list) so `localai-operators` members reach `agent-token`; every file inside has its own owner and mode (issue #483). The agent adds the pass-through bit at start if it is missing |
 | `/etc/localai/node.yaml` | root:localai 0640 | Node identity and settings ([agent.md](../specs/agent.md) §3.4). The previous version is kept as `node.yaml.bak` on every agent write |
@@ -232,7 +232,8 @@ Nothing listens on the LAN interface. Remote access only works in online mode, t
 | Music and workload command types | `localai.music.generate`, `localai.workload.activate` | cloud-app.md §3.7, [music.md](../specs/music.md) §4.7 |
 | Cloud music UI API and page | `/api/localai/music/*`, page `/music` | cloud-app.md §3.9, §3.11 |
 | Music engine shim (in repo) | `engines/acestep/` (Python package `localai_music_shim`) | music.md §3.4 |
-| Music wheel bundle (kit item) | `kit/engines/acestep/<version>/acestep-<version>-<backend>.tar.zst` | rebuild-kit.md §3.1, music.md §3.1 |
+| Music wheelhouse (kit item `kit-engine-acestep-<backend>`) | `kit/engines/acestep/<version>/` (`python/`, `wheels/`, `requirements.lock`) | rebuild-kit.md §3.2.2, music.md §3.1 |
+| Music runtime lock (in repo) | `engines/acestep/requirements-<backend>.in` → `requirements-<backend>.lock` (`scripts/release/lock-acestep.sh`) | rebuild-kit.md §3.2.2 |
 | Agent music UI path | `/music/` on port 7070 | agent.md §3.11 |
 | Agent in-flight command file (survives self-update) | `/var/lib/localai/cloud/inflight.json` | agent.md §4.8.6 |
 | Desktop appId / executable | `cr.marin.localai.desktop` / `ai-desktop` | desktop.md §3.3 |

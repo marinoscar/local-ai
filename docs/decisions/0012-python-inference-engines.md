@@ -1,6 +1,6 @@
 # ADR-0012: Python/PyTorch inference engines run on nodes as their own loopback services
 
-- **Status:** Accepted
+- **Status:** Accepted; the delivery part of decision 2 (the release-asset wheel bundle and the system Python) is superseded by [ADR-0015](0015-engine-runtime-wheelhouse.md)
 - **Date:** 2026-11-14
 - **Deciders:** owner (decisions delegated for epic E11, issue #506)
 

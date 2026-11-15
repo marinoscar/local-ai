@@ -232,7 +232,7 @@ content:
     refresh_days: 30
 
   # E11 (#511): the music runtime's offline install set, kit/engines/acestep/<version>/. Ark sync fills it on an online
-  # node (rebuild-kit.md section 3.2.2, ark-sync.md section 4.9.10): the pinned standalone Python (ACE-Step needs
+  # node (rebuild-kit.md section 3.2.2, ark-sync.md section 4.9.11): the pinned standalone Python (ACE-Step needs
   # 3.11 or 3.12; Ubuntu 26.04 has 3.14), every wheel of the lock (sha256 per wheel; the lock's own sha256 below),
   # and the wheels sync builds itself (ACE-Step and nano-vllm have no wheel on any index; the shim is this repo's).
   # The lock and the shim come from this repository at the catalog tag. Re-pin with scripts/release/lock-acestep.sh.

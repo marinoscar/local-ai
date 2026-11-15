@@ -24,7 +24,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
 )
 
-// PipWheelhouse is the pip_wheelhouse resolver (ark-sync.md section 4.9.10, rebuild-kit.md section 3.2.2): the
+// PipWheelhouse is the pip_wheelhouse resolver (ark-sync.md section 4.9.11, rebuild-kit.md section 3.2.2): the
 // offline install set of a Python engine, kit/engines/<engine>/<version>/ with
 //
 //	python/<tarball>        the pinned standalone Python (files of the item, sha256 pinned in the catalog)
