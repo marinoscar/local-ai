@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The AI usage card (Settings > AI, `GET /api/ai/usage/me`) no longer fails with "this.prisma.forOrg is not a function": `PrismaService` implements `forOrg`, which the platform's AI, storage and credentials slices call through `PLATFORM_PRISMA` (EnterpriseAppBase #1155). A test pins every method of the port.
 - `laictl deploy update` no longer stops at "Look for a new revision" when the repository moves a tag (`catalog-stable`): the CLI is on `@marinoscar/platform-cli` 0.1.0-next.30, which fetches with `--force` (marinoscar/EnterpriseAppBase#1151). CLI 0.1.2; the generated infra files are re-synced to `@marinoscar/platform-infra` 0.1.0-next.30.
 - The web image build no longer fails when a test imports a file outside `apps/web`: `npm run build` type-checks from the shipped entry points only (`apps/web/tsconfig.build.json`), and cloud-ci builds both images from the flat deploy tree (#574).
 
