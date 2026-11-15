@@ -1,0 +1,192 @@
+{
+  "permissions": [
+    {
+      "name": "ai_config:read",
+      "scope": "system"
+    },
+    {
+      "name": "ai_config:write",
+      "scope": "system"
+    },
+    {
+      "name": "ai:use",
+      "scope": "org"
+    },
+    {
+      "name": "allowlist:read",
+      "scope": "system"
+    },
+    {
+      "name": "allowlist:write",
+      "scope": "system"
+    },
+    {
+      "name": "broadcasts:read",
+      "scope": "system"
+    },
+    {
+      "name": "broadcasts:write",
+      "scope": "system"
+    },
+    {
+      "name": "gateway:admin",
+      "scope": "system"
+    },
+    {
+      "name": "gateway:use",
+      "scope": "org"
+    },
+    {
+      "name": "jobs:read",
+      "scope": "system"
+    },
+    {
+      "name": "jobs:write",
+      "scope": "system"
+    },
+    {
+      "name": "lab:admin",
+      "scope": "system"
+    },
+    {
+      "name": "lab:operate",
+      "scope": "org"
+    },
+    {
+      "name": "lab:read",
+      "scope": "org"
+    },
+    {
+      "name": "localai_music:delete",
+      "scope": "org"
+    },
+    {
+      "name": "localai_music:use",
+      "scope": "org"
+    },
+    {
+      "name": "localai_workloads:write",
+      "scope": "org"
+    },
+    {
+      "name": "nodes:read",
+      "scope": "system"
+    },
+    {
+      "name": "nodes:write",
+      "scope": "system"
+    },
+    {
+      "name": "org_ai_config:read",
+      "scope": "org"
+    },
+    {
+      "name": "org_ai_config:write",
+      "scope": "org"
+    },
+    {
+      "name": "org_broadcasts:read",
+      "scope": "org"
+    },
+    {
+      "name": "org_broadcasts:write",
+      "scope": "org"
+    },
+    {
+      "name": "org_invites:read",
+      "scope": "org"
+    },
+    {
+      "name": "org_invites:write",
+      "scope": "org"
+    },
+    {
+      "name": "org_members:read",
+      "scope": "org"
+    },
+    {
+      "name": "org_members:write",
+      "scope": "org"
+    },
+    {
+      "name": "org_settings:read",
+      "scope": "org"
+    },
+    {
+      "name": "org_settings:write",
+      "scope": "org"
+    },
+    {
+      "name": "organizations:read",
+      "scope": "system"
+    },
+    {
+      "name": "organizations:write",
+      "scope": "system"
+    },
+    {
+      "name": "orgs:offboard",
+      "scope": "system"
+    },
+    {
+      "name": "push:read",
+      "scope": "system"
+    },
+    {
+      "name": "push:write",
+      "scope": "system"
+    },
+    {
+      "name": "rbac:manage",
+      "scope": "system"
+    },
+    {
+      "name": "storage_config:read",
+      "scope": "system"
+    },
+    {
+      "name": "storage_config:write",
+      "scope": "system"
+    },
+    {
+      "name": "storage:delete_any",
+      "scope": "system"
+    },
+    {
+      "name": "storage:read",
+      "scope": "org"
+    },
+    {
+      "name": "storage:write",
+      "scope": "org"
+    },
+    {
+      "name": "system_settings:read",
+      "scope": "system"
+    },
+    {
+      "name": "system_settings:write",
+      "scope": "system"
+    },
+    {
+      "name": "system:factory_reset",
+      "scope": "system"
+    },
+    {
+      "name": "user_settings:read",
+      "scope": "org"
+    },
+    {
+      "name": "user_settings:write",
+      "scope": "org"
+    },
+    {
+      "name": "users:read",
+      "scope": "system"
+    },
+    {
+      "name": "users:write",
+      "scope": "system"
+    }
+  ]
+}

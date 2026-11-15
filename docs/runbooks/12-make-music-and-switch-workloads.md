@@ -8,13 +8,14 @@ Use this when you want a node to **make music** from your lyrics, or to switch a
 > - Deleting a song needs the **admin PIN** on the node or in the desktop app.
 > - **Time:** switching to Music takes about 1 minute (the music engine itself starts in about 20 seconds); a 1-minute song takes about 20 seconds on a 12 GB graphics card.
 
-> 🛠 Verify when implemented (Epic E11: #509 workloads, #510 music API, #512 local page, #514 website page, #515 desktop app, #568 website prompts and titles).
+> 🛠 Verify when implemented (Epic E11: #509 workloads, #510 music API, #512 local page, #514 website page, #515 desktop app, #568 website prompts and titles, #570 website AI for music and optional lyrics).
 
 **Words used on this page**
 - **Workload:** what the computer is set up to do right now, for example **Coding**, **Chat and photos** or **Music**. The graphics card has room for only one big job at a time, so choosing **Music** stops the coding AI, and choosing **Coding** stops the music maker.
 - **Lyrics:** the words of the song. Parts of the song are marked with tags in square brackets, such as `[verse]` and `[chorus]`.
 - **Style:** a few words that describe the sound, for example `folk, acoustic guitar, warm`. On the website this box is called **Describe your song**, and you may write a whole sentence.
 - **Prompt:** on the website, everything you typed for a song (title, description, lyrics, settings and sample). The website keeps your prompts under **My prompts**, so you can open one again, change it, make it again or delete it (Part 5).
+- **Music AI:** on the website, an AI service that writes lyrics and suggests titles. The lab owner turns it on once (Part 6). Without it, everything else still works: empty lyrics make a song with no vocals.
 - **Sample:** a short piece of audio you add so the song follows it. **Sounds like this** borrows its style. **Same song, my lyrics** keeps its melody and sings your words over it.
 - **Version:** the computer can make up to 4 different songs from the same lyrics at once.
 
@@ -134,12 +135,13 @@ The song is made on the node. You can ask for it on the node itself (the **Music
 
 The website (`https://ai.marin.cr/music`) keeps every prompt you make a song from under **My prompts**. A song keeps the title and settings it was made with, even if you change or delete its prompt later.
 
-21. Write the song's words for the website. In **Describe your song**, write the song in plain words, for example `a slow ballad about the sea, soft piano, warm voice, 80 bpm` (at most 500 characters). Under **Lyrics**, choose one:
+21. Write the song's words for the website. In **Describe your song**, write the song in plain words, for example `a slow ballad about the sea, soft piano, warm voice, 80 bpm` (at most 500 characters). Lyrics are optional: you do not have to choose anything. Under **Lyrics**, **Automatic (recommended)** is already chosen:
+    - **Automatic (recommended)**: type your lyrics in **Your lyrics**, or leave the box empty. The line under the box says what happens when you press **Make the song**: "Your lyrics are used.", "Leave it empty and the AI writes the lyrics when you press Make the song." or "Leave it empty for a song with no vocals."
     - **Use my lyrics**: type or paste your lyrics in **Your lyrics**.
-    - **Write lyrics for me**: press **Write the lyrics**. The AI writes lyrics from your description and puts them in **Your lyrics**. Read them and change what you want.
+    - **Write lyrics now**: press **Write the lyrics**. The AI writes lyrics from your description and puts them in **Your lyrics**. Read them and change what you want.
     - **No vocals (instrumental)**: the song is made without singing.
-    - **What you should see:** the counter under **Describe your song** (for example `60 / 500 characters`), and your lyrics in the box, or the line "The song is made without singing."
-    - **If it doesn't work:** if **Write lyrics for me** is grey, the line under it says why: the AI is turned off on this cloud, or no AI model is set up for you. Ask the lab owner to turn the AI on, or choose **Use my lyrics** and write them yourself. "The description is too long for the computer" means it has many accented letters or symbols: shorten it a little.
+    - **What you should see:** the counter under **Describe your song** (for example `60 / 500 characters`), and the line under the lyrics box, or the line "The song is made without singing." When the AI wrote your lyrics, they are in the form after the song is made: change them and press **Make the song** again if you want.
+    - **If it doesn't work:** if **Write lyrics now** is grey, the line under the choices says why and what to do: the AI is turned off (Settings → AI), **Use AI for music** is turned off, or no AI model is set up for you. The lab owner fixes it with Part 6. You can still make the song: leave the lyrics empty for a song with no vocals, or write them yourself. "The AI could not write lyrics this time" means the AI did not answer: press **Make the song** again, write your own lyrics, or choose **No vocals**. "The description is too long for the computer" means it has many accented letters or symbols: shorten it a little.
 22. Give the song a title. Type it in **Title** (at most 80 characters), or press **Suggest a title**. Or leave it empty.
     - **What you should see:** a title in the box, with "Suggested by the AI" or "Made from your words" under it. If you leave it empty, the song gets the first line of your lyrics, or the first words of your description, or "Untitled song".
     - **If it doesn't work:** **Suggest a title** always gives a title; when the AI is off it makes one from your words. Change it if you don't like it.
@@ -162,6 +164,23 @@ The website (`https://ai.marin.cr/music`) keeps every prompt you make a song fro
     - **What you should see:** the box says the songs stay in the library. The prompt leaves **My prompts**; its songs stay under **Songs**, marked "prompt deleted".
     - **If it doesn't work:** an error says why; try again. Deleting a prompt never deletes a song. To delete a song, use step 18.
 
+## Part 6. For the lab owner: let the website use AI for music (once)
+
+The website can write lyrics and suggest titles with an AI service you choose (for example OpenAI, or any OpenAI-compatible server). It is off until you do these steps. You need an administrator account on the website and an API key from the AI service.
+
+28. Open `https://ai.marin.cr/admin/settings` and press the **AI** card (in the **AI** group). Switch AI on, open the provider you want, switch it on, paste its API key and save.
+    - **What you should see:** AI is on, and the provider shows that a key is stored. The key is never shown again.
+    - **If it doesn't work:** the page says what is wrong (for example a key that the provider refused). Check the key with the AI service, then save again.
+29. Go back to `https://ai.marin.cr/admin/settings` and press **AI Models**. Turn on at least one model that writes text.
+    - **What you should see:** the model is listed as enabled.
+    - **If it doesn't work:** if the list is empty, the provider in step 28 is off or its key was refused: repeat step 28.
+30. Go back to `https://ai.marin.cr/admin/settings` and press **Use AI for music** (in the **AI** group). Turn on the **Use AI for music** switch.
+    - **What you should see:** "Music AI is on."
+    - **If it doesn't work:** the switch is grey when your account cannot change AI settings: sign in as the administrator. The card is hidden while AI is off: do step 28 first.
+31. Check it: open `https://ai.marin.cr/music`, write a description and leave **Your lyrics** empty.
+    - **What you should see:** the line "Leave it empty and the AI writes the lyrics when you press Make the song.", and **Write lyrics now** can be chosen.
+    - **If it doesn't work:** the line under the lyrics choices names what is still off; fix that step. If it says no AI model is set up for you, step 29 has no enabled model, or the provider's key does not pay for your account. See [07-troubleshooting.md](07-troubleshooting.md).
+
 ---
 
 # 12. Hacer una canción, y cambiar lo que hace una computadora
@@ -174,13 +193,14 @@ Use esta página cuando quiera que un nodo **haga música** con su letra, o para
 > - Borrar una canción pide el **PIN de administrador** en el nodo o en la app de escritorio.
 > - **Tiempo:** cambiar a Música toma alrededor de 1 minuto (el motor de música arranca en unos 20 segundos); una canción de 1 minuto toma unos 20 segundos con una tarjeta gráfica de 12 GB.
 
-> 🛠 Verify when implemented (Epic E11: #509, #510, #512, #514, #515, #568).
+> 🛠 Verify when implemented (Epic E11: #509, #510, #512, #514, #515, #568, #570).
 
 **Palabras de esta página**
 - **Tarea (workload):** lo que la computadora está preparada para hacer ahora, por ejemplo **Programación**, **Conversar y fotos** o **Música**. La tarjeta gráfica tiene espacio para un solo trabajo grande a la vez: al elegir **Música** se detiene la IA de programación, y al elegir **Programación** se detiene la música.
 - **Letra:** las palabras de la canción. Las partes se marcan con etiquetas entre corchetes, como `[verse]` (estrofa) y `[chorus]` (coro).
 - **Estilo:** unas palabras que describen el sonido, por ejemplo `folk, guitarra acústica, cálido`. En el sitio web este cuadro se llama **Describa su canción**, y puede escribir una frase completa.
 - **Indicación:** en el sitio web, todo lo que escribió para una canción (título, descripción, letra, opciones y muestra). El sitio guarda sus indicaciones en **Mis indicaciones**, para abrirlas otra vez, cambiarlas, volver a usarlas o eliminarlas (Parte 5).
+- **IA para música:** en el sitio web, un servicio de IA que escribe letras y sugiere títulos. El dueño del laboratorio la enciende una vez (Parte 6). Sin ella todo lo demás funciona igual: sin letra, la canción no tiene voz.
 - **Muestra:** un pedazo corto de audio que usted agrega para que la canción lo siga. **Suena como esto** toma su estilo. **La misma canción, mi letra** mantiene su melodía y canta su letra encima.
 - **Versión:** la computadora puede hacer hasta 4 canciones distintas con la misma letra a la vez.
 
@@ -300,12 +320,13 @@ La canción se hace en el nodo. Puede pedirla en el nodo mismo (la página **Mú
 
 El sitio web (`https://ai.marin.cr/music`) guarda en **Mis indicaciones** cada indicación con la que crea una canción. Una canción conserva el título y las opciones con que se hizo, aunque después cambie o elimine su indicación.
 
-21. Escriba las palabras de la canción para el sitio web. En **Describa su canción**, describa la canción con palabras sencillas, por ejemplo `una balada lenta sobre el mar, piano suave, voz cálida, 80 bpm` (500 caracteres como máximo). En **Letra**, elija una:
+21. Escriba las palabras de la canción para el sitio web. En **Describa su canción**, describa la canción con palabras sencillas, por ejemplo `una balada lenta sobre el mar, piano suave, voz cálida, 80 bpm` (500 caracteres como máximo). La letra es opcional: no tiene que elegir nada. En **Letra**, **Automático (recomendado)** ya está elegido:
+    - **Automático (recomendado)**: escriba su letra en **Su letra**, o deje el cuadro vacío. La línea bajo el cuadro dice qué pasa al presionar **Crear la canción**: "Se usa su letra.", "Déjela vacía y la IA escribe la letra cuando pulse Crear la canción." o "Déjela vacía para una canción sin voz."
     - **Usar mi letra**: escriba o pegue su letra en **Su letra**.
-    - **Escribir la letra por mí**: presione **Escribir la letra**. La IA escribe una letra con su descripción y la pone en **Su letra**. Léala y cambie lo que quiera.
+    - **Escribir la letra ahora**: presione **Escribir la letra**. La IA escribe una letra con su descripción y la pone en **Su letra**. Léala y cambie lo que quiera.
     - **Sin voz (instrumental)**: la canción se hace sin canto.
-    - **Lo que debería ver:** el contador bajo **Describa su canción** (por ejemplo `60 / 500 caracteres`), y su letra en el cuadro, o la línea "La canción se hace sin canto."
-    - **Si no funciona:** si **Escribir la letra por mí** está gris, la línea de abajo dice por qué: la IA está apagada en esta nube, o no hay un modelo de IA para usted. Pida al dueño del laboratorio que encienda la IA, o elija **Usar mi letra** y escríbala usted. "La descripción es demasiado larga para la computadora" quiere decir que tiene muchas letras con tilde o símbolos: acórtela un poco.
+    - **Lo que debería ver:** el contador bajo **Describa su canción** (por ejemplo `60 / 500 caracteres`), y la línea bajo el cuadro de la letra, o la línea "La canción se hace sin canto." Si la IA escribió su letra, la letra queda en el formulario después de crear la canción: cámbiela y presione **Crear la canción** otra vez si quiere.
+    - **Si no funciona:** si **Escribir la letra ahora** está gris, la línea bajo las opciones dice por qué y qué hacer: la IA está apagada (Ajustes (Settings) → AI), **Use AI for music** está apagado, o no hay un modelo de IA para usted. El dueño del laboratorio lo arregla con la Parte 6. Igual puede crear la canción: deje la letra vacía para una canción sin voz, o escríbala usted. "La IA no pudo escribir la letra esta vez" quiere decir que la IA no respondió: presione **Crear la canción** otra vez, escriba su propia letra, o elija **Sin voz**. "La descripción es demasiado larga para la computadora" quiere decir que tiene muchas letras con tilde o símbolos: acórtela un poco.
 22. Póngale un título a la canción. Escríbalo en **Título** (80 caracteres como máximo), o presione **Sugerir un título**. O déjelo vacío.
     - **Lo que debería ver:** un título en el cuadro, con "Sugerido por la IA" o "Hecho con sus palabras" debajo. Si lo deja vacío, la canción recibe la primera línea de su letra, o las primeras palabras de su descripción, o "Canción sin título".
     - **Si no funciona:** **Sugerir un título** siempre da un título; con la IA apagada lo hace con sus palabras. Cámbielo si no le gusta.
@@ -327,3 +348,20 @@ El sitio web (`https://ai.marin.cr/music`) guarda en **Mis indicaciones** cada i
 27. Para eliminar una indicación, ábrala, presione **Eliminar** y luego **Eliminar** otra vez en el cuadro que pregunta.
     - **Lo que debería ver:** el cuadro dice que las canciones se quedan en la biblioteca. La indicación sale de **Mis indicaciones**; sus canciones se quedan en **Canciones**, marcadas "indicación eliminada".
     - **Si no funciona:** un error dice por qué; intente otra vez. Eliminar una indicación nunca borra una canción. Para borrar una canción, use el paso 18.
+
+## Parte 6. Para el dueño del laboratorio: dejar que el sitio web use IA para música (una vez)
+
+El sitio web puede escribir letras y sugerir títulos con un servicio de IA que usted elige (por ejemplo OpenAI, o cualquier servidor compatible con OpenAI). Está apagado hasta que haga estos pasos. Necesita una cuenta de administrador en el sitio web y una clave de API del servicio de IA. Las páginas de administración están en inglés: los nombres de los botones se dan como aparecen.
+
+28. Abra `https://ai.marin.cr/admin/settings` y presione la tarjeta **AI** (en el grupo **AI**). Encienda la IA, abra el proveedor que quiere, enciéndalo, pegue su clave de API y guarde.
+    - **Lo que debería ver:** la IA está encendida y el proveedor muestra que tiene una clave guardada. La clave nunca se vuelve a mostrar.
+    - **Si no funciona:** la página dice qué está mal (por ejemplo una clave que el proveedor rechazó). Revise la clave con el servicio de IA y guarde otra vez.
+29. Vuelva a `https://ai.marin.cr/admin/settings` y presione **AI Models**. Encienda al menos un modelo que escriba texto.
+    - **Lo que debería ver:** el modelo aparece como habilitado.
+    - **Si no funciona:** si la lista está vacía, el proveedor del paso 28 está apagado o su clave fue rechazada: repita el paso 28.
+30. Vuelva a `https://ai.marin.cr/admin/settings` y presione **Use AI for music** (en el grupo **AI**). Encienda el interruptor **Usar IA para música**.
+    - **Lo que debería ver:** "La IA para música está encendida."
+    - **Si no funciona:** el interruptor está gris si su cuenta no puede cambiar los ajustes de IA: entre como administrador. La tarjeta no se ve mientras la IA está apagada: haga primero el paso 28.
+31. Compruébelo: abra `https://ai.marin.cr/music`, escriba una descripción y deje **Su letra** vacía.
+    - **Lo que debería ver:** la línea "Déjela vacía y la IA escribe la letra cuando pulse Crear la canción.", y **Escribir la letra ahora** se puede elegir.
+    - **Si no funciona:** la línea bajo las opciones de la letra dice qué sigue apagado; arregle ese paso. Si dice que no hay un modelo de IA para usted, el paso 29 no tiene un modelo habilitado, o la clave del proveedor no paga por su cuenta. Vea [07-troubleshooting.md](07-troubleshooting.md).

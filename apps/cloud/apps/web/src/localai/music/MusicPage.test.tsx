@@ -52,7 +52,7 @@ let postAnswer: () => Response = () => HttpResponse.json({ data: musicRequest() 
 let deleted: Array<{ id: string; body: unknown }> = [];
 let commandReads: unknown[] = [];
 let prompts: MusicPrompt[] = [];
-let assist: MusicAssist = { ai: { available: false, reason: 'ai_off' } };
+let assist: MusicAssist = { ai: { enabled: false, reason: 'ai_off', fix: 'Turn on AI in Settings → AI.' } };
 let promptWrites: Array<{ method: string; id?: string; body: unknown }> = [];
 let titleAnswer: { title: string; source: 'ai' | 'generated' } = { title: 'Walking To The River', source: 'generated' };
 let titleAsked: unknown[] = [];
@@ -124,7 +124,7 @@ beforeEach(() => {
   commandReads = [];
   postAnswer = () => HttpResponse.json({ data: musicRequest() }, { status: 201 });
   prompts = [];
-  assist = { ai: { available: false, reason: 'ai_off' } };
+  assist = { ai: { enabled: false, reason: 'ai_off', fix: 'Turn on AI in Settings → AI.' } };
   promptWrites = [];
   titleAnswer = { title: 'Walking To The River', source: 'generated' };
   titleAsked = [];
@@ -222,7 +222,7 @@ describe('the form', () => {
       nodeId: 'ai-n2',
       title: 'River Song',
       description: 'folk, acoustic guitar',
-      lyrics_mode: 'mine',
+      lyrics_mode: 'auto',
       lyrics: '[verse]\r\nWalking to the river',
       ui_language: 'en',
       duration_s: '60',
@@ -283,31 +283,31 @@ describe('the form', () => {
 });
 
 describe('titles and the AI helpers (#568)', () => {
-  it('AI off: "Suggest a title" gives the title made from the words; "Write lyrics for me" is disabled with the reason and the fix', async () => {
+  it('AI off: "Suggest a title" gives the title made from the words; "Write lyrics now" is disabled with the reason and the fix', async () => {
     renderPage();
     await screen.findByTestId('next-action');
-    expect(await screen.findByTestId('ai-off-reason')).toHaveTextContent('the AI is turned off on this cloud. An administrator can turn it on, or write your own lyrics.');
-    expect(screen.getByRole('radio', { name: 'Write lyrics for me' })).toBeDisabled();
+    expect(await screen.findByTestId('ai-off-reason')).toHaveTextContent('Music AI is off: the AI is turned off on this cloud. An administrator turns it on in Settings → AI.');
+    expect(screen.getByRole('radio', { name: 'Write lyrics now' })).toBeDisabled();
     fireEvent.change(descriptionBox(), { target: { value: 'folk' } });
     fireEvent.change(lyricsBox(), { target: { value: 'walking to the river' } });
     fireEvent.click(screen.getByRole('button', { name: 'Suggest a title' }));
     await waitFor(() => expect(titleBox()).toHaveValue('Walking To The River'));
     expect(screen.getByText('Made from your words. You can change it.')).toBeInTheDocument();
-    expect(titleAsked).toEqual([{ lyrics: 'walking to the river', description: 'folk', lyricsMode: 'mine', language: 'en', uiLanguage: 'en' }]);
+    expect(titleAsked).toEqual([{ lyrics: 'walking to the river', description: 'folk', lyricsMode: 'auto', language: 'en', uiLanguage: 'en' }]);
   });
 
   it('no AI model for the person: the reason says how to fix it', async () => {
-    assist = { ai: { available: false, reason: 'no_model' } };
+    assist = { ai: { enabled: false, reason: 'no_model', fix: 'Add a provider and model in Settings → AI.' } };
     renderPage();
-    expect(await screen.findByText(/no AI model is set up for you\. Add an AI key in Settings, or write your own lyrics\./)).toBeInTheDocument();
+    expect(await screen.findByText('Music AI is off: no AI model is set up for you. An administrator adds a provider and model in Settings → AI.')).toBeInTheDocument();
   });
 
-  it('AI on: the model\'s title, and "Write lyrics for me" fills the editable lyrics box', async () => {
-    assist = { ai: { available: true, reason: null } };
+  it('AI on: the model\'s title, and "Write lyrics now" fills the editable lyrics box', async () => {
+    assist = { ai: { enabled: true, reason: null, fix: null } };
     titleAnswer = { title: 'Harbour Secrets', source: 'ai' };
     renderPage();
     await screen.findByTestId('next-action');
-    const aiMode = await screen.findByRole('radio', { name: 'Write lyrics for me' });
+    const aiMode = await screen.findByRole('radio', { name: 'Write lyrics now' });
     await waitFor(() => expect(aiMode).toBeEnabled());
     expect(screen.queryByTestId('ai-off-reason')).toBeNull();
     fireEvent.change(descriptionBox(), { target: { value: 'a slow ballad about the sea' } });
@@ -325,17 +325,115 @@ describe('titles and the AI helpers (#568)', () => {
   });
 
   it('AI failing: the lyrics refusal is shown and the box stays as it was', async () => {
-    assist = { ai: { available: true, reason: null } };
+    assist = { ai: { enabled: true, reason: null, fix: null } };
     lyricsAnswer = () => HttpResponse.json({ statusCode: 502, message: 'The AI could not write lyrics this time. Try again, or write your own lyrics.', details: { reason: 'ai_failed' } }, { status: 502 });
     renderPage();
     await screen.findByTestId('next-action');
-    const aiMode = await screen.findByRole('radio', { name: 'Write lyrics for me' });
+    const aiMode = await screen.findByRole('radio', { name: 'Write lyrics now' });
     await waitFor(() => expect(aiMode).toBeEnabled());
     fireEvent.change(descriptionBox(), { target: { value: 'a slow ballad' } });
     fireEvent.click(aiMode);
     fireEvent.click(screen.getByRole('button', { name: 'Write the lyrics' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('The AI could not write lyrics this time.');
     expect(lyricsBox()).toHaveValue('');
+  });
+});
+
+describe('Automatic lyrics and the music AI states (#570)', () => {
+  const hint = () => screen.getByTestId('lyrics-hint');
+  const offReason = () => screen.getByTestId('ai-off-reason');
+  const settle = async () => {
+    await screen.findByTestId('next-action');
+    // The assist answer has arrived when the hint (or the off reason) reflects it.
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Automatic|Automático/ })).toBeChecked());
+  };
+
+  it('Automatic is the default; with music AI on, the hint says the AI writes empty lyrics, and Make the song sends no lyrics', async () => {
+    assist = { ai: { enabled: true, reason: null, fix: null } };
+    renderPage();
+    await settle();
+    await waitFor(() => expect(hint()).toHaveTextContent('Leave it empty and the AI writes the lyrics when you press Make the song.'));
+    expect(screen.queryByTestId('ai-off-reason')).toBeNull();
+    fireEvent.change(descriptionBox(), { target: { value: 'a slow ballad about the sea' } });
+    const make = screen.getByRole('button', { name: 'Make the song' });
+    expect(make).toBeEnabled();
+    expect(screen.queryByTestId('form-missing')).toBeNull();
+    fireEvent.click(make);
+    await waitFor(() => expect(posted).not.toBeNull());
+    expect(fields(posted!)).toMatchObject({ lyrics_mode: 'auto', lyrics: '', description: 'a slow ballad about the sea' });
+  });
+
+  it('with lyrics in the box the hint says they are used', async () => {
+    assist = { ai: { enabled: true, reason: null, fix: null } };
+    renderPage();
+    await settle();
+    fireEvent.change(lyricsBox(), { target: { value: 'la la' } });
+    expect(hint()).toHaveTextContent('Your lyrics are used.');
+  });
+
+  it.each([
+    ['ai_off', 'Turn on AI in Settings → AI.', 'Music AI is off: the AI is turned off on this cloud. An administrator turns it on in Settings → AI.'],
+    ['music_ai_off', 'Turn on Use AI for music in Settings → AI.', 'Music AI is off: Use AI for music is turned off. An administrator turns on Use AI for music in Settings → AI.'],
+    ['no_model', 'Add a provider and model in Settings → AI.', 'Music AI is off: no AI model is set up for you. An administrator adds a provider and model in Settings → AI.'],
+  ] as const)('music AI off (%s), in English: empty lyrics mean no vocals; the reason and the fix are shown', async (reason, fix, text) => {
+    assist = { ai: { enabled: false, reason, fix } };
+    renderPage();
+    await settle();
+    expect(hint()).toHaveTextContent('Leave it empty for a song with no vocals.');
+    expect(offReason()).toHaveTextContent(text);
+    expect(screen.getByRole('radio', { name: 'Write lyrics now' })).toBeDisabled();
+    fireEvent.change(descriptionBox(), { target: { value: 'ambient piano' } });
+    expect(screen.getByRole('button', { name: 'Make the song' })).toBeEnabled();
+  });
+
+  it.each([
+    ['ai_off', 'La IA para música está apagada: la IA está apagada en esta nube. Un administrador la enciende en Ajustes (Settings) → AI.'],
+    ['music_ai_off', 'La IA para música está apagada: "Use AI for music" está apagado. Un administrador lo enciende en Ajustes (Settings) → AI.'],
+    ['no_model', 'La IA para música está apagada: no hay un modelo de IA para usted. Un administrador agrega un proveedor y un modelo en Ajustes (Settings) → AI.'],
+  ] as const)('music AI off (%s), in Spanish: the hint and the reason', async (reason, text) => {
+    assist = { ai: { enabled: false, reason, fix: 'x' } };
+    renderPage('es');
+    await settle();
+    expect(hint()).toHaveTextContent('Déjela vacía para una canción sin voz.');
+    expect(offReason()).toHaveTextContent(text);
+    expect(screen.getByRole('radio', { name: 'Escribir la letra ahora' })).toBeDisabled();
+  });
+
+  it('music AI on, in Spanish: the hint says the AI writes the lyrics; with lyrics, that they are used', async () => {
+    assist = { ai: { enabled: true, reason: null, fix: null } };
+    renderPage('es');
+    await settle();
+    await waitFor(() => expect(hint()).toHaveTextContent('Déjela vacía y la IA escribe la letra cuando pulse Crear la canción.'));
+    expect(screen.getByRole('radio', { name: 'Escribir la letra ahora' })).toBeEnabled();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Su letra' }), { target: { value: 'la la' } });
+    expect(hint()).toHaveTextContent('Se usa su letra.');
+  });
+
+  it('"Use my lyrics" still needs lyrics, and shows no Automatic hint', async () => {
+    renderPage();
+    await settle();
+    fireEvent.click(screen.getByRole('radio', { name: 'Use my lyrics' }));
+    expect(screen.queryByTestId('lyrics-hint')).toBeNull();
+    fireEvent.change(descriptionBox(), { target: { value: 'folk' } });
+    expect(screen.getByRole('button', { name: 'Make the song' })).toBeDisabled();
+    expect(screen.getByTestId('form-missing')).toHaveTextContent('Write your lyrics, or choose "No vocals".');
+  });
+
+  it('after a song made with AI-written lyrics, the opened prompt shows them in the box to edit and remake', async () => {
+    assist = { ai: { enabled: true, reason: null, fix: null } };
+    prompts = [];
+    postAnswer = () => {
+      prompts = [musicPrompt({ title: 'Written Now', songCount: 0, lyricsMode: 'auto', lyrics: '[verse]\nThe tide comes in' })];
+      return HttpResponse.json({ data: musicRequest({ promptId: PROMPT_ID, lyricsMode: 'auto' }) }, { status: 201 });
+    };
+    requestReads = [musicRequest({ promptId: PROMPT_ID, lyricsMode: 'auto' })];
+    renderPage();
+    await settle();
+    fireEvent.change(descriptionBox(), { target: { value: 'sea song' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Make the song' }));
+    expect(await screen.findByRole('heading', { name: 'Prompt: Written Now' })).toBeInTheDocument();
+    await waitFor(() => expect(lyricsBox()).toHaveValue('[verse]\nThe tide comes in'));
+    expect(hint()).toHaveTextContent('Your lyrics are used.');
   });
 });
 
