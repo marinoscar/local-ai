@@ -292,7 +292,7 @@ func TestRealCatalogEveryProfilePlansWithinBudget(t *testing.T) {
 }
 
 // A 1 TB drive is the smallest the runbook recommends. The drive profile wants everything, so the planner
-// drops from the end; tier 1 and every model must survive even a drive far too small for the rest.
+// drops from the end; tier 1 content and every tier 1 model must survive even a drive far too small for the rest.
 func TestRealCatalogSmallDriveKeepsTierOne(t *testing.T) {
 	cat := loadReal(t)
 	p, _ := cat.Profile(catalog.ArkDriveProfileID)
@@ -310,6 +310,14 @@ func TestRealCatalogSmallDriveKeepsTierOne(t *testing.T) {
 				skipped = append(skipped, it.ID)
 				if it.Reason != plan.ReasonBudget {
 					t.Errorf("%s skipped for %q, want budget", it.ID, it.Reason)
+				}
+				// A model may go too when it is tier 2 or 3 (issue #590: the music model is tier 3); a tier 1
+				// model never.
+				if m, ok := cat.Model(it.ID); ok {
+					if m.SurvivalTier < 2 {
+						t.Errorf("model %s (tier %d) was dropped for budget, but only tier 2 and 3 may be", it.ID, m.SurvivalTier)
+					}
+					continue
 				}
 				if c, ok := cat.ContentItem(it.ID); !ok || c.Tier() < 2 || c.Kind == "kit" || c.Kind == "docs" {
 					t.Errorf("%s (kind %s) was dropped for budget, but only tier 2 and 3 content may be", it.ID, it.Kind)
