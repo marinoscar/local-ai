@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/maps/places"
+	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 )
 
@@ -182,6 +184,9 @@ func (s *Maps) resolve(it MapItem) (resolved, error) {
 			}
 		}
 	}
+	if path == "" && len(cp.Manifest.Files) == 0 && cp.Manifest.TreeSHA256 != "" {
+		path, sum = treeFile(cp.Dir)
+	}
 	if path == "" {
 		return resolved{}, ErrNoFile
 	}
@@ -214,6 +219,27 @@ func (s *Maps) header(path, sum string) (Header, error) {
 	s.headers[k] = h
 	s.mu.Unlock()
 	return h, nil
+}
+
+// treeFile finds the .pmtiles file of a directory item (the pmtiles_extract product): its MANIFEST
+// has tree_sha256 and file_count, and the per-file list is the item's SHA256SUMS. It returns the
+// absolute path and the sha256 of the first .pmtiles entry, or "" when there is none.
+func treeFile(dir string) (path, sum string) {
+	data, err := os.ReadFile(filepath.Join(dir, manifest.SumsName))
+	if err != nil {
+		return "", ""
+	}
+	sums, err := manifest.ParseSums(data)
+	if err != nil {
+		return "", ""
+	}
+	for _, e := range sums {
+		p := filepath.Join(dir, filepath.FromSlash(e.Path))
+		if strings.HasSuffix(strings.ToLower(e.Path), ".pmtiles") && inside(dir, p) {
+			return p, e.SHA256
+		}
+	}
+	return "", ""
 }
 
 // etagOf is the strong validator of a map file: the first 16 hex digits of its sha256 from the
