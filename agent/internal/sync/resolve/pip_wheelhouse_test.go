@@ -27,6 +27,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 	"github.com/marinoscar/local-ai/agent/internal/sync/plan"
 	"github.com/marinoscar/local-ai/agent/internal/sync/throttle"
+	"github.com/marinoscar/local-ai/agent/internal/untar/untartest"
 )
 
 // The pip_wheelhouse producer against a fake origin (the repository tarball at the catalog tag, a PEP 503 index,
@@ -140,7 +141,7 @@ func (o *whOrigin) serve(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(r.URL.Path, "/example/local-ai/tar.gz/refs/tags/catalog-"):
 		_, _ = w.Write(o.tarball())
 	case r.URL.Path == "/py/cpython-3.12.16-install_only.tar.gz":
-		_, _ = io.WriteString(w, "python tarball")
+		_, _ = w.Write(untartest.PythonTarball())
 	case strings.HasPrefix(r.URL.Path, "/simple/"):
 		name := strings.Trim(strings.TrimPrefix(r.URL.Path, "/simple/"), "/")
 		fmt.Fprintf(w, "<html><body>\n")
@@ -205,10 +206,6 @@ func (f *whRunner) Run(_ context.Context, c execx.Cmd) (execx.Result, error) {
 		return ""
 	}
 	switch {
-	case filepath.Base(c.Path) == "tar":
-		dst := arg("-C")
-		_ = os.MkdirAll(filepath.Join(dst, "python", "bin"), 0o755)
-		_ = os.WriteFile(filepath.Join(dst, "python", "bin", "python3"), []byte("#!/bin/sh\n"), 0o755)
 	case strings.Contains(argv, "-m venv"):
 		dst := c.Args[len(c.Args)-1]
 		_ = os.MkdirAll(filepath.Join(dst, "bin"), 0o755)
@@ -281,7 +278,7 @@ func (r *whRig) setLock(lock []byte) {
 	r.o.lock = lock
 	r.it = contentItem("kit-engine-acestep-cuda", "kit", catalog.ContentSource{
 		Type: "pip_wheelhouse", Version: "1.5.0", Lock: "engines/acestep/requirements-cuda.lock", SHA256: sha256Hex(lock),
-		Files:   []catalog.URLFile{{URL: r.o.srv.URL + "/py/cpython-3.12.16-install_only.tar.gz", SHA256: sha256Hex([]byte("python tarball")), Name: "python/cpython-3.12.16-install_only.tar.gz"}},
+		Files:   []catalog.URLFile{{URL: r.o.srv.URL + "/py/cpython-3.12.16-install_only.tar.gz", SHA256: sha256Hex(untartest.PythonTarball()), Name: "python/cpython-3.12.16-install_only.tar.gz"}},
 		Indexes: []string{r.o.srv.URL + "/simple"},
 		Builds: []catalog.WheelBuild{
 			{URL: "https://example.test/ACE-Step.git", Commit: whCommit},
@@ -359,7 +356,7 @@ func TestWheelhouseHappyPath(t *testing.T) {
 	// The build ran offline: --no-index, no build isolation, an unusable proxy, and the git source was fetched
 	// once at the pinned commit for both builds of the same repository.
 	argv := strings.Join(r.run.argvs(), "\n")
-	for _, w := range []string{"tar -xzf", "-m venv", "-m pip install --no-index --find-links", "--require-hashes -r",
+	for _, w := range []string{"-m venv", "-m pip install --no-index --find-links", "--require-hashes -r",
 		"-m pip wheel --no-deps --no-build-isolation --no-index", "fetch -q --depth 1 --no-tags -- https://example.test/ACE-Step.git " + whCommit} {
 		if !strings.Contains(argv, w) {
 			t.Errorf("no %q in:\n%s", w, argv)
@@ -491,9 +488,9 @@ func TestWheelhouseRefusals(t *testing.T) {
 		}, doctor.SYN030},
 		{"a build fails", func(r *whRig) { r.run.failAt = "pip wheel" }, doctor.SYN060},
 		{"the pinned commit cannot be fetched", func(r *whRig) { r.run.failAt = " fetch " }, doctor.SYN031},
-		{"tar is missing", func(r *whRig) {
+		{"git is missing", func(r *whRig) {
 			r.env.Lookup = func(n string) (string, error) {
-				if n == "tar" {
+				if n == "git" {
 					return "", errors.New("not found")
 				}
 				return "/usr/bin/" + n, nil

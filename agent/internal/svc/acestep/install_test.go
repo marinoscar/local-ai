@@ -1,6 +1,9 @@
 package acestep
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,10 +15,12 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/execx"
+	"github.com/marinoscar/local-ai/agent/internal/untar"
+	"github.com/marinoscar/local-ai/agent/internal/untar/untartest"
 )
 
-// fakeBuild plays tar, python3 -m venv, pip and the self-test: tar unpacks python/bin/python3 into -C, venv makes
-// bin/python, and failAt makes the call whose argv contains it exit 1.
+// fakeBuild plays python3 -m venv, pip and the self-test: venv makes bin/python, and failAt makes the call whose
+// argv contains it exit 1. The Python tarball itself is a real one, unpacked in-process.
 type fakeBuild struct {
 	calls  []string
 	failAt string
@@ -28,10 +33,6 @@ func (f *fakeBuild) Run(_ context.Context, c execx.Cmd) (execx.Result, error) {
 		return execx.Result{ExitCode: 1, Stderr: []byte("boom")}, nil
 	}
 	switch {
-	case filepath.Base(c.Path) == "tar":
-		dst := c.Args[len(c.Args)-2]
-		_ = os.MkdirAll(filepath.Join(dst, "python", "bin"), 0o755)
-		_ = os.WriteFile(filepath.Join(dst, "python", "bin", "python3"), []byte("#!/bin/sh\n"), 0o755)
 	case len(c.Args) == 3 && c.Args[1] == "venv":
 		_ = os.MkdirAll(filepath.Join(c.Args[2], "bin"), 0o755)
 		_ = os.WriteFile(filepath.Join(c.Args[2], "bin", "python"), []byte("#!/bin/sh\n"), 0o755)
@@ -49,7 +50,7 @@ func wheelhouseFixture(t *testing.T) Wheelhouse {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "engines", "acestep", "1.5.0-ab12cd34")
 	files := map[string]string{
-		"python/cpython-3.12.16+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz": "not really a tarball",
+		"python/cpython-3.12.16+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz": string(untartest.PythonTarball()),
 		"wheels/torch-2.10.0+cu128-cp312-cp312-manylinux_2_28_x86_64.whl":              "torch",
 		"wheels/localai_music_shim-0.1.0-py3-none-any.whl":                             "shim",
 		WheelhouseLock: "torch==2.10.0+cu128 --hash=sha256:x\n",
@@ -90,7 +91,6 @@ func TestInstallBuildsInPlaceAndMovesCurrent(t *testing.T) {
 	final := filepath.Join(in.Root, "1.5.0-ab12cd34")
 	joined := strings.Join(f.calls, "\n")
 	for _, want := range []string{
-		"tar -xzf " + filepath.Join(wh.Dir, "python", "cpython-3.12.16+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz") + " -C " + final,
 		"python3 -m venv " + filepath.Join(final, "venv"),
 		"python -m pip install --no-index --find-links " + filepath.Join(wh.Dir, "wheels") + " --require-hashes -r " + filepath.Join(wh.Dir, WheelhouseLock),
 		"python -m localai_music_shim --self-test",
@@ -155,7 +155,7 @@ func TestInstallRefusesADamagedWheelhouse(t *testing.T) {
 }
 
 func TestInstallFailureKeepsThePreviousRuntime(t *testing.T) {
-	for _, step := range []string{"tar", "-m venv", "pip install", "--self-test"} {
+	for _, step := range []string{"-m venv", "pip install", "--self-test"} {
 		t.Run(step, func(t *testing.T) {
 			f := &fakeBuild{}
 			in := newInstaller(t, f)
@@ -246,5 +246,36 @@ func TestVersionsAndSub(t *testing.T) {
 	w := Sub("/kit/engines/acestep", sums, "1.5.0-aa")
 	if w.Dir != filepath.Join("/kit/engines/acestep", "1.5.0-aa") || len(w.Sums) != 2 || w.Sums["wheels/x.whl"] != "b" {
 		t.Errorf("Sub = %+v", w)
+	}
+}
+
+// A Python tarball that matches its record but is unsafe (a link out of the folder) installs nothing and keeps
+// the runtime in use.
+func TestInstallAnUnsafePythonTarballKeepsThePreviousRuntime(t *testing.T) {
+	f := &fakeBuild{}
+	in := newInstaller(t, f)
+	wh := wheelhouseFixture(t)
+	if _, err := in.Install(context.Background(), wh, "1.4.0-00000000", "cuda"); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	_ = tw.WriteHeader(&tar.Header{Name: "python/bin/python3", Typeflag: tar.TypeSymlink, Linkname: "../../../../etc/passwd"})
+	_ = tw.Close()
+	_ = gz.Close()
+	rel := "python/cpython-3.12.16+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz"
+	if err := os.WriteFile(filepath.Join(wh.Dir, filepath.FromSlash(rel)), buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wh.Sums[rel] = sum(buf.Bytes())
+	if _, err := in.Install(context.Background(), wh, "1.5.0-ab12cd34", "cuda"); !errors.Is(err, untar.ErrUnsafe) {
+		t.Fatalf("err = %v", err)
+	}
+	if cur, ok := in.Current(); !ok || cur.Version != "1.4.0-00000000" {
+		t.Errorf("current = %+v, %v", cur, ok)
+	}
+	if _, err := os.Stat(filepath.Join(in.Root, "1.5.0-ab12cd34")); !os.IsNotExist(err) {
+		t.Error("the failed build was left behind")
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/marinoscar/local-ai/agent/internal/execx"
+	"github.com/marinoscar/local-ai/agent/internal/untar"
 )
 
 // The offline build of the music runtime (music.md section 3.1, rebuild-kit.md section 4.5 row engine.acestep).
@@ -61,8 +62,8 @@ type Wheelhouse struct {
 	Sums map[string]string
 }
 
-// Installer builds the runtime. The programs (tar, the pinned Python, pip) run through Runner; tar is found with
-// LookPath. Tests give fakes.
+// Installer builds the runtime. The pinned Python is unpacked in-process (internal/untar); the programs (that
+// Python, pip, the self-test) run through Runner. Tests give fakes.
 type Installer struct {
 	// Root is /opt/localai/acestep; tests use a temporary directory.
 	Root     string
@@ -249,8 +250,12 @@ func (in Installer) Install(ctx context.Context, wh Wheelhouse, version, backend
 		}
 	}()
 
-	if err := in.run(ctx, unpackTimeout, "tar", "-xzf", pyTar, "-C", final, "--no-same-owner"); err != nil {
-		return out, err
+	// In-process, not the tar program: GNU tar 1.35 needs openat2, which the agent's sandbox refuses (untar).
+	uctx, cancel := context.WithTimeout(ctx, unpackTimeout)
+	_, err = untar.ExtractTarGz(uctx, pyTar, final, untar.Limits{})
+	cancel()
+	if err != nil {
+		return out, fmt.Errorf("acestep: unpack the Python: %w", err)
 	}
 	py := filepath.Join(final, WheelhousePython, "bin", "python3")
 	if fi, err := os.Stat(py); err != nil || fi.IsDir() {
