@@ -189,7 +189,9 @@ function musicForm(raw: unknown): MusicRequestForm | CloudDeny {
   if (typeof lyrics !== 'string' || bytes(lyrics) > MUSIC_LIMITS.lyricsBytes) return 'body';
   if (typeof tags !== 'string' || bytes(tags) > MUSIC_LIMITS.tagsBytes) return 'body';
   if (lyrics.trim() === '' && tags.trim() === '') return 'body';
-  if (!isInt(duration, MUSIC_LIMITS.minDuration, MUSIC_LIMITS.maxDuration)) return 'body';
+  // Left out (or null): Auto, the model picks the length (#571); the field is then not sent.
+  const auto = duration === undefined || duration === null;
+  if (!auto && !isInt(duration, MUSIC_LIMITS.minDuration, MUSIC_LIMITS.maxDuration)) return 'body';
   if (typeof language !== 'string' || !LANGUAGE.test(language)) return 'body';
   if (seed !== undefined && seed !== null && !isInt(seed, 0, 4_294_967_295)) return 'body';
   if (!isInt(variations, MUSIC_LIMITS.minVariations, MUSIC_LIMITS.maxVariations)) return 'body';
@@ -197,7 +199,7 @@ function musicForm(raw: unknown): MusicRequestForm | CloudDeny {
     nodeId,
     lyrics,
     tags,
-    duration_s: String(duration),
+    ...(auto ? {} : { duration_s: String(duration) }),
     language,
     ...(typeof seed === 'number' ? { seed: String(seed) } : {}),
     variations: String(variations),

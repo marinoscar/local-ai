@@ -56,13 +56,29 @@ export function MusicDialog({ nodeId, lang, workloads, canSend, onClose, onSend 
           <TextField label={pick(STRINGS.tags, lang)} value={form.tags} onChange={(event) => set({ tags: event.target.value })} slotProps={{ htmlInput: { maxLength: 512, 'data-testid': 'music-tags' } }} />
           <Stack direction="row" spacing={2}>
             <TextField
-              label={pick(STRINGS.duration, lang)}
-              type="number"
-              value={form.duration}
-              onChange={(event) => set({ duration: event.target.value })}
-              slotProps={{ htmlInput: { min: 10, max: 240, step: 5, 'data-testid': 'music-duration' } }}
+              select
+              label={pick(STRINGS.length, lang)}
+              value={form.durationAuto ? 'auto' : 'set'}
+              onChange={(event) => set({ durationAuto: event.target.value !== 'set' })}
+              helperText={form.durationAuto ? pick(STRINGS.lengthAutoHint, lang) : undefined}
               sx={{ flex: 1 }}
-            />
+              slotProps={{ htmlInput: { 'data-testid': 'music-length' } }}
+            >
+              <MenuItem value="auto">{pick(STRINGS.lengthAuto, lang)}</MenuItem>
+              <MenuItem value="set">{pick(STRINGS.lengthSet, lang)}</MenuItem>
+            </TextField>
+            {form.durationAuto ? null : (
+              <TextField
+                label={pick(STRINGS.duration, lang)}
+                type="number"
+                value={form.duration}
+                onChange={(event) => set({ duration: event.target.value })}
+                slotProps={{ htmlInput: { min: 10, max: 240, step: 5, 'data-testid': 'music-duration' } }}
+                sx={{ flex: 1 }}
+              />
+            )}
+          </Stack>
+          <Stack direction="row" spacing={2}>
             <TextField
               select
               label={pick(STRINGS.variations, lang)}

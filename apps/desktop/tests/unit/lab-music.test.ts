@@ -299,22 +299,33 @@ describe('the music form', () => {
     expect(musicInputFrom(MUSIC_FORM_DEFAULTS)).toEqual({ ok: false, problem: 'musicNeedsText' });
     expect(musicInputFrom({ ...MUSIC_FORM_DEFAULTS, lyrics: 'ñ'.repeat(4097) })).toEqual({ ok: false, problem: 'musicTooLong' });
     expect(musicInputFrom({ ...MUSIC_FORM_DEFAULTS, tags: 't'.repeat(513) })).toEqual({ ok: false, problem: 'musicTagsTooLong' });
-    expect(musicInputFrom({ lyrics: 'la', tags: ' folk ', duration: '500', language: 'es', variations: '9' })).toEqual({
+    expect(musicInputFrom({ lyrics: 'la', tags: ' folk ', durationAuto: false, duration: '500', language: 'es', variations: '9' })).toEqual({
       ok: true,
       input: { lyrics: 'la', tags: 'folk', durationS: 240, language: 'es', variations: 4 },
     });
-    expect(musicInputFrom({ lyrics: '', tags: 'calm', duration: 'abc', language: 'en', variations: '0' })).toEqual({
+    expect(musicInputFrom({ lyrics: '', tags: 'calm', durationAuto: false, duration: 'abc', language: 'en', variations: '0' })).toEqual({
       ok: true,
       input: { lyrics: '', tags: 'calm', durationS: 60, language: 'en', variations: 1 },
     });
   });
 
+  it('the length defaults to Auto, which sends no number (#571)', () => {
+    expect(MUSIC_FORM_DEFAULTS.durationAuto).toBe(true);
+    expect(musicInputFrom({ ...MUSIC_FORM_DEFAULTS, lyrics: 'la', duration: '500' })).toEqual({
+      ok: true,
+      input: { lyrics: 'la', tags: '', durationS: null, language: 'en', variations: 1 },
+    });
+  });
+
   it('every form value it makes passes the allowlist', () => {
-    const checked = musicInputFrom({ lyrics: 'a'.repeat(8192), tags: 't'.repeat(512), duration: '5', language: 'es', variations: '4' });
-    expect(checked.ok).toBe(true);
-    if (!checked.ok) return;
-    const i = checked.input;
-    expect(decideCloudRequest({ method: 'POST', path: '/api/localai/music/requests', body: { nodeId: 'ai-n1', lyrics: i.lyrics, tags: i.tags, duration_s: i.durationS, language: i.language, variations: i.variations } }).allow).toBe(true);
+    for (const durationAuto of [false, true]) {
+      const checked = musicInputFrom({ lyrics: 'a'.repeat(8192), tags: 't'.repeat(512), durationAuto, duration: '5', language: 'es', variations: '4' });
+      expect(checked.ok).toBe(true);
+      if (!checked.ok) return;
+      const i = checked.input;
+      const body = { nodeId: 'ai-n1', lyrics: i.lyrics, tags: i.tags, ...(i.durationS !== null ? { duration_s: i.durationS } : {}), language: i.language, variations: i.variations };
+      expect(decideCloudRequest({ method: 'POST', path: '/api/localai/music/requests', body }).allow).toBe(true);
+    }
   });
 
   it('the "switch to Music first" hint appears only when the node is known to be on another workload', () => {
