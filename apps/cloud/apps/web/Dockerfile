@@ -25,11 +25,9 @@ COPY --from=deps /app ./
 # The shared UI package is TypeScript source linked into node_modules/@localai/ui (real directory on the deploy branch).
 COPY packages/localai-ui ./packages/localai-ui/
 COPY apps/web ./apps/web
-# `tsc --noEmit` in the build also checks the web tests, and apps/web/src/localai/lab/fixture.ts imports this fixture.
-COPY apps/api/test/fixtures/localai ./apps/api/test/fixtures/localai/
-# The same check covers src/localai/doctorFixes.test.ts, which imports the generator and its type declarations (#457).
-COPY scripts/gen-doctor-fixes.mjs scripts/gen-doctor-fixes.d.mts ./scripts/
 WORKDIR /app/apps/web
+# `npm run build` type-checks from the shipped entry points only (tsconfig.build.json), so the image needs no test,
+# test fixture or test helper from elsewhere in the repository (#574, #457).
 RUN npm run build
 
 FROM nginx:1.30-alpine AS production

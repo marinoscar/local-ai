@@ -17,6 +17,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  cli-version:
+    # Every CLI fix or improvement raises the CLI's version (AGENTS.md, Versions), so `laictl --version` always names
+    # the CLI a server runs. scripts/check-cli-version-bump.sh says what counts as a CLI change.
+    name: CLI version raised with every CLI change
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - run: scripts/check-cli-version-bump.sh "origin/${{ github.base_ref }}"
+
   ci:
     name: Typecheck, test, build, platform checks
     runs-on: ubuntu-latest
@@ -107,3 +122,32 @@ jobs:
       - run: npm run prisma:migrate --workspace=api
       - run: npm run prisma:seed --workspace=api
       - run: npm run test:db --workspace=api
+
+  images:
+    # The VPS builds the images from the flat tree on deploy/cloud, not from this monorepo checkout, so a Dockerfile
+    # that misses a file only fails there (#574, #457). Build both production images from the same tree here, so the
+    # pull request fails instead of the server.
+    name: Build the Docker images from the deploy tree
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build the flat deploy tree (scripts/cloud-deploy-branch.sh build)
+        run: scripts/cloud-deploy-branch.sh build --out "$RUNNER_TEMP/deploy-tree"
+
+      - name: Build the web image
+        run: docker build --target production -f "$RUNNER_TEMP/deploy-tree/apps/web/Dockerfile" "$RUNNER_TEMP/deploy-tree"
+
+      # The API image downloads a released aiagent; any published node release proves the Dockerfile.
+      - name: Build the API image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
+            --jq '[.[].tagName | select(startswith("node-v"))][0]')"
+          test -n "$tag" || { echo "::error::no node-v* release found"; exit 1; }
+          docker build --target production --build-arg "AIAGENT_VERSION=${tag#node-v}" \
+            -f "$RUNNER_TEMP/deploy-tree/apps/api/Dockerfile" "$RUNNER_TEMP/deploy-tree"
