@@ -1,7 +1,7 @@
 import { Global, Injectable, Logger, Module, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { buildDatabaseUrl, runInOrg, userScopeExtension, type Scope } from '@marinoscar/platform-api/core';
+import { buildDatabaseUrl, orgScopeExtension, runInOrg, userScopeExtension, type Scope } from '@marinoscar/platform-api/core';
 
 // The registry of user-owned models fills BEFORE the first scoped client is
 // built (src/platform/registrations.ts: the platform's models, then the app's).
@@ -34,6 +34,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   /** A client confined to `scope.userId` on every registered user-owned model (core's scoped data access). */
   forUser(scope: Scope) {
     return this.$extends(userScopeExtension(scope));
+  }
+
+  /**
+   * A client whose every operation runs in an organization's row-level-security scope (the transaction-local
+   * `app.org_id`, plus `app.user_id` with `opts.userId`). The platform slices call it through `PLATFORM_PRISMA`:
+   * the AI slice (runs, usage, `GET /api/ai/usage/me`), storage and credentials. Without it those routes fail with
+   * "this.prisma.forOrg is not a function" (EnterpriseAppBase #1155). Never open `$transaction(async tx => ...)` on
+   * the returned client; use {@link PrismaService.runInOrg} for more than one statement.
+   */
+  forOrg(orgId: string, opts: { userId?: string } = {}) {
+    return this.$extends(orgScopeExtension(this, { orgId, ...opts }));
   }
 
   /** One transaction in an organization's row-level-security scope (the settings slice's `SETTINGS_DATA` port). */
