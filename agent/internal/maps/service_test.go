@@ -547,3 +547,48 @@ func TestCatalogGPSBlock(t *testing.T) {
 		t.Fatalf("none: %+v", g)
 	}
 }
+
+// TestTileDirectoryItem: a map synced by pmtiles_extract is a directory item (tree_sha256 and
+// file_count in the MANIFEST, the file list in SHA256SUMS). It must be served like a file item (#580).
+func TestTileDirectoryItem(t *testing.T) {
+	sum := strings.Repeat("ab", 32)
+	dirCopy := func(t *testing.T, e *env, sums string) {
+		cp := e.cp[mapID]
+		cp.Files = nil
+		cp.Manifest.Files = nil
+		cp.Manifest.TreeSHA256 = strings.Repeat("a", 64)
+		cp.Manifest.FileCount = 1
+		if err := os.WriteFile(filepath.Join(cp.Dir, "SHA256SUMS"), []byte(sums), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		e.cp[mapID] = cp
+	}
+	t.Run("served from SHA256SUMS", func(t *testing.T) {
+		e := newEnv(t, func(e *env) { dirCopy(t, e, sum+"  "+mapID+".pmtiles\n") })
+		resp, body := e.do(t, "GET", tilePath, map[string]string{"Range": "bytes=0-6"})
+		if resp.StatusCode != 206 || string(body) != "PMTiles" {
+			t.Fatalf("%d %q", resp.StatusCode, body)
+		}
+		if got := resp.Header.Get("ETag"); got != `"abababababababab"` {
+			t.Errorf("ETag %q", got)
+		}
+		_, cat := e.do(t, "GET", CatalogPath, nil)
+		if !strings.Contains(string(cat), mapID+".pmtiles") {
+			t.Errorf("catalog does not list the map: %s", cat)
+		}
+	})
+	t.Run("no pmtiles entry is not found", func(t *testing.T) {
+		e := newEnv(t, func(e *env) { dirCopy(t, e, sum+"  readme.txt\n") })
+		resp, _ := e.do(t, "GET", tilePath, nil)
+		if resp.StatusCode == 200 || resp.StatusCode == 206 {
+			t.Fatalf("served %d", resp.StatusCode)
+		}
+	})
+	t.Run("an entry outside the item is refused", func(t *testing.T) {
+		e := newEnv(t, func(e *env) { dirCopy(t, e, sum+"  ../x.pmtiles\n") })
+		resp, _ := e.do(t, "GET", tilePath, nil)
+		if resp.StatusCode == 200 || resp.StatusCode == 206 {
+			t.Fatalf("served %d", resp.StatusCode)
+		}
+	})
+}
