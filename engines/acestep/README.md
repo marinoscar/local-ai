@@ -6,7 +6,7 @@ it listens on `127.0.0.1` only.
 
 - Package: `localai_music_shim`, run as `python -m localai_music_shim`.
 - Standard library only (`http.server`). ACE-Step and its dependencies come from the runtime venv
-  (`/opt/localai/acestep/current/venv`), installed offline from the kit's wheel bundle.
+  (`/opt/localai/acestep/current/venv`), installed offline from the kit item `kit-engine-acestep-<backend>` (ADR-0015).
 - Settings come from `/etc/localai/music.env`, which the agent writes: `MUSIC_PORT` (8082),
   `MUSIC_MODEL_ID`, `MUSIC_MODEL_DIR`, `MUSIC_WORK_DIR`, `MUSIC_DEVICE`, `MUSIC_DTYPE`,
   `MUSIC_MAX_QUEUE` (4). `MUSIC_BACKEND=fake` swaps ACE-Step for a fake that writes a short tone

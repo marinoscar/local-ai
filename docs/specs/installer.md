@@ -435,7 +435,7 @@ Details of the implementation (INST-08): the confirmations (the `[y/N]` question
 - directory modes are fixed,
 - packages missing from the list are reinstalled,
 - the llama build is smoke-tested and rebuilt if broken,
-- when the profile or `node.yaml` includes an `acestep` model: the music runtime is rebuilt offline from the kit's wheel bundle if `/opt/localai/acestep/current` is missing, for another backend or fails its self-test (the `engine.acestep` step of [rebuild-kit.md](rebuild-kit.md) §4.5, [music.md](music.md) §3.1); never with `pip` from the internet,
+- when the profile or `node.yaml` includes an `acestep` model: the music runtime is rebuilt offline from the kit's runtime files (`kit-engine-acestep-<backend>`) if `/opt/localai/acestep/current` is missing, for another backend or fails its self-test (the `engine.acestep` step of [rebuild-kit.md](rebuild-kit.md) §4.5, [music.md](music.md) §3.1); never with `pip` from the internet,
 - `aictl doctor` is run at the end.
 The installer copy and the symlink are repaired by the driver itself: the copy comes from the script that is running (or, when the running script is the installed one, from `<ark>/localai/kit/installers/install-node.sh` given with `--from-ark`; if neither exists the installer says it cannot judge the installed copy). Every other item is done by its phase: the driver forces all 15 phases to run (an "already done" record is not trusted) with `REPAIR_MODE=1`, and a phase in that mode must verify and fix without touching identity or secrets. A failing final `aictl doctor` makes `--repair` exit 1.
 It never changes the node id, key, agent token, PIN, cloud credential, profile, or content. It is what doctor fixes like "Run `sudo install-node.sh --repair`" mean.

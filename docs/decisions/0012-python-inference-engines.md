@@ -1,6 +1,6 @@
 # ADR-0012: Python/PyTorch inference engines run on nodes as their own loopback services
 
-- **Status:** Accepted
+- **Status:** Accepted · Decision 2 superseded by [ADR-0015](0015-music-runtime-synced-per-file-with-its-own-python.md) (the files are synced one by one, and the runtime brings its own Python)
 - **Date:** 2026-11-14
 - **Deciders:** owner (decisions delegated for epic E11, issue #506)
 

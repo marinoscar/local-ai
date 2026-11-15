@@ -155,7 +155,7 @@ A music model is a set of PyTorch weights run by the ACE-Step engine ([music.md]
 **Rules (lint-enforced):**
 - `engine: acestep` requires `roles` to contain `music`, at least one `files[kind=acestep]` entry, and only files of kind `acestep`. It has no `llama` block and no `client_hints`.
 - An `acestep` file `name` is a relative path with **at most one** directory level (`<dir>/<file>`); no `..`, no leading `/`, no deeper nesting. The files are stored under `music/<model-id>/<name>` in the content root ([overview.md](../architecture/overview.md) §3.3), not under `models/`.
-- `requirements.min_vram_mib` must be greater than 0 and `requirements.backends` must be `[cuda]` (the only backend with a wheel bundle, ADR-0012).
+- `requirements.min_vram_mib` must be greater than 0 and `requirements.backends` must be `[cuda]` (the only backend with a runtime kit item, ADR-0012, ADR-0015).
 - A breach of these rules is `LAI-CAT-021` (the layout of an `acestep` model is invalid). The agent raises the same code at run time when the files present in `music/<model-id>/` do not match the entry (a file missing or an extra directory level), and refuses to load the model.
 - `min_vram_mib` is measured as for any model (§2): on the target node while a song of the default length is generated, plus 10 %.
 
