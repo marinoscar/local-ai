@@ -51,10 +51,10 @@ test.describe('the bridges', () => {
     });
   });
 
-  test('the agent UI can open a window through the host bridge and copy the key (it never receives it)', async () => {
+  test('the agent UI can show a companion through the host bridge (in the main window) and copy the key (it never receives it)', async () => {
     const { agentPage } = await start();
     await evaluateIn(run!.app, agentPage, "window.localaiDesktopHost.openWindow('maps')");
-    await waitForContents(run!.app, (url) => url === 'http://127.0.0.1:7070/maps/');
+    await waitForContents(run!.app, (url) => url === 'http://127.0.0.1:7070/portal/maps');
     expect(await evaluateIn<string>(run!.app, agentPage, "window.localaiDesktopHost.copyApiKey().then((r) => JSON.stringify(r))")).toBe('{"ok":true,"clearsInS":60}');
     expect(await run!.app.evaluate(({ clipboard }) => clipboard.readText())).toBe(agent!.apiKey);
     // The connection info it can read has the key masked.
@@ -64,7 +64,9 @@ test.describe('the bridges', () => {
     // A name that is not one of the three opens nothing.
     await evaluateIn(run!.app, agentPage, "window.localaiDesktopHost.openWindow('../api/v1/key')");
     await settle();
-    expect(await childUrls(run!.app)).toEqual(['http://127.0.0.1:7070/maps/']);
+    // No second window ever opens (issue #581); the main window still shows the Maps screen.
+    expect(await childUrls(run!.app)).toEqual([]);
+    await waitForContents(run!.app, (url) => url === 'http://127.0.0.1:7070/portal/maps');
   });
 
   test('the top bar reads and changes the settings through the allowlist; cloud.* is refused', async () => {

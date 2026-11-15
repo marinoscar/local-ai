@@ -163,7 +163,11 @@ describe('decideDownload', () => {
     ['music', 'data:audio/wav;base64,AAAA', 'cancel'],
     ['music', 'not a url', 'cancel'],
     ['chat', 'https://example.com/file.bin', 'default'],
-    ['content', 'http://127.0.0.1:7070/api/v1/music/songs/x/audio', 'default'],
+    // Issue #581: the Portal's Music screen in the main window saves a song the same way; nothing else changes there.
+    ['content', 'http://127.0.0.1:7070/api/v1/music/songs/x/audio', 'ask'],
+    ['content', 'http://localhost:7070/api/v1/music/songs/x/audio', 'default'],
+    ['content', 'http://127.0.0.1:7070/api/v1/key', 'default'],
+    ['content', 'blob:http://127.0.0.1:7070/6f1c2a77-0000-4000-8000-000000000000', 'default'],
     ['shell', 'http://127.0.0.1:7070/api/v1/music/songs/x/audio', 'default'],
   ] as const)('%s %s -> %s', (view, url, expected) => {
     expect(decideDownload(view as View, url)).toBe(expected);

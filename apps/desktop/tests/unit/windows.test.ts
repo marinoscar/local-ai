@@ -17,6 +17,7 @@ import {
   type WebContentsLike,
   MODAL_WINDOWS,
   VIEW_SPECS,
+  companionPath,
   createWindowManager,
   isCloudUrl,
   resolveBounds,
@@ -658,8 +659,30 @@ describe('messages to pages', () => {
   });
 });
 
+describe('companions (issue #581)', () => {
+  it('Chat, Library, Maps and Music show their Portal screen in the main window, never a second window', async () => {
+    const { manager, made, view } = setup();
+    for (const name of ['chat', 'library', 'maps', 'music'] as const) {
+      manager.showCompanion(name);
+      await Promise.resolve();
+      expect(view('agent').webContents.loads.at(-1)).toBe(`http://127.0.0.1:7070/portal/${name}`);
+    }
+    expect(made.children).toEqual([]);
+  });
+  it('companionPath: a page inside a companion opens in the reader, coming back to its screen', () => {
+    expect(companionPath('library')).toBe('/portal/library');
+    expect(companionPath('library', 'http://127.0.0.1:7070/library/')).toBe('/portal/library');
+    expect(companionPath('chat', 'http://127.0.0.1:7070/chat')).toBe('/portal/chat');
+    expect(companionPath('library', 'http://127.0.0.1:7070/library/content/w/A/Water?x=1#h')).toBe(
+      '/portal/read?src=%2Flibrary%2Fcontent%2Fw%2FA%2FWater%3Fx%3D1%23h&back=%2Fportal%2Flibrary',
+    );
+    expect(companionPath('music', 'http://127.0.0.1:7070/music/songs')).toBe('/portal/music');
+    expect(companionPath('maps', 'https://example.com/maps/x')).toBe('/portal/maps');
+  });
+});
+
 describe('navigation hooks', () => {
-  it('open the child window, tell the top bar about a blocked link, and open only the cloud in the browser, only when connected', async () => {
+  it('show the companion in the main window, tell the top bar about a blocked link, and open only the cloud in the browser, only when connected', async () => {
     const { manager, made, view } = setup();
     const openExternal = vi.fn();
     let connected = false;
@@ -670,7 +693,9 @@ describe('navigation hooks', () => {
     const state = { connected: false };
 
     applyNavigation(contents, 'content', 'http://127.0.0.1:7070/library/x', state, 'navigate');
-    expect(made.children.map((c) => c.webContents.loads[0])).toEqual(['http://127.0.0.1:7070/library/']);
+    await Promise.resolve();
+    expect(made.children).toEqual([]);
+    expect(view('agent').webContents.loads.at(-1)).toBe('http://127.0.0.1:7070/portal/read?src=%2Flibrary%2Fx&back=%2Fportal%2Flibrary');
 
     applyNavigation(contents, 'content', 'https://example.com/', state, 'navigate');
     expect(view('topbar').webContents.sent.at(-1)).toEqual({

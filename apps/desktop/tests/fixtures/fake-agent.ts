@@ -304,7 +304,7 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
       return;
     }
     // Issue #515: the Music page: a sample picker and a link that downloads a song.
-    if (method === 'GET' && path === '/music/') {
+    if (method === 'GET' && (path === '/music/' || path === '/portal/music')) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(MUSIC_HTML);
       return;
@@ -315,7 +315,8 @@ export async function startFakeAgent(options: FakeAgentOptions = {}): Promise<Fa
       res.end(FAKE_WAV);
       return;
     }
-    if (method === 'GET' && (path === '/chat/' || path === '/library/' || path === '/maps/')) {
+    // Issue #581: the Portal's own Chat, Library and Maps screens and its reader, which the desktop shows in the main window.
+    if (method === 'GET' && ['/chat/', '/library/', '/maps/', '/portal/chat', '/portal/library', '/portal/maps', '/portal/read'].includes(path)) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(`<!doctype html><meta charset="utf-8"><title>${path}</title><h1>${path}</h1>`);
       return;

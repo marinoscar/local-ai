@@ -54,32 +54,24 @@ test('the top bar shows the status, the mode and the buttons; the Lab tab is hid
   expect(present).toEqual({ 'tab-local': true, 'tab-lab': false, 'open-chat': true, 'open-library': true, 'open-maps': true, 'copy-key': true, menu: true });
 });
 
-test('the Chat button opens one window at /chat/; a second click focuses it instead of opening another', async () => {
+test('the Chat button shows the Chat screen in the main window; no second window ever opens (issue #581)', async () => {
   const bar = await waitForContents(run.app, isTopBar);
   expect(await childUrls(run.app)).toEqual([]);
   await evaluateIn(run.app, bar.id, "document.querySelector('[data-testid=open-chat]').click()");
-  const chat = await waitForContents(run.app, (url) => url === 'http://127.0.0.1:7070/chat/');
-  await pollIn(run.app, chat.id, "document.body.innerText.includes('/chat/')");
+  const chat = await waitForContents(run.app, (url) => url === 'http://127.0.0.1:7070/portal/chat');
+  expect(chat.id).toBe(agentPage);
   await evaluateIn(run.app, bar.id, "document.querySelector('[data-testid=open-chat]').click()");
   await new Promise((r) => setTimeout(r, 500));
-  expect(await childUrls(run.app)).toEqual(['http://127.0.0.1:7070/chat/']);
-  // It is a window of its own, not a view of the main one, and it carries no preload.
-  const bridge = await evaluateIn<string>(run.app, chat.id, 'JSON.stringify([typeof window.localaiDesktop, typeof window.localaiDesktopHost])');
-  expect(bridge).toBe('["undefined","undefined"]');
+  expect(await childUrls(run.app)).toEqual([]);
 });
 
-test('inside the Chat window, navigating to /library/ is blocked silently', async () => {
-  const chat = await waitForContents(run.app, (url) => url === 'http://127.0.0.1:7070/chat/');
-  await evaluateIn(run.app, chat.id, "location.href = '/library/'");
-  await new Promise((r) => setTimeout(r, 700));
-  expect(await childUrls(run.app)).toEqual(['http://127.0.0.1:7070/chat/']);
-  expect(await evaluateIn<string>(run.app, chat.id, 'location.href')).toBe('http://127.0.0.1:7070/chat/');
-});
-
-test('a link from the agent UI to /library/ opens the Library window and leaves the agent UI where it was', async () => {
-  await evaluateIn(run.app, agentPage, "location.href = '/library/'");
-  await waitForContents(run.app, (url) => url === 'http://127.0.0.1:7070/library/');
-  expect(await evaluateIn<string>(run.app, agentPage, 'location.href')).toBe('http://127.0.0.1:7070/');
+test('a link from the agent UI to a library page opens it in the Portal reader, in the main window', async () => {
+  await evaluateIn(run.app, agentPage, "location.href = '/library/content/wiki/A/Water'");
+  await waitForContents(run.app, (url) => url === 'http://127.0.0.1:7070/portal/read?src=%2Flibrary%2Fcontent%2Fwiki%2FA%2FWater&back=%2Fportal%2Flibrary');
+  expect(await childUrls(run.app)).toEqual([]);
+  // Back to where the next tests expect the agent UI.
+  await evaluateIn(run.app, agentPage, "location.href = '/'");
+  await waitForContents(run.app, (url) => url === 'http://127.0.0.1:7070/');
 });
 
 test('a link to the internet from the agent UI is blocked and the top bar says so', async () => {
