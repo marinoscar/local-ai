@@ -1271,8 +1271,8 @@ export interface paths {
         /**
          * Make a song from lyrics and an optional sample
          * @description Owned by music.md. The upload is `multipart/form-data` (limit 21 MiB). Text fields: `lyrics` (at most
-         *     8 KiB, `[verse]`/`[chorus]` tags allowed), `tags` (at most 512 bytes), `duration_s` (10 to 240, default
-         *     60), `language` (default `en`), `seed` (optional, 0 to 2147483647; the agent draws one when it is absent
+         *     8 KiB, `[verse]`/`[chorus]` tags allowed), `tags` (at most 512 bytes), `duration_s` (10 to 240; leave it
+         *     out for Auto, #571: the engine picks the length from the lyrics and the style), `language` (default `en`), `seed` (optional, 0 to 2147483647; the agent draws one when it is absent
          *     and records it), `variations` (1 to 4, default 1).
          *     An optional `sample` file (WAV, MP3, FLAC or Ogg by content, at most 20 MiB and 60 s) with
          *     `sample_mode` (`sounds_like` default, or `same_song`) and `strength` (0 to 1; default 0.5 for
@@ -2897,8 +2897,8 @@ export interface components {
             /** @description At most 8 KiB of UTF-8. Never logged. */
             lyrics?: string;
             tags?: string;
-            /** @default 60 */
-            duration_s: number;
+            /** @description Seconds. Leave it out (or send an empty value or `auto`) for Auto: the engine picks the length; the song's duration_s is what it chose. */
+            duration_s?: number;
             /** @default en */
             language: string;
             seed?: number;

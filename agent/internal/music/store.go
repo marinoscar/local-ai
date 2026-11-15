@@ -59,9 +59,10 @@ type Meta struct {
 	Tags      string    `json:"tags"`
 	Language  string    `json:"language"`
 	DurationS float64   `json:"duration_s"`
-	Requested int       `json:"requested_duration_s"`
-	ModelID   string    `json:"model_id"`
-	Seed      *int64    `json:"seed"`
+	// Requested is the asked length; null for an Auto song (#571), whose DurationS is what the engine chose.
+	Requested *int   `json:"requested_duration_s"`
+	ModelID   string `json:"model_id"`
+	Seed      *int64 `json:"seed"`
 	// Variation is 0-based: variation i was made with seed + i.
 	Variation      int         `json:"variation"`
 	Mime           string      `json:"mime"`

@@ -387,3 +387,5 @@ func mp3Xing(frames uint32) []byte {
 	binary.BigEndian.PutUint32(frame[4+32+8:], frames)
 	return append(b, frame...)
 }
+
+func ptrInt(v int) *int { return &v }
