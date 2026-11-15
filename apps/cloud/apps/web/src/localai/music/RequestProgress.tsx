@@ -28,7 +28,9 @@ export function RequestProgress({ created, onDone, pollMs = 3000 }: RequestProgr
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
 
-  const upsert = (request: MusicRequest) => {
+  const upsert = (request: MusicRequest | null | undefined) => {
+    // A reply that is not a request (an empty or malformed answer) changes nothing.
+    if (!request || typeof request.id !== 'string' || typeof request.createdAt !== 'string') return;
     setRequests((current) => [request, ...current.filter((item) => item.id !== request.id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     if (request.stage === 'done' && !done.current.has(request.id)) {
       done.current.add(request.id);

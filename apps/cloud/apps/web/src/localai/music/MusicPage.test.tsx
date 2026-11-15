@@ -425,6 +425,8 @@ describe('My prompts (#568)', () => {
     prompts = [];
     postAnswer = () => {
       prompts = [musicPrompt({ title: 'Made Now', songCount: 0 })];
+      // The page polls the new request while it is queued: answer with that request.
+      requestReads = [musicRequest({ promptId: PROMPT_ID })];
       return HttpResponse.json({ data: musicRequest({ promptId: PROMPT_ID }) }, { status: 201 });
     };
     renderPage();
