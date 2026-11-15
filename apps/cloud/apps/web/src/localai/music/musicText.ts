@@ -2,7 +2,7 @@
 import { ApiError } from '@marinoscar/platform-web/core';
 
 import { plainError } from '../doctorFix';
-import type { MusicReadiness, MusicRequest, MusicStage } from './musicApi';
+import type { MusicAssist, MusicReadiness, MusicRequest, MusicStage } from './musicApi';
 
 type T = (en: string, es: string) => string;
 
@@ -84,4 +84,25 @@ export const formatDuration = (seconds: number | null): string => {
   if (seconds === null || !Number.isFinite(seconds)) return '';
   const whole = Math.round(seconds);
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+};
+
+/** Why "Write lyrics for me" is off, and the fix, in one sentence each (the choice is disabled with this text). */
+export function aiUnavailableText(assist: MusicAssist | null, t: T): string {
+  if (assist?.ai.available === false && assist.ai.reason === 'no_model') {
+    return t(
+      'Write lyrics for me is off: no AI model is set up for you. Add an AI key in Settings, or write your own lyrics.',
+      'Escribir la letra por mí está apagado: no hay un modelo de IA para usted. Agregue una clave de IA en Ajustes, o escriba su propia letra.',
+    );
+  }
+  return t(
+    'Write lyrics for me is off: the AI is turned off on this cloud. An administrator can turn it on, or write your own lyrics.',
+    'Escribir la letra por mí está apagado: la IA está apagada en esta nube. Un administrador puede encenderla, o escriba su propia letra.',
+  );
+}
+
+/** A size as people read it: 512 B, 3.4 KB, 1.2 MB. */
+export const formatBytes = (bytes: number): string => {
+  if (bytes < 1000) return `${bytes} B`;
+  if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(1)} KB`;
+  return `${(bytes / 1_000_000).toFixed(1)} MB`;
 };

@@ -11,8 +11,9 @@
 // is still right on the next poll.
 //
 // Who sees what: a person sees their own requests and songs; a holder of `localai_music:delete` (org_admin) sees all.
-// Lyrics: in the command's params only (the node needs them), returned to their author on the single-request route,
-// never in a column, a log line, a span, an audit row or the command history (`redactParams`).
+// Lyrics: in the command's params (the node needs them) and in the person's own saved prompt
+// (`localai_music_prompts.lyrics`, #568: the owner asked for an editable history), returned to their author only,
+// never in a request column, a log line, a span, an audit row or the command history (`redactParams`).
 import { createHash, randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { LocalaiMusicRequest, Prisma } from '@prisma/client';
@@ -28,6 +29,7 @@ import type { CommandParams } from '../contracts/commands';
 import { LOCALAI_PERMISSION_IDS } from '../localai.permissions';
 import { AUDIT_MUSIC_REQUEST_CANCELLED, AUDIT_MUSIC_REQUESTED, AUDIT_MUSIC_SONG_DELETED, AUDIT_TARGET_MUSIC_REQUEST, AUDIT_TARGET_MUSIC_SONG } from './music-audit';
 import {
+  musicInputRejected,
   musicRateLimited,
   musicRequestNotCancellable,
   musicStorageUnavailable,
@@ -35,7 +37,8 @@ import {
   unknownMusicRequest,
   unknownSong,
 } from './music-errors';
-import { extensionOf, songTitle, strengthFor, type MusicRequestFields, type SniffedAudio } from './music-input';
+import { extensionOf, musicSettingsOf, strengthFor, type MusicLyricsMode, type MusicRequestFields, type MusicSettings, type SniffedAudio } from './music-input';
+import { MusicPromptsService, sampleOfPrompt, type PromptFields, type StoredSample } from './music-prompts.service';
 import { MUSIC_MAX_ACTIVE_PER_USER, MUSIC_MAX_PER_HOUR_PER_USER, MUSIC_PENDING_URL, MUSIC_PLAY_URL_TTL_S } from './music-limits';
 import { MUSIC_OBJECT_STORE, MusicStorageNotConfigured, sampleKey, songKey, type MusicObjectStore } from './music-store';
 import { MUSIC_ROLE, TERMINAL_REQUEST_STATUSES, activeWorkloadOf, musicReadiness, reconcileRequest, workloadsOf } from './music-state';
@@ -62,6 +65,22 @@ export interface SampleInput {
   audio: SniffedAudio;
 }
 
+/** What `enqueue` makes one request from: the settings, an uploaded or a reused sample, and how to save the prompt. */
+interface EnqueueJob {
+  nodeId: string;
+  settings: MusicSettings;
+  durationS: number;
+  language: string;
+  seed: number | null;
+  variations: number;
+  sampleMode?: 'sounds_like' | 'same_song';
+  strength?: number;
+  upload: SampleInput | null;
+  reuse: StoredSample | null;
+  /** Saves the prompt (new, updated or touched); `released` is a sample key the prompt no longer references. */
+  save: (fields: PromptFields, sample: StoredSample | null) => Promise<{ promptId: string; released: string | null }>;
+}
+
 const REQUEST_INCLUDE = { songs: true, node: { select: { nodeId: true, displayName: true } } } as const;
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -75,94 +94,201 @@ export class MusicService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly commands: CommandsService,
+    private readonly prompts: MusicPromptsService,
     @Inject(MUSIC_OBJECT_STORE) private readonly store: MusicObjectStore,
     @Inject(LOCALAI_CLOCK) private readonly clock: LocalaiClock,
     @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   /**
-   * `POST /requests`. In order: the node exists (404), is enrolled (409 LAI-CLD-035) and not in Offline or Survival
-   * mode (422 LAI-CLD-034); the person is within their limits (429 LAI-SVC-153); storage answers and signs https URLs
-   * (503 otherwise); the sample is stored; one pending song row per variation; the command is queued with placeholder
-   * URLs (signed at the claim); audited `localai.music.requested`.
+   * `POST /requests` (the form). The cross-field rules first (`musicSettingsOf`: a description, lyrics for "mine" and
+   * "ai", `[Instrumental]` for "No vocals", the title typed or generated). Without `promptId` a new prompt is saved
+   * from the form; with it (the caller's own prompt, else 404) the sent fields are saved into that prompt, an uploaded
+   * sample replaces its sample, and without an upload its stored sample is reused unless `remove_sample=true`. Then
+   * `enqueue`.
    */
   async create(fields: MusicRequestFields, sample: SampleInput | null, requester: MusicRequester, source: CommandSource): Promise<MusicRequestView> {
-    const node = await this.prisma.localaiNode.findUnique({ where: { nodeId: fields.nodeId }, select: { id: true, nodeId: true, phase: true, mode: true } });
+    const settings = musicSettingsOf(fields);
+    if (typeof settings === 'string') throw musicInputRejected(null, settings);
+    const prompt = fields.promptId ? await this.prompts.owned(fields.promptId, requester.userId) : null;
+    const reuse = !sample && prompt && !fields.remove_sample ? sampleOfPrompt(prompt) : null;
+    return this.enqueue(
+      {
+        nodeId: fields.nodeId,
+        settings,
+        durationS: fields.duration_s,
+        language: fields.language,
+        seed: fields.seed ?? null,
+        variations: fields.variations,
+        sampleMode: fields.sample_mode,
+        strength: fields.strength,
+        upload: sample,
+        reuse,
+        save: async (fieldsToSave, stored) => {
+          if (!prompt) return { promptId: (await this.prompts.create(fieldsToSave, stored, requester.userId, 'request')).id, released: null };
+          return { promptId: prompt.id, released: await this.prompts.saveFromRequest(prompt, fieldsToSave, stored, requester.userId) };
+        },
+      },
+      requester,
+      source,
+    );
+  }
+
+  /**
+   * `POST /prompts/:id/make`: a song from the caller's own saved prompt, with its stored sample, and optional
+   * overrides for this one song (versions, seed, length, language). The prompt itself is not changed, only moved to
+   * the top of the history.
+   */
+  async makeFromPrompt(
+    promptId: string,
+    body: { nodeId: string; overrides?: { variations?: number; seed?: number | null; durationS?: number; language?: string } },
+    requester: MusicRequester,
+    source: CommandSource,
+  ): Promise<MusicRequestView> {
+    const prompt = await this.prompts.owned(promptId, requester.userId);
+    const settings = musicSettingsOf({ lyrics: prompt.lyrics, description: prompt.description, lyrics_mode: prompt.lyricsMode as MusicLyricsMode, title: prompt.title });
+    if (typeof settings === 'string') throw musicInputRejected(null, settings);
+    const overrides = body.overrides ?? {};
+    const stored = sampleOfPrompt(prompt);
+    const seed = overrides.seed !== undefined ? overrides.seed : prompt.seed === null ? null : Number(prompt.seed);
+    return this.enqueue(
+      {
+        nodeId: body.nodeId,
+        settings,
+        durationS: overrides.durationS ?? prompt.durationS,
+        language: overrides.language ?? prompt.language,
+        seed,
+        variations: overrides.variations ?? prompt.variations,
+        sampleMode: stored ? ((prompt.sampleMode as 'sounds_like' | 'same_song' | null) ?? undefined) : undefined,
+        strength: stored ? (prompt.strength ?? undefined) : undefined,
+        upload: null,
+        reuse: stored,
+        save: async () => {
+          await this.prompts.touch(prompt.id);
+          return { promptId: prompt.id, released: null };
+        },
+      },
+      requester,
+      source,
+    );
+  }
+
+  /**
+   * One request. In order: the node exists (404), is enrolled (409 LAI-CLD-035) and not in Offline or Survival mode
+   * (422 LAI-CLD-034); the person is within their limits (429 LAI-SVC-153); storage answers and signs https URLs (503
+   * otherwise); an uploaded sample is stored (or a stored one reused); the prompt is saved; one pending song row per
+   * variation, each with the request's title; the command is queued with placeholder URLs (signed at the claim);
+   * audited `localai.music.requested`. The request keeps the title and settings it used, whatever its prompt becomes.
+   */
+  private async enqueue(job: EnqueueJob, requester: MusicRequester, source: CommandSource): Promise<MusicRequestView> {
+    const hasSample = job.upload !== null || job.reuse !== null;
+    if (!hasSample && (job.sampleMode !== undefined || job.strength !== undefined)) throw musicInputRejected(null, 'sample_settings_without_sample');
+    const node = await this.prisma.localaiNode.findUnique({ where: { nodeId: job.nodeId }, select: { id: true, nodeId: true, phase: true, mode: true } });
     if (!node) throw unknownLabNode();
     assertNodeTakesCommands(node);
     await this.assertWithinLimits(requester.userId);
 
     const requestId = randomUUID();
-    const sampleObject = sample ? { key: sampleKey(requestId, sample.audio.ext), sha256: createHash('sha256').update(sample.bytes).digest('hex') } : null;
-    const keys = Array.from({ length: fields.variations }, (_, index) => songKey(requestId, index));
+    const sampleObject: StoredSample | null = job.upload
+      ? { key: sampleKey(requestId, job.upload.audio.ext), mime: job.upload.audio.mime, bytes: job.upload.bytes.length, sha256: createHash('sha256').update(job.upload.bytes).digest('hex') }
+      : job.reuse;
+    const keys = Array.from({ length: job.variations }, (_, index) => songKey(requestId, index));
 
     // Storage first: one that is not set up, or that would sign plain-http URLs the node refuses, ends the request here,
     // before any row exists. The probe signature is thrown away; the real ones are minted at the claim.
     try {
       const probe = await this.store.signedPut(keys[0], 60);
       if (!probe.startsWith('https://')) throw musicStorageUnavailable('not_https');
-      if (sample && sampleObject) await this.store.put(sampleObject.key, sample.bytes, sample.audio.mime);
+      if (job.upload && sampleObject) await this.store.put(sampleObject.key, job.upload.bytes, job.upload.audio.mime);
     } catch (error) {
       throw this.storageError(error);
     }
 
-    const sampleMode = sample ? (fields.sample_mode ?? 'sounds_like') : undefined;
-    const strength = strengthFor(sampleMode, fields.strength, sample !== null);
+    const sampleMode = hasSample ? (job.sampleMode ?? 'sounds_like') : undefined;
+    const strength = strengthFor(sampleMode, job.strength, hasSample);
+    const { settings } = job;
     const params: CommandParams<'localai.music.generate'> = {
       request_id: requestId,
-      lyrics: fields.lyrics,
-      tags: fields.tags,
-      duration_s: fields.duration_s,
-      language: fields.language,
-      ...(fields.seed !== undefined ? { seed: fields.seed } : {}),
-      variations: fields.variations,
-      ...(sample && sampleObject ? { sample: { url: MUSIC_PENDING_URL, sha256: sampleObject.sha256, mime: sample.audio.mime, size_bytes: sample.bytes.length } } : {}),
+      lyrics: settings.lyricsSent,
+      tags: settings.description,
+      duration_s: job.durationS,
+      language: job.language,
+      ...(job.seed !== null ? { seed: job.seed } : {}),
+      variations: job.variations,
+      ...(sampleObject ? { sample: { url: MUSIC_PENDING_URL, sha256: sampleObject.sha256, mime: sampleObject.mime as SniffedAudio['mime'], size_bytes: sampleObject.bytes } } : {}),
       ...(sampleMode ? { sample_mode: sampleMode } : {}),
       ...(strength !== undefined ? { strength } : {}),
       results: keys.map(() => ({ put_url: MUSIC_PENDING_URL })),
     };
 
+    let saved: { promptId: string; released: string | null };
+    try {
+      saved = await job.save(
+        {
+          title: settings.title,
+          description: settings.description,
+          lyricsMode: settings.lyricsMode,
+          lyrics: settings.lyricsStored,
+          durationS: job.durationS,
+          language: job.language,
+          seed: job.seed,
+          variations: job.variations,
+          sampleMode: sampleMode ?? null,
+          strength: strength ?? null,
+        },
+        sampleObject,
+      );
+    } catch (error) {
+      if (job.upload && sampleObject) await this.forget(sampleObject.key);
+      throw error;
+    }
+
+    const lyricsBytes = new TextEncoder().encode(settings.lyricsSent).length;
     await this.prisma.localaiMusicRequest.create({
       data: {
         id: requestId,
         nodeId: node.id,
         requestedById: requester.userId,
+        promptId: saved.promptId,
         status: 'queued',
-        title: songTitle(fields.lyrics, fields.tags),
-        tags: fields.tags,
-        lyricsBytes: new TextEncoder().encode(fields.lyrics).length,
-        durationS: fields.duration_s,
-        language: fields.language,
-        seed: fields.seed !== undefined ? BigInt(fields.seed) : null,
-        variations: fields.variations,
+        title: settings.title,
+        tags: settings.description,
+        lyricsMode: settings.lyricsMode,
+        lyricsBytes,
+        durationS: job.durationS,
+        language: job.language,
+        seed: job.seed !== null ? BigInt(job.seed) : null,
+        variations: job.variations,
         sampleMode: sampleMode ?? null,
         strength: strength ?? null,
         sampleKey: sampleObject?.key ?? null,
-        sampleMime: sample?.audio.mime ?? null,
-        sampleBytes: sample?.bytes.length ?? null,
+        sampleMime: sampleObject?.mime ?? null,
+        sampleBytes: sampleObject?.bytes ?? null,
         sampleSha256: sampleObject?.sha256 ?? null,
-        songs: { create: keys.map((storageKey, index) => ({ index, storageKey, status: 'pending' as const })) },
+        songs: { create: keys.map((storageKey, index) => ({ index, storageKey, title: settings.title, status: 'pending' as const })) },
       },
     });
+    // The prompt's previous sample, now referenced by nothing new (past requests may still hold it).
+    if (saved.released) await this.prompts.releaseSample(saved.released);
 
     let commandId: string;
     try {
       const { command } = await this.commands.enqueueForNode(node.id, 'localai.music.generate', params, { userId: requester.userId }, source);
       commandId = command.id;
     } catch (error) {
-      // Nothing was queued: the request ends here, with no code (the cloud refused it, not the node).
+      // Nothing was queued: the request ends here, with no code (the cloud refused it, not the node). The sample
+      // stays: the prompt references it.
       await this.prisma.localaiMusicRequest.updateMany({
         where: { id: requestId },
         data: { status: 'failed', errorMessage: 'The request could not be queued. Try again.', finishedAt: this.clock.now() },
       });
       await this.prisma.localaiMusicSong.updateMany({ where: { requestId, status: 'pending' }, data: { status: 'failed' } });
-      if (sampleObject) await this.forget(sampleObject.key);
       throw error;
     }
     await this.prisma.localaiMusicRequest.update({ where: { id: requestId }, data: { commandId } });
 
     this.logger.log(
-      `music request ${requestId} queued for ${node.nodeId}: command_id=${commandId} variations=${fields.variations} lyrics_bytes=${new TextEncoder().encode(fields.lyrics).length} sample_bytes=${sample?.bytes.length ?? 0}`,
+      `music request ${requestId} queued for ${node.nodeId}: command_id=${commandId} prompt_id=${saved.promptId} variations=${job.variations} lyrics_mode=${settings.lyricsMode} lyrics_bytes=${lyricsBytes} sample_bytes=${sampleObject?.bytes ?? 0}`,
     );
     await this.recordAudit({
       action: AUDIT_MUSIC_REQUESTED,
@@ -172,11 +298,13 @@ export class MusicService {
       meta: {
         nodeId: node.nodeId,
         commandId,
-        variations: fields.variations,
-        durationS: fields.duration_s,
-        hasSample: sample !== null,
+        promptId: saved.promptId,
+        variations: job.variations,
+        durationS: job.durationS,
+        lyricsMode: settings.lyricsMode,
+        hasSample,
         ...(sampleMode ? { sampleMode } : {}),
-        ...(sample ? { sampleBytes: sample.bytes.length } : {}),
+        ...(sampleObject ? { sampleBytes: sampleObject.bytes } : {}),
       },
     });
     return this.getRequest(requestId, requester);
@@ -282,7 +410,7 @@ export class MusicService {
     if (!UUID.test(songId)) throw unknownSong();
     const song = await this.prisma.localaiMusicSong.findUnique({ where: { id: songId }, include: { request: { select: { title: true, requestedById: true } } } });
     if (!song || song.status !== 'ready' || (song.request.requestedById !== requester.userId && !seesAll(requester))) throw unknownSong();
-    const filename = `${song.request.title} ${song.index + 1}.${extensionOf(song.mime)}`;
+    const filename = `${song.title} ${song.index + 1}.${extensionOf(song.mime)}`;
     let url: string;
     try {
       url = await this.store.signedGet(song.storageKey, MUSIC_PLAY_URL_TTL_S, { filename, attachment: download });
@@ -314,8 +442,9 @@ export class MusicService {
 
     const remaining = await this.prisma.localaiMusicSong.count({ where: { requestId: song.requestId } });
     if (remaining === 0 && song.request.sampleKey && TERMINAL_REQUEST_STATUSES.has(song.request.status)) {
-      await this.forget(song.request.sampleKey);
+      // The request lets go of its sample; the object goes only when no other request and no prompt references it.
       await this.prisma.localaiMusicRequest.updateMany({ where: { id: song.requestId }, data: { sampleKey: null } });
+      await this.prompts.releaseSample(song.request.sampleKey);
     }
     await this.recordAudit({
       action: AUDIT_MUSIC_SONG_DELETED,
