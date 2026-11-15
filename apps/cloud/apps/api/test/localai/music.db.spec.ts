@@ -33,7 +33,7 @@ async function login(role: 'admin' | 'contributor' | 'viewer'): Promise<void> {
 }
 
 const auth = (bearer: string | null) => (bearer ? { authorization: `Bearer ${bearer}` } : {});
-const api = (method: 'GET' | 'POST' | 'DELETE', url: string, bearer: string | null, payload?: unknown) =>
+const api = (method: 'GET' | 'POST' | 'DELETE' | 'PATCH', url: string, bearer: string | null, payload?: unknown) =>
   app.inject({ method, url: `/api/localai${url}`, headers: auth(bearer), payload: payload as never });
 const submit = (bearer: string, fields: Record<string, string>, sample?: Buffer) => {
   const body = multipartBody(fields, sample ? { field: 'sample', filename: 'hum.wav', contentType: 'audio/wav', bytes: sample } : undefined);
@@ -112,6 +112,9 @@ afterAll(async () => {
         ],
       },
     });
+    const promptIds = (await prisma.localaiMusicPrompt.findMany({ where: { ownerId: { in: Object.values(userIds) } }, select: { id: true } })).map((prompt) => prompt.id);
+    await prisma.auditEvent.deleteMany({ where: { targetType: 'localai_music_prompt', targetId: { in: promptIds } } });
+    await prisma.localaiMusicPrompt.deleteMany({ where: { id: { in: promptIds } } });
     await prisma.localaiMusicRequest.deleteMany({ where: { nodeId: { in: nodeRowIds } } });
     await prisma.localaiCommand.deleteMany({ where: { nodeId: { in: nodeRowIds } } });
     await prisma.localaiNode.deleteMany({ where: { id: { in: nodeRowIds } } });
@@ -128,7 +131,7 @@ describe('a music request, end to end', () => {
     const created = await submit(tokens.contributor, { nodeId: n.nodeId, lyrics: LYRICS, tags: 'lofi', variations: '2', duration_s: '30' }, sample);
     expect(created.statusCode).toBe(201);
     const request = created.json().data;
-    expect(request).toMatchObject({ nodeId: n.nodeId, status: 'queued', title: 'Person B hums by the window', variations: 2, hasSample: true, sampleMode: 'sounds_like', strength: 0.5, lyrics: LYRICS });
+    expect(request).toMatchObject({ nodeId: n.nodeId, status: 'queued', title: 'Person B Hums By The Window', variations: 2, hasSample: true, sampleMode: 'sounds_like', strength: 0.5, lyrics: LYRICS });
 
     // Stored: the row, two pending songs, the sample object, the command with placeholders only.
     const row = await prisma.localaiMusicRequest.findUniqueOrThrow({ where: { id: request.id }, include: { songs: true, command: true } });
@@ -210,6 +213,76 @@ describe('a music request, end to end', () => {
   it('a viewer cannot make music', async () => {
     const n = await enrolled();
     expect((await submit(tokens.viewer, { nodeId: n.nodeId, tags: 'x' })).statusCode).toBe(403);
+  });
+});
+
+describe('the prompt history and titles (#568)', () => {
+  const DESCRIPTION = 'a quiet song about Person B and the rain, soft guitar';
+
+  it('a song saves a prompt; editing it never rewrites the past request or songs; delete keeps the songs (prompt_id NULL)', async () => {
+    const n = await enrolled();
+    const sample = wavBytes(4000);
+    const made = (await submit(tokens.contributor, { nodeId: n.nodeId, description: DESCRIPTION, lyrics_mode: 'mine', lyrics: LYRICS, variations: '2' }, sample)).json().data;
+    expect(made).toMatchObject({ title: 'Person B Hums By The Window', tags: DESCRIPTION, lyricsMode: 'mine', promptId: expect.any(String) });
+
+    // Stored: the prompt with the lyrics (the one table that holds them), the request without them, titled songs.
+    const prompt = await prisma.localaiMusicPrompt.findUniqueOrThrow({ where: { id: made.promptId } });
+    expect(prompt).toMatchObject({ ownerId: userIds.contributor, title: 'Person B Hums By The Window', description: DESCRIPTION, lyricsMode: 'mine', lyrics: LYRICS, variations: 2, sampleKey: `localai-music/samples/${made.id}.wav` });
+    const request = await prisma.localaiMusicRequest.findUniqueOrThrow({ where: { id: made.id }, include: { songs: true } });
+    expect(request).toMatchObject({ promptId: prompt.id, title: 'Person B Hums By The Window', lyricsMode: 'mine', sampleKey: prompt.sampleKey });
+    expect(request).not.toHaveProperty('lyrics');
+    expect(request.songs.map((song) => song.title)).toEqual(['Person B Hums By The Window', 'Person B Hums By The Window']);
+
+    // Edit the prompt: the past request and songs keep their own title and settings.
+    const edited = await api('PATCH', `/music/prompts/${prompt.id}`, tokens.contributor, { title: 'Rain Song', lyrics: '[verse]\nOther words', variations: 1, durationS: 90 });
+    expect(edited.statusCode).toBe(200);
+    const after = await prisma.localaiMusicRequest.findUniqueOrThrow({ where: { id: made.id }, include: { songs: true } });
+    expect(after).toMatchObject({ title: 'Person B Hums By The Window', variations: 2, durationS: 60 });
+    expect(after.songs.every((song) => song.title === 'Person B Hums By The Window')).toBe(true);
+
+    // Make again from the prompt: the same sample key (no new object), the prompt's new title and settings.
+    const again = await api('POST', `/music/prompts/${prompt.id}/make`, tokens.contributor, { nodeId: n.nodeId });
+    expect(again.statusCode).toBe(201);
+    expect(again.json().data).toMatchObject({ title: 'Rain Song', variations: 1, durationS: 90, promptId: prompt.id, hasSample: true });
+    const second = await prisma.localaiMusicRequest.findUniqueOrThrow({ where: { id: again.json().data.id } });
+    expect(second.sampleKey).toBe(prompt.sampleKey);
+    expect([...objects.keys()].filter((key) => key.startsWith('localai-music/samples/'))).toContain(prompt.sampleKey);
+
+    // Another person cannot see or use it; the list is the owner's, newest used first.
+    expect((await api('GET', `/music/prompts/${prompt.id}`, tokens.admin)).statusCode).toBe(404);
+    expect((await api('POST', `/music/prompts/${prompt.id}/make`, tokens.admin, { nodeId: n.nodeId })).statusCode).toBe(404);
+    const list = (await api('GET', '/music/prompts', tokens.contributor)).json().data;
+    expect(list.items[0]).toMatchObject({ id: prompt.id, title: 'Rain Song' });
+
+    // Delete: confirmation required; the songs and requests stay with prompt_id NULL; the sample stays (requests hold it).
+    expect((await api('DELETE', `/music/prompts/${prompt.id}`, tokens.contributor, { confirm: 'no' })).statusCode).toBe(400);
+    expect((await api('DELETE', `/music/prompts/${prompt.id}`, tokens.contributor, { confirm: prompt.id })).statusCode).toBe(200);
+    expect(await prisma.localaiMusicPrompt.count({ where: { id: prompt.id } })).toBe(0);
+    const kept = await prisma.localaiMusicRequest.findMany({ where: { id: { in: [made.id, second.id] } }, include: { songs: true } });
+    expect(kept.map((row) => row.promptId)).toEqual([null, null]);
+    expect(kept.flatMap((row) => row.songs)).toHaveLength(3);
+    expect(objects.has(prompt.sampleKey!)).toBe(true);
+    const audit = await prisma.auditEvent.findMany({ where: { targetType: 'localai_music_prompt', targetId: prompt.id }, orderBy: { createdAt: 'asc' } });
+    expect(audit.map((entry) => entry.action)).toEqual(['localai.music.prompt_created', 'localai.music.prompt_updated', 'localai.music.prompt_deleted']);
+    expect(JSON.stringify(audit)).not.toMatch(/Person B|Rain Song|Other words|guitar/);
+  });
+
+  it('instrumental sends [Instrumental]; a deleted user takes their prompts but not the lab\'s songs', async () => {
+    const n = await enrolled();
+    const email = `music-leaver-${run}@example.test`;
+    const login = await app.inject({ method: 'POST', url: '/api/auth/test/login', payload: { email, role: 'contributor' } });
+    const bearer = new URL(String(login.headers.location)).searchParams.get('token') ?? '';
+    const leaver = (await prisma.user.findFirstOrThrow({ where: { email } })).id;
+    const made = (await submit(bearer, { nodeId: n.nodeId, description: DESCRIPTION, lyrics_mode: 'instrumental' })).json().data;
+    const command = await prisma.localaiCommand.findUniqueOrThrow({ where: { id: made.commandId } });
+    expect((command.params as { lyrics: string }).lyrics).toBe('[Instrumental]');
+    expect(made.title).toBe('A Quiet Song About Person B And The Rain');
+
+    // The FK: deleting the user cascades to their prompts and sets the request's prompt_id and requested_by_id NULL.
+    await prisma.auditEvent.deleteMany({ where: { actorUserId: leaver } });
+    await prisma.user.delete({ where: { id: leaver } });
+    expect(await prisma.localaiMusicPrompt.count({ where: { ownerId: leaver } })).toBe(0);
+    expect(await prisma.localaiMusicRequest.findUniqueOrThrow({ where: { id: made.id } })).toMatchObject({ promptId: null, requestedById: null });
   });
 });
 

@@ -1,5 +1,6 @@
-// The form's fields, the sample's type from its bytes, the library title and the strength default (E11 contract 3, 6).
-import { MusicRequestFieldsSchema, extensionOf, sniffAudio, songTitle, strengthFor } from './music-input';
+// The form's fields and its cross-field rules, the sample's type from its bytes, the generated title (#568) and the
+// strength default (E11 contract 3, 6).
+import { MusicRequestFieldsSchema, extensionOf, generatedTitle, musicSettingsOf, sniffAudio, strengthFor, tidyTitle, titleCase } from './music-input';
 
 const bytes = (...parts: Array<string | number[]>) =>
   Uint8Array.from(parts.flatMap((part) => (typeof part === 'string' ? [...part].map((char) => char.charCodeAt(0)) : part)));
@@ -7,14 +8,22 @@ const bytes = (...parts: Array<string | number[]>) =>
 describe('MusicRequestFieldsSchema', () => {
   const base = { nodeId: 'ai-n2', lyrics: '[verse]\nPerson A sings' };
 
-  it('applies the defaults: 60 s, en, one variation, empty tags', () => {
-    expect(MusicRequestFieldsSchema.parse(base)).toEqual({ nodeId: 'ai-n2', lyrics: '[verse]\nPerson A sings', tags: '', duration_s: 60, language: 'en', variations: 1 });
+  it('applies the defaults: 60 s, en, one variation, the English page, keep the sample', () => {
+    expect(MusicRequestFieldsSchema.parse(base)).toEqual({
+      nodeId: 'ai-n2',
+      lyrics: '[verse]\nPerson A sings',
+      ui_language: 'en',
+      remove_sample: false,
+      duration_s: 60,
+      language: 'en',
+      variations: 1,
+    });
   });
 
-  it('reads the numbers from text fields and checks their ranges', () => {
+  it('reads the numbers from text fields and checks their ranges (the seed is the contract\'s 31 bits)', () => {
     const parsed = MusicRequestFieldsSchema.parse({ ...base, duration_s: '240', variations: '4', seed: '42', strength: '0.25', sample_mode: 'same_song' });
     expect(parsed).toMatchObject({ duration_s: 240, variations: 4, seed: 42, strength: 0.25, sample_mode: 'same_song' });
-    for (const bad of [{ duration_s: '9' }, { duration_s: '241' }, { duration_s: '60.5' }, { variations: '0' }, { variations: '5' }, { strength: '1.5' }, { seed: '-1' }, { seed: 'abc' }]) {
+    for (const bad of [{ duration_s: '9' }, { duration_s: '241' }, { duration_s: '60.5' }, { variations: '0' }, { variations: '5' }, { strength: '1.5' }, { seed: '-1' }, { seed: 'abc' }, { seed: '2147483648' }]) {
       expect(MusicRequestFieldsSchema.safeParse({ ...base, ...bad }).success).toBe(false);
     }
   });
@@ -26,13 +35,58 @@ describe('MusicRequestFieldsSchema', () => {
     expect(MusicRequestFieldsSchema.safeParse({ ...base, tags: 'x'.repeat(513) }).success).toBe(false);
   });
 
-  it('needs lyrics or a style, refuses an unknown field and a bad node id or language', () => {
-    expect(MusicRequestFieldsSchema.safeParse({ nodeId: 'ai-n2' }).success).toBe(false);
-    expect(MusicRequestFieldsSchema.safeParse({ nodeId: 'ai-n2', lyrics: '   ', tags: '' }).success).toBe(false);
-    expect(MusicRequestFieldsSchema.safeParse({ nodeId: 'ai-n2', tags: 'ambient piano' }).success).toBe(true);
+  it('caps the description at 500 characters AND at the 512 bytes of the command\'s tags', () => {
+    expect(MusicRequestFieldsSchema.safeParse({ ...base, description: 'x'.repeat(500) }).success).toBe(true);
+    expect(MusicRequestFieldsSchema.safeParse({ ...base, description: 'x'.repeat(501) }).success).toBe(false);
+    // 250 two-byte letters: 250 characters, 500 bytes: fine. 300 of them: 300 characters but 600 bytes: refused.
+    expect(MusicRequestFieldsSchema.safeParse({ ...base, description: 'ñ'.repeat(250) }).success).toBe(true);
+    expect(MusicRequestFieldsSchema.safeParse({ ...base, description: 'ñ'.repeat(300) }).success).toBe(false);
+  });
+
+  it('takes a title of at most 80 characters without control characters, trimmed', () => {
+    expect(MusicRequestFieldsSchema.parse({ ...base, title: '  River Song  ' }).title).toBe('River Song');
+    expect(MusicRequestFieldsSchema.safeParse({ ...base, title: 'é'.repeat(80) }).success).toBe(true);
+    expect(MusicRequestFieldsSchema.safeParse({ ...base, title: 'x'.repeat(81) }).success).toBe(false);
+    expect(MusicRequestFieldsSchema.safeParse({ ...base, title: 'two\nlines' }).success).toBe(false);
+  });
+
+  it('refuses an unknown field, a bad node id, language, lyrics mode or prompt id', () => {
     expect(MusicRequestFieldsSchema.safeParse({ ...base, model: 'other' }).success).toBe(false);
     expect(MusicRequestFieldsSchema.safeParse({ ...base, nodeId: '../etc' }).success).toBe(false);
     expect(MusicRequestFieldsSchema.safeParse({ ...base, language: 'Spanish' }).success).toBe(false);
+    expect(MusicRequestFieldsSchema.safeParse({ ...base, lyrics_mode: 'karaoke' }).success).toBe(false);
+    expect(MusicRequestFieldsSchema.safeParse({ ...base, promptId: 'p1' }).success).toBe(false);
+  });
+});
+
+describe('musicSettingsOf: the cross-field rules (#568)', () => {
+  it('with a lyrics mode: a description is required, and "mine" and "ai" need lyrics', () => {
+    expect(musicSettingsOf({ lyrics: 'la la', lyrics_mode: 'mine' })).toBe('description_required');
+    expect(musicSettingsOf({ lyrics: ' ', description: 'a slow ballad', lyrics_mode: 'mine' })).toBe('lyrics_required');
+    expect(musicSettingsOf({ lyrics: '', description: 'a slow ballad', lyrics_mode: 'ai' })).toBe('lyrics_required');
+    expect(musicSettingsOf({ lyrics: 'la la', description: 'a slow ballad', lyrics_mode: 'mine' })).toMatchObject({ lyricsMode: 'mine', lyricsSent: 'la la', description: 'a slow ballad', title: 'La La' });
+  });
+
+  it('"No vocals" sends [Instrumental] and keeps the typed lyrics for the prompt; the title comes from the description', () => {
+    expect(musicSettingsOf({ lyrics: 'kept for later', description: 'calm piano by the sea, soft rain', lyrics_mode: 'instrumental' })).toEqual({
+      title: 'Calm Piano By The Sea',
+      description: 'calm piano by the sea, soft rain',
+      lyricsMode: 'instrumental',
+      lyricsStored: 'kept for later',
+      lyricsSent: '[Instrumental]',
+    });
+  });
+
+  it('an older client (tags, no mode) keeps the old rule: lyrics or tags, the mode derived, lyrics sent as written', () => {
+    expect(musicSettingsOf({ lyrics: ' ', tags: '' })).toBe('lyrics_or_tags_required');
+    expect(musicSettingsOf({ lyrics: '', tags: 'ambient piano' })).toMatchObject({ lyricsMode: 'instrumental', lyricsSent: '', description: 'ambient piano' });
+    expect(musicSettingsOf({ lyrics: 'Person A sings', tags: '' })).toMatchObject({ lyricsMode: 'mine', lyricsSent: 'Person A sings' });
+    expect(musicSettingsOf({ lyrics: 'x', tags: 'one', description: 'two' })).toBe('description_and_tags');
+  });
+
+  it('a typed title wins; an empty one is generated', () => {
+    expect(musicSettingsOf({ lyrics: 'la', description: 'd', lyrics_mode: 'mine', title: 'My Title' })).toMatchObject({ title: 'My Title' });
+    expect(musicSettingsOf({ lyrics: '', description: '', lyrics_mode: 'instrumental' })).toBe('description_required');
   });
 });
 
@@ -55,22 +109,45 @@ describe('sniffAudio', () => {
   });
 });
 
-describe('songTitle', () => {
-  it('is the first lyric line without structure tags', () => {
-    expect(songTitle('[verse]\n\n  Walking to the river  \n[chorus] la la', 'folk')).toBe('Walking to the river');
-    expect(songTitle('[intro] Morning light', '')).toBe('Morning light');
+describe('generatedTitle (#568)', () => {
+  it('is the first lyric line that is not a section tag, trimmed and title-cased', () => {
+    expect(generatedTitle('[verse]\n\n  walking to the river  \n[chorus] la la', 'folk')).toBe('Walking To The River');
+    expect(generatedTitle('[intro] morning light', '')).toBe('Morning Light');
+    expect(generatedTitle('the DJ plays my iPhone song', '')).toBe('The DJ Plays My IPhone Song');
+    expect(generatedTitle('¿dónde está la luna?', '')).toBe('¿Dónde Está La Luna?');
   });
 
-  it('falls back to the tags, then to "Untitled", and is cut to 120 characters', () => {
-    expect(songTitle('[instrumental]', 'ambient, piano')).toBe('ambient, piano');
-    expect(songTitle('', '')).toBe('Untitled');
-    const long = songTitle('x'.repeat(300), '');
-    expect(long).toHaveLength(120);
+  it('falls back to the first words of the description, then to "Untitled song" by the page\'s language', () => {
+    expect(generatedTitle('[instrumental]', 'ambient piano, slow, rain')).toBe('Ambient Piano');
+    expect(generatedTitle('', 'a slow spanish ballad about the sea and the old harbour at night. soft piano')).toBe('A Slow Spanish Ballad About The Sea And The Old');
+    expect(generatedTitle('', '')).toBe('Untitled song');
+    expect(generatedTitle('', '   ', 'es')).toBe('Canción sin título');
+  });
+
+  it('is at most 80 characters (counting characters) and removes control characters', () => {
+    const long = generatedTitle('x'.repeat(300), '');
+    expect([...long]).toHaveLength(80);
     expect(long.endsWith('…')).toBe(true);
+    expect([...generatedTitle('ñ'.repeat(300), '')]).toHaveLength(80);
+    expect(generatedTitle('Line\u0007 one\u0000', '')).toBe('Line One');
   });
 
-  it('removes control characters', () => {
-    expect(songTitle('Line\u0007 one\u0000', '')).toBe('Line one');
+  it('is deterministic', () => {
+    expect(generatedTitle('a b c', 'd')).toBe(generatedTitle('a b c', 'd'));
+  });
+});
+
+describe('tidyTitle and titleCase', () => {
+  it('makes a model\'s answer one clean title line', () => {
+    expect(tidyTitle('"Harbour Lights"\n\nThis title evokes...')).toBe('Harbour Lights');
+    expect(tidyTitle('  **Luz del puerto**.  ')).toBe('Luz del puerto');
+    expect(tidyTitle('')).toBe('');
+    expect([...tidyTitle('y'.repeat(200))]).toHaveLength(80);
+  });
+
+  it('capitalises each word and keeps the rest as written', () => {
+    expect(titleCase('rain on the roof')).toBe('Rain On The Roof');
+    expect(titleCase('NASA (and me)')).toBe('NASA (And Me)');
   });
 });
 

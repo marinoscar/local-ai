@@ -251,7 +251,7 @@ describe('the flows that write audit rows today', () => {
   });
 
   it('inserts the rows of the actions whose writers are not on this branch (the VPS stack-agent and the gateway), in the §3.5 shapes', async () => {
-    seededTargetIds.push('gw-key-1', 'gw-policy-1', 'route53');
+    seededTargetIds.push('gw-key-1', 'gw-policy-1', 'route53', 'music-prompt-1');
     await prisma.auditEvent.createMany({
       data: [
         // The VPS stack-agent's rows (CLOUD-19): the shapes its services write. Its flow needs a running agent worker.
@@ -271,6 +271,10 @@ describe('the flows that write audit rows today', () => {
         { actorUserId: userIds.admin, action: 'localai.music.request_cancelled', targetType: 'localai_music_request', targetId: 'music-request-1', meta: {} },
         { actorUserId: userIds.admin, action: 'localai.music.song_deleted', targetType: 'localai_music_song', targetId: 'music-song-1', meta: {} },
         { actorUserId: userIds.admin, action: 'localai.workload.requested', targetType: 'localai_node', targetId: 'ai-n99', meta: { name: 'music' } },
+        // #568: the saved prompts (ids only).
+        { actorUserId: userIds.admin, action: 'localai.music.prompt_created', targetType: 'localai_music_prompt', targetId: 'music-prompt-1', meta: { source: 'saved' } },
+        { actorUserId: userIds.admin, action: 'localai.music.prompt_updated', targetType: 'localai_music_prompt', targetId: 'music-prompt-1', meta: { source: 'saved' } },
+        { actorUserId: userIds.admin, action: 'localai.music.prompt_deleted', targetType: 'localai_music_prompt', targetId: 'music-prompt-1', meta: { songsKept: 0 } },
       ],
     });
   });

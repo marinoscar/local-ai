@@ -109,3 +109,38 @@ export function musicRequestNotCancellable(status: string): ConflictException {
     details: { reason: 'not_cancellable', status },
   });
 }
+
+/** `404` for a prompt id nobody knows, a non-uuid, or someone else's prompt (a prompt is read by its owner only). */
+export function unknownPrompt(): NotFoundException {
+  return new NotFoundException({ message: 'No such prompt', details: { reason: 'unknown_music_prompt' } });
+}
+
+/** `400`: a prompt delete without the typed confirmation (the prompt's id). */
+export function promptDeleteNotConfirmed(): BadRequestException {
+  return new BadRequestException({
+    message: 'Confirm the delete: send { "confirm": "<prompt id>" }.',
+    details: { reason: 'confirmation_required' },
+  });
+}
+
+/**
+ * `409`: "Write lyrics for me" while the cloud's AI is off or no model answers for this person. The page disables the
+ * choice first, with the same reason and fix; this answers a client that asks anyway.
+ */
+export function musicAiUnavailable(reason: 'ai_off' | 'no_model'): ConflictException {
+  return new ConflictException({
+    message:
+      reason === 'ai_off'
+        ? 'The AI is turned off on this cloud. An administrator turns it on in Settings, AI, or write your own lyrics.'
+        : 'No AI model is set up for you. Add an AI key in Settings, or write your own lyrics.',
+    details: { reason: reason === 'ai_off' ? 'ai_off' : 'ai_no_model' },
+  });
+}
+
+/** `502`: the AI did not answer with lyrics (its error is logged by name only, never the text). */
+export function musicAiFailed(): HttpException {
+  return new HttpException(
+    { message: 'The AI could not write lyrics this time. Try again, or write your own lyrics.', details: { reason: 'ai_failed' } },
+    HttpStatus.BAD_GATEWAY,
+  );
+}

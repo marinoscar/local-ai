@@ -11,6 +11,7 @@ import {
   AUDIT_TARGET_CATALOG,
   AUDIT_TARGET_COMMAND,
   AUDIT_TARGET_NODE,
+  AUDIT_TARGET_MUSIC_PROMPT,
   AUDIT_TARGET_MUSIC_REQUEST,
   AUDIT_TARGET_MUSIC_SONG,
   AUDIT_TARGET_VPS,
@@ -145,7 +146,7 @@ function linkOf(src: AuditRowSource, node: string | null): string | null {
     return version === null ? '/lab/catalog' : `/lab/catalog?version=${encodeURIComponent(version)}`;
   }
   if (src.targetType === AUDIT_TARGET_ALERT) return '/lab/alerts';
-  if (src.targetType === AUDIT_TARGET_MUSIC_REQUEST || src.targetType === AUDIT_TARGET_MUSIC_SONG) return '/music';
+  if (src.targetType === AUDIT_TARGET_MUSIC_REQUEST || src.targetType === AUDIT_TARGET_MUSIC_SONG || src.targetType === AUDIT_TARGET_MUSIC_PROMPT) return '/music';
   // The Route53 key rows target the VPS slice itself: its admin card is the page to open.
   if (src.targetType === AUDIT_TARGET_VPS) return '/admin/settings/vps-publishing';
   return null;
@@ -273,6 +274,13 @@ function summaryOf(src: AuditRowSource, meta: Record<string, unknown>, node: str
     }
     case 'localai.music.song_deleted':
       return join(['Deleted a song', node === null ? null : `made on ${node}`]);
+    // The prompt rows carry ids only (#568): never the title, description or lyrics.
+    case 'localai.music.prompt_created':
+      return 'Music prompt saved';
+    case 'localai.music.prompt_updated':
+      return 'Music prompt changed';
+    case 'localai.music.prompt_deleted':
+      return 'Music prompt deleted (its songs are kept)';
     default:
       // A new or unknown action never breaks the page: its name is the summary.
       return scrubText(src.action.slice(0, 120));

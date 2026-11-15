@@ -1,8 +1,8 @@
-// An in-memory stand-in for `localai_music_requests` and `localai_music_songs`, for the route tests over a mocked
+// An in-memory stand-in for `localai_music_requests`, `localai_music_songs` and `localai_music_prompts`, for the route tests over a mocked
 // database: the few Prisma operations `MusicService` uses, with their real semantics (a conditional `updateMany` is
 // atomic, `include` joins the songs and the node). The SQL itself is proven against PostgreSQL in `music.db.spec.ts`.
 import { randomUUID } from 'node:crypto';
-import type { LocalaiMusicRequest, LocalaiMusicSong } from '@prisma/client';
+import type { LocalaiMusicPrompt, LocalaiMusicRequest, LocalaiMusicSong } from '@prisma/client';
 
 type Where = Record<string, unknown>;
 
@@ -31,6 +31,7 @@ const matches = (row: object, where: Where = {}) =>
 export class FakeMusicTables {
   readonly requests: LocalaiMusicRequest[] = [];
   readonly songs: LocalaiMusicSong[] = [];
+  readonly prompts: LocalaiMusicPrompt[] = [];
   /** Node row id to its lab id and name, for `include: { node }`. */
   readonly nodes = new Map<string, { nodeId: string; displayName: string }>();
   now = () => new Date();
@@ -38,6 +39,7 @@ export class FakeMusicTables {
   reset(): void {
     this.requests.length = 0;
     this.songs.length = 0;
+    this.prompts.length = 0;
   }
 
   private withRelations(row: LocalaiMusicRequest) {
@@ -63,6 +65,8 @@ export class FakeMusicTables {
         sampleMime: null,
         sampleBytes: null,
         sampleSha256: null,
+        promptId: null,
+        lyricsMode: null,
         errorCode: null,
         errorMessage: null,
         finishedAt: null,
@@ -72,8 +76,8 @@ export class FakeMusicTables {
         ...fields,
       } as LocalaiMusicRequest;
       this.requests.push(row);
-      for (const song of (songs?.create ?? []) as Array<{ index: number; storageKey: string; status: LocalaiMusicSong['status'] }>) {
-        this.songs.push({ id: randomUUID(), requestId: row.id, index: song.index, status: song.status, storageKey: song.storageKey, mime: null, sizeBytes: null, sha256: null, durationS: null, createdAt: now, readyAt: null });
+      for (const song of (songs?.create ?? []) as Array<{ index: number; storageKey: string; title: string; status: LocalaiMusicSong['status'] }>) {
+        this.songs.push({ id: randomUUID(), requestId: row.id, index: song.index, title: song.title, status: song.status, storageKey: song.storageKey, mime: null, sizeBytes: null, sha256: null, durationS: null, createdAt: now, readyAt: null });
       }
       return { ...row };
     },
@@ -81,12 +85,15 @@ export class FakeMusicTables {
       const row = this.requests.find((candidate) => (where.id !== undefined ? candidate.id === where.id : candidate.commandId === where.commandId));
       return row ? this.withRelations(row) : null;
     },
-    findMany: async ({ where, skip, take }: { where?: Where; skip?: number; take?: number } = {}) =>
-      this.requests
+    findMany: async ({ where, skip, take, select }: { where?: Where; skip?: number; take?: number; select?: Record<string, unknown> } = {}) => {
+      const rows = this.requests
         .filter((row) => matches(row, where))
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-        .slice(skip ?? 0, take === undefined ? undefined : (skip ?? 0) + take)
-        .map((row) => this.withRelations(row)),
+        .slice(skip ?? 0, take === undefined ? undefined : (skip ?? 0) + take);
+      // The prompt history's song count: `select: { promptId, _count: { select: { songs: { where: { status } } } } }`.
+      if (select?._count) return rows.map((row) => ({ promptId: row.promptId, _count: { songs: this.songs.filter((song) => song.requestId === row.id && song.status === 'ready').length } }));
+      return rows.map((row) => this.withRelations(row));
+    },
     count: async ({ where }: { where?: Where } = {}) => this.requests.filter((row) => matches(row, where)).length,
     update: async ({ where, data }: { where: { id: string }; data: Partial<LocalaiMusicRequest> }) => {
       const row = this.requests.find((candidate) => candidate.id === where.id);
@@ -102,6 +109,61 @@ export class FakeMusicTables {
         count += 1;
       }
       return { count };
+    },
+  };
+
+  readonly localaiMusicPrompt = {
+    create: async ({ data }: { data: Record<string, any> }) => {
+      const now = this.now();
+      const row = {
+        id: randomUUID(),
+        seed: null,
+        sampleKey: null,
+        sampleMime: null,
+        sampleBytes: null,
+        sampleSha256: null,
+        sampleMode: null,
+        strength: null,
+        lastUsedAt: now,
+        createdAt: now,
+        updatedAt: now,
+        ...data,
+      } as LocalaiMusicPrompt;
+      this.prompts.push(row);
+      return { ...row };
+    },
+    findUnique: async ({ where }: { where: { id: string } }) => {
+      const row = this.prompts.find((candidate) => candidate.id === where.id);
+      return row ? { ...row } : null;
+    },
+    findMany: async ({ where, skip, take }: { where?: Where; skip?: number; take?: number } = {}) =>
+      this.prompts
+        .filter((row) => matches(row, where))
+        .sort((a, b) => b.lastUsedAt.getTime() - a.lastUsedAt.getTime() || b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(skip ?? 0, take === undefined ? undefined : (skip ?? 0) + take)
+        .map((row) => ({ ...row })),
+    count: async ({ where }: { where?: Where } = {}) => this.prompts.filter((row) => matches(row, where)).length,
+    update: async ({ where, data }: { where: { id: string }; data: Partial<LocalaiMusicPrompt> }) => {
+      const row = this.prompts.find((candidate) => candidate.id === where.id);
+      if (!row) throw new Error('not found');
+      Object.assign(row, data, { updatedAt: this.now() });
+      return { ...row };
+    },
+    updateMany: async ({ where, data }: { where?: Where; data: Partial<LocalaiMusicPrompt> }) => {
+      let count = 0;
+      for (const row of this.prompts) {
+        if (!matches(row, where)) continue;
+        Object.assign(row, data);
+        count += 1;
+      }
+      return { count };
+    },
+    // `onDelete: SetNull` on `localai_music_requests.prompt_id`: the songs stay.
+    deleteMany: async ({ where }: { where?: Where } = {}) => {
+      const gone = this.prompts.filter((row) => matches(row, where));
+      for (const request of this.requests) if (gone.some((row) => row.id === request.promptId)) request.promptId = null;
+      this.prompts.splice(0, this.prompts.length, ...this.prompts.filter((row) => !gone.includes(row)));
+      return { count: gone.length };
     },
   };
 
