@@ -50,3 +50,24 @@ const (
 
 // llamaCgroupUnit is the systemd unit of the router; its cgroup holds llama-server and its children.
 const llamaCgroupUnit = "localai-llama.service"
+
+// CgroupHasUnit reports whether a /proc/<pid>/cgroup file places the process in a systemd unit.
+func CgroupHasUnit(b []byte, unit string) bool { return cgroupHasUnit(b, unit) }
+
+// UnitVRAMMiB sums the graphics memory of the compute processes that run in a systemd unit
+// (llama-router.md section 4.3.1: an engine's own memory is measured, not taken from what it says).
+// readCgroup reads /proc/<pid>/cgroup; a process whose file cannot be read is not the unit's. known
+// is false when the processes cannot be attributed: no GPU, several GPUs, or a GPU that does not list
+// its processes (AMD).
+func UnitVRAMMiB(gpus []GPU, unit string, readCgroup func(pid int) ([]byte, error)) (mib int64, known bool) {
+	if len(gpus) != 1 || gpus[0].Vendor != VendorNVIDIA || gpus[0].Processes == nil {
+		return 0, false
+	}
+	for _, p := range gpus[0].Processes {
+		b, err := readCgroup(p.PID)
+		if err == nil && cgroupHasUnit(b, unit) {
+			mib += p.VRAMMiB
+		}
+	}
+	return mib, true
+}

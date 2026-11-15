@@ -311,3 +311,35 @@ func TestParseNvidiaAppsCases(t *testing.T) {
 		})
 	}
 }
+
+func TestUnitVRAMMiBSumsTheUnitsProcessesOnly(t *testing.T) {
+	cg := map[int]string{
+		10: "0::/system.slice/localai-music.service\n",
+		11: "0::/system.slice/localai-music.service\n",
+		20: "0::/system.slice/localai-llama.service\n",
+	}
+	read := func(pid int) ([]byte, error) {
+		s, ok := cg[pid]
+		if !ok {
+			return nil, errors.New("gone")
+		}
+		return []byte(s), nil
+	}
+	nv := GPU{Vendor: VendorNVIDIA, Processes: []GPUProcess{{PID: 10, VRAMMiB: 6000}, {PID: 11, VRAMMiB: 58}, {PID: 20, VRAMMiB: 9000}, {PID: 30, VRAMMiB: 200}}}
+	if mib, known := UnitVRAMMiB([]GPU{nv}, "localai-music.service", read); !known || mib != 6058 {
+		t.Fatalf("music = %d %v, want 6058 true", mib, known)
+	}
+	if mib, known := UnitVRAMMiB([]GPU{{Vendor: VendorNVIDIA, Processes: []GPUProcess{}}}, "localai-music.service", read); !known || mib != 0 {
+		t.Fatalf("nothing running = %d %v", mib, known)
+	}
+	for name, gpus := range map[string][]GPU{
+		"no GPU":          nil,
+		"two GPUs":        {nv, nv},
+		"AMD":             {{Vendor: VendorAMD, Processes: []GPUProcess{}}},
+		"no process list": {{Vendor: VendorNVIDIA}},
+	} {
+		if _, known := UnitVRAMMiB(gpus, "localai-music.service", read); known {
+			t.Fatalf("%s: known", name)
+		}
+	}
+}
