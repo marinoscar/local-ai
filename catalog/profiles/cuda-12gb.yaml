@@ -30,6 +30,7 @@ include:
     - kit-piper
     - kit-debs-resolute-amd64
     - kit-nvidia-resolute-amd64-595-open
+    - kit-engine-acestep-cuda
     - wikimed-en
     - survival-first-aid
     - survival-water

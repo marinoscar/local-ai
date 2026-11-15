@@ -231,6 +231,35 @@ content:
     expected_size_bytes: 700000000
     refresh_days: 30
 
+  # E11 (#511): the music runtime's offline install set, kit/engines/acestep/<version>/. Ark sync fills it on an online
+  # node (rebuild-kit.md section 3.2.2, ark-sync.md section 4.9.10): the pinned standalone Python (ACE-Step needs
+  # 3.11 or 3.12; Ubuntu 26.04 has 3.14), every wheel of the lock (sha256 per wheel; the lock's own sha256 below),
+  # and the wheels sync builds itself (ACE-Step and nano-vllm have no wheel on any index; the shim is this repo's).
+  # The lock and the shim come from this repository at the catalog tag. Re-pin with scripts/release/lock-acestep.sh.
+  # The Python sha256 is from the release's SHA256SUMS; size about 4.5 GB (wheels 4.4 GB, Python 68 MB).
+  - id: kit-engine-acestep-cuda
+    kind: kit
+    display_name: "Music engine 1.5.0 for NVIDIA (rebuild kit)"
+    summary: "Python 3.12 and every package of the music engine (ACE-Step 1.5), to install music offline."
+    summary_es: "Python 3.12 y todos los paquetes del motor de música (ACE-Step 1.5), para instalar la música sin internet."
+    survival_tier: 1
+    license: "MIT"
+    source:
+      type: pip_wheelhouse
+      version: "1.5.0"
+      lock: engines/acestep/requirements-cuda.lock
+      sha256: "7be4976de3f28108edd35477e19cfef0c24b83e4c5dd1e84dc406c112c46cb55"
+      files:
+        - {url: "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.12.16+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz", sha256: "c2f87d4b4e8db3abddb0f116c6ccfc503d0cbdbb9ee8faacddad1b679ec12e99", name: "python/cpython-3.12.16+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz"}
+      indexes:
+        - https://pypi.org/simple
+        - https://download.pytorch.org/whl/cu128
+      builds:
+        - {url: "https://github.com/ACE-Step/ACE-Step-1.5.git", commit: "ca1e85fe9430179831e6bc6be790c332190a3866"}
+        - {url: "https://github.com/ACE-Step/ACE-Step-1.5.git", commit: "ca1e85fe9430179831e6bc6be790c332190a3866", subdirectory: "acestep/third_parts/nano-vllm"}
+        - {repo_path: engines/acestep}
+    expected_size_bytes: 5000000000
+
   - id: kit-local-ai-repo
     kind: kit
     display_name: "local-ai repository (rebuild kit)"
