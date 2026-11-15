@@ -41,7 +41,7 @@ var (
 	flashAttn      = []string{"on", "off", "auto"}
 	specTypes      = []string{"draft-mtp", "draft"}
 	contentKinds   = []string{"kiwix", "maps", "kit", "docs"}
-	arkSrcTypes    = []string{"kiwix", "url", "pmtiles_extract", "github_release", "git_mirror", "apt_closure", "repo_docs"}
+	arkSrcTypes    = []string{"kiwix", "url", "pmtiles_extract", "github_release", "git_mirror", "apt_closure", "repo_docs", "pip_wheelhouse"}
 	versionPolicy  = []string{"latest", "pinned"}
 	kiwixChecksums = []string{"sidecar", "pinned"}
 	urlChecksums   = []string{"pinned", "sidecar", "computed"}
@@ -233,7 +233,7 @@ type ContentSource struct {
 	// kiwix, url, pmtiles_extract
 	Checksum string `yaml:"checksum"`
 
-	// url (and git_mirror: URL only)
+	// url (and git_mirror: URL only; pip_wheelhouse: sha256 is the lock's, files the pinned Python)
 	URL        string    `yaml:"url"`
 	SHA256     string    `yaml:"sha256"`
 	Files      []URLFile `yaml:"files"`
@@ -261,6 +261,12 @@ type ContentSource struct {
 	Arch       string      `yaml:"arch"`
 	Packages   []string    `yaml:"packages"`
 	ExtraRepos []ExtraRepo `yaml:"extra_repos"`
+
+	// pip_wheelhouse (wheelhouse.go)
+	Version string       `yaml:"version"`
+	Lock    string       `yaml:"lock"`
+	Indexes []string     `yaml:"indexes"`
+	Builds  []WheelBuild `yaml:"builds"`
 }
 
 // KiwixPinned is the pinned file of a kiwix item with version_policy: pinned.
