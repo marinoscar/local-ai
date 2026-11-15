@@ -40,9 +40,18 @@ import {
 import { extensionOf, musicSettingsOf, strengthFor, type MusicLyricsMode, type MusicRequestFields, type MusicSettings, type SniffedAudio } from './music-input';
 import { MusicAssistService } from './music-assist.service';
 import { MusicPromptsService, sampleOfPrompt, type PromptFields, type StoredSample } from './music-prompts.service';
-import { MUSIC_MAX_ACTIVE_PER_USER, MUSIC_MAX_PER_HOUR_PER_USER, MUSIC_PENDING_URL, MUSIC_PLAY_URL_TTL_S } from './music-limits';
+import { MUSIC_DURATION_FALLBACK_S, MUSIC_MAX_ACTIVE_PER_USER, MUSIC_MAX_PER_HOUR_PER_USER, MUSIC_PENDING_URL, MUSIC_PLAY_URL_TTL_S } from './music-limits';
 import { MUSIC_OBJECT_STORE, MusicStorageNotConfigured, sampleKey, songKey, type MusicObjectStore } from './music-store';
-import { MUSIC_ROLE, TERMINAL_REQUEST_STATUSES, activeWorkloadOf, musicReadiness, reconcileRequest, workloadsOf } from './music-state';
+import {
+  MUSIC_ROLE,
+  TERMINAL_REQUEST_STATUSES,
+  acceptsAutoDuration,
+  activeWorkloadOf,
+  musicReadiness,
+  reconcileRequest,
+  sentDuration,
+  workloadsOf,
+} from './music-state';
 import {
   UUID,
   toLibrarySong,
@@ -71,7 +80,8 @@ export interface SampleInput {
 interface EnqueueJob {
   nodeId: string;
   settings: MusicSettings;
-  durationS: number;
+  /** null: Auto (#571). */
+  durationS: number | null;
   language: string;
   seed: number | null;
   variations: number;
@@ -144,7 +154,7 @@ export class MusicService {
    */
   async makeFromPrompt(
     promptId: string,
-    body: { nodeId: string; overrides?: { variations?: number; seed?: number | null; durationS?: number; language?: string } },
+    body: { nodeId: string; overrides?: { variations?: number; seed?: number | null; durationS?: number | null; language?: string } },
     requester: MusicRequester,
     source: CommandSource,
   ): Promise<MusicRequestView> {
@@ -158,7 +168,7 @@ export class MusicService {
       {
         nodeId: body.nodeId,
         settings,
-        durationS: overrides.durationS ?? prompt.durationS,
+        durationS: overrides.durationS !== undefined ? overrides.durationS : prompt.durationS,
         language: overrides.language ?? prompt.language,
         seed,
         variations: overrides.variations ?? prompt.variations,
@@ -189,10 +199,15 @@ export class MusicService {
   private async enqueue(job: EnqueueJob, requester: MusicRequester, source: CommandSource): Promise<MusicRequestView> {
     const hasSample = job.upload !== null || job.reuse !== null;
     if (!hasSample && (job.sampleMode !== undefined || job.strength !== undefined)) throw musicInputRejected(null, 'sample_settings_without_sample');
-    const node = await this.prisma.localaiNode.findUnique({ where: { nodeId: job.nodeId }, select: { id: true, nodeId: true, phase: true, mode: true } });
+    const node = await this.prisma.localaiNode.findUnique({
+      where: { nodeId: job.nodeId },
+      select: { id: true, nodeId: true, phase: true, mode: true, workerNodeId: true },
+    });
     if (!node) throw unknownLabNode();
     assertNodeTakesCommands(node);
     await this.assertWithinLimits(requester.userId);
+    // Auto (#571) goes out without a length only to a node that says it picks one; an older one is sent 60 s.
+    const durationS = sentDuration(job.durationS, job.durationS === null && (await this.acceptsAuto(node.workerNodeId)), MUSIC_DURATION_FALLBACK_S);
 
     const requestId = randomUUID();
     const sampleObject: StoredSample | null = job.upload
@@ -234,7 +249,7 @@ export class MusicService {
       request_id: requestId,
       lyrics: settings.lyricsSent,
       tags: settings.description,
-      duration_s: job.durationS,
+      ...(durationS !== null ? { duration_s: durationS } : {}),
       language: job.language,
       ...(job.seed !== null ? { seed: job.seed } : {}),
       variations: job.variations,
@@ -278,7 +293,7 @@ export class MusicService {
         tags: settings.description,
         lyricsMode: settings.lyricsMode,
         lyricsBytes,
-        durationS: job.durationS,
+        durationS,
         language: job.language,
         seed: job.seed !== null ? BigInt(job.seed) : null,
         variations: job.variations,
@@ -323,7 +338,7 @@ export class MusicService {
         commandId,
         promptId: saved.promptId,
         variations: job.variations,
-        durationS: job.durationS,
+        durationS,
         lyricsMode: settings.lyricsMode,
         ...(autoLyrics ? { autoLyrics } : {}),
         hasSample,
@@ -480,17 +495,25 @@ export class MusicService {
     return { id: songId, deleted: true };
   }
 
+  /** Whether a node's worker row says it picks a song's length itself (`music.auto_duration`, #571). */
+  private async acceptsAuto(workerNodeId: string | null): Promise<boolean> {
+    if (!workerNodeId) return false;
+    const worker = await this.prisma.workerNode.findUnique({ where: { id: workerNodeId }, select: { capabilities: true } });
+    return acceptsAutoDuration(worker?.capabilities ?? null);
+  }
+
   /** `GET /nodes`: every enrolled node with its music readiness (state first) and its workloads from its snapshot. */
   async nodes(): Promise<MusicNodeView[]> {
     const now = this.clock.now();
     const nodes = await this.prisma.localaiNode.findMany({
       where: { phase: 'enrolled' },
-      select: { id: true, nodeId: true, displayName: true, phase: true, mode: true, lastStateAt: true, lastState: true },
+      select: { id: true, nodeId: true, displayName: true, phase: true, mode: true, lastStateAt: true, lastState: true, workerNodeId: true },
       orderBy: { nodeId: 'asc' },
     });
     if (nodes.length === 0) return [];
     const ids = nodes.map((node) => node.id);
-    const [models, switches] = await Promise.all([
+    const workerIds = nodes.flatMap((node) => (node.workerNodeId ? [node.workerNodeId] : []));
+    const [models, switches, workers] = await Promise.all([
       this.prisma.localaiNodeModel.findMany({
         where: { nodeId: { in: ids }, roles: { has: MUSIC_ROLE } },
         select: { nodeId: true, modelId: true, present: true, loadable: true, loadableReason: true, status: true, roles: true },
@@ -500,7 +523,9 @@ export class MusicService {
         select: { nodeId: true, result: true, finishedAt: true },
         orderBy: { finishedAt: 'desc' },
       }),
+      workerIds.length > 0 ? this.prisma.workerNode.findMany({ where: { id: { in: workerIds } }, select: { id: true, capabilities: true } }) : Promise.resolve([]),
     ]);
+    const autoByWorker = new Map(workers.map((worker) => [worker.id, acceptsAutoDuration(worker.capabilities)]));
     return nodes.map((node) => {
       const mine = models.filter((model) => model.nodeId === node.id);
       const last = switches.find((entry) => entry.nodeId === node.id);
@@ -512,6 +537,7 @@ export class MusicService {
         musicModels: [...mine].sort((a, b) => Number(b.status === 'loaded') - Number(a.status === 'loaded')).map((model) => model.modelId),
         activeWorkload: workloads ? workloads.active : last ? activeWorkloadOf(last.result) : null,
         workloads: workloads ? workloads.items.map((item) => ({ name: item.name, label: item.label, fits: item.fits, missing: item.missing })) : null,
+        autoDuration: node.workerNodeId ? (autoByWorker.get(node.workerNodeId) ?? false) : false,
         lastStateAt: node.lastStateAt ? node.lastStateAt.toISOString() : null,
       };
     });

@@ -8,16 +8,21 @@ const bytes = (...parts: Array<string | number[]>) =>
 describe('MusicRequestFieldsSchema', () => {
   const base = { nodeId: 'ai-n2', lyrics: '[verse]\nPerson A sings' };
 
-  it('applies the defaults: 60 s, en, one variation, the English page, keep the sample', () => {
+  it('applies the defaults: Auto length (null, #571), en, one variation, the English page, keep the sample', () => {
     expect(MusicRequestFieldsSchema.parse(base)).toEqual({
       nodeId: 'ai-n2',
       lyrics: '[verse]\nPerson A sings',
       ui_language: 'en',
       remove_sample: false,
-      duration_s: 60,
+      duration_s: null,
       language: 'en',
       variations: 1,
     });
+  });
+
+  it('reads "auto" and an empty length as Auto (null)', () => {
+    for (const duration_s of ['auto', '']) expect(MusicRequestFieldsSchema.parse({ ...base, duration_s }).duration_s).toBeNull();
+    for (const bad of ['AUTO', 'none', ' ']) expect(MusicRequestFieldsSchema.safeParse({ ...base, duration_s: bad }).success).toBe(false);
   });
 
   it('reads the numbers from text fields and checks their ranges (the seed is the contract\'s 31 bits)', () => {

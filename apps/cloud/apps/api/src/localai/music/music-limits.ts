@@ -57,5 +57,11 @@ export const MUSIC_INSTRUMENTAL_LYRICS = '[Instrumental]';
 /** Per page of the prompt history. */
 export const MUSIC_PROMPTS_PAGE_SIZE_MAX = 50;
 
+/**
+ * The length sent to a node that cannot pick one itself (#571): its capabilities do not list `music.auto_duration`, so
+ * an Auto request goes out as 60 s and the page says so ("This computer needs an update to pick the length by itself").
+ */
+export const MUSIC_DURATION_FALLBACK_S = 60;
+
 /** The default strength per mode (E11 contract section 3): 1.0 for the same song, 0.5 for "sounds like". */
 export const MUSIC_DEFAULT_STRENGTH = { same_song: 1.0, sounds_like: 0.5 } as const;

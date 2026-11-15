@@ -368,6 +368,70 @@ describe('Local AI music routes over HTTP', () => {
     });
   });
 
+  describe('Auto length (#571): left out only for a node that picks it', () => {
+    const WORKER = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1';
+    const withCapabilities = (capabilities: unknown) => {
+      node = { ...node!, workerNodeId: WORKER } as typeof node;
+      prismaMock.workerNode.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) => (where.id === WORKER ? { id: WORKER, capabilities } : null));
+      prismaMock.workerNode.findMany.mockResolvedValue([{ id: WORKER, capabilities }]);
+    };
+    const NEW_AGENT = { localai: { schema: 1, allow: ['music.generate'], features: ['music.auto_duration'] } };
+    const OLD_AGENT = { localai: { schema: 1, allow: ['music.generate'] } };
+
+    it('a node that lists music.auto_duration gets no duration_s; the request and the prompt keep Auto (null)', async () => {
+      withCapabilities(NEW_AGENT);
+      const author = registerMockUser(jwt, 'contributor');
+      const response = await submit(author.accessToken, { nodeId: 'ai-n2', lyrics: LYRICS });
+      expect(response.statusCode).toBe(201);
+      const view = response.json().data;
+      expect(view.durationS).toBeNull();
+      const [command] = musicCommands();
+      const params = COMMANDS['localai.music.generate'].params.parse(command.params);
+      expect(params).not.toHaveProperty('duration_s');
+      expect(command.params).not.toHaveProperty('duration_s');
+      expect((await claimMusic()).params).not.toHaveProperty('duration_s');
+      expect(audits('localai.music.requested')[0].meta).toMatchObject({ durationS: null });
+      expect((await send('GET', `/prompts/${view.promptId}`, author.accessToken)).json().data.durationS).toBeNull();
+    });
+
+    it('"auto" and an empty field are Auto too; a set length is sent as it is', async () => {
+      withCapabilities(NEW_AGENT);
+      const contributor = token('contributor');
+      for (const duration_s of ['auto', '']) expect((await submit(contributor, { nodeId: 'ai-n2', lyrics: LYRICS, duration_s })).json().data.durationS).toBeNull();
+      expect((await submit(contributor, { nodeId: 'ai-n2', lyrics: LYRICS, duration_s: '120' })).json().data.durationS).toBe(120);
+      expect(musicCommands().map((command) => (command.params as Record<string, unknown>).duration_s)).toEqual([undefined, undefined, 120]);
+    });
+
+    it('a node that does not list it (an older agent, or no worker row) is sent 60 s; the prompt still says Auto', async () => {
+      for (const capabilities of [OLD_AGENT, null, { localai: { features: 'music.auto_duration' } }]) {
+        withCapabilities(capabilities);
+        const author = registerMockUser(jwt, 'contributor');
+        const view = (await submit(author.accessToken, { nodeId: 'ai-n2', lyrics: LYRICS })).json().data;
+        expect(view.durationS).toBe(60);
+        expect((musicCommands().at(-1)!.params as Record<string, unknown>).duration_s).toBe(60);
+        expect((await send('GET', `/prompts/${view.promptId}`, author.accessToken)).json().data.durationS).toBeNull();
+      }
+    });
+
+    it('GET /nodes says which nodes pick the length (autoDuration)', async () => {
+      withCapabilities(NEW_AGENT);
+      prismaMock.localaiNode.findMany.mockResolvedValue([{ ...node, lastStateAt: clock.now() }, { ...node, id: 'x', nodeId: 'ai-n3', workerNodeId: null, lastStateAt: clock.now() }]);
+      prismaMock.localaiNodeModel.findMany.mockResolvedValue([]);
+      const nodes = (await send('GET', '/nodes', token('contributor'))).json().data;
+      expect(nodes.map((entry: any) => [entry.nodeId, entry.autoDuration])).toEqual([['ai-n2', true], ['ai-n3', false]]);
+    });
+
+    it('make again: a null override is Auto, a left-out one keeps the prompt\'s length', async () => {
+      withCapabilities(NEW_AGENT);
+      const author = registerMockUser(jwt, 'contributor');
+      const created = (await submit(author.accessToken, { nodeId: 'ai-n2', lyrics: LYRICS, description: 'a slow song by the river', lyrics_mode: 'mine', duration_s: '90' })).json().data;
+      const make = (overrides?: unknown) =>
+        app.inject({ method: 'POST', url: `/api/localai/music/prompts/${created.promptId}/make`, headers: auth(author.accessToken), payload: { nodeId: 'ai-n2', ...(overrides ? { overrides } : {}) } as never });
+      expect((await make()).json().data.durationS).toBe(90);
+      expect((await make({ durationS: null })).json().data.durationS).toBeNull();
+    });
+  });
+
   describe('the enqueue and the request life', () => {
     it('stores the sample, mints one PUT per variation, queues music.generate with its sha256, audits without lyrics, and logs no lyrics', async () => {
       const restoreLogger = enableNestLogging();
@@ -621,7 +685,8 @@ describe('Local AI music routes over HTTP', () => {
       expect(list.items[0]).toMatchObject({ id: created.promptId, title: 'Harbour Song', description: DESCRIPTION, lyricsMode: 'mine', hasSample: true, songCount: 0 });
       expect(list.items[0]).not.toHaveProperty('lyrics');
       const one = (await send('GET', `/prompts/${created.promptId}`, owner.accessToken)).json().data;
-      expect(one).toMatchObject({ lyrics: LYRICS, variations: 2, durationS: 60, sampleMime: 'audio/wav' });
+      // No length on the form: the prompt keeps Auto (#571), whatever the node was sent.
+      expect(one).toMatchObject({ lyrics: LYRICS, variations: 2, durationS: null, sampleMime: 'audio/wav' });
       expect(JSON.stringify(one)).not.toMatch(/localai-music\//);
 
       const edited = await patch(owner.accessToken, `/prompts/${created.promptId}`, { title: 'New Name', lyrics: '[verse]\nOther words', variations: 1 });

@@ -71,6 +71,28 @@ export function musicReadiness(node: ReadinessNode, models: readonly ReadinessMo
   return 'no_music';
 }
 
+/** The entry of `capabilities.localai.features` that says the node's engine picks a song's length (#571, agent.md 4.8.2). */
+export const MUSIC_AUTO_DURATION_FEATURE = 'music.auto_duration';
+
+/**
+ * Whether the node takes `localai.music.generate` without `duration_s` (Auto): its worker row's capabilities, which the
+ * agent reports at register and on every heartbeat, list `music.auto_duration`. Anything else (no row, an older agent,
+ * a shape this cloud does not know) is false, and the cloud sends the fallback length.
+ */
+export function acceptsAutoDuration(capabilities: unknown): boolean {
+  if (capabilities === null || typeof capabilities !== 'object') return false;
+  const localai = (capabilities as Record<string, unknown>).localai;
+  if (localai === null || typeof localai !== 'object') return false;
+  const features = (localai as Record<string, unknown>).features;
+  return Array.isArray(features) && features.includes(MUSIC_AUTO_DURATION_FEATURE);
+}
+
+/** The length a request sends: the one asked for, else nothing (Auto) for a node that picks it, else the fallback. */
+export function sentDuration(asked: number | null, nodeAcceptsAuto: boolean, fallback: number): number | null {
+  if (asked !== null) return asked;
+  return nodeAcceptsAuto ? null : fallback;
+}
+
 /** The workload a node last switched to through the cloud: the result of its newest succeeded `workload.activate`. */
 export function activeWorkloadOf(result: unknown): string | null {
   const parsed = COMMANDS['localai.workload.activate'].result.safeParse(result);

@@ -222,6 +222,10 @@ describe('describeAudit: the E11 music and workload actions', () => {
       link: '/music',
       nodeId: 'ai-n2',
     });
+    // #571: an Auto length is recorded as null.
+    expect(describeAudit(row('localai.music.requested', 'localai_music_request', 'r1', { nodeId: 'ai-n2', variations: 1, durationS: null, hasSample: false })).summary).toBe(
+      'Music requested on ai-n2 (1 song, auto length)',
+    );
     expect(describeAudit(row('localai.music.song_deleted', 'localai_music_song', 's1', { nodeId: 'ai-n2' })).summary).toBe('Deleted a song made on ai-n2');
     expect(describeAudit(row('localai.music.request_cancelled', 'localai_music_request', 'r1', {})).summary).toBe('Music request cancelled');
     // #568: the saved prompts, with no text from the prompt even if a row carried some.
