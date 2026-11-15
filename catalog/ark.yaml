@@ -248,7 +248,7 @@ content:
       type: pip_wheelhouse
       version: "1.5.0"
       lock: engines/acestep/requirements-cuda.lock
-      sha256: "74368893dbb36a9573eb7bcfc3ef4b5580b8963280085b7a034527879df2c527"
+      sha256: "cf009f8a9a0eef6f5bb4a228114b94e87f150db375702a27c8812ab41f3f39e8"
       files:
         - {url: "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.12.16+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz", sha256: "c2f87d4b4e8db3abddb0f116c6ccfc503d0cbdbb9ee8faacddad1b679ec12e99", name: "python/cpython-3.12.16+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz"}
       indexes:
