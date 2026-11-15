@@ -1,7 +1,13 @@
 {
   "appMigrations": [
     "20261008180000_add_notes",
-    "20261009205750_add_documents"
+    "20261009205750_add_documents",
+    "20261104120542_add_localai",
+    "20261104215031_add_localai_gateway",
+    "20261114173820_add_localai_music",
+    "20261115051102_add_localai_music_prompts",
+    "20261115060654_localai_music_lyrics_mode_auto",
+    "20261115063042_localai_music_duration_auto"
   ],
   "lockVersion": 1,
   "migrations": [
@@ -244,9 +250,21 @@
       "originId": "platform:0040_add_alerts",
       "sha256": "ec4af7e5123ecd8bb6faf3505893cb2efab4d793dae84a98d8b7f26f2dff3776",
       "since": "1.0.0"
+    },
+    {
+      "localDir": "20261115171857_notifications_state_counted",
+      "originId": "platform:0041_notifications_state_counted",
+      "sha256": "c9285347971920da5310a279351d8de8acac3bba4b281e227cb025745dafc73c",
+      "since": "1.0.0"
+    },
+    {
+      "localDir": "20261115171858_add_storage_migrations",
+      "originId": "platform:0042_add_storage_migrations",
+      "sha256": "8d37841523a5b4737379df567d5ad3feb37abb0f29dcef416cd34f20167ba181",
+      "since": "1.0.0"
     }
   ],
-  "platformVersion": "0.1.0-next.19",
+  "platformVersion": "0.1.0-next.31",
   "rawSqlIndexes": [
     {
       "definition": "CREATE UNIQUE INDEX localai_alerts_one_active ON public.localai_alerts USING btree (COALESCE(node_id, '00000000-0000-0000-0000-000000000000'::uuid), kind) WHERE (state = 'active'::\"LocalaiAlertState\")",

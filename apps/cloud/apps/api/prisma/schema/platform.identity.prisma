@@ -109,7 +109,9 @@ model User {
   grantsGiven         Grant[]       @relation("GrantGrantedBy")
 
   // composed from package:storage.prisma
-  storageObjects         StorageObject[]         @relation("UserStorageObjects")
+  storageObjects               StorageObject[]       @relation("UserStorageObjects")
+  storageMigrationRunsStarted  StorageMigrationRun[] @relation("StorageMigrationRunsStarted")
+  storageMigrationRunsCancelled StorageMigrationRun[] @relation("StorageMigrationRunsCancelled")
 
   // composed from package:webhooks.prisma
   webhookEndpoints WebhookEndpoint[] @relation("WebhookEndpointOwner")
@@ -295,6 +297,7 @@ enum PatDurationUnit {
   months
 }
 
+// @extensible — back-relations only, added with "extend model PersonalAccessToken { ... }" in a fragment
 model PersonalAccessToken {
   id            String          @id @default(uuid()) @db.Uuid
   userId        String          @map("user_id") @db.Uuid
@@ -498,8 +501,10 @@ model Organization {
   grants       Grant[]
 
   // composed from package:storage.prisma
-  storageObjects      StorageObject[]
-  storageObjectChunks StorageObjectChunk[]
+  storageObjects        StorageObject[]
+  storageObjectChunks   StorageObjectChunk[]
+  storageMigrationRuns  StorageMigrationRun[]
+  storageMigrationItems StorageMigrationItem[]
 
   // composed from package:webhooks.prisma
   webhookEndpoints WebhookEndpoint[]

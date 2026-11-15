@@ -35,9 +35,10 @@ model StorageObject {
   updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  uploadedBy User?                @relation("UserStorageObjects", fields: [uploadedById], references: [id], onDelete: SetNull)
-  org        Organization         @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  chunks     StorageObjectChunk[]
+  uploadedBy     User?                  @relation("UserStorageObjects", fields: [uploadedById], references: [id], onDelete: SetNull)
+  org            Organization           @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  chunks         StorageObjectChunk[]
+  migrationItems StorageMigrationItem[]
 
   // The target of the chunks' composite foreign key (object_id, org_id): a
   // reference between two org-owned tables is composite, because a foreign-key
@@ -75,4 +76,111 @@ model StorageObjectChunk {
   @@index([objectId])
   @@index([orgId, objectId])
   @@map("storage_object_chunks")
+}
+
+// =============================================================================
+// Copy-only provider migration (issue #1093)
+// =============================================================================
+//
+// An administrator copies every `ready` object recorded on one storage driver
+// to another: copy (streamed), verify (size and sha256 of the bytes read back
+// from the target), repoint the `storage_objects` row, and leave the source
+// object in place as a fallback. One job (`storage.migrate_object`) per item.
+//
+// A RUN is deployment-wide (storage configuration is system scope), so its
+// `org_id` is NULL today: visible to the bypass (system) client only, like a
+// system-scope `webhook_endpoints` row. The column exists so a future
+// organization-owned run needs no migration. An ITEM carries its object's
+// organization (NOT NULL), and its link to the object is the composite
+// (object_id, org_id) foreign key, so an item can never name another
+// organization's object (ADR 0002 D5).
+//
+// At most ONE run is pending or running: the raw-SQL partial unique index
+// `storage_migration_runs_active_uniq_idx` (raw-sql-indexes.json), never a
+// findFirst pre-check.
+// =============================================================================
+
+enum StorageMigrationRunStatus {
+  pending // Created; the planner job has not started yet
+  running // Planning or copying
+  completed // Every item migrated or skipped
+  failed // Finished with at least one failed item, or the planner gave up
+  cancelled // Stopped by an administrator
+}
+
+enum StorageMigrationItemStatus {
+  pending // Queued, not claimed
+  copying // A job is copying it now
+  migrated // Copied, verified and repointed
+  failed // Gave up (attempt budget spent, or verification failed every time)
+  skipped // Nothing to do: deleted, moved, already on the target, or run cancelled
+}
+
+model StorageMigrationRun {
+  id             String                    @id @default(uuid()) @db.Uuid
+  // NULL: a deployment-wide run (today, every run). Row-level security forced
+  // (policy `storage_migration_runs_org_isolation`).
+  orgId          String?                   @map("org_id") @db.Uuid
+  sourceProvider String                    @map("source_provider") @db.VarChar(48)
+  targetProvider String                    @map("target_provider") @db.VarChar(48)
+  status         StorageMigrationRunStatus @default(pending)
+  // Snapshots written by the planner and the per-item jobs; GET recomputes
+  // them from the items, so a crash between an item write and a counter write
+  // never shows a wrong figure.
+  totalCount     Int                       @default(0) @map("total_count")
+  migratedCount  Int                       @default(0) @map("migrated_count")
+  failedCount    Int                       @default(0) @map("failed_count")
+  skippedCount   Int                       @default(0) @map("skipped_count")
+  // Set when the planner has created every item and enqueued every job; the
+  // run cannot finalize before.
+  plannedAt      DateTime?                 @map("planned_at") @db.Timestamptz
+  startedById    String?                   @map("started_by_id") @db.Uuid
+  cancelledById  String?                   @map("cancelled_by_id") @db.Uuid
+  startedAt      DateTime?                 @map("started_at") @db.Timestamptz
+  finishedAt     DateTime?                 @map("finished_at") @db.Timestamptz
+  cancelledAt    DateTime?                 @map("cancelled_at") @db.Timestamptz
+  lastError      String?                   @map("last_error") @db.VarChar(1000)
+  createdAt      DateTime                  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime                  @updatedAt @map("updated_at") @db.Timestamptz
+
+  org         Organization?          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  startedBy   User?                  @relation("StorageMigrationRunsStarted", fields: [startedById], references: [id], onDelete: SetNull)
+  cancelledBy User?                  @relation("StorageMigrationRunsCancelled", fields: [cancelledById], references: [id], onDelete: SetNull)
+  items       StorageMigrationItem[]
+
+  @@index([createdAt(sort: Desc)])
+  @@index([status])
+  @@index([orgId])
+  @@map("storage_migration_runs")
+}
+
+model StorageMigrationItem {
+  id             String                     @id @default(uuid()) @db.Uuid
+  runId          String                     @map("run_id") @db.Uuid
+  objectId       String                     @map("object_id") @db.Uuid
+  // The object's organization, carried here because a policy cannot join
+  // through the parent. NOT NULL, row-level security forced.
+  orgId          String                     @map("org_id") @db.Uuid
+  status         StorageMigrationItemStatus @default(pending)
+  // The job that copies it, once the planner enqueued one (a retried planner
+  // enqueues only the items that have none).
+  jobId          String?                    @map("job_id") @db.Uuid
+  // The object's byte count and the sha256 the copy was verified against.
+  sizeBytes      BigInt?                    @map("size_bytes")
+  checksumSha256 String?                    @map("checksum_sha256") @db.Char(64)
+  lastError      String?                    @map("last_error") @db.VarChar(1000)
+  createdAt      DateTime                   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime                   @updatedAt @map("updated_at") @db.Timestamptz
+
+  run    StorageMigrationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  // Composite: (object_id, org_id) -> storage_objects (id, org_id). Cascade: an
+  // object deleted mid-run takes its item with it.
+  object StorageObject       @relation(fields: [objectId, orgId], references: [id, orgId], onDelete: Cascade)
+  org    Organization        @relation(fields: [orgId], references: [id], onDelete: Restrict)
+
+  // The idempotency anchor: one item per object per run.
+  @@unique([runId, objectId])
+  @@index([runId, status])
+  @@index([orgId, objectId])
+  @@map("storage_migration_items")
 }
