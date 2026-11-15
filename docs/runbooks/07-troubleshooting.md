@@ -201,7 +201,7 @@ A node installs what is missing from the rebuild kit **by itself** after every s
 ## Music or switching doesn't work
 
 The steps are in [12-make-music-and-switch-workloads.md](12-make-music-and-switch-workloads.md). By code:
-- `LAI-SVC-150` (music program not installed) or `LAI-LLM-043` (a model's engine is not installed): press **Install what's missing**, or `aictl ensure`.
+- `LAI-SVC-150` (music program not installed) or `LAI-LLM-043` (a model's engine is not installed): press **Install what's missing**, or `aictl ensure`. If it says the kit does not have the music engine (`LAI-KIT-040`), connect to the internet and run `aictl ark sync --item kit-engine-acestep-cuda --wait` first (about 4.5 GB; it resumes if interrupted), then **Install what's missing** again. If that sync fails with `LAI-SYN-060` and the message says the lock is incomplete, report it: the lab owner must run `scripts/release/lock-acestep.sh` and publish a new catalog.
 - `LAI-SVC-151` (music is not running): switch the computer to **Music** first (runbook 12, Part 1).
 - `LAI-SVC-152` (the music program stopped during a song), `LAI-LLM-040` (it did not start), `LAI-LLM-041` (it took too long to start): switch to **Music** again and retry; if it repeats, `aictl logs --unit music`.
 - `LAI-SVC-153` (four songs already waiting): wait for one to finish.

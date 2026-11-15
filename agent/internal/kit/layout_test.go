@@ -192,7 +192,7 @@ func TestCheckLayout(t *testing.T) {
 }
 
 func TestPartsAreTheLayoutOfSection31(t *testing.T) {
-	want := "catalog installers bin src git toolchains tools desktop debs nvidia cuda prebuilt iso"
+	want := "catalog installers bin src git toolchains tools desktop debs nvidia cuda prebuilt iso engines"
 	if got := strings.Join(kit.Parts, " "); got != want {
 		t.Fatalf("Parts = %q, want %q", got, want)
 	}

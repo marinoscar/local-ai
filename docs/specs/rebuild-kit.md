@@ -56,9 +56,12 @@ Non-goals: building Ubuntu itself; replacing the Ubuntu installer; keeping a ful
     kiwix-tools/kiwix-tools_linux-x86_64-<ver>.tar.gz   (+ aarch64)       kit-kiwix-tools
     pmtiles/go-pmtiles_<ver>_Linux_x86_64.tar.gz       (+ arm64)        kit-pmtiles
     piper/piper_linux_x86_64.tar.gz                    (+ aarch64)       kit-piper
-  engines/acestep/<version>/                   kit-engine-acestep-<backend> (E11, ADR-0012; only when a profile includes an acestep model)
-    acestep-<version>-<backend>.tar.zst        the wheel bundle: every wheel, the shim's wheel, requirements.lock with a hash per wheel
-    MANIFEST.json
+  engines/acestep/                             kit-engine-acestep-<backend> (E11, ADR-0012, ADR-0015; only when a profile includes an acestep model) §3.2.2
+    <version>/                                 "<runtime version>-<8 hex of the pins>", e.g. 1.5.0-1a2b3c4d
+      python/cpython-<ver>-...-install_only.tar.gz  the pinned standalone Python (python-build-standalone)
+      wheels/*.whl                             every wheel of the lock, plus ace-step, nano-vllm and the shim built by sync
+      requirements.lock                        the repository's lock with one line per built wheel appended (pip --require-hashes)
+    SHA256SUMS  MANIFEST.json
   desktop/
     ai-desktop_<ver>_amd64.deb   ai-desktop-<ver>-x86_64.AppImage   SHA256SUMS   kit-desktop (github_release)
   debs/<codename>-<arch>/                      kit-debs-<codename>-<arch> (apt_closure)
@@ -91,13 +94,13 @@ The **rendered docs** are not duplicated in the kit: they are `<root>/docs/` (it
 | `kit-go-toolchain` | `url` (pinned per Go version listed in `agent/go.mod` `toolchain`) | when `go.mod` changes | all (own arch internally) |
 | `kit-kiwix-tools`, `kit-pmtiles`, `kit-piper` | `url` / `github_release`, pinned | when the catalog pin changes | all |
 | `kit-desktop` | `github_release` (`marinoscar/local-ai`, desktop tag) | with each desktop release | all with a desktop |
-| `kit-engine-acestep-<backend>` (backend `cuda` first) | `github_release` (`marinoscar/local-ai`, tag `acestep-<version>`, asset `acestep-<version>-<backend>.tar.zst`, pinned sha256; built by CI from the shim and a pinned `requirements.lock` with `pip download --require-hashes`) | when the catalog pin changes | **optional per profile**: only profiles that include an `acestep` model; all on the drive (`ark-drive-full`). Several GB per backend and version ([ADR-0012](../decisions/0012-python-inference-engines.md)) |
+| `kit-engine-acestep-<backend>` (backend `cuda` first) | `pip_wheelhouse` (§3.2.2): the pinned standalone Python, the hashed lock `engines/acestep/requirements-<backend>.lock` of this repository at the catalog tag, the PyPI and PyTorch indexes, and the wheels sync builds from pinned sources; filled by ark sync on an online node ([ark-sync.md](ark-sync.md) §4.9.11) | when a pin changes (the version is derived from every pin) | **optional per profile**: only profiles that include an `acestep` model (`cuda-12gb`); all on the drive (`ark-drive-full`). About 4.5 GB per backend and version ([ADR-0012](../decisions/0012-python-inference-engines.md), [ADR-0015](../decisions/0015-engine-runtime-wheelhouse.md)) |
 | `kit-debs-<codename>-<arch>` | `apt_closure` | `refresh_days: 30` | own codename/arch internally; all on the drive |
 | `kit-nvidia-<codename>-<arch>-<branch>` | `apt_closure` | `refresh_days: 30` | CUDA nodes; all on the drive |
 | `kit-cuda-redist-<ver>-<arch>` | `url` set (optional, §CUDA option B) | when pinned | off by default |
 | `kit-ubuntu-iso-<ver>` | `url` + sidecar `SHA256SUMS` (tier 3) | each point release | ark-drive-full only |
 
-**What `catalog/ark.yaml` holds today (KIT-01).** Present and pinned: `kit-catalog`, `kit-llama-cpp`, `kit-whisper-cpp`, `kit-local-ai-repo`, `kit-agent-binaries` (the two binaries, `install-node.sh` and the release's signed `SHA256SUMS` and `SHA256SUMS.minisig`, the last two as `release/SHA256SUMS(.minisig)`, §3.2.1) and `kit-agent-source` (the pre-release `node-v0.1.0-rc.12` since epic #536; a new agent release means new pins in the same change), `kit-go-toolchain` (go1.24.13), `kit-kiwix-tools` (3.8.2), `kit-pmtiles` (1.31.2), `kit-piper` (2023.11.14-2), `kit-debs-resolute-amd64`, `kit-nvidia-resolute-amd64-595-open` and `kit-ubuntu-iso-26.04` (the 26.04.1 desktop image, checked against the `SHA256SUMS` sidecar). `kit-desktop` (`desktop-v0.1.0-rc.4` since epic #536, the `.deb` and the AppImage, pinned with `scripts/release/desktop-kit-snippet.sh --pubkey` per the `kit-desktop-bump` template, issue #491; listed in every profile next to `kit-agent-source`). Not yet present: `kit-cuda-redist-*` (off by default). Profile membership follows the Profiles column: every profile lists the all-profile items and `kit-debs-resolute-amd64`; the CUDA profiles (`cuda-12gb`, `small-8gb`) add `kit-nvidia-*`; `ark-drive-full` adds `kit-nvidia-*`, `kit-local-ai-repo` and the ISO. Three details differ from the table above:
+**What `catalog/ark.yaml` holds today (KIT-01).** Present and pinned: `kit-catalog`, `kit-llama-cpp`, `kit-whisper-cpp`, `kit-local-ai-repo`, `kit-agent-binaries` (the two binaries, `install-node.sh` and the release's signed `SHA256SUMS` and `SHA256SUMS.minisig`, the last two as `release/SHA256SUMS(.minisig)`, §3.2.1) and `kit-agent-source` (the pre-release `node-v0.1.0-rc.12` since epic #536; a new agent release means new pins in the same change), `kit-go-toolchain` (go1.24.13), `kit-kiwix-tools` (3.8.2), `kit-pmtiles` (1.31.2), `kit-piper` (2023.11.14-2), `kit-debs-resolute-amd64`, `kit-nvidia-resolute-amd64-595-open`, `kit-engine-acestep-cuda` (§3.2.2; its lock still has the four `+cu128` PyTorch packages unresolved until `scripts/release/lock-acestep.sh` is run with internet, so sync refuses it until then) and `kit-ubuntu-iso-26.04` (the 26.04.1 desktop image, checked against the `SHA256SUMS` sidecar). `kit-desktop` (`desktop-v0.1.0-rc.4` since epic #536, the `.deb` and the AppImage, pinned with `scripts/release/desktop-kit-snippet.sh --pubkey` per the `kit-desktop-bump` template, issue #491; listed in every profile next to `kit-agent-source`). Not yet present: `kit-cuda-redist-*` (off by default). Profile membership follows the Profiles column: every profile lists the all-profile items and `kit-debs-resolute-amd64`; the CUDA profiles (`cuda-12gb`, `small-8gb`) add `kit-nvidia-*`; `cuda-12gb` (the only profile with a music model) adds `kit-engine-acestep-cuda`; `ark-drive-full` adds `kit-nvidia-*`, `kit-engine-acestep-cuda`, `kit-local-ai-repo` and the ISO. Three details differ from the table above:
 - `agent/go.mod` has a `go 1.24` line and no `toolchain` line, so the pin is the newest 1.24 patch release (go1.24.13); the sha256 values come from the `go.dev/dl` JSON.
 - The `git_mirror` pinned commits are not in the catalog: `also_tarball_of: pinned` takes them from `node.yaml` and, on a drive, from `pins.json` (ark-sync.md §4.9.6). The catalog only names the repositories.
 - A `kit` item is always survival tier 1 (catalog.md §3), so the ISO cannot carry tier 3 in the catalog. "Tier 3" here means "drive only, last to matter": the ISO is listed only by `ark-drive-full`, at the end of the kit group.
@@ -115,6 +118,7 @@ The catalog sizes (`expected_size_bytes`) are approximate and only used for plan
 | CUDA toolkit (Ubuntu `nvidia-cuda-toolkit` closure) | 2.5–4 GB |
 | prebuilt binaries per node | 0.05–0.5 GB each |
 | Ubuntu ISO | 6 GB |
+| music engine wheelhouse per backend (Python 68 MB, wheels about 4.4 GB: CUDA libraries and torch) | 4.5–5 GB |
 
 #### 3.2.1 Item directories and manifests (§Item directories)
 Every kit item has exactly one **item directory** below `kit/`, the directory that holds its `MANIFEST.json` (ark-sync.md §3.1, §4.11); every file the manifest lists is inside it. `agent/internal/kit` (`kit.LayoutOf`) is the one table; the planner puts the result in the `dir` of each plan row (ark-sync.md §4.4.4) and `ark.ItemDir` places it.
@@ -128,7 +132,7 @@ Every kit item has exactly one **item directory** below `kit/`, the directory th
 | `kit-go-toolchain` | `kit/toolchains/` | |
 | `kit-kiwix-tools`, `kit-pmtiles`, `kit-piper` | `kit/tools/kiwix-tools/`, `kit/tools/pmtiles/`, `kit/tools/piper/` | |
 | `kit-desktop` | `kit/desktop/` | |
-| `kit-engine-acestep-<backend>` | `kit/engines/acestep/<version>/` | |
+| `kit-engine-acestep-<backend>` (`pip_wheelhouse`) | `kit/engines/acestep/` (one folder per runtime version below it, §3.2.2; one backend per kit until a second backend gets its own folder) | |
 | `kit-debs-<codename>-<arch>` | `kit/debs/<codename>-<arch>/` | |
 | `kit-nvidia-<codename>-<arch>-<branch>` | `kit/nvidia/<codename>-<arch>-<branch>/` | |
 | `kit-cuda-redist-<ver>-<arch>` | `kit/cuda/<ver>-<arch>/` | |
@@ -141,6 +145,30 @@ Rules:
 - **Several assets per release.** The catalog's `github_release` names one `asset`. `kit-agent-source` is one asset and is a `github_release`. `kit-agent-binaries` (two binaries, the signed checksums, the installer), `kit-desktop` (a `.deb`, an AppImage), `kit-go-toolchain`, `kit-kiwix-tools`, `kit-pmtiles` and `kit-piper` (one file per CPU type) are `url` items with a `files` list: one pinned sha256 per file, the release download URL carrying the tag.
 - **`kit-catalog` is a kit item with a `repo_docs` source** (lint accepts that combination for kit items; catalog.md §3). It produces only `kit/catalog/`; the `docs-bundle` item produces only `docs/`; both read the same `catalog-<V>` tarball (ark-sync.md §4.9.8).
 - **`kit/MANIFEST.json` and `kit/README.txt` are not items.** They are generated (§3.6); `kit/config/` and `kit/prebuilt/` have no manifest of this kind and are ignored by the index.
+
+#### 3.2.2 Engine wheelhouses (`pip_wheelhouse`, §Wheelhouse)
+A Python engine (E11, [ADR-0012](../decisions/0012-python-inference-engines.md)) is installed offline from a **wheelhouse**: a folder of wheels, the hashed lock that names them, and the Python that runs them. It is a kit item like any other (one item directory, `SHA256SUMS`, `MANIFEST.json`, verified by `aictl kit verify`, copied to a drive, counted in the budget), but it is not a release asset: GitHub release assets are limited to 2 GiB per file and the CUDA wheels alone are over 4 GB, so ark sync **fills it on an online node** from pinned inputs, the way it fills the git mirrors ([ADR-0015](../decisions/0015-engine-runtime-wheelhouse.md)).
+
+**Pinned inputs** (catalog `source.type: pip_wheelhouse`, [catalog.md](catalog.md) §3):
+
+| Field | What it pins |
+|---|---|
+| id `kit-engine-<engine>-<backend>` | the engine (`acestep`) and the backend (`cuda`) |
+| `version` | the engine's version (`1.5.0`, ACE-Step 1.5) |
+| `lock` + `sha256` | the hashed lock in this repository, `engines/acestep/requirements-<backend>.lock`, read from the repository at the catalog tag; its sha256 |
+| `files` | exactly one standalone Python tarball, `name: python/<file>.tar.gz`, with its sha256 (python-build-standalone `20261110`, CPython 3.12.16 `install_only` for x86_64; ACE-Step needs 3.11 or 3.12 and Ubuntu 26.04 ships 3.14) |
+| `indexes` | the PEP 503 indexes the wheels are found on, in order (`https://pypi.org/simple`, `https://download.pytorch.org/whl/cu128`) |
+| `builds` | what has no wheel on any index and is built by sync: a git repository at a 40-hex commit with an optional `subdirectory` (ace-step 1.5.0 and nano-vllm 0.2.0 from `ACE-Step/ACE-Step-1.5` at `ca1e85fe…`), or a `repo_path` of this repository (the shim, `engines/acestep`) |
+
+The **lock** (`engines/acestep/requirements-<backend>.lock`) is written by `scripts/release/lock-acestep.sh` from `requirements-<backend>.in` (the spike's `pip freeze`, every package `==`, plus the build backends): one line `name==version --hash=sha256:<sha256>` per package, the one wheel a linux x86_64 CPython 3.12 installs, with the sha256 the index itself publishes. It also carries `# repo-tree-sha256: <repo_path> <sha256>` (the tree hash of each `repo_path` source: every file except `tests/`, `*.in`, `*.lock` and byte code) and `# build-requires: <names>` (the build backends, all pinned in the lock). A package the generator could not resolve is written `# unresolved: …`, and sync refuses such a lock. The script runs with internet on a maintainer's machine and prints the lock's sha256 for `ark.yaml`; `--shim-only` refreshes the tree hash offline after a shim edit. A Go test (`TestRealCatalogWheelhousesMatchTheRepository`) fails when the lock, the shim and `ark.yaml` disagree.
+
+**Version.** `<version>-<first 8 hex of the sha256 of every pin and the backend>` (`catalog.WheelhouseVersion`), for example `1.5.0-1a2b3c4d`. It needs no network, so an offline plan knows it ([ark-sync.md](ark-sync.md) §4.4), and the same string names the kit folder `kit/engines/acestep/<version>/` and the runtime folder `/opt/localai/acestep/<version>/`: a new lock, Python or build pin is a new runtime that `ensure` installs (§4.5).
+
+**Contents** of `kit/engines/acestep/<version>/`: `python/<tarball>`, `wheels/*.whl` (every wheel of the lock, verified against the lock's sha256, plus the wheels sync built), and `requirements.lock` (the repository's lock with one `name==version --hash=sha256:…` line appended per built wheel). Nothing else: a stray file in `wheels/` would be seen by pip. The item records every file in `SHA256SUMS`; the trust is `pinned` (the lock and the catalog pin every downloaded byte; the built wheels' digests are computed by sync and recorded there).
+
+**How the shim gets in.** The shim (`engines/acestep`, package `localai_music_shim`) is built by sync from this repository at the catalog tag (the tarball the manuals use) into `wheels/localai_music_shim-<ver>-py3-none-any.whl`; the lock's tree hash makes sure it is the shim the lock was made with. The install therefore needs nothing but the wheelhouse.
+
+**Sizes.** The Python tarball is 68 MB; the wheels are about 4.4 GB (cuDNN 0.7 GB, cuBLAS 0.6 GB, torch about 0.9 GB, the other CUDA libraries); the installed runtime is about 8.1 GB plus 230 MB of Python under `/opt/localai/acestep/<version>/` (spike #505). `expected_size_bytes` is 5 GB.
 
 ### 3.3 Pins (§Pins)
 `kit/catalog/pins.json`, written by the cloud into the catalog release (or, unenrolled, by each node into its own roots and merged on the drive):
@@ -184,7 +212,7 @@ Each fingerprint was checked against three independent sources (the vendor's bin
 | Command | Notes |
 |---|---|
 | `aictl kit` / `aictl kit status [--root <id>]` | which kit parts are present and verified for this node, and for every pinned node on a drive; reads the disk directly, re-reads no file ([§4.4](#what-the-code-does-kit-03)) |
-| `aictl kit verify [--root <id>] [--part <name>] [--full]` | §4.4. `--part` limits the run to one top-level kit part of §3.1: `catalog`, `installers`, `bin`, `src`, `git`, `toolchains`, `tools`, `desktop`, `debs`, `nvidia`, `cuda`, `prebuilt`, `iso`; an unknown name → exit 2 |
+| `aictl kit verify [--root <id>] [--part <name>] [--full]` | §4.4. `--part` limits the run to one top-level kit part of §3.1: `catalog`, `installers`, `bin`, `src`, `git`, `toolchains`, `tools`, `desktop`, `debs`, `nvidia`, `cuda`, `prebuilt`, `iso`, `engines`; an unknown name → exit 2 |
 | `aictl kit install <tool>` | installs a tool from the kit into `/opt/localai` (`kiwix-tools`, `pmtiles`, `piper`, `agent`), verifying first. The per-tool install functions come from companion-services (SVC-02 kiwix-tools/pmtiles, SVC-08 piper); the CLI dispatcher is KIT-06 |
 | `aictl kit install-debs [--root <id>] [--packages …] [--dry-run]` | installs packages from the kit's local apt repo (§Offline apt); verifies first, `--dry-run` changes nothing |
 | `aictl kit export-build` | exports this node's current llama/whisper builds into `kit/prebuilt/` on every writable root (§4.2; `rebuild-llama` and `rebuild-whisper` also do it after they switch to a new build) |
@@ -400,7 +428,7 @@ Sync downloads and verifies; this is what turns the kit into a working node ([AD
 | `apt.packages` | the profile has `kit-debs-<codename>-<arch>` | dpkg has every package of `kit.DefaultPackages(<backend>)` that the kit carries | `kit.Apt.Run` with those names (= `aictl kit install-debs --packages …`): every `.deb` is re-verified, a temporary source, only that source enabled, removed on every path |
 | `whisper.restore` | the profile has `kit-whisper-cpp` and `whisper.enabled` is not `false` | `/opt/localai/whisper.cpp/current/bin/whisper-server` exists and can run (**not** replaced when it does, whatever its commit) | a ready-made build of `kit/prebuilt/` that fits exactly (§4.2): `aiagent ctl rebuild-whisper --prebuilt <file> --yes`, which verifies, smoke tests, switches and rolls back |
 | `whisper.build` | no build in use, no ready-made one fits, and the kit has the source of the pinned commit | as above | **needs a confirmation**: `aiagent ctl rebuild-whisper --from-kit --yes` (no internet) |
-| `engine.acestep` | the profile or `node.yaml` includes an `acestep` model and the profile has `kit-engine-acestep-<backend>` for the node's backend (E11, [music.md](music.md) §3.1) | `/opt/localai/acestep/current/BUILD.json` names the bundle's version and the node's backend, and its self-test passes | the offline venv build of music.md §3.1: verify the bundle, unpack, `python3 -m venv`, `pip install --no-index --require-hashes`, self-test, move `current`; a failure leaves `current` as it was (`LAI-KIT-051`). Never touches a running `localai-music` (a new runtime is used at the next music load) |
+| `engine.acestep` | the profile or `node.yaml` includes an `acestep` model and the profile has `kit-engine-acestep-<backend>` for the node's backend (E11, [music.md](music.md) §3.1) | `/opt/localai/acestep/current/BUILD.json` names the version of the kit's newest wheelhouse (§3.2.2) and the node's backend, and the folder is finished (no `.incomplete` marker) | the offline build of music.md §3.1 from `kit/engines/acestep/<version>/`: re-hash every file of the version folder against the item's `SHA256SUMS` (a changed, missing or unrecorded file installs nothing: `LAI-KIT-001`), unpack the pinned Python to `/opt/localai/acestep/<version>/python`, `python/bin/python3 -m venv`, `pip install --no-index --find-links <wheels> --require-hashes -r requirements.lock`, self-test, `BUILD.json`, move `current`; a failure removes the build and leaves `current` as it was (`LAI-KIT-051`). A kit with no wheelhouse for the backend blocks the step with `LAI-KIT-040`: connect to the internet and run `aictl ark sync` first. Never touches a running `localai-music` (a new runtime is used at the next music load) |
 | `restart.kiwix` | kiwix-tools was replaced while the library service ran (the journal remembers it) | the service was restarted | **needs a confirmation**: the same restart as `POST /services/kiwix/restart` |
 
 A step whose kit item is missing or damaged is `blocked` (`LAI-KIT-040`, `LAI-KIT-001`) when the node does not already have the thing; a node that has a tool and whose kit lacks it is simply complete (READY and `kit verify` report the kit, not this). An essential package (the build tools and the backend's own: cmake, the compilers, the Vulkan or CUDA ones) that the kit cannot supply is `blocked` (`not_in_kit`); an optional one (an everyday tool such as `curl`) that the kit lacks is ignored. "Outdated" is a tool whose `current` is another version than the kit's: the kit's version is the catalog pin.
@@ -431,7 +459,7 @@ Plain list, also printed in the rebuild runbook:
 | **Firmware/BIOS problems, dead disk, dead GPU** | Hardware | The ark drive + another machine + the ISO (tier 3) |
 | **Desktop app on a different arch** | Only amd64 builds exist today | Use any browser at `http://127.0.0.1:7070` |
 | **Agent UI changes** | Rebuilding the UI needs Node/npm, not in the kit | The agent source tarball contains the built UI; UI changes need internet |
-| **A new music runtime version** | A new wheel bundle must be built online (`pip download`) | The kit keeps the bundle in use; the venv is rebuilt from it offline as often as needed. Music on a backend with no bundle (ROCm, CPU) is not possible offline or online until #517 |
+| **A new music runtime version** | A new wheelhouse must be filled online (a new lock from `lock-acestep.sh`, then `aictl ark sync`) | The kit keeps the wheelhouse in use; the venv is rebuilt from it offline as often as needed. Music on a backend with no wheelhouse (ROCm, CPU) is not possible offline or online until #517 |
 
 ## 6. Failure handling and edge cases
 

@@ -16,9 +16,11 @@ const BuildFile = "BUILD.json"
 
 // Build is BUILD.json: what the runtime in a version directory was built from.
 type Build struct {
-	Version    string `json:"version"`
-	Backend    string `json:"backend"`
-	Python     string `json:"python"`
+	Version string `json:"version"`
+	Backend string `json:"backend"`
+	// Python is the file name of the standalone Python tarball the runtime was unpacked from.
+	Python string `json:"python"`
+	// LockSHA256 is the sha256 of the kit's requirements.lock the venv was installed from.
 	LockSHA256 string `json:"lock_sha256"`
 	BuiltAt    string `json:"built_at"`
 }
@@ -61,6 +63,9 @@ func (r Runtime) root() string {
 // BUILD.json missing, damaged or for another backend.
 func (r Runtime) Current() (Build, error) {
 	cur := filepath.Join(r.root(), "current")
+	if _, err := os.Lstat(filepath.Join(cur, incompleteMarker)); err == nil {
+		return Build{}, fmt.Errorf("acestep: the music runtime in %s was not finished", cur)
+	}
 	if err := RuntimeInstalled(nil, filepath.Join(cur, "venv", "bin", "python")); err != nil {
 		return Build{}, err
 	}
@@ -83,7 +88,7 @@ func (r Runtime) Installed() error {
 }
 
 // MinDriverMajor is the oldest NVIDIA driver branch the music runtime's CUDA wheels run on.
-// The bundle uses the cu128 wheels (CUDA runtime 12.8, spike #505), whose documented driver floor is
+// The runtime uses the cu128 wheels (CUDA runtime 12.8, spike #505), whose documented driver floor is
 // 570; the spike ran on 595.
 const MinDriverMajor = 570
 

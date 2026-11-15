@@ -263,8 +263,8 @@ var zimSuffix = regexp.MustCompile(`_(\d{4}-\d{2})\.zim$`)
 
 // FromCatalog derives the target version and size from what the catalog pins, for the items whose
 // version needs no network: a model's revision (its first 12 characters), a pinned kiwix file, a
-// pinned url (the first 12 characters of the sha256), a release tag, and the rendered docs
-// ("catalog-<catalog version>"). It reports false for the items that follow "latest" or a git mirror,
+// pinned url (the first 12 characters of the sha256), a release tag, the rendered docs
+// ("catalog-<catalog version>") and a pip wheelhouse (catalog.WheelhouseVersion). It reports false for the items that follow "latest" or a git mirror,
 // which only a resolver can answer. The gatherer uses it for items no resolver answered, so an offline
 // node still knows what it should have.
 func FromCatalog(it CatalogItem, catalogVersion string) (Resolved, bool) {
@@ -308,6 +308,10 @@ func FromCatalog(it CatalogItem, catalogVersion string) (Resolved, bool) {
 		case "repo_docs":
 			if catalogVersion != "" {
 				return Resolved{Version: "catalog-" + catalogVersion, SortKey: catalogVersion, SizeBytes: size}, true
+			}
+		case "pip_wheelhouse":
+			if v := catalog.WheelhouseVersion(it.ID, src); v != "" {
+				return Resolved{Version: v, SortKey: v, SizeBytes: size}, true
 			}
 		}
 	}

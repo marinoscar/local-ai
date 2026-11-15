@@ -17,7 +17,7 @@ import (
 )
 
 // This file wires the kit and docs source types of ark sync (ark-sync.md sections 4.9.6 to 4.9.9):
-// git_mirror, apt_closure and repo_docs. Each producer is registered twice, as the planner's resolver
+// git_mirror, apt_closure, repo_docs and pip_wheelhouse. Each producer is registered twice, as the planner's resolver
 // (plan.Resolvers, the version and the size) and as the engine's task resolver (run.ItemResolvers, the
 // fetch), over one resolve.Env. The producers hold all the behaviour; this is only the binding of their
 // seams to the node: the runner, the downloader, the bandwidth bucket, the network state, the sync
@@ -34,13 +34,13 @@ const sourceResolveTimeout = 30 * time.Minute
 // aptSandboxUser is the user apt runs as (APT::Sandbox::User): the service user.
 const aptSandboxUser = "localai"
 
-// arkSources are the three producers of the kit and docs source types, kept on the stack so a test can
-// reach them.
+// arkSources are the producers of the kit and docs source types, kept on the stack so a test can reach them.
 type arkSources struct {
-	env  *resolve.Env
-	git  *resolve.GitMirror
-	apt  *resolve.AptClosure
-	docs *resolve.RepoDocs
+	env    *resolve.Env
+	git    *resolve.GitMirror
+	apt    *resolve.AptClosure
+	docs   *resolve.RepoDocs
+	wheels *resolve.PipWheelhouse
 }
 
 // registerSources builds the producers and registers them on the planner's and the engine's
@@ -92,13 +92,17 @@ func (s *arkStack) registerSources(dl *download.Downloader) error {
 		src.docs.Owner = &docsrender.Owner{UID: d.localaiUID, GID: d.localaiGID}
 	}
 
-	if err := resolve.Register(s.resolvers, src.git, src.apt, src.docs); err != nil {
+	// The engines' wheelhouses (E11) take the lock and the shim from the same tarball of this repository at the
+	// catalog tag as the manuals (src.docs), and the wheels through the same downloader.
+	src.wheels = &resolve.PipWheelhouse{Env: env, Repo: src.docs, Version: d.env.Version}
+
+	if err := resolve.Register(s.resolvers, src.git, src.apt, src.docs, src.wheels); err != nil {
 		return err
 	}
 	for _, p := range []struct {
 		sourceType string
 		producer   resolve.Producer
-	}{{"git_mirror", src.git}, {"apt_closure", src.apt}, {"repo_docs", src.docs}} {
+	}{{"git_mirror", src.git}, {"apt_closure", src.apt}, {"repo_docs", src.docs}, {"pip_wheelhouse", src.wheels}} {
 		if err := run.RegisterProducer(s.itemResolvers, p.sourceType, p.producer); err != nil {
 			return err
 		}

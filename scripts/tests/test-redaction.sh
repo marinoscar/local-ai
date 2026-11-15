@@ -127,6 +127,19 @@ mkdir -p "$repo/scripts" && cp scripts/check-redaction.sh scripts/install-hooks.
   rm apps/cloud/infra/platform-infra.lock.json
   scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL the digest allowance leaked to another file"; rc=1; }
   rm -rf apps
+  # 2e2. hashed pip locks of the engines (issue #511): a digest after --hash=sha256: or in a repo-tree-sha256 line
+  #      is public data; a bare 64-hex string there, and the same lines in any other file, stay leaks.
+  mkdir -p engines/acestep other
+  printf '# repo-tree-sha256: engines/acestep %s\nsix==1.17.0 --hash=sha256:%s\n' "$hex64" "$hex64" >engines/acestep/requirements-cuda.lock
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 0 ]] || { echo "  FAIL a pip lock digest was rejected"; rc=1; }
+  printf 'six==1.17.0 --hash=sha256:%s\n# note %s\n' "$hex64" "$hex64" >engines/acestep/requirements-cuda.lock
+  out="$(scripts/check-redaction.sh 2>&1)"; [[ $? -eq 1 ]] || { echo "  FAIL a bare 64-hex string in a pip lock was accepted"; rc=1; }
+  grep -q 'requirements-cuda.lock:2' <<<"$out" || { echo "  FAIL the bare 64-hex line of the pip lock was not reported"; rc=1; }
+  grep -q 'requirements-cuda.lock:1' <<<"$out" && { echo "  FAIL the pinned line of the pip lock was reported"; rc=1; }
+  rm engines/acestep/requirements-cuda.lock
+  printf 'six==1.17.0 --hash=sha256:%s\n' "$hex64" >other/requirements-cuda.lock
+  scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 1 ]] || { echo "  FAIL the pip lock allowance leaked to another folder"; rc=1; }
+  rm -rf engines other
   # 2f. the RFC 1918 range literal is not a LAN host; a host address and a real-looking email still leak.
   printf 'allow 192.168.0.0/16;\n' >r.conf
   scripts/check-redaction.sh >/dev/null 2>&1; [[ $? -eq 0 ]] || { echo "  FAIL the RFC 1918 range was rejected"; rc=1; }
