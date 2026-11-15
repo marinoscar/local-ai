@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Every `laictl deploy update` bumps the app's release version (`apps/api`, `apps/web`, `packages/shared`; the list is `packages/shared/versioned-manifests.json`). The CLI is no longer bumped by a deploy: it keeps its own version, raised with every CLI change and checked in CI (`scripts/check-cli-version-bump.sh`). CLI 0.1.1.
+- Republishing `deploy/cloud` keeps the version a deploy pushed onto the branch (`scripts/carry-deploy-version.mjs`), so the version never moves backwards (#574).
+
 ### Fixed
+
+- The web image build no longer fails when a test imports a file outside `apps/web`: `npm run build` type-checks from the shipped entry points only (`apps/web/tsconfig.build.json`), and cloud-ci builds both images from the flat deploy tree (#574).
 
 - VPS deploy no longer fails at "Build images" looking for `apps/stack-agent`: the overlay `infra/compose/app.vps.no-stack-agent.compose.yml` turns off the platform's stack-agent container, which this app does not ship (#450).
 
