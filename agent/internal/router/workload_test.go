@@ -257,3 +257,23 @@ func TestResolveWorkloads(t *testing.T) {
 		t.Errorf("dropped: %+v", dropped)
 	}
 }
+
+// The music engine is a process of its own, so the hardware sampler counts its graphics memory in
+// G_others. A workload replaces whatever is loaded: with music loaded, the other workloads must still
+// fit, and switching back must work (#566).
+func TestWorkloadsFitWhileTheMusicEngineHoldsTheCard(t *testing.T) {
+	r, e := workloadRig(t, func(c *orCfg) { c.env.GOthersMiB += 6000 })
+	e.mu.Lock()
+	e.resident["music-l"], e.vram = true, 6000
+	e.mu.Unlock()
+	for _, w := range r.o.Workloads(bg).Workloads {
+		if (w.Name == "too-big") == w.Fits {
+			t.Errorf("%s fits = %v while music is loaded", w.Name, w.Fits)
+		}
+	}
+	if _, err := activate(r, "coding", false); err != nil {
+		t.Fatalf("switching back from music: %v", err)
+	}
+	eqStrings(t, "engine calls", e.log(), []string{"stop music-l"})
+	eqStrings(t, "llama loaded", r.loadedNow(), []string{"m-b"})
+}

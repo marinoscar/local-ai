@@ -163,7 +163,7 @@ func exactly(rs residentSet, w Workload, kept map[string]bool) bool {
 // workloadFit checks that every model of the set may load here and that the set fits together, with
 // an empty keep-set (plus the survival models in survival mode). missing lists the models with no
 // verified copy; err is the refusal (LAI-LLM-051, 043 or 008).
-func (o *Orchestrator) workloadFit(in Inputs, w Workload) (missing []string, err *OpError) {
+func (o *Orchestrator) workloadFit(in Inputs, w Workload, engineMiB int64) (missing []string, err *OpError) {
 	var members []Loaded
 	llamaMax := in.modelsMax()
 	if in.Llama.Mode == LlamaModeSingle {
@@ -217,7 +217,9 @@ func (o *Orchestrator) workloadFit(in Inputs, w Workload) (missing []string, err
 			}
 		}
 		last := members[len(members)-1]
-		env := in.Fit
+		// The engines' own graphics memory (the music engine while it is loaded) is in G_others; the
+		// workload replaces whatever is loaded, so it is taken out, as the load path does (#566).
+		env := in.Fit.withoutEngines(engineMiB)
 		env.ModelsMax = 1 << 10 // the count rule is checked above, per engine
 		if s := env.DynamicFit(Candidate{ID: last.ID, Engine: last.Engine, Requirements: last.Requirements}, keep, nil); s.GPU || s.RAM {
 			noFit = append(noFit, w.Models...)
@@ -257,8 +259,9 @@ func (o *Orchestrator) Workloads(ctx context.Context) WorkloadsView {
 	kept := survivalKept(in)
 	st := o.opt.State.Snapshot()
 	var v WorkloadsView
+	_, engMiB := o.engineResidents(ctx, in, st)
 	for _, w := range in.Workloads {
-		missing, ferr := o.workloadFit(in, w)
+		missing, ferr := o.workloadFit(in, w, engMiB)
 		wv := WorkloadView{Name: w.Name, Label: w.Label, Models: append([]string{}, w.Models...), Fits: ferr == nil,
 			Missing: append([]string{}, missing...), Active: err == nil && exactly(rs, w, kept)}
 		if wv.Active && st.Workloads != nil && st.Workloads.Active == w.Name {
@@ -329,7 +332,8 @@ func (o *Orchestrator) ActivateWorkload(ctx context.Context, req WorkloadRequest
 	if in.Llama.Mode == LlamaModeSingle {
 		return fail("", errSingleWorkload(w.Name))
 	}
-	if _, ferr := o.workloadFit(in, w); ferr != nil {
+	_, engMiB := o.engineResidents(ctx, in, o.opt.State.Snapshot())
+	if _, ferr := o.workloadFit(in, w, engMiB); ferr != nil {
 		return fail("", ferr)
 	}
 	if err := o.opt.Router.Health(ctx); err != nil {
