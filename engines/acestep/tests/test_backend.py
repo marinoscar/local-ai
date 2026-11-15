@@ -18,6 +18,7 @@ from localai_music_shim.backend import (
     Cancelled,
     GenerateRequest,
     build_overlay,
+    estimate_duration,
     quiet_engine_log,
     secret_lines,
     write_wav,
@@ -345,6 +346,54 @@ class AceStepBackendTests(unittest.TestCase):
     def test_secret_lines(self):
         self.assertEqual(secret_lines("[verse]\nhola mundo\n\nab\n", " folk, warm "), ("hola mundo", "folk, warm"))
         self.assertEqual(secret_lines("", ""), ())
+
+    def test_auto_duration_lets_the_engine_choose(self):
+        r = self.rig(FakeAPI())
+        r.backend.load()
+        outs = r.backend.generate(r.req(duration_s=None, variations=1), r.progress.append, lambda: False)
+        p, _ = r.api.calls[0]
+        self.assertEqual(p.duration, -1.0)  # ACE-Step's own "choose automatically"
+        self.assertEqual(outs[0].duration_s, 1.0)  # the real length of the file, not a guess
+
+    def test_auto_duration_estimate_when_the_engine_does_not_choose(self):
+        r = self.rig(FakeAPI())
+        r.backend.AUTO_BY_ENGINE = False
+        r.backend.load()
+        lyrics = "[verse]\n" + "\n".join(f"line {i}" for i in range(10)) + "\n[chorus]\nla la"
+        r.backend.generate(r.req(duration_s=None, variations=1, lyrics=lyrics), r.progress.append, lambda: False)
+        self.assertEqual(r.api.calls[0][0].duration, 11 * 4.0 + 10.0)
+
+    def test_explicit_duration_still_passes(self):
+        r = self.rig(FakeAPI())
+        r.backend.load()
+        r.backend.generate(r.req(duration_s=45.0, variations=1), r.progress.append, lambda: False)
+        self.assertEqual(r.api.calls[0][0].duration, 45.0)
+
+    def test_estimate_duration(self):
+        for name, lyrics, want in [
+            ("instrumental", "", 60.0),
+            ("only tags", "[verse]\n[chorus]\n  \n", 60.0),
+            ("short lyrics clamp to 30", "[verse]\none\ntwo", 30.0),
+            ("ten lines", "\n".join(["la"] * 10), 50.0),
+            ("long lyrics clamp to 240", "\n".join(["la"] * 100), 240.0),
+        ]:
+            with self.subTest(name):
+                self.assertEqual(estimate_duration(lyrics), want)
+
+    def test_cover_reports_the_output_length_with_auto(self):
+        r = self.rig(FakeAPI())
+        r.backend.load()
+        sample = os.path.join(r.work, "sample.wav")
+        write_wav(sample, 2.0)
+        outs = r.backend.generate(r.req("cv", variations=1, duration_s=None, sample_path=sample, sample_mode="same_song"),
+                                  r.progress.append, lambda: False)
+        p, _ = r.api.calls[0]
+        self.assertEqual(p.task_type, "cover")
+        self.assertEqual(outs[0].duration_s, 1.0)  # what the engine wrote (ACE-Step locks a cover to its source)
+        # when the output cannot be measured, a cover reports the sample's length, never the estimate
+        self.assertEqual(r.backend._expected(r.req(duration_s=None, sample_path=sample, sample_mode="same_song")), 2.0)
+        self.assertEqual(r.backend._expected(r.req(duration_s=None, lyrics="")), 60.0)
+        self.assertEqual(r.backend._expected(r.req(duration_s=90.0)), 90.0)
 
     def test_generate_before_load(self):
         r = self.rig(FakeAPI())
