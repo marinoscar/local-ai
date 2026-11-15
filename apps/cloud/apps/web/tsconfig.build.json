@@ -1,0 +1,9 @@
+{
+  // The production build's type check (`npm run build`, run inside the web Docker image). It starts from the
+  // shipped entry points and follows their imports, so it checks exactly what ships: a test, a test fixture or a
+  // test helper can never break the image build, whatever it imports (#574, #457). `npm run typecheck`
+  // (tsconfig.json, run in CI) still checks the tests.
+  "extends": "./tsconfig.json",
+  "include": [],
+  "files": ["src/main.tsx", "src/sw.ts", "vite.config.ts"]
+}

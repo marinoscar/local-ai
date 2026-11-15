@@ -58,6 +58,11 @@ cd apps/api && npm run db:compose      # after editing a fragment in apps/api/pr
 
 Run the dev stack with the Compose commands in README, "Run it". Use the `npm run prisma:*` scripts, never bare `npx prisma`.
 
+## Versions
+
+- **The app's release version** (`apps/api`, `apps/web`, `packages/shared`; listed in `packages/shared/versioned-manifests.json`) is bumped by every `laictl deploy update`, which pushes a `chore(release): x.y.z` commit onto `deploy/cloud`. Do not bump it by hand for a deploy. `scripts/carry-deploy-version.mjs` keeps that version when CI republishes the branch.
+- **The CLI's version** (`apps/cli/package.json`, plus its `package-lock.json` entry) is separate and is NOT bumped by a deploy. **Every CLI fix or improvement raises it** (patch for a fix, minor for a feature), in the same pull request. That includes a new version of `@marinoscar/platform-cli` or `@marinoscar/platform-infra`, and any change to `packages/shared`. Add a CHANGELOG line. The `cli-version` job in cloud-ci (`scripts/check-cli-version-bump.sh`) fails a pull request that changes the CLI without raising its version.
+
 ## Commits
 
 Conventional Commits (`<type>(<scope>): <summary>`), small and single-purpose, a behaviour change with its tests. Do not push or open a pull request unless asked.

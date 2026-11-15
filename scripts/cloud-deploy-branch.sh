@@ -22,6 +22,8 @@
 #   * Every COPY source of the two Dockerfiles exists in the tree (nothing builds against a missing symlink target).
 #   * An older source never overwrites a newer one: if the branch tip was built from a commit that has the
 #     current source as an ancestor, the run is skipped.
+#   * The release version a deploy bumped onto the branch (`chore(release): x.y.z`) is carried forward
+#     (scripts/carry-deploy-version.mjs), so a republish never moves the version backwards.
 #
 # Env: DEPLOY_GIT_NAME / DEPLOY_GIT_EMAIL set the commit author (default: the github-actions bot).
 set -euo pipefail
@@ -37,7 +39,7 @@ AUTHOR_NAME="${DEPLOY_GIT_NAME:-github-actions[bot]}"
 AUTHOR_EMAIL="${DEPLOY_GIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
 
 die() { echo "cloud-deploy-branch: $*" >&2; exit 1; }
-usage() { sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-}"; [[ -n "$cmd" ]] || { usage >&2; exit 2; }
 shift
@@ -155,7 +157,8 @@ case "$cmd" in
 
     if [[ $have_remote -eq 1 ]]; then
       # Never let an older source replace a newer one (two queued runs).
-      last="$(git log -1 --format=%s "refs/remotes/$REMOTE/$BRANCH" | sed -n 's|^deploy: apps/cloud @ \([0-9a-f]\{7,40\}\)$|\1|p')"
+      # The last CI commit, not the tip: a deploy may have pushed a `chore(release)` bump on top of it.
+      last="$(git log -1 --format=%s --grep='^deploy: apps/cloud @ ' "refs/remotes/$REMOTE/$BRANCH" | sed -n 's|^deploy: apps/cloud @ \([0-9a-f]\{7,40\}\)$|\1|p')"
       if [[ -n "$last" ]] && last_full="$(git rev-parse --verify -q "${last}^{commit}")" \
          && [[ "$last_full" != "$src_full" ]] && git merge-base --is-ancestor "$src_full" "$last_full"; then
         echo "= $BRANCH was built from a newer source ($last); nothing to do."
@@ -171,6 +174,11 @@ case "$cmd" in
     # Replace the contents (everything except .git) with the tree.
     find "$wt" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
     cp -a "$tree/." "$wt/"
+    # Keep the release version a deploy bumped and pushed onto the branch: main's manifests still carry the older one,
+    # and letting it fall back would make the next deploy re-issue a deployed number (#574).
+    if [[ $have_remote -eq 1 ]]; then
+      node "$REPO/scripts/carry-deploy-version.mjs" "$wt" || die "could not carry the deployed version forward"
+    fi
     git -C "$wt" add -A -f
     if [[ $have_remote -eq 1 ]] && git -C "$wt" diff --cached --quiet; then
       echo "= $BRANCH is already up to date; nothing to commit."
