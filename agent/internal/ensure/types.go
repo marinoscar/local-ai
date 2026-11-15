@@ -28,7 +28,7 @@ const (
 	IDWhisperRestore = "whisper.restore"
 	IDWhisperBuild   = "whisper.build"
 	IDRestartKiwix   = "restart.kiwix"
-	// IDEngineAcestep builds the music runtime from the kit's wheel bundle (E11, rebuild-kit.md section 4.5).
+	// IDEngineAcestep builds the music runtime from the kit's runtime files (E11, rebuild-kit.md section 4.5).
 	IDEngineAcestep = "engine.acestep"
 )
 

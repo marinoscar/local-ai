@@ -236,6 +236,19 @@ content:
         - {url: "https://redist.example.test/cuda/libcublas-linux-x86_64-12.4.1-archive.tar.xz", sha256: "@sha:5@"}
     expected_size_bytes: 1500000000
 
+  - id: kit-engine-acestep-cuda
+    kind: kit
+    display_name: "Music program ACE-Step 1.5.0 for CUDA (rebuild kit)"
+    source:
+      type: url
+      version_policy: pinned
+      checksum: pinned
+      files:
+        - {url: "https://release.example.test/acestep-1.5.0/requirements.lock", sha256: "@sha:a@", name: "1.5.0/requirements.lock"}
+        - {url: "https://wheels.example.test/torch-2.10.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl", sha256: "@sha:b@", name: "1.5.0/wheels/torch-2.10.0+cu128-cp312-cp312-manylinux_2_28_x86_64.whl"}
+        - {url: "https://python.example.test/cpython-3.12.16-x86_64-unknown-linux-gnu-install_only.tar.gz", sha256: "@sha:c@", name: "1.5.0/python/cpython-3.12.16-x86_64-unknown-linux-gnu-install_only.tar.gz"}
+    expected_size_bytes: 6000000000
+
   - id: kit-ubuntu-iso-26.04
     kind: kit
     display_name: "Ubuntu 26.04 install image (rebuild kit, drive only)"

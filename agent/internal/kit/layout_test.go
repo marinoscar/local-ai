@@ -42,6 +42,7 @@ func TestLayoutOfFixtureItems(t *testing.T) {
 		{"kit-debs-resolute-arm64", "debs/resolute-arm64", kit.PartDebs, nil},
 		{"kit-nvidia-resolute-amd64-595-open", "nvidia/resolute-amd64-595-open", kit.PartNvidia, nil},
 		{"kit-cuda-redist-12.4.1-amd64", "cuda/12.4.1-amd64", kit.PartCuda, nil},
+		{"kit-engine-acestep-cuda", "engines/acestep/cuda", kit.PartEngines, nil},
 		{"kit-ubuntu-iso-26.04", "iso", kit.PartISO, nil},
 	}
 	seen := map[string]bool{}
@@ -115,6 +116,7 @@ func TestLayoutOfErrors(t *testing.T) {
 		{"apt closure with another id", kitItem("kit-other", catalog.ContentSource{Type: "apt_closure", Codename: "resolute", Arch: "amd64"}), "no place"},
 		{"cuda redist id without a version", kitItem("kit-cuda-redist-", catalog.ContentSource{Type: "url"}), "kit-cuda-redist"},
 		{"iso id without a version", kitItem("kit-ubuntu-iso-", catalog.ContentSource{Type: "url"}), "kit-ubuntu-iso"},
+		{"music engine with an unknown backend", kitItem("kit-engine-acestep-rocm", catalog.ContentSource{Type: "url"}), "kit-engine-acestep-<cuda|vulkan|cpu>"},
 		{"fixed id on another source type is still fixed", kitItem("kit-catalog", catalog.ContentSource{Type: "url"}), ""},
 	}
 	for _, tc := range cases {
@@ -192,7 +194,7 @@ func TestCheckLayout(t *testing.T) {
 }
 
 func TestPartsAreTheLayoutOfSection31(t *testing.T) {
-	want := "catalog installers bin src git toolchains tools desktop debs nvidia cuda prebuilt iso"
+	want := "catalog installers bin src git toolchains tools engines desktop debs nvidia cuda prebuilt iso"
 	if got := strings.Join(kit.Parts, " "); got != want {
 		t.Fatalf("Parts = %q, want %q", got, want)
 	}

@@ -108,6 +108,8 @@ func expectedID(dir string) string {
 		return "kit-nvidia-" + p[1]
 	case len(p) == 2 && p[0] == PartCuda:
 		return "kit-cuda-redist-" + p[1]
+	case len(p) == 3 && p[0] == PartEngines && p[1] == "acestep":
+		return "kit-engine-acestep-" + p[2]
 	}
 	return ""
 }

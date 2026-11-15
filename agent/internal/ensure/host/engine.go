@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/marinoscar/local-ai/agent/internal/config"
 	"github.com/marinoscar/local-ai/agent/internal/ensure"
@@ -14,10 +16,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/sync/manifest"
 )
 
-// The engine.acestep step (E11, #511): the music runtime built from the kit's wheel bundle.
-
-// engineKitDir is the kit item directory of a Python engine's bundles (rebuild-kit.md section 3.1).
-func engineKitDir(kitDir, engine string) string { return filepath.Join(kitDir, "engines", engine) }
+// The engine.acestep step (E11, #511): the music runtime built from the kit's runtime files.
 
 func (h *Host) acestepRoot() string { return filepath.Join(h.c.OptRoot, "acestep") }
 
@@ -33,9 +32,10 @@ func (h *Host) EngineVersion(engine, backend string) string {
 	return b.Version
 }
 
-// Engine implements ensure.Kit: the newest bundle for the backend on the first root whose kit has one,
-// with its sha256 from the item's MANIFEST.json (the record sync verified it against). A bundle with no
-// record, or whose record is not a sha256, is damaged.
+// Engine implements ensure.Kit: the newest runtime version for the backend on the first root whose kit
+// has one (kit/engines/acestep/<backend>/<version>/), with every file of that version and its sha256
+// from the item's MANIFEST.json (the record sync verified it against). A version with no record, a file
+// the record does not list as a sha256, or a recorded file that is missing, is damaged.
 func (h *Host) Engine(ctx context.Context, engine, backend string) (ensure.Source, string, error) {
 	if engine != "acestep" {
 		return ensure.Source{}, "", ensure.ErrKitMissing
@@ -46,27 +46,17 @@ func (h *Host) Engine(ctx context.Context, engine, backend string) (ensure.Sourc
 			return ensure.Source{}, "", ctx.Err()
 		}
 		kitDir := filepath.Join(r.Path, kit.DirName)
-		file, version := acestep.FindBundle(kitDir, backend)
-		if file == "" {
+		dir, version := acestep.FindVersion(kitDir, backend)
+		if dir == "" {
 			continue
 		}
-		m, err := manifest.Load(config.OSFS{}, engineKitDir(kitDir, engine))
-		if err != nil {
+		src, ok := engineFiles(kitDir, dir, version, backend)
+		if !ok {
 			damaged = true
 			continue
 		}
-		want := path.Join(version, acestep.BundleName(version, backend))
-		sum := ""
-		for _, f := range m.Files {
-			if f.Path == want {
-				sum = f.SHA256
-			}
-		}
-		if !manifest.IsSHA256(sum) {
-			damaged = true
-			continue
-		}
-		return ensure.Source{Root: r.Path, KitDir: kitDir, File: file, SHA256: sum}, version, nil
+		src.Root, src.KitDir = r.Path, kitDir
+		return src, version, nil
 	}
 	if damaged {
 		return ensure.Source{}, "", ensure.ErrKitDamaged
@@ -74,14 +64,47 @@ func (h *Host) Engine(ctx context.Context, engine, backend string) (ensure.Sourc
 	return ensure.Source{}, "", ensure.ErrKitMissing
 }
 
+// engineFiles reads the record of a runtime version: every MANIFEST.json entry below <version>/, each a
+// sha256 and present on disk, the lock among them.
+func engineFiles(kitDir, dir, version, backend string) (ensure.Source, bool) {
+	itemDir := acestep.KitDir(kitDir, backend)
+	m, err := manifest.Load(config.OSFS{}, itemDir)
+	if err != nil {
+		return ensure.Source{}, false
+	}
+	src := ensure.Source{}
+	prefix := version + "/"
+	for _, f := range m.Files {
+		if !strings.HasPrefix(f.Path, prefix) {
+			continue
+		}
+		if !manifest.IsSHA256(f.SHA256) {
+			return ensure.Source{}, false
+		}
+		p := filepath.Join(itemDir, filepath.FromSlash(f.Path))
+		if fi, err := os.Stat(p); err != nil || !fi.Mode().IsRegular() {
+			return ensure.Source{}, false
+		}
+		src.Files = append(src.Files, ensure.FileSum{Path: p, SHA256: f.SHA256})
+		if f.Path == path.Join(version, acestep.KitLock) {
+			src.File, src.SHA256 = p, f.SHA256
+		}
+	}
+	return src, src.File != "" && filepath.Dir(src.File) == dir
+}
+
 // InstallEngine implements ensure.Installer.
 func (h *Host) InstallEngine(ctx context.Context, engine string, src ensure.Source, version, backend string) (ensure.ToolOutcome, error) {
 	if engine != "acestep" {
 		return ensure.ToolOutcome{}, fmt.Errorf("ensure: engine %q is not on the allowlist", engine)
 	}
+	files := make([]acestep.KitFile, 0, len(src.Files))
+	for _, f := range src.Files {
+		files = append(files, acestep.KitFile{Path: f.Path, SHA256: f.SHA256})
+	}
 	in := acestep.Installer{Root: h.acestepRoot(), Runner: h.c.Runner, LookPath: h.lookPath, Now: h.c.Now}
-	out, err := in.Install(ctx, src.File, src.SHA256, version, backend)
-	if errors.Is(err, acestep.ErrBundleDamaged) {
+	out, err := in.Install(ctx, filepath.Dir(src.File), files, version, backend)
+	if errors.Is(err, acestep.ErrKitDamaged) {
 		return ensure.ToolOutcome{}, ensure.ErrKitDamaged
 	}
 	return ensure.ToolOutcome{Version: out.Version, Previous: out.Previous, Unchanged: out.Unchanged}, err

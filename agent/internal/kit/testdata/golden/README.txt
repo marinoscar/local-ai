@@ -41,6 +41,8 @@ toolchains/  The Go compiler, to rebuild the agent with no internet.
              here (1 item, 8 B)
 tools/       kiwix-tools (Wikipedia reader), pmtiles (maps), piper (voice).
              NOT HERE YET
+engines/     The music program (ACE-Step) with its own Python, per backend.
+             NOT HERE YET
 desktop/     The ai-desktop app installers.
              NOT HERE YET
 debs/        Ubuntu packages (compilers, Vulkan, tools), per Ubuntu release.

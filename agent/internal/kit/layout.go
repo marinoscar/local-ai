@@ -28,11 +28,12 @@ const (
 	PartCuda       = "cuda"
 	PartPrebuilt   = "prebuilt"
 	PartISO        = "iso"
+	PartEngines    = "engines"
 )
 
 // Parts lists every part in the order of the layout of rebuild-kit.md section 3.1.
 var Parts = []string{
-	PartCatalog, PartInstallers, PartBin, PartSrc, PartGit, PartToolchains, PartTools,
+	PartCatalog, PartInstallers, PartBin, PartSrc, PartGit, PartToolchains, PartTools, PartEngines,
 	PartDesktop, PartDebs, PartNvidia, PartCuda, PartPrebuilt, PartISO,
 }
 
@@ -105,6 +106,7 @@ var fixed = map[string]Layout{
 //	kit-nvidia-<codename>-<arch>-<branch>  nvidia/<codename>-<arch>-<branch>/
 //	kit-cuda-redist-<ver>-<arch>           cuda/<ver>-<arch>/
 //	kit-ubuntu-iso-<ver>                   iso/
+//	kit-engine-acestep-<backend>           engines/acestep/<backend>/   (the music runtime, E11)
 //
 // An item that is not a kit item, an unknown kit id and any id, codename, arch, branch or mirror
 // name that would not be one plain path element is ErrNoLayout.
@@ -152,6 +154,12 @@ func LayoutOf(it catalog.ContentItem) (Layout, error) {
 			return fail("the id must be kit-cuda-redist-<ver>-<arch>")
 		}
 		return Layout{Dir: path.Join(PartCuda, rest), Part: PartCuda}, nil
+	case strings.HasPrefix(it.ID, "kit-engine-acestep-") && src.Type == "url":
+		backend := strings.TrimPrefix(it.ID, "kit-engine-acestep-")
+		if backend != "cuda" && backend != "vulkan" && backend != "cpu" {
+			return fail("the id must be kit-engine-acestep-<cuda|vulkan|cpu>")
+		}
+		return Layout{Dir: path.Join(PartEngines, "acestep", backend), Part: PartEngines}, nil
 	case strings.HasPrefix(it.ID, "kit-ubuntu-iso-") && src.Type == "url":
 		if it.ID == "kit-ubuntu-iso-" {
 			return fail("the id must be kit-ubuntu-iso-<ver>")

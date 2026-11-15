@@ -23,9 +23,17 @@ var (
 type Source struct {
 	// Root is the content root ("/srv/localai", "/media/<user>/AI-ARK/localai"), KitDir its kit folder.
 	Root, KitDir string
-	// File and SHA256 are the one file a step installs and its sha256 in the kit's record (an engine's
-	// wheel bundle); empty for the other steps.
+	// File and SHA256 name what an engine step installs and the sha256 of that file in the kit's record
+	// (the music runtime: its requirements.lock); empty for the other steps.
 	File, SHA256 string
+	// Files are every file of the engine's version with its sha256 in the kit's record, all checked
+	// before the install uses them; empty for the other steps.
+	Files []FileSum
+}
+
+// FileSum is one file of the kit and its sha256 in the kit's record.
+type FileSum struct {
+	Path, SHA256 string
 }
 
 // Kit answers what the rebuild kit can supply. Every answer comes from the kit verifier of
@@ -42,7 +50,7 @@ type Kit interface {
 	// WhisperSource says whether the kit holds the whisper.cpp source of the commit (so a build is
 	// possible); an empty commit means the pinned one.
 	WhisperSource(ctx context.Context, w WhisperWant) (bool, error)
-	// Engine is the newest verified wheel bundle of a Python engine ("acestep") for a backend: the source
+	// Engine is the newest verified runtime version of a Python engine ("acestep") for a backend: the source
 	// (File and SHA256 set) and its version.
 	Engine(ctx context.Context, engine, backend string) (Source, string, error)
 }
@@ -84,7 +92,7 @@ type Installer interface {
 	BuildWhisper(ctx context.Context) error
 	// RestartService restarts a service (only kiwix, only with a confirmation).
 	RestartService(ctx context.Context, service string) error
-	// InstallEngine builds a Python engine's runtime ("acestep") from its verified wheel bundle, offline.
+	// InstallEngine builds a Python engine's runtime ("acestep") from its verified kit files, offline.
 	// It never touches a running engine: the new runtime is used at its next start.
 	InstallEngine(ctx context.Context, engine string, src Source, version, backend string) (ToolOutcome, error)
 }

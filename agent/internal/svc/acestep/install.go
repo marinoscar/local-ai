@@ -18,34 +18,38 @@ import (
 )
 
 // The offline build of the music runtime (music.md section 3.1, rebuild-kit.md section 4.5 row
-// engine.acestep). From the kit's wheel bundle
-// kit/engines/acestep/<version>/acestep-<version>-<backend>.tar.zst it builds
-// /opt/localai/acestep/<version>/venv with `pip install --no-index --require-hashes`, writes BUILD.json,
-// runs the shim's self-test and only then moves the current link. Nothing is downloaded; a failure at
-// any step leaves current as it was and removes what it built.
+// engine.acestep). From the kit item kit-engine-acestep-<backend>, synced file by file into
+// kit/engines/acestep/<backend>/<version>/, it builds /opt/localai/acestep/<version>/venv with
+// `pip install --no-index --require-hashes`, writes BUILD.json, runs the shim's self-test and only then
+// moves the current link. Nothing is downloaded; a failure at any step leaves current as it was and
+// removes what it built.
 
-// Bundle layout (built by scripts/release/build-acestep-bundle.sh): wheels/ with every wheel (the shim's
-// own included) and requirements.lock with a hash per wheel.
+// Kit layout of one runtime version (written by ark sync from catalog/ark.yaml, the list made by
+// scripts/release/build-acestep-kit.sh): requirements.lock with a hash per wheel, wheels/ with every
+// wheel (the shim's own included) and, optionally, python/ with one python-build-standalone
+// "install_only" tarball: the runtime's own CPython, for nodes whose python3 is a version ACE-Step does
+// not support (#511).
 const (
-	BundleWheels = "wheels"
-	BundleLock   = "requirements.lock"
+	KitWheels = "wheels"
+	KitLock   = "requirements.lock"
+	KitPython = "python"
 )
 
 // Timeouts of the build.
 const (
-	unpackTimeout   = 30 * time.Minute
+	unpackTimeout   = 10 * time.Minute
 	venvTimeout     = 5 * time.Minute
 	pipTimeout      = 60 * time.Minute
 	selfTestTimeout = 5 * time.Minute
 	maxProgOut      = 1 << 20
 )
 
-// BundleName is the file name of a bundle in the kit.
-func BundleName(version, backend string) string {
-	return "acestep-" + version + "-" + backend + ".tar.zst"
+// KitFile is one file of a runtime version in the kit and its sha256 from the kit's record.
+type KitFile struct {
+	Path, SHA256 string
 }
 
-// Installer builds the runtime. The programs (tar with zstd, python3) are found with LookPath and run
+// Installer builds the runtime. The programs (tar, python3) are found with LookPath and run
 // through Runner; tests give fakes.
 type Installer struct {
 	// Root is /opt/localai/acestep; tests use a temporary directory.
@@ -62,8 +66,9 @@ type InstallOutcome struct {
 	Unchanged bool
 }
 
-// ErrBundleDamaged is a bundle whose sha256 is not the kit's record: nothing is installed.
-var ErrBundleDamaged = errors.New("acestep: the wheel bundle does not match the kit's checksum")
+// ErrKitDamaged is a runtime version in the kit that is incomplete or has a file whose sha256 is not
+// the kit's record: nothing is installed.
+var ErrKitDamaged = errors.New("acestep: the music runtime in the kit is incomplete or does not match its checksums")
 
 func (in Installer) root() string {
 	if in.Root == "" {
@@ -116,10 +121,11 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// Install builds the runtime of version for backend from bundle, whose sha256 must be want. It is
-// idempotent (the same version and backend in current is Unchanged), cleans up what an interrupted run
-// left, and never changes current unless every step succeeded.
-func (in Installer) Install(ctx context.Context, bundle, want, version, backend string) (InstallOutcome, error) {
+// Install builds the runtime of version for backend from the kit's version directory dir, whose files
+// must each match their sha256 in files (every file of the version, as the kit's record lists them).
+// It is idempotent (the same version and backend in current is Unchanged), cleans up what an
+// interrupted run left, and never changes current unless every step succeeded.
+func (in Installer) Install(ctx context.Context, dir string, files []KitFile, version, backend string) (InstallOutcome, error) {
 	out := InstallOutcome{Version: version}
 	if !VersionRe.MatchString(version) || (backend != "cuda" && backend != "vulkan" && backend != "cpu") {
 		return out, fmt.Errorf("acestep: version %q or backend %q is not usable", version, backend)
@@ -131,13 +137,29 @@ func (in Installer) Install(ctx context.Context, bundle, want, version, backend 
 			return out, nil
 		}
 	}
-	// Verify the bundle right before it is used: a flipped byte installs nothing.
-	got, err := fileSHA256(bundle)
-	if err != nil {
-		return out, fmt.Errorf("acestep: read the bundle: %w", err)
+	// Verify every file right before it is used: a flipped byte installs nothing.
+	lock, tarball := filepath.Join(dir, KitLock), ""
+	hasLock := false
+	for _, f := range files {
+		got, err := fileSHA256(f.Path)
+		if err != nil {
+			return out, fmt.Errorf("%w: %v", ErrKitDamaged, err)
+		}
+		if !strings.EqualFold(got, f.SHA256) {
+			return out, ErrKitDamaged
+		}
+		switch rel, _ := filepath.Rel(dir, f.Path); {
+		case rel == KitLock:
+			hasLock = true
+		case filepath.Dir(rel) == KitPython && strings.HasSuffix(rel, ".tar.gz"):
+			if tarball != "" {
+				return out, fmt.Errorf("%w: more than one python in %s", ErrKitDamaged, KitPython)
+			}
+			tarball = f.Path
+		}
 	}
-	if !strings.EqualFold(got, want) {
-		return out, ErrBundleDamaged
+	if !hasLock {
+		return out, fmt.Errorf("%w: no %s", ErrKitDamaged, KitLock)
 	}
 
 	root := in.root()
@@ -148,7 +170,7 @@ func (in Installer) Install(ctx context.Context, bundle, want, version, backend 
 	work := filepath.Join(root, "."+version+".partial")
 	// A leftover of an interrupted run is never trusted.
 	_ = os.RemoveAll(work)
-	if err := os.MkdirAll(filepath.Join(work, "unpacked"), 0o755); err != nil {
+	if err := os.MkdirAll(work, 0o755); err != nil {
 		return out, err
 	}
 	ok := false
@@ -157,38 +179,49 @@ func (in Installer) Install(ctx context.Context, bundle, want, version, backend 
 			_ = os.RemoveAll(work)
 		}
 	}()
-	unpacked := filepath.Join(work, "unpacked")
-	if err := in.run(ctx, unpackTimeout, "tar", "--zstd", "-xf", bundle, "-C", unpacked, "--no-same-owner"); err != nil {
-		return out, err
-	}
-	for _, need := range []string{BundleWheels, BundleLock} {
-		if _, err := os.Stat(filepath.Join(unpacked, need)); err != nil {
-			return out, fmt.Errorf("acestep: the bundle has no %s", need)
-		}
-	}
 	venv := filepath.Join(work, "venv")
-	if err := in.run(ctx, venvTimeout, "python3", "-m", "venv", venv); err != nil {
+	python, py := "python3", filepath.Join(venv, "bin", "python")
+	if tarball != "" {
+		// The kit's own interpreter is the runtime. python-build-standalone is relocatable, so it is
+		// unpacked as venv/ and the wheels go into it (a venv made from it would name the scratch path).
+		unpacked := filepath.Join(work, "unpacked")
+		if err := os.MkdirAll(unpacked, 0o755); err != nil {
+			return out, err
+		}
+		if err := in.run(ctx, unpackTimeout, "tar", "-xzf", tarball, "-C", unpacked, "--no-same-owner"); err != nil {
+			return out, err
+		}
+		if err := os.Rename(filepath.Join(unpacked, "python"), venv); err != nil {
+			return out, fmt.Errorf("%w: the python tarball has no python/ folder", ErrKitDamaged)
+		}
+		_ = os.RemoveAll(unpacked)
+		// The unit and the runtime check run venv/bin/python.
+		if _, err := os.Lstat(filepath.Join(venv, "bin", "python")); err != nil {
+			if err := os.Symlink("python3", filepath.Join(venv, "bin", "python")); err != nil {
+				return out, err
+			}
+		}
+		python, py = "bundled "+filepath.Base(tarball), filepath.Join(venv, "bin", "python3")
+	} else if err := in.run(ctx, venvTimeout, "python3", "-m", "venv", venv); err != nil {
 		return out, err
 	}
-	py := filepath.Join(venv, "bin", "python")
-	if err := in.run(ctx, pipTimeout, py, "-m", "pip", "install", "--no-index", "--find-links", filepath.Join(unpacked, BundleWheels),
-		"--require-hashes", "-r", filepath.Join(unpacked, BundleLock)); err != nil {
+	if err := in.run(ctx, pipTimeout, py, "-m", "pip", "install", "--no-index", "--find-links", filepath.Join(dir, KitWheels),
+		"--require-hashes", "-r", lock); err != nil {
 		return out, err
 	}
 	if err := in.run(ctx, selfTestTimeout, py, "-m", ShimModule, "--self-test"); err != nil {
 		return out, err
 	}
-	lockSum, _ := fileSHA256(filepath.Join(unpacked, BundleLock))
+	lockSum, _ := fileSHA256(lock)
 	now := time.Now
 	if in.Now != nil {
 		now = in.Now
 	}
-	b, _ := json.MarshalIndent(Build{Version: version, Backend: backend, Python: "python3", LockSHA256: lockSum,
+	b, _ := json.MarshalIndent(Build{Version: version, Backend: backend, Python: python, LockSHA256: lockSum,
 		BuiltAt: now().UTC().Format(time.RFC3339)}, "", "  ")
 	if err := os.WriteFile(filepath.Join(work, BuildFile), append(b, '\n'), 0o644); err != nil {
 		return out, err
 	}
-	_ = os.RemoveAll(unpacked)
 	// The version directory replaces any older build of the same version, then current moves.
 	_ = os.RemoveAll(final)
 	if err := os.Rename(work, final); err != nil {
@@ -206,11 +239,18 @@ func (in Installer) Install(ctx context.Context, bundle, want, version, backend 
 	return out, nil
 }
 
-// FindBundle looks for the newest bundle for backend under kitDir/engines/acestep/<version>/ and
-// returns its path and version ("" when the kit has none).
-func FindBundle(kitDir, backend string) (path, version string) {
-	dir := filepath.Join(kitDir, "engines", "acestep")
-	entries, err := os.ReadDir(dir)
+// KitDir is the directory of backend's runtime versions in a kit: kit/engines/acestep/<backend>, the
+// item directory of kit-engine-acestep-<backend> (it holds the item's MANIFEST.json).
+func KitDir(kitDir, backend string) string {
+	return filepath.Join(kitDir, "engines", "acestep", backend)
+}
+
+// FindVersion looks for the newest runtime version for backend in the kit (a directory
+// kit/engines/acestep/<backend>/<version>/ with a requirements.lock) and returns its directory and
+// version ("" when the kit has none).
+func FindVersion(kitDir, backend string) (dir, version string) {
+	base := KitDir(kitDir, backend)
+	entries, err := os.ReadDir(base)
 	if err != nil {
 		return "", ""
 	}
@@ -219,12 +259,12 @@ func FindBundle(kitDir, backend string) (path, version string) {
 		if !e.IsDir() || !VersionRe.MatchString(v) {
 			continue
 		}
-		p := filepath.Join(dir, v, BundleName(v, backend))
-		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() && versionLess(version, v) {
-			path, version = p, v
+		d := filepath.Join(base, v)
+		if fi, err := os.Stat(filepath.Join(d, KitLock)); err == nil && fi.Mode().IsRegular() && versionLess(version, v) {
+			dir, version = d, v
 		}
 	}
-	return path, version
+	return dir, version
 }
 
 // versionLess orders versions by their dotted numbers, then as text.

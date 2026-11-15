@@ -404,6 +404,7 @@ var partText = map[string]partDesc{
 	PartCuda:       {what: "Optional smaller CUDA compiler files."},
 	PartPrebuilt:   {what: "Ready-made llama.cpp and whisper.cpp builds from the computers."},
 	PartISO:        {what: "The Ubuntu install image, to make a new install USB stick.", driveOnly: true},
+	PartEngines:    {what: "The music program (ACE-Step) with its own Python, per backend."},
 }
 
 // wrapList writes "<label>a, b, c" wrapped at 78 characters, continuation lines indented by three.
