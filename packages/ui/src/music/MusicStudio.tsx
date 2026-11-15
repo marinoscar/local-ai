@@ -65,6 +65,7 @@ export function MusicStudio({ transport, disabled = false, onSongsCreated, defau
   const [form, setForm] = useState<StudioForm>({
     lyrics: '',
     tags: '',
+    durationAuto: true,
     duration: String(DURATION_DEFAULT_S),
     language: (SONG_LANGUAGES as readonly string[]).includes(defaultLanguage) ? defaultLanguage : 'en',
     seed: '',
@@ -222,23 +223,50 @@ export function MusicStudio({ transport, disabled = false, onSongsCreated, defau
         </div>
 
         <div className="lai-field-row">
-          <div className="lai-field">
-            <label htmlFor={`${id}-duration_s`}>{t('duration')}</label>
-            <p id={`${id}-duration-hint`} className="lai-hint">
-              {t('durationHint', { min: DURATION_MIN_S, max: DURATION_MAX_S })}
-            </p>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={DURATION_MIN_S}
-              max={DURATION_MAX_S}
-              step={1}
-              value={form.duration}
-              onChange={(e) => update('duration', e.target.value)}
-              {...fieldProps('duration_s', `${id}-duration-hint`)}
-            />
-            {fieldError('duration_s')}
-          </div>
+          <fieldset className="lai-field lai-duration">
+            <legend>{t('durationLegend')}</legend>
+            {([true, false] as const).map((auto) => {
+              const key = auto ? 'auto' : 'set';
+              return (
+                <div key={key} className="lai-radio">
+                  <input
+                    type="radio"
+                    id={`${id}-duration-${key}`}
+                    name={`${id}-duration`}
+                    value={key}
+                    checked={form.durationAuto === auto}
+                    onChange={() => update('durationAuto', auto)}
+                    aria-describedby={auto ? `${id}-duration-auto-hint` : undefined}
+                  />
+                  <label htmlFor={`${id}-duration-${key}`}>{t(auto ? 'durationAuto' : 'durationSet')}</label>
+                  {auto ? (
+                    <p id={`${id}-duration-auto-hint`} className="lai-hint">
+                      {t('durationAutoHint')}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
+            {form.durationAuto ? null : (
+              <>
+                <label htmlFor={`${id}-duration_s`}>{t('duration')}</label>
+                <p id={`${id}-duration-hint`} className="lai-hint">
+                  {t('durationHint', { min: DURATION_MIN_S, max: DURATION_MAX_S })}
+                </p>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={DURATION_MIN_S}
+                  max={DURATION_MAX_S}
+                  step={1}
+                  value={form.duration}
+                  onChange={(e) => update('duration', e.target.value)}
+                  {...fieldProps('duration_s', `${id}-duration-hint`)}
+                />
+                {fieldError('duration_s')}
+              </>
+            )}
+          </fieldset>
           <div className="lai-field">
             <label htmlFor={`${id}-language`}>{t('language')}</label>
             <select value={form.language} onChange={(e) => update('language', e.target.value)} {...fieldProps('language')}>

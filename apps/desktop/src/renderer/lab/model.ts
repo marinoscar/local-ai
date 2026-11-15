@@ -89,7 +89,8 @@ export type SongsPanel = { state: 'loading' | 'ready' | 'error'; songs: SongInfo
 export interface MusicInput {
   lyrics: string;
   tags: string;
-  durationS: number;
+  /** Seconds (10 to 240), or null for Auto (#571): the field is left out and the model picks the length. */
+  durationS: number | null;
   language: 'en' | 'es';
   variations: number;
   seed?: number;
@@ -552,7 +553,7 @@ export class LabController {
       nodeId,
       lyrics: input.lyrics,
       tags: input.tags,
-      duration_s: input.durationS,
+      ...(input.durationS !== null ? { duration_s: input.durationS } : {}),
       language: input.language,
       variations: input.variations,
       ...(input.seed !== undefined ? { seed: input.seed } : {}),
@@ -613,12 +614,14 @@ export class LabController {
 export interface MusicForm {
   lyrics: string;
   tags: string;
+  /** Length: Auto (the default, #571) or the seconds in `duration`. */
+  durationAuto: boolean;
   duration: string;
   language: 'en' | 'es';
   variations: string;
 }
 
-export const MUSIC_FORM_DEFAULTS: MusicForm = { lyrics: '', tags: '', duration: '60', language: 'en', variations: '1' };
+export const MUSIC_FORM_DEFAULTS: MusicForm = { lyrics: '', tags: '', durationAuto: true, duration: '60', language: 'en', variations: '1' };
 
 /** Why the form cannot be sent yet: a key of STRINGS. */
 export type MusicFormProblem = 'musicNeedsText' | 'musicTooLong' | 'musicTagsTooLong';
@@ -638,7 +641,7 @@ export function musicInputFrom(form: MusicForm): { ok: true; input: MusicInput }
   if (new TextEncoder().encode(form.tags).length > 512) return { ok: false, problem: 'musicTagsTooLong' };
   return {
     ok: true,
-    input: { lyrics: form.lyrics, tags: form.tags.trim(), durationS: clampInt(form.duration, 10, 240, 60), language: form.language, variations: clampInt(form.variations, 1, 4, 1) },
+    input: { lyrics: form.lyrics, tags: form.tags.trim(), durationS: form.durationAuto ? null : clampInt(form.duration, 10, 240, 60), language: form.language, variations: clampInt(form.variations, 1, 4, 1) },
   };
 }
 

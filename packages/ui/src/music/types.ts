@@ -17,7 +17,8 @@ export interface MusicStatus {
 export interface GenerateRequest {
   lyrics: string;
   tags: string;
-  duration_s: number;
+  /** Seconds (10 to 240), or null for Auto (#571): the engine picks the length; the transport leaves the field out. */
+  duration_s: number | null;
   language: string;
   seed: number | null;
   variations: number;

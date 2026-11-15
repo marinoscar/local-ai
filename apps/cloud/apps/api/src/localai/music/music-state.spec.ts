@@ -1,6 +1,6 @@
 // The derived states (E11): a node's music readiness, the workload it last switched to, and a request reconciled from
 // its command.
-import { activeWorkloadOf, musicReadiness, reconcileRequest, stageOf, workloadsOf, type ReadinessModel } from './music-state';
+import { acceptsAutoDuration, activeWorkloadOf, musicReadiness, reconcileRequest, sentDuration, stageOf, workloadsOf, type ReadinessModel } from './music-state';
 
 const NOW = new Date('2026-11-14T12:00:00.000Z');
 const fresh = new Date(NOW.getTime() - 30_000);
@@ -109,5 +109,22 @@ describe('reconcileRequest', () => {
 
   it('the stage the page shows', () => {
     expect(['queued', 'running', 'succeeded', 'failed', 'expired', 'cancelled'].map((status) => stageOf(status as never))).toEqual(['queued', 'generating', 'done', 'failed', 'expired', 'cancelled']);
+  });
+});
+
+describe('Auto length (#571)', () => {
+  it('acceptsAutoDuration reads capabilities.localai.features, and is false for anything else', () => {
+    expect(acceptsAutoDuration({ localai: { features: ['music.auto_duration'] } })).toBe(true);
+    expect(acceptsAutoDuration({ localai: { features: ['other', 'music.auto_duration'], allow: [] } })).toBe(true);
+    for (const capabilities of [null, undefined, 'x', {}, { localai: null }, { localai: {} }, { localai: { features: [] } }, { localai: { features: 'music.auto_duration' } }, { features: ['music.auto_duration'] }]) {
+      expect(acceptsAutoDuration(capabilities)).toBe(false);
+    }
+  });
+
+  it('sentDuration: the asked length wins; Auto is nothing for a node that picks it, else the fallback', () => {
+    expect(sentDuration(90, false, 60)).toBe(90);
+    expect(sentDuration(90, true, 60)).toBe(90);
+    expect(sentDuration(null, true, 60)).toBeNull();
+    expect(sentDuration(null, false, 60)).toBe(60);
   });
 });

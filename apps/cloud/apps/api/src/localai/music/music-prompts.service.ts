@@ -35,7 +35,8 @@ export interface PromptFields {
   description: string;
   lyricsMode: MusicLyricsMode;
   lyrics: string;
-  durationS: number;
+  /** null: Auto (#571). */
+  durationS: number | null;
   language: string;
   seed: number | null;
   variations: number;

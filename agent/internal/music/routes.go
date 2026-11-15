@@ -285,6 +285,10 @@ func setField(req *GenerateRequest, name, val string) error {
 	case "sample_mode":
 		req.SampleMode = trim
 	case "duration_s":
+		if trim == "" || strings.EqualFold(trim, "auto") { // Auto (#571), the same as leaving the field out
+			req.DurationS = nil
+			return nil
+		}
 		n, err := integer()
 		if err != nil {
 			return err
@@ -292,7 +296,8 @@ func setField(req *GenerateRequest, name, val string) error {
 		if n < MinDurationS || n > MaxDurationS {
 			return inputError(name, "out_of_range")
 		}
-		req.DurationS = int(n)
+		d := int(n)
+		req.DurationS = &d
 	case "variations":
 		n, err := integer()
 		if err != nil {

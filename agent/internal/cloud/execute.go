@@ -48,7 +48,41 @@ type jobRun struct {
 	renewExited chan struct{}
 
 	done chan struct{}
+	// settleWork closes when a settle claimed by the command's own run (claimSettleRun) has sent the
+	// result and rewritten inflight.json; Stop waits for it (drain).
+	settleWork chan struct{}
+	byRun      bool
 }
+
+// claimSettleRun is claimSettle for the command's own run (execute, refuseNow): the caller must call
+// settleFinished once the result is sent and the inflight entry is removed.
+func (j *jobRun) claimSettleRun() bool {
+	j.settleMu.Lock()
+	defer j.settleMu.Unlock()
+	if j.settled {
+		return false
+	}
+	j.settled, j.byRun = true, true
+	return true
+}
+
+// settlingByRun reports whether the command's own run has claimed the settle and not finished it.
+func (j *jobRun) settlingByRun() bool {
+	j.settleMu.Lock()
+	byRun := j.byRun
+	j.settleMu.Unlock()
+	if !byRun {
+		return false
+	}
+	select {
+	case <-j.settleWork:
+		return false
+	default:
+		return true
+	}
+}
+
+func (j *jobRun) settleFinished() { close(j.settleWork) }
 
 // claimSettle reports whether the caller is the one that settles the command: true exactly once.
 func (j *jobRun) claimSettle() bool {
@@ -106,7 +140,7 @@ func (c *Claimer) start(link ClaimLink, s Session, a assignment) {
 	}
 	j := &jobRun{
 		id: a.ID, fullType: a.Type, plane: s.Plane, token: a.Token, started: now, lease: lease,
-		handler: h, done: make(chan struct{}), renewExited: make(chan struct{}),
+		handler: h, done: make(chan struct{}), renewExited: make(chan struct{}), settleWork: make(chan struct{}),
 	}
 	c.mu.Lock()
 	if _, dup := c.jobs[a.ID]; dup {
@@ -185,7 +219,7 @@ func (c *Claimer) execute(link ClaimLink, s Session, j *jobRun, a assignment, na
 	<-j.renewExited
 
 	// 6. Settle exactly once: if the stop path got there first (LAI-CLD-063), the outcome is dropped.
-	if !j.claimSettle() {
+	if !j.claimSettleRun() {
 		logger.Info("a command finished after it was settled; its outcome is dropped")
 		return
 	}
@@ -193,12 +227,14 @@ func (c *Claimer) execute(link ClaimLink, s Session, j *jobRun, a assignment, na
 		// agent.update: the process is about to be replaced; the entry stays for the next one.
 		c.writeAudit(j.id, j.fullType, audit.Result("deferred"), "")
 		logger.Info("a command continues after the restart")
+		j.settleFinished()
 		return
 	}
 	c.settleOutcome(link, j, out, runErr, logger)
 
 	// 7. Remove the inflight entry, run what follows the settle and push a fresh snapshot.
 	c.removeInflight(j.id)
+	j.settleFinished()
 	if out.After != nil && runErr == nil {
 		c.runAfter(out.After, logger)
 		return // mode.offline: the transition ends with a snapshot of its own (link_stop)
@@ -212,9 +248,10 @@ func (c *Claimer) execute(link ClaimLink, s Session, j *jobRun, a assignment, na
 
 // refuseNow settles a command the node will not run: failure with a code, nothing executed.
 func (c *Claimer) refuseNow(link ClaimLink, j *jobRun, code, msg string, logger *slog.Logger) {
-	if !j.claimSettle() {
+	if !j.claimSettleRun() {
 		return
 	}
+	defer j.settleFinished()
 	logger.Warn("a cloud command was refused", "code", code)
 	link.Counters().Failed.Add(1)
 	ctx, cancel := context.WithTimeout(context.Background(), 4*callTimeout)

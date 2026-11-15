@@ -62,9 +62,10 @@ def parse_task(body: Any, settings: Settings) -> GenerateRequest:
         raise BadRequest("tags must be a string of at most 512 bytes")
     if not lyrics.strip() and not tags.strip():
         raise BadRequest("lyrics or tags is required")
+    # Absent is the old default, 60 s; null is Auto (#571): the engine picks the length.
     duration = body.get("duration_s", 60)
-    if not _number(duration) or not MIN_DURATION <= duration <= MAX_DURATION:
-        raise BadRequest("duration_s must be between 10 and 240")
+    if duration is not None and (not _number(duration) or not MIN_DURATION <= duration <= MAX_DURATION):
+        raise BadRequest("duration_s must be null or between 10 and 240")
     language = body.get("language", "en")
     if not isinstance(language, str) or not LANGUAGE.match(language):
         raise BadRequest("language must be a language code such as en or es")
@@ -98,7 +99,7 @@ def parse_task(body: Any, settings: Settings) -> GenerateRequest:
     if os.path.lexists(output_dir):
         raise BadRequest("output_dir must not exist yet")
     return GenerateRequest(
-        lyrics=lyrics, tags=tags, duration_s=float(duration), language=language, seed=seed,
+        lyrics=lyrics, tags=tags, duration_s=None if duration is None else float(duration), language=language, seed=seed,
         variations=variations, sample_path=sample_path, sample_mode=sample_mode,
         strength=None if strength is None else float(strength), output_dir=os.path.normpath(output_dir),
     )

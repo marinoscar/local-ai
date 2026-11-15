@@ -71,6 +71,19 @@ describe('what passes', () => {
     expect(without.allow && 'form' in without && without.form !== undefined && 'seed' in without.form).toBe(false);
   });
 
+  it('no duration_s, or null, is Auto: the field is not sent (#571)', () => {
+    const { duration_s: _omit, ...auto } = song;
+    for (const body of [auto, { ...song, duration_s: null }]) {
+      const decision = decideCloudRequest(post('/api/localai/music/requests', body));
+      expect(decision).toEqual({
+        allow: true,
+        method: 'POST',
+        path: '/api/localai/music/requests',
+        form: { nodeId: 'ai-n2', lyrics: 'Line one\nLine two', tags: 'folk, guitar', language: 'es', variations: '2' },
+      });
+    }
+  });
+
   it('only tags, or only lyrics, is a request', () => {
     expect(decideCloudRequest(post('/api/localai/music/requests', { ...song, lyrics: '' })).allow).toBe(true);
     expect(decideCloudRequest(post('/api/localai/music/requests', { ...song, tags: '' })).allow).toBe(true);

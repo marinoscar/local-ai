@@ -236,3 +236,33 @@ func TestLinkStopWithARunningCommand(t *testing.T) {
 		t.Errorf("claims after the stop: %d -> %d", claims, got)
 	}
 }
+
+// A command whose own run is settling when Stop is called is waited for: Stop returns only after the
+// result is answered and inflight.json no longer lists the command. A command counts as settled from
+// the start of its settle, so Stop must not take "nothing unsettled" for "nothing left to write".
+func TestStopWaitsForASettleInProgress(t *testing.T) {
+	cr := newClaimRig(t, []*testHandler{okHandler()}, withoutLoop())
+	cr.start()
+	release := cr.srv.Hold(fake.RouteResult)
+	defer release()
+	cr.dispatchNow(fake.Job{ID: "job-1", Type: "localai.status.refresh", Params: map[string]any{}, Token: "tok-1"}, 20*time.Second)
+	cr.waitCount(fake.RouteResult, 1) // the result is at the cloud, its answer held: the settle is in progress
+
+	errc := cr.stopAsync()
+	select {
+	case err := <-errc:
+		t.Fatalf("Stop returned (%v) while a settle was still running", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	release()
+	if err := cr.waitErr(errc); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := InflightStore{Path: cr.inflight}.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("inflight.json still lists %d command(s) after Stop", len(entries))
+	}
+}

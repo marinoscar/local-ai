@@ -55,7 +55,7 @@ func TestHTTPShim(t *testing.T) {
 	}
 
 	seed := int64(3)
-	id, err := c.Submit(ctx, music.TaskRequest{Lyrics: "la", DurationS: 30, Variations: 1, Seed: &seed, OutputDir: "/w/op"})
+	id, err := c.Submit(ctx, music.TaskRequest{Lyrics: "la", DurationS: ptrInt(30), Variations: 1, Seed: &seed, OutputDir: "/w/op"})
 	if err != nil || id != "tsk_000000000001" || lastBody["output_dir"] != "/w/op" || lastBody["sample_path"] != nil {
 		t.Fatalf("submit = %q, %v, body %v", id, err, lastBody)
 	}

@@ -32,9 +32,10 @@ func TestEnrollRegistersHandshakesAndLinks(t *testing.T) {
 		Concurrency   int      `json:"concurrency"`
 		Capabilities  struct {
 			Localai struct {
-				Schema  int      `json:"schema"`
-				Allow   []string `json:"allow"`
-				Backend string   `json:"backend"`
+				Schema   int      `json:"schema"`
+				Allow    []string `json:"allow"`
+				Backend  string   `json:"backend"`
+				Features []string `json:"features"`
 			} `json:"localai"`
 		} `json:"capabilities"`
 	}
@@ -46,6 +47,10 @@ func TestEnrollRegistersHandshakesAndLinks(t *testing.T) {
 	}
 	if len(body.EligibleTypes) != 17 || body.EligibleTypes[0] != "localai.status.refresh" || len(body.Capabilities.Localai.Allow) != 17 || body.Capabilities.Localai.Schema != 1 {
 		t.Errorf("eligible types / allow: %v / %v", body.EligibleTypes, body.Capabilities.Localai.Allow)
+	}
+	// #571: the cloud omits duration_s (Auto) only for a node that lists music.auto_duration.
+	if f := body.Capabilities.Localai.Features; len(f) != 1 || f[0] != "music.auto_duration" {
+		t.Errorf("capabilities.localai.features = %v", f)
 	}
 	if regs[0].Credential != testCredential {
 		t.Error("register did not carry the credential")

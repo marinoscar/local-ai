@@ -93,6 +93,9 @@ func TestDecodeMusicGenerate(t *testing.T) {
 		validMusicParams(nil),
 		validMusicParams(map[string]any{"seed": 7, "sample": sampleBlock(nil), "sample_mode": "same_song", "strength": 0.8}),
 		validMusicParams(map[string]any{"lyrics": "", "tags": "ambient"}),
+		validMusicParams(map[string]any{"duration_s": nil}), // Auto (#571): the cloud omits the field
+		validMusicParams(map[string]any{"duration_s": 10}),
+		validMusicParams(map[string]any{"duration_s": 240}),
 	}
 	for i, m := range ok {
 		raw, _ := json.Marshal(m)
@@ -108,6 +111,9 @@ func TestDecodeMusicGenerate(t *testing.T) {
 		"bad request id":           validMusicParams(map[string]any{"request_id": "nope"}),
 		"lyrics too long":          validMusicParams(map[string]any{"lyrics": strings.Repeat("a", 8193)}),
 		"duration":                 validMusicParams(map[string]any{"duration_s": 5}),
+		"duration too long":        validMusicParams(map[string]any{"duration_s": 241}),
+		"duration not an integer":  validMusicParams(map[string]any{"duration_s": 60.5}),
+		"duration as text":         validMusicParams(map[string]any{"duration_s": "auto"}),
 		"language":                 validMusicParams(map[string]any{"language": "spa"}),
 		"seed":                     validMusicParams(map[string]any{"seed": 2147483648}),
 		"null seed":                validMusicParams(map[string]any{"seed": "x"}),
@@ -135,6 +141,19 @@ func TestDecodeMusicGenerate(t *testing.T) {
 	raw := []byte(strings.Replace(string(mustJSON(validMusicParams(nil))), `"tags"`, `"seed":null,"tags"`, 1))
 	if _, err := decodeMusicGenerate(raw); err == nil {
 		t.Error("seed: null accepted")
+	}
+	// Auto is the field left out, never null (the Zod side is .optional()).
+	raw = []byte(strings.Replace(string(mustJSON(validMusicParams(map[string]any{"duration_s": nil}))), `"tags"`, `"duration_s":null,"tags"`, 1))
+	if _, err := decodeMusicGenerate(raw); err == nil {
+		t.Error("duration_s: null accepted")
+	}
+	p, err := decodeMusicGenerate(mustJSON(validMusicParams(map[string]any{"duration_s": nil})))
+	if err != nil || p.DurationS != nil {
+		t.Fatalf("auto: %+v %v", p.DurationS, err)
+	}
+	p, err = decodeMusicGenerate(mustJSON(validMusicParams(nil)))
+	if err != nil || p.DurationS == nil || *p.DurationS != 30 {
+		t.Fatalf("explicit: %+v %v", p.DurationS, err)
 	}
 }
 

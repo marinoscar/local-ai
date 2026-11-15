@@ -9,6 +9,7 @@ import { defaultStrength, insertSection, toRequest, validateForm, type StudioFor
 const base: StudioForm = {
   lyrics: 'la la',
   tags: '',
+  durationAuto: false,
   duration: '60',
   language: 'en',
   seed: '',
@@ -41,9 +42,18 @@ describe('validateForm', () => {
     for (const s of ['-1', '1.5', 'x', '4294967296']) expect(validateForm({ ...base, seed: s }).map((e) => e.field)).toEqual(['seed']);
     expect(validateForm({ ...base, seed: '4294967295' })).toEqual([]);
   });
+
+  it('ignores the length field while the length is Auto (#571)', () => {
+    for (const d of ['', '5', 'abc', '60']) expect(validateForm({ ...base, durationAuto: true, duration: d })).toEqual([]);
+  });
 });
 
 describe('toRequest', () => {
+  it('sends a null length for Auto and the number otherwise (#571)', () => {
+    expect(toRequest({ ...base, durationAuto: true }).duration_s).toBeNull();
+    expect(toRequest({ ...base, duration: ' 90 ' }).duration_s).toBe(90);
+  });
+
   it('leaves the sample fields null without a sample', () => {
     expect(toRequest({ ...base, strength: 0.9 })).toMatchObject({ sample: null, sample_mode: null, strength: null, seed: null, duration_s: 60 });
   });

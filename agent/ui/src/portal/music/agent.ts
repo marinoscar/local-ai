@@ -427,7 +427,8 @@ export function generateForm(req: GenerateRequest): FormData {
   const f = new FormData();
   f.set("lyrics", req.lyrics);
   f.set("tags", req.tags);
-  f.set("duration_s", String(req.duration_s));
+  // Auto length (#571): the field is left out and the engine picks the length.
+  if (req.duration_s !== null) f.set("duration_s", String(req.duration_s));
   f.set("language", req.language);
   if (req.seed !== null) f.set("seed", String(req.seed));
   f.set("variations", String(req.variations));

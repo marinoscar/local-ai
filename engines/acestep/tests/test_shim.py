@@ -211,6 +211,24 @@ class TaskTests(unittest.TestCase):
         finally:
             rig.close()
 
+    def test_duration_null_is_auto_and_absent_is_60(self):
+        backend = FakeBackend()
+        rig = Rig(backend)
+        try:
+            self.assertEqual(rig.call("POST", "/v1/tasks", rig.task_body("a", duration_s=None))[0], 202)
+            self.assertTrue(rig.manager.wait_idle())
+            self.assertIsNone(backend.calls[-1].duration_s)
+            body = rig.task_body("b")
+            del body["duration_s"]
+            self.assertEqual(rig.call("POST", "/v1/tasks", body)[0], 202)
+            self.assertTrue(rig.manager.wait_idle())
+            self.assertEqual(backend.calls[-1].duration_s, 60.0)
+            for bad in (9, 241, "60", True):
+                with self.subTest(bad):
+                    self.assertEqual(rig.call("POST", "/v1/tasks", rig.task_body("c", duration_s=bad))[0], 400)
+        finally:
+            rig.close()
+
     def test_lyrics_never_logged(self):
         buf = io.StringIO()
         handler = logging.StreamHandler(buf)
