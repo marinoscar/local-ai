@@ -270,7 +270,7 @@ export const CreatePromptBodySchema = z
   .object({
     title: TitleText.optional(),
     description: DescriptionText.refine((value) => value.trim() !== '', { message: 'describe the song' }),
-    lyricsMode: MusicLyricsMode.default('mine'),
+    lyricsMode: MusicLyricsMode.default('auto'),
     lyrics: LyricsText.default(''),
     durationS: Duration.default(60),
     language: MusicLanguage.default('en'),

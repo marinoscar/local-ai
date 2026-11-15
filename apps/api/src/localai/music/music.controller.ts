@@ -29,7 +29,8 @@ const USE = LOCALAI_PERMISSIONS.MUSIC_USE.id;
 const DELETE = LOCALAI_PERMISSIONS.MUSIC_DELETE.id;
 const WORKLOADS = LOCALAI_PERMISSIONS.WORKLOADS_WRITE.id;
 
-const requesterOf = (user: RequestUser) => ({ userId: user.id, permissions: user.permissions });
+/** The requester of a route: the user, the credential's permissions and the active organization. */
+export const requesterOf = (user: RequestUser) => ({ userId: user.id, permissions: user.permissions, orgId: user.activeOrgId ?? null });
 
 @ApiTags('localai-music')
 @Controller('localai/music')

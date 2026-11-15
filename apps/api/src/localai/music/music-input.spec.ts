@@ -74,7 +74,21 @@ describe('musicSettingsOf: the cross-field rules (#568)', () => {
       lyricsMode: 'instrumental',
       lyricsStored: 'kept for later',
       lyricsSent: '[Instrumental]',
+      autoLyrics: false,
     });
+  });
+
+  it('Automatic (#570): lyrics in the box are sent as written; empty lyrics are marked for the AI, provisionally no vocals', () => {
+    expect(musicSettingsOf({ lyrics: 'la la', description: 'a slow ballad', lyrics_mode: 'auto' })).toMatchObject({ lyricsMode: 'auto', lyricsSent: 'la la', lyricsStored: 'la la', autoLyrics: false });
+    expect(musicSettingsOf({ lyrics: '  ', description: 'calm piano, soft rain', lyrics_mode: 'auto' })).toEqual({
+      title: 'Calm Piano',
+      description: 'calm piano, soft rain',
+      lyricsMode: 'auto',
+      lyricsStored: '  ',
+      lyricsSent: '[Instrumental]',
+      autoLyrics: true,
+    });
+    expect(musicSettingsOf({ lyrics: '', lyrics_mode: 'auto' })).toBe('description_required');
   });
 
   it('an older client (tags, no mode) keeps the old rule: lyrics or tags, the mode derived, lyrics sent as written', () => {

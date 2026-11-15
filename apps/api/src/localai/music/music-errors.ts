@@ -12,6 +12,7 @@ import {
 import type { ZodError } from 'zod';
 
 import { wireIssues } from '../commands/command-errors';
+import { MUSIC_AI_FIXES, type MusicAiReason } from './music-ai';
 
 /** Sample or input rejected (type, size, length). */
 export const LAI_SVC_INPUT_REJECTED = 'LAI-SVC-154';
@@ -124,23 +125,29 @@ export function promptDeleteNotConfirmed(): BadRequestException {
 }
 
 /**
- * `409`: "Write lyrics for me" while the cloud's AI is off or no model answers for this person. The page disables the
- * choice first, with the same reason and fix; this answers a client that asks anyway.
+ * `409`: "Write lyrics now" while music AI is not available for this person (the AI is off, "Use AI for music" is off,
+ * or no model resolves). The page disables the choice first, with the same reason and fix; this answers a client that
+ * asks anyway. `details.fix` is the API's one-sentence fix (`MUSIC_AI_FIXES`).
  */
-export function musicAiUnavailable(reason: 'ai_off' | 'no_model'): ConflictException {
+export function musicAiUnavailable(reason: MusicAiReason): ConflictException {
+  const message: Record<MusicAiReason, string> = {
+    ai_off: 'The AI is turned off on this cloud. An administrator turns it on in Settings, AI, or write your own lyrics.',
+    music_ai_off: 'Using AI for music is turned off on this cloud. An administrator turns on Use AI for music in Settings, AI, or write your own lyrics.',
+    no_model: 'No AI model is set up for you. An administrator adds a provider and model in Settings, AI, or write your own lyrics.',
+  };
   return new ConflictException({
-    message:
-      reason === 'ai_off'
-        ? 'The AI is turned off on this cloud. An administrator turns it on in Settings, AI, or write your own lyrics.'
-        : 'No AI model is set up for you. Add an AI key in Settings, or write your own lyrics.',
-    details: { reason: reason === 'ai_off' ? 'ai_off' : 'ai_no_model' },
+    message: message[reason],
+    details: { reason: MUSIC_AI_REFUSAL_REASONS[reason], fix: MUSIC_AI_FIXES[reason] },
   });
 }
+
+/** The `details.reason` of {@link musicAiUnavailable} for each availability reason. */
+export const MUSIC_AI_REFUSAL_REASONS: Readonly<Record<MusicAiReason, string>> = { ai_off: 'ai_off', music_ai_off: 'ai_music_off', no_model: 'ai_no_model' };
 
 /** `502`: the AI did not answer with lyrics (its error is logged by name only, never the text). */
 export function musicAiFailed(): HttpException {
   return new HttpException(
-    { message: 'The AI could not write lyrics this time. Try again, or write your own lyrics.', details: { reason: 'ai_failed' } },
+    { message: 'The AI could not write lyrics this time. Try again, write your own lyrics, or choose No vocals.', details: { reason: 'ai_failed' } },
     HttpStatus.BAD_GATEWAY,
   );
 }
