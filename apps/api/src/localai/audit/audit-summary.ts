@@ -263,7 +263,8 @@ function summaryOf(src: AuditRowSource, meta: Record<string, unknown>, node: str
       // { nodeId, variations, durationS, hasSample, sampleMode }: counts and flags, never the lyrics or tags.
       const count = typeof meta.variations === 'number' && Number.isInteger(meta.variations) && meta.variations >= 1 && meta.variations <= 4 ? meta.variations : null;
       const seconds = typeof meta.durationS === 'number' && Number.isInteger(meta.durationS) && meta.durationS > 0 && meta.durationS <= 600 ? meta.durationS : null;
-      const detail = [count === null ? null : `${count} ${count === 1 ? 'song' : 'songs'}`, seconds === null ? null : `${seconds} s`, meta.hasSample === true ? 'with a sample' : null].filter((part) => part !== null);
+      const length = seconds !== null ? `${seconds} s` : meta.durationS === null ? 'auto length' : null;
+      const detail = [count === null ? null : `${count} ${count === 1 ? 'song' : 'songs'}`, length, meta.hasSample === true ? 'with a sample' : null].filter((part) => part !== null);
       return join(['Music requested', on(node), detail.length > 0 ? `(${detail.join(', ')})` : null]);
     }
     case 'localai.music.request_cancelled':

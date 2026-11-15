@@ -230,7 +230,9 @@ export const COMMANDS = {
         request_id: z.string().uuid(),
         lyrics: z.string().max(8192), // bytes checked again on the node (UTF-8, <= 8 KiB) and by the cloud's form
         tags: z.string().max(512),
-        duration_s: z.number().int().min(10).max(240),
+        // Left out: Auto (#571), the node's engine picks the length. Only a node whose capabilities list
+        // `music.auto_duration` is sent no duration (`music-state.ts` acceptsAutoDuration); null is refused, as on the node.
+        duration_s: z.number().int().min(10).max(240).optional(),
         language: MusicLanguage,
         seed: z.number().int().min(0).max(2147483647).optional(),
         variations: z.number().int().min(1).max(4),

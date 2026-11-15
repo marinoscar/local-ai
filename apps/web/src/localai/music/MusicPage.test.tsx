@@ -225,7 +225,6 @@ describe('the form', () => {
       lyrics_mode: 'auto',
       lyrics: '[verse]\r\nWalking to the river',
       ui_language: 'en',
-      duration_s: '60',
       language: 'en',
       variations: '1',
       sample_mode: 'same_song',
@@ -234,6 +233,65 @@ describe('the form', () => {
     // bytes is proven in its own route and db tests).
     expect(posted!.has('sample')).toBe(true);
     expect(await screen.findByTestId('request-stage')).toHaveTextContent('Waiting for Studio laptop');
+  });
+
+  describe('Length (#571)', () => {
+    const fillSong = async () => {
+      await screen.findByTestId('next-action');
+      fireEvent.change(descriptionBox(), { target: { value: 'folk, acoustic guitar' } });
+      fireEvent.change(lyricsBox(), { target: { value: '[verse]\nWalking to the river' } });
+    };
+    const chooseLength = (name: string) => {
+      fireEvent.click(screen.getByRole('button', { name: 'More options' }));
+      fireEvent.mouseDown(within(screen.getByTestId('music-length').parentElement!).getByRole('combobox'));
+      fireEvent.click(screen.getByRole('option', { name }));
+    };
+
+    it('defaults to Auto and leaves duration_s out', async () => {
+      renderPage();
+      await fillSong();
+      expect(screen.getByTestId('music-length-summary')).toHaveTextContent('Length: Auto.');
+      expect(screen.queryByTestId('music-length-old-node')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Make the song' }));
+      await waitFor(() => expect(posted).not.toBeNull());
+      expect(posted!.has('duration_s')).toBe(false);
+    });
+
+    it('Set the length sends the seconds (10 to 240)', async () => {
+      renderPage();
+      await fillSong();
+      chooseLength('Set the length');
+      const seconds = screen.getByRole('spinbutton', { name: 'Length (seconds)' });
+      fireEvent.change(seconds, { target: { value: '300' } });
+      expect(screen.getByRole('button', { name: 'Make the song' })).toBeDisabled();
+      fireEvent.change(seconds, { target: { value: '120' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Make the song' }));
+      await waitFor(() => expect(posted).not.toBeNull());
+      expect(fields(posted!)).toMatchObject({ duration_s: '120' });
+    });
+
+    it('an older computer: the page says it is sent 1 minute; a set length needs no note', async () => {
+      nodes = [musicNode({ autoDuration: false })];
+      renderPage();
+      await fillSong();
+      expect(await screen.findByTestId('music-length-old-node')).toHaveTextContent('This computer needs an update to pick the length by itself; using 1 minute.');
+      chooseLength('Set the length');
+      expect(screen.queryByTestId('music-length-old-node')).toBeNull();
+    });
+
+    it('a prompt saved with Auto opens on Auto; one saved with a length opens with it', async () => {
+      prompts = [musicPrompt({ durationS: null })];
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Open Harbour Lights' }));
+      expect(await screen.findByTestId('music-length-summary')).toHaveTextContent('Length: Auto.');
+    });
+
+    it('speaks Spanish: Duración: Automática, and the older-computer note', async () => {
+      nodes = [musicNode({ autoDuration: false })];
+      renderPage('es');
+      expect(await screen.findByTestId('music-length-summary')).toHaveTextContent('Duración: Automática.');
+      expect(await screen.findByTestId('music-length-old-node')).toHaveTextContent('Esta computadora necesita una actualización para elegir la duración por sí sola; se usa 1 minuto.');
+    });
   });
 
   it('checks the limits before sending: a description is needed, at most 500 characters; lyrics at most 8 KB', async () => {

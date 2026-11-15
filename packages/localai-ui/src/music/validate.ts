@@ -68,6 +68,8 @@ export interface FieldError {
 export interface StudioForm {
   lyrics: string;
   tags: string;
+  /** Auto length (#571, the default): the engine picks it and `duration` is ignored. */
+  durationAuto: boolean;
   duration: string;
   language: string;
   seed: string;
@@ -97,7 +99,7 @@ export function validateForm(f: StudioForm): FieldError[] {
   if (byteLength(f.lyrics) > LYRICS_MAX_BYTES) out.push({ field: 'lyrics', key: 'errLyricsLong', vars: { max: LYRICS_MAX_BYTES } });
   if (byteLength(f.tags) > TAGS_MAX_BYTES) out.push({ field: 'tags', key: 'errTagsLong', vars: { max: TAGS_MAX_BYTES } });
   const d = intOf(f.duration);
-  if (d === null || d < DURATION_MIN_S || d > DURATION_MAX_S)
+  if (!f.durationAuto && (d === null || d < DURATION_MIN_S || d > DURATION_MAX_S))
     out.push({ field: 'duration_s', key: 'errDuration', vars: { min: DURATION_MIN_S, max: DURATION_MAX_S } });
   if (f.seed.trim() !== '') {
     const s = intOf(f.seed);
@@ -119,7 +121,7 @@ export function toRequest(f: StudioForm): GenerateRequest {
   return {
     lyrics: f.lyrics,
     tags: f.tags.trim(),
-    duration_s: Number(f.duration.trim()),
+    duration_s: f.durationAuto ? null : Number(f.duration.trim()),
     language: f.language,
     seed,
     variations: Number(f.variations.trim()),

@@ -93,7 +93,11 @@ export const MusicRequestFieldsSchema = z
       .enum(['true', 'false'])
       .transform((value) => value === 'true')
       .default(false),
-    duration_s: intField(MUSIC_DURATION_MIN_S, MUSIC_DURATION_MAX_S).default(60),
+    // Left out, empty or "auto": Auto (#571), null here; the node's engine picks the length (music.service.ts).
+    duration_s: z
+      .union([z.enum(['', 'auto']).transform(() => null), intField(MUSIC_DURATION_MIN_S, MUSIC_DURATION_MAX_S)])
+      .optional()
+      .transform((value) => value ?? null),
     language: MusicLanguage.default('en'),
     seed: intField(0, 2_147_483_647).optional(),
     variations: intField(1, MUSIC_VARIATIONS_MAX).default(1),

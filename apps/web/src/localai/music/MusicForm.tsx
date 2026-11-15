@@ -61,6 +61,8 @@ export interface MusicFormProps {
   nodeId: string | null;
   /** The chosen node can make music now (its readiness is `ready`). */
   ready: boolean;
+  /** The chosen node picks a song's length itself (#571); false: Auto is sent as 1 minute, and the form says so. */
+  autoDuration?: boolean;
   /** The saved prompt loaded into the form, or null for a new one. The page remounts the form when it changes. */
   prompt: MusicPrompt | null;
   /** Whether the AI helpers work now (null while unknown: treated as off). */
@@ -74,7 +76,10 @@ export interface MusicFormProps {
 
 const SAMPLE_TYPES = 'audio/wav,audio/x-wav,audio/mpeg,audio/flac,audio/ogg,.wav,.mp3,.flac,.ogg';
 
-export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, onDeleted }: MusicFormProps) {
+/** What an older computer is sent for an Auto length (the API's MUSIC_DURATION_FALLBACK_S). */
+const FALLBACK_DURATION_S = 60;
+
+export function MusicForm({ nodeId, ready, autoDuration = true, prompt, assist, onCreated, onSaved, onDeleted }: MusicFormProps) {
   const t = useT();
   const { lang } = useLanguage();
   const sampleId = useId();
@@ -86,7 +91,9 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
   const [sample, setSample] = useState<File | null>(null);
   const [removeSaved, setRemoveSaved] = useState(false);
   const [mode, setMode] = useState<SampleMode>(prompt?.sampleMode ?? 'sounds_like');
-  const [duration, setDuration] = useState(String(prompt?.durationS ?? 60));
+  // Length: Auto by default (#571); a prompt saved with a length opens with it.
+  const [durationAuto, setDurationAuto] = useState(prompt ? prompt.durationS === null : true);
+  const [duration, setDuration] = useState(String(prompt?.durationS ?? FALLBACK_DURATION_S));
   const [language, setLanguage] = useState(prompt?.language ?? 'en');
   const [variations, setVariations] = useState(String(prompt?.variations ?? 1));
   const [seed, setSeed] = useState(prompt?.seed !== null && prompt?.seed !== undefined ? String(prompt.seed) : '');
@@ -102,6 +109,7 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
   const lyricsBytes = utf8Bytes(lyrics);
   const descriptionChars = charCount(description);
   const durationN = Number(duration);
+  const durationSent = durationAuto ? null : durationN;
   const seedN = seed.trim() === '' ? undefined : Number(seed);
   const strengthN = strength.trim() === '' ? undefined : Number(strength);
   const needsLyrics = lyricsMode !== 'instrumental';
@@ -113,7 +121,7 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
       : null,
     needsLyrics && lyricsBytes > LYRICS_MAX_BYTES ? t('The lyrics are too long (8 KB at most).', 'La letra es demasiado larga (8 KB como máximo).') : null,
     sample && sample.size > SAMPLE_MAX_BYTES ? t('The sample is too big (20 MB at most).', 'La muestra es demasiado grande (20 MB como máximo).') : null,
-    !Number.isInteger(durationN) || durationN < 10 || durationN > 240 ? t('The length is 10 to 240 seconds.', 'La duración es de 10 a 240 segundos.') : null,
+    !durationAuto && (!Number.isInteger(durationN) || durationN < 10 || durationN > 240) ? t('The length is 10 to 240 seconds.', 'La duración es de 10 a 240 segundos.') : null,
     seedN !== undefined && (!Number.isInteger(seedN) || seedN < 0 || seedN > 2147483647) ? t('The seed is a whole number from 0.', 'La semilla es un número entero desde 0.') : null,
     strengthN !== undefined && (!Number.isFinite(strengthN) || strengthN < 0 || strengthN > 1) ? t('The strength is 0 to 1.', 'La intensidad es de 0 a 1.') : null,
   ].filter((issue): issue is string => issue !== null);
@@ -133,7 +141,7 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
     description,
     lyricsMode,
     lyrics,
-    durationS: durationN,
+    durationS: durationSent,
     language,
     seed: seedN ?? null,
     variations: Number(variations),
@@ -167,7 +175,7 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
         uiLanguage: lang,
         ...(prompt ? { promptId: prompt.id } : {}),
         ...(prompt?.hasSample && removeSaved ? { removeSample: true } : {}),
-        durationS: durationN,
+        durationS: durationSent,
         language,
         variations: Number(variations),
         ...(seedN !== undefined ? { seed: seedN } : {}),
@@ -303,7 +311,20 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
       <Accordion disableGutters>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>{t('More options', 'Más opciones')}</AccordionSummary>
         <AccordionDetails sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-          <TextField label={t('Length (seconds)', 'Duración (segundos)')} type="number" value={duration} onChange={(event) => setDuration(event.target.value)} slotProps={{ htmlInput: { min: 10, max: 240 } }} sx={{ width: 170 }} />
+          <TextField
+            select
+            label={t('Length', 'Duración')}
+            value={durationAuto ? 'auto' : 'set'}
+            onChange={(event) => setDurationAuto(event.target.value !== 'set')}
+            sx={{ width: 190 }}
+            slotProps={{ htmlInput: { 'data-testid': 'music-length' } }}
+          >
+            <MenuItem value="auto">{t('Auto', 'Automática')}</MenuItem>
+            <MenuItem value="set">{t('Set the length', 'Elegir la duración')}</MenuItem>
+          </TextField>
+          {durationAuto ? null : (
+            <TextField label={t('Length (seconds)', 'Duración (segundos)')} type="number" value={duration} onChange={(event) => setDuration(event.target.value)} slotProps={{ htmlInput: { min: 10, max: 240 } }} sx={{ width: 170 }} />
+          )}
           <TextField select label={t('Language', 'Idioma')} value={language} onChange={(event) => setLanguage(event.target.value)} sx={{ width: 150 }}>
             <MenuItem value="en">English</MenuItem>
             <MenuItem value="es">Español</MenuItem>
@@ -332,6 +353,16 @@ export function MusicForm({ nodeId, ready, prompt, assist, onCreated, onSaved, o
         <Typography color="text.secondary" data-testid="form-missing">
           {missing.join(' ')}
         </Typography>
+      ) : null}
+      <Typography color="text.secondary" data-testid="music-length-summary">
+        {durationAuto
+          ? t('Length: Auto. The music model picks it from the lyrics and the description.', 'Duración: Automática. El modelo de música la elige según la letra y la descripción.')
+          : t(`Length: ${duration} seconds.`, `Duración: ${duration} segundos.`)}
+      </Typography>
+      {durationAuto && nodeId !== null && !autoDuration ? (
+        <Alert severity="info" data-testid="music-length-old-node">
+          {t('This computer needs an update to pick the length by itself; using 1 minute.', 'Esta computadora necesita una actualización para elegir la duración por sí sola; se usa 1 minuto.')}
+        </Alert>
       ) : null}
       {!ready ? <Typography color="text.secondary">{t('Choose a computer that is ready for music.', 'Elija una computadora lista para música.')}</Typography> : null}
       {problem ? (

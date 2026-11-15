@@ -142,7 +142,9 @@ describe('the E11 commands: workload.activate and music.generate (E11 contract s
 
   it('music.generate: duration 10 to 240 s, a two-letter language, a non-negative 31-bit seed', () => {
     for (const ok of [10, 240]) expect(music.params.safeParse({ ...example, duration_s: ok }).success).toBe(true);
-    for (const bad of [9, 241, 60.5]) expect(music.params.safeParse({ ...example, duration_s: bad }).success).toBe(false);
+    for (const bad of [9, 241, 60.5, null, '60']) expect(music.params.safeParse({ ...example, duration_s: bad }).success).toBe(false);
+    // #571: left out is Auto (the node's engine picks the length); the Go decoder accepts the same.
+    expect(music.params.safeParse(without('duration_s')).success).toBe(true);
     expect(music.params.safeParse({ ...example, language: 'english' }).success).toBe(false);
     expect(music.params.safeParse({ ...example, language: 'pt-BR' }).success).toBe(false);
     expect(music.params.safeParse({ ...example, seed: -1 }).success).toBe(false);
