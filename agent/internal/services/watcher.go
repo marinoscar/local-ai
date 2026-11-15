@@ -317,6 +317,12 @@ func (w *Watcher) check(ctx context.Context, unit string) {
 		w.mu.Unlock()
 		return
 	}
+	if e.checked && e.lastCheck.After(now) {
+		// A probe that started later has already answered (the ticker's and CheckNow's can overlap): this
+		// older answer must not overwrite it, nor withdraw an alert the newer one raised (issue #555).
+		w.mu.Unlock()
+		return
+	}
 	e.checked, e.lastCheck, e.healthy = true, now, err == nil
 	if err == nil {
 		e.unhealthySince = time.Time{}
