@@ -16,6 +16,8 @@
 import './storage.settings';
 // The `localai` namespace (lab alert thresholds, catalog source, gateway defaults): src/localai/localai.settings.ts.
 import '../localai/localai.settings';
+// The `localaiMusic` namespace ("Use AI for music", #570): src/localai/music/music-ai.settings.ts.
+import '../localai/music/music-ai.settings';
 // Everything the enabled slices add to the registries (settings namespaces,
 // credential purposes, storage prefixes, notifications, onboarding steps...).
 // Before the first `forRoot()` below, and never from `onModuleInit`.

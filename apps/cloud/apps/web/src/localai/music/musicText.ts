@@ -2,7 +2,7 @@
 import { ApiError } from '@marinoscar/platform-web/core';
 
 import { plainError } from '../doctorFix';
-import type { MusicAssist, MusicReadiness, MusicRequest, MusicStage } from './musicApi';
+import type { MusicAiReason, MusicAssist, MusicReadiness, MusicRequest, MusicStage } from './musicApi';
 
 type T = (en: string, es: string) => string;
 
@@ -86,18 +86,38 @@ export const formatDuration = (seconds: number | null): string => {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 };
 
-/** Why "Write lyrics for me" is off, and the fix, in one sentence each (the choice is disabled with this text). */
-export function aiUnavailableText(assist: MusicAssist | null, t: T): string {
-  if (assist?.ai.available === false && assist.ai.reason === 'no_model') {
-    return t(
-      'Write lyrics for me is off: no AI model is set up for you. Add an AI key in Settings, or write your own lyrics.',
-      'Escribir la letra por mí está apagado: no hay un modelo de IA para usted. Agregue una clave de IA en Ajustes, o escriba su propia letra.',
-    );
+/**
+ * Why music AI is off for this person, and the fix, in one line (#570). The order is the API's: the AI itself, then
+ * "Use AI for music", then a model. The settings names are the ones the (English) administration pages show.
+ */
+export function musicAiOffText(assist: MusicAssist | null, t: T): string {
+  const reason: MusicAiReason = assist?.ai.enabled === false ? assist.ai.reason : 'ai_off';
+  switch (reason) {
+    case 'music_ai_off':
+      return t(
+        'Music AI is off: Use AI for music is turned off. An administrator turns on Use AI for music in Settings → AI.',
+        'La IA para música está apagada: "Use AI for music" está apagado. Un administrador lo enciende en Ajustes (Settings) → AI.',
+      );
+    case 'no_model':
+      return t(
+        'Music AI is off: no AI model is set up for you. An administrator adds a provider and model in Settings → AI.',
+        'La IA para música está apagada: no hay un modelo de IA para usted. Un administrador agrega un proveedor y un modelo en Ajustes (Settings) → AI.',
+      );
+    case 'ai_off':
+      return t(
+        'Music AI is off: the AI is turned off on this cloud. An administrator turns it on in Settings → AI.',
+        'La IA para música está apagada: la IA está apagada en esta nube. Un administrador la enciende en Ajustes (Settings) → AI.',
+      );
   }
-  return t(
-    'Write lyrics for me is off: the AI is turned off on this cloud. An administrator can turn it on, or write your own lyrics.',
-    'Escribir la letra por mí está apagado: la IA está apagada en esta nube. Un administrador puede encenderla, o escriba su propia letra.',
-  );
+}
+
+/** The one-line hint under the lyrics box in Automatic mode: what Make the song will do with the box as it is. */
+export function autoLyricsHint(assist: MusicAssist | null, lyrics: string, t: T): string {
+  if (lyrics.trim() !== '') return t('Your lyrics are used.', 'Se usa su letra.');
+  if (assist?.ai.enabled === true) {
+    return t('Leave it empty and the AI writes the lyrics when you press Make the song.', 'Déjela vacía y la IA escribe la letra cuando pulse Crear la canción.');
+  }
+  return t('Leave it empty for a song with no vocals.', 'Déjela vacía para una canción sin voz.');
 }
 
 /** A size as people read it: 512 B, 3.4 KB, 1.2 MB. */

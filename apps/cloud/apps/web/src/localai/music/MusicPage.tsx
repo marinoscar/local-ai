@@ -51,7 +51,7 @@ export function MusicPage({ nodesPollMs = 5000, libraryPollMs = 15000, requestPo
     let alive = true;
     getAssist()
       .then((value) => alive && setAssist(value))
-      .catch(() => alive && setAssist({ ai: { available: false, reason: 'ai_off' } }));
+      .catch(() => alive && setAssist({ ai: { enabled: false, reason: 'ai_off', fix: 'Turn on AI in Settings → AI.' } }));
     return () => {
       alive = false;
     };

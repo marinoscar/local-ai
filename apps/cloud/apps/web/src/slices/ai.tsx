@@ -9,6 +9,7 @@
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import DataUsageOutlinedIcon from '@mui/icons-material/DataUsageOutlined';
 import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
+import LibraryMusicOutlinedIcon from '@mui/icons-material/LibraryMusicOutlined';
 import ModelTrainingOutlinedIcon from '@mui/icons-material/ModelTrainingOutlined';
 import VpnKeyOutlinedIcon from '@mui/icons-material/VpnKeyOutlined';
 import { Box, CircularProgress } from '@mui/material';
@@ -25,6 +26,8 @@ const AiModelsPage = lazy(() => import('@marinoscar/platform-web/ai/ui/models-pa
 const AiUsagePage = lazy(() => import('@marinoscar/platform-web/ai/ui/usage-page'));
 const OrgAiKeysPage = lazy(() => import('@marinoscar/platform-web/ai/ui'));
 const UserAiKeysPage = lazy(() => import('@marinoscar/platform-web/ai/ui/keys-page'));
+// The app's own AI card (#570): "Use AI for music", behind the ai_config:* permissions its API route enforces.
+const MusicAiSettingsPage = lazy(() => import('../localai/music/MusicAiSettingsPage'));
 
 // The `ai` feature, for the settings cards that declare it.
 declare module '@marinoscar/platform-web/settings/headless' {
@@ -62,6 +65,8 @@ export const aiWebSlice: WebSlice = {
     { path: 'admin/settings/ai/usage', permission: 'ai_config:read', element: <RequireAiEnabled><AiUsagePage /></RequireAiEnabled> },
     { path: 'admin/settings/ai/organization-keys', permission: 'org_ai_config:read', element: <RequireAiEnabled><OrgAiKeysPage /></RequireAiEnabled> },
     { path: 'settings/ai', permission: 'ai:use', element: <RequireAiEnabled><UserAiKeysPage /></RequireAiEnabled> },
+    // ai_config:read is what GET /api/localai/music/ai-settings enforces (PUT: ai_config:write, gated inside the page).
+    { path: 'admin/settings/ai/music', permission: 'ai_config:read', element: <RequireAiEnabled><MusicAiSettingsPage /></RequireAiEnabled> },
   ],
   adminCards: [
     {
@@ -96,6 +101,14 @@ export const aiWebSlice: WebSlice = {
           Icon: VpnKeyOutlinedIcon,
           path: '/admin/settings/ai/organization-keys',
           permission: 'org_ai_config:read',
+          feature: 'ai',
+        },
+        {
+          title: 'Use AI for music',
+          description: 'Let the Music page use AI to write lyrics and suggest song titles. Off until you turn it on.',
+          Icon: LibraryMusicOutlinedIcon,
+          path: '/admin/settings/ai/music',
+          permission: 'ai_config:read',
           feature: 'ai',
         },
       ],
