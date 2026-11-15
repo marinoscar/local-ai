@@ -5,12 +5,16 @@
 // names are permanent. This fragment declares no raw-SQL index: every index below is expressible in Prisma.
 //
 // Rules that Prisma cannot express, kept here so a reader of the schema sees them:
-//   - The lyrics are NOT a column: they travel once, in the command's params (`localai_commands.params`), and the
-//     command history redacts them. A request keeps only `title` (the first lyric line or the tags, at most 120
-//     characters) for the library.
+//   - The lyrics are a column of ONE table only: `localai_music_prompts.lyrics`, the owner's editable prompt history
+//     (#568: the owner asked to keep, edit and reuse prompts). A prompt is read by its owner only. A request never
+//     stores the lyrics: they travel once, in the command's params (`localai_commands.params`), and the command
+//     history redacts them. A request keeps the title and the settings it actually used, so editing or deleting its
+//     prompt later never changes a past song.
 //   - The sample and every song live in object storage under the deployment-scoped prefix `localai-music/`
-//     (`<prefix><request id>/sample.<ext>` and `<prefix><request id>/song-<index>`). `storage_key` is the truth; it is
-//     server-chosen, never a client's string.
+//     (`<prefix>samples/<request id>.<ext>` and `<prefix>songs/<request id>/<index>`). `storage_key` is the truth; it
+//     is server-chosen, never a client's string. A sample key may be referenced by several requests and prompts ("make
+//     again" reuses it), so `sample_key` is not unique; the object is deleted only when no request and no prompt
+//     references it any more.
 //   - A song row exists from the request on (status `pending`), so its signed PUT URL is scoped to exactly one key.
 //     The command result marks it `ready` (with sha256, size, mime and duration) or `failed`.
 //   - The back-relations on LocalaiNode (`musicRequests`) and LocalaiCommand (`musicRequest`) are declared in
@@ -32,7 +36,8 @@ enum LocalaiMusicSongStatus {
 }
 
 // ---------------------------------------------------------------------------
-// One "make music" request: the node, the command that carries it, and the form's settings (never the lyrics).
+// One "make music" request: the node, the command that carries it, its prompt (if not deleted) and the settings it
+// actually used (never the lyrics).
 // ---------------------------------------------------------------------------
 model LocalaiMusicRequest {
   id            String                    @id @default(uuid()) @db.Uuid
@@ -49,10 +54,12 @@ model LocalaiMusicRequest {
   variations    Int
   sampleMode    String?                   @map("sample_mode")
   strength      Float?
-  sampleKey     String?                   @unique @map("sample_key")
+  sampleKey     String?                   @map("sample_key")
   sampleMime    String?                   @map("sample_mime")
   sampleBytes   Int?                      @map("sample_bytes")
   sampleSha256  String?                   @map("sample_sha256")
+  promptId      String?                   @map("prompt_id") @db.Uuid
+  lyricsMode    String?                   @map("lyrics_mode")
   errorCode     String?                   @map("error_code")
   errorMessage  String?                   @map("error_message")
   createdAt     DateTime                  @default(now()) @map("created_at") @db.Timestamptz
@@ -62,9 +69,12 @@ model LocalaiMusicRequest {
   node        LocalaiNode        @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   command     LocalaiCommand?    @relation(fields: [commandId], references: [id], onDelete: SetNull)
   requestedBy User?              @relation("LocalaiMusicRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  prompt      LocalaiMusicPrompt? @relation(fields: [promptId], references: [id], onDelete: SetNull)
   songs       LocalaiMusicSong[]
 
   @@index([requestedById, createdAt])
+  @@index([promptId])
+  @@index([sampleKey])
   @@index([status, createdAt])
   @@index([nodeId, createdAt])
   @@map("localai_music_requests")
@@ -77,6 +87,7 @@ model LocalaiMusicSong {
   id         String                 @id @default(uuid()) @db.Uuid
   requestId  String                 @map("request_id") @db.Uuid
   index      Int
+  title      String
   status     LocalaiMusicSongStatus @default(pending)
   storageKey String                 @unique @map("storage_key")
   mime       String?
@@ -91,4 +102,38 @@ model LocalaiMusicSong {
   @@unique([requestId, index])
   @@index([status, createdAt])
   @@map("localai_music_songs")
+}
+
+// ---------------------------------------------------------------------------
+// One saved prompt of a person's music history (#568): what they typed, to edit, make again or delete. Owned by one
+// user (deleted with them); read by that user only. Deleting a prompt keeps its songs (`prompt_id` becomes NULL).
+// `lyrics_mode` is `mine`, `ai` or `instrumental`; `description` is sent to the node as the command's `tags`.
+// ---------------------------------------------------------------------------
+model LocalaiMusicPrompt {
+  id           String    @id @default(uuid()) @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  title        String
+  description  String
+  lyricsMode   String    @map("lyrics_mode")
+  lyrics       String
+  durationS    Int       @map("duration_s")
+  language     String
+  seed         BigInt?
+  variations   Int
+  sampleKey    String?   @map("sample_key")
+  sampleMime   String?   @map("sample_mime")
+  sampleBytes  Int?      @map("sample_bytes")
+  sampleSha256 String?   @map("sample_sha256")
+  sampleMode   String?   @map("sample_mode")
+  strength     Float?
+  lastUsedAt   DateTime  @default(now()) @map("last_used_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  owner    User                  @relation("LocalaiMusicPromptOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  requests LocalaiMusicRequest[]
+
+  @@index([ownerId, lastUsedAt])
+  @@index([sampleKey])
+  @@map("localai_music_prompts")
 }

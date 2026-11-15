@@ -11,7 +11,7 @@ import '../../src/platform/registrations';
 const localai = readSchemaDatamodel(join(__dirname, '..', '..', 'prisma', 'schema')).filter((model) => model.name.startsWith('Localai'));
 
 describe('Local AI model ownership', () => {
-  it('finds the eleven Local AI models in the composed schema', () => {
+  it('finds the twelve Local AI models in the composed schema', () => {
     expect(localai.map((model) => model.name).sort()).toEqual([
       'LocalaiAlert',
       'LocalaiCatalogVersion',
@@ -20,6 +20,7 @@ describe('Local AI model ownership', () => {
       'LocalaiGatewayUsage',
       'LocalaiGatewayUsageDaily',
       'LocalaiModelPolicy',
+      'LocalaiMusicPrompt',
       'LocalaiMusicRequest',
       'LocalaiMusicSong',
       'LocalaiNode',
@@ -28,7 +29,9 @@ describe('Local AI model ownership', () => {
   });
 
   // The gateway key is the one model a person owns (gateway.md section 3.6); the lab and the other gateway tables are deployment-wide.
-  it.each(localai.filter((model) => model.name !== 'LocalaiGatewayKey').map((model) => [model.name]))(
+  const PERSONAL = new Set(['LocalaiGatewayKey', 'LocalaiMusicPrompt']);
+
+  it.each(localai.filter((model) => !PERSONAL.has(model.name)).map((model) => [model.name]))(
     '%s is classified as a deployment-wide (system) model',
     (name) => {
       expect(modelOwnershipRegistry.get(name)).toMatchObject({ kind: 'system' });
@@ -45,12 +48,18 @@ describe('Local AI model ownership', () => {
     expect(userOwnedModelRegistry.get('LocalaiGatewayKey')?.exportOmit).toContain('tokenHash');
   });
 
+  it('classifies a music prompt as user-owned: deleted with its user, exported without the sample key (#568)', () => {
+    expect(modelOwnershipRegistry.get('LocalaiMusicPrompt')).toMatchObject({ kind: 'user' });
+    expect(userOwnedModelRegistry.get('LocalaiMusicPrompt')).toMatchObject({ ownerField: 'ownerId', purge: 'delete', export: 'include' });
+    expect(userOwnedModelRegistry.get('LocalaiMusicPrompt')?.exportOmit).toEqual(expect.arrayContaining(['ownerId', 'sampleKey']));
+  });
+
   it('carries no org_id column on any Local AI table', () => {
     for (const model of localai) expect(model.fields.map((field) => field.name)).not.toContain('orgId');
   });
 
   it('registers every foreign key to User as an actor field that is detached on purge', () => {
-    for (const model of localai.filter((candidate) => candidate.name !== 'LocalaiGatewayKey')) {
+    for (const model of localai.filter((candidate) => !PERSONAL.has(candidate.name))) {
       const userKeys = model.fields.filter((field) => field.type === 'User' && field.relation).flatMap((field) => field.relation?.fields ?? []);
       if (userKeys.length === 0) continue;
       const policy = userOwnedModelRegistry.get(model.name);
