@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   containingMap,
+  fitZoom,
+  startView,
   formatDecimal,
   inBounds,
   parseCoordinates,
@@ -87,5 +89,25 @@ describe("bounds", () => {
     expect(containingMap(maps, 8.98, -79.5, "cr")?.id).toBe("pa");
     expect(containingMap(maps, 9.93, -84.08, "cr")).toBeUndefined();
     expect(containingMap(maps, 40, 10, "cr")).toBeUndefined();
+  });
+});
+
+describe("startView (issue #593)", () => {
+  const southCentral = { center: [-98.95, 31.45, 0] as [number, number, number], bounds: [-109.1, 25.8, -88.8, 37.1] as [number, number, number, number], maxzoom: 15 };
+  it("fits the map's area when the header zoom is the whole world", () => {
+    const v = startView(southCentral, 1290, 640);
+    expect(v).toEqual({ lat: 31.45, lon: -98.95, zoom: 5 });
+    // A small window still shows the whole area, a level further out.
+    expect(startView(southCentral, 600, 300).zoom).toBe(3);
+  });
+  it("keeps a real header zoom", () => {
+    expect(startView({ ...southCentral, center: [-98.95, 31.45, 7] }, 1290, 640).zoom).toBe(7);
+  });
+  it("never goes past the map's maxzoom and never below 0", () => {
+    expect(startView({ center: [0, 0, 0], bounds: [-0.001, -0.001, 0.001, 0.001], maxzoom: 13 }, 1290, 640).zoom).toBe(13);
+    expect(fitZoom([-180, -85, 180, 85], 100, 100)).toBe(0);
+  });
+  it("the whole contiguous US opens at zoom 3", () => {
+    expect(fitZoom([-125.0, 24.4, -66.9, 49.5], 1290, 640)).toBe(3);
   });
 });

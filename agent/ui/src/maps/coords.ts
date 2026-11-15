@@ -102,3 +102,38 @@ export function containingMap<T extends HasBounds>(
 ): T | undefined {
   return maps.find((m) => m.id !== exceptId && inBounds(lat, lon, m.bounds));
 }
+
+/** The center zoom below which the viewer fits the map's bounds instead (issue #593). */
+export const MIN_START_ZOOM = 3;
+
+function mercY(lat: number): number {
+  const r = (Math.max(-85, Math.min(85, lat)) * Math.PI) / 180;
+  return Math.log(Math.tan(Math.PI / 4 + r / 2));
+}
+
+/**
+ * fitZoom is the largest zoom (rounded down, at least 0) at which the bounds fit a viewport of
+ * width x height CSS pixels in Web Mercator with 512 px tiles, as MapLibre draws them.
+ */
+export function fitZoom(b: Bounds, width: number, height: number): number {
+  const lonSpan = Math.max(b[2] - b[0], 1e-6);
+  const ySpan = Math.max(mercY(b[3]) - mercY(b[1]), 1e-6);
+  const zx = Math.log2((Math.max(width, 1) * 360) / (512 * lonSpan));
+  const zy = Math.log2((Math.max(height, 1) * 2 * Math.PI) / (512 * ySpan));
+  return Math.max(0, Math.floor(Math.min(zx, zy)));
+}
+
+/**
+ * startView is where the viewer opens on a map: its header center, at the header's zoom when that
+ * is a real zoom, else at the zoom that shows the whole map in the viewport (issue #593: the
+ * extracted maps carry zoom 0, which is the whole world).
+ */
+export function startView(
+  m: { center: [number, number, number]; bounds: Bounds; maxzoom: number },
+  width: number,
+  height: number,
+): { lat: number; lon: number; zoom: number } {
+  const [lon, lat, z] = m.center;
+  const zoom = z >= MIN_START_ZOOM ? z : Math.min(fitZoom(m.bounds, width, height), m.maxzoom);
+  return { lat, lon, zoom };
+}
