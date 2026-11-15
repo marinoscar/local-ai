@@ -34,12 +34,12 @@ include:
     - survival-post-disaster
     - ifixit-en
     - osm-us-south-central
-    - osm-us
     - map-assets
     - places-us
     - wikipedia-en-nopic
     - wikipedia-es-nopic
     # tier 2
+    - osm-us
     - wikimed-es
     - stackexchange-diy
     - stackexchange-cooking

@@ -37,12 +37,12 @@ include:
     - survival-post-disaster
     - ifixit-en
     - osm-us-south-central
-    - osm-us
     - map-assets
     - places-us
     - wikipedia-es-nopic
     - wikipedia-en-maxi
     # tier 2
+    - osm-us
     - wikimed-es
     - mdwiki-en
     - stackexchange-diy

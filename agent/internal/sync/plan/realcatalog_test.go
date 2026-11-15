@@ -383,7 +383,7 @@ func TestRealCatalogProfileOrderAndEditions(t *testing.T) {
 	}
 	// The tier 1 items every profile carries (catalog.md section 3.1).
 	for _, p := range cat.Profiles {
-		for _, id := range []string{"osm-central-america", "places-central-america", "docs-bundle", "wikimed-en",
+		for _, id := range []string{"osm-us-south-central", "places-us", "docs-bundle", "wikimed-en",
 			"survival-first-aid", "survival-water", "survival-food", "survival-post-disaster", "ifixit-en", "wikipedia-es-nopic"} {
 			if !toSet(p.Include.Content)[id] {
 				t.Errorf("%s does not include the tier 1 item %s", p.ID, id)
@@ -395,6 +395,16 @@ func TestRealCatalogProfileOrderAndEditions(t *testing.T) {
 	}
 	if !has("ark-drive-full", "osm-north-america") {
 		t.Error("ark-drive-full must include osm-north-america")
+	}
+	// Issue #586: every profile carries the US overview; Central America is for the ark drive only.
+	for _, p := range cat.Profiles {
+		if !toSet(p.Include.Content)["osm-us"] {
+			t.Errorf("%s does not include osm-us", p.ID)
+		}
+		ca := toSet(p.Include.Content)["osm-central-america"] || toSet(p.Include.Content)["places-central-america"]
+		if ca != (p.ID == catalog.ArkDriveProfileID) {
+			t.Errorf("%s: Central America included = %v, want it on the ark drive only", p.ID, ca)
+		}
 	}
 }
 
@@ -483,21 +493,25 @@ func TestRealCatalogKiwixSources(t *testing.T) {
 // allows (computed with trust on first use), so no 64-hex string is committed.
 func TestRealCatalogMapsPlacesDocs(t *testing.T) {
 	cat := loadReal(t)
-	ca, _ := cat.ContentItem("osm-central-america")
-	if ca == nil || ca.Tier() != 1 || ca.Source.Type != "pmtiles_extract" || ca.Source.Checksum != "computed" {
-		t.Errorf("osm-central-america = %+v", ca)
+	for id, tier := range map[string]int{"osm-us-south-central": 1, "osm-us": 2, "osm-central-america": 2} {
+		m, _ := cat.ContentItem(id)
+		if m == nil || m.Tier() != tier || m.Source.Type != "pmtiles_extract" || m.Source.Checksum != "computed" {
+			t.Errorf("%s = %+v, want tier %d", id, m, tier)
+		}
 	}
 	na, _ := cat.ContentItem("osm-north-america")
 	if na == nil || na.Tier() != 3 || na.Source.Type != "pmtiles_extract" {
 		t.Errorf("osm-north-america = %+v", na)
 	}
-	pl, _ := cat.ContentItem("places-central-america")
-	if pl == nil || pl.Tier() != 1 || pl.Source.Trust != "tofu" || pl.Source.Checksum != "computed" || len(pl.Source.Files) != 7 {
-		t.Fatalf("places-central-america = %+v", pl)
-	}
-	for _, f := range pl.Source.Files {
-		if f.SHA256 != "" {
-			t.Errorf("places file %s carries a digest %q: computed+tofu items store none", f.URL, f.SHA256)
+	for id, want := range map[string]struct{ tier, files int }{"places-us": {1, 1}, "places-central-america": {2, 7}} {
+		pl, _ := cat.ContentItem(id)
+		if pl == nil || pl.Tier() != want.tier || pl.Source.Trust != "tofu" || pl.Source.Checksum != "computed" || len(pl.Source.Files) != want.files {
+			t.Fatalf("%s = %+v", id, pl)
+		}
+		for _, f := range pl.Source.Files {
+			if f.SHA256 != "" {
+				t.Errorf("places file %s carries a digest %q: computed+tofu items store none", f.URL, f.SHA256)
+			}
 		}
 	}
 	d, _ := cat.ContentItem("docs-bundle")
