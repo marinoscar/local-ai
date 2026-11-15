@@ -1,6 +1,6 @@
 {
   "name": "@app/shared",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "The app's identity and slice manifest: the files every runtime reads its name, repository, CLI name, colours and enabled platform slices from.",
   "type": "commonjs",
