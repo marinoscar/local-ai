@@ -551,7 +551,7 @@ func TestCatalogGPSBlock(t *testing.T) {
 // TestTileDirectoryItem: a map synced by pmtiles_extract is a directory item (tree_sha256 and
 // file_count in the MANIFEST, the file list in SHA256SUMS). It must be served like a file item (#580).
 func TestTileDirectoryItem(t *testing.T) {
-	const sum = "fedcba98765432100123456789abcdef0123456789abcdef0123456789abcdef"
+	sum := strings.Repeat("ab", 32)
 	dirCopy := func(t *testing.T, e *env, sums string) {
 		cp := e.cp[mapID]
 		cp.Files = nil
@@ -569,7 +569,7 @@ func TestTileDirectoryItem(t *testing.T) {
 		if resp.StatusCode != 206 || string(body) != "PMTiles" {
 			t.Fatalf("%d %q", resp.StatusCode, body)
 		}
-		if got := resp.Header.Get("ETag"); got != `"fedcba9876543210"` {
+		if got := resp.Header.Get("ETag"); got != `"abababababababab"` {
 			t.Errorf("ETag %q", got)
 		}
 		_, cat := e.do(t, "GET", CatalogPath, nil)
