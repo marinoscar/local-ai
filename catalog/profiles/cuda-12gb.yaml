@@ -30,6 +30,7 @@ include:
     - kit-piper
     - kit-debs-resolute-amd64
     - kit-nvidia-resolute-amd64-595-open
+    - kit-engine-acestep-cuda          # the music runtime (E11, #511): about 7 GB, only where a profile has music
     - wikimed-en
     - survival-first-aid
     - survival-water
