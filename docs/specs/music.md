@@ -124,10 +124,11 @@ JSON over HTTP/1.1; every body is UTF-8 JSON; unknown fields in a request are re
  "sample_path": null, "sample_mode": null, "strength": 0.5,
  "output_dir": "/var/lib/localai/music/work/<task-id>"}
 ```
+- `duration_s` is the length in seconds (10 to 240), or **null for Auto** (#571): the engine picks the length from the lyrics and the tags. The field left out means 60 s (the protocol's first version; the agent always sends it). The real backend passes ACE-Step's own automatic length, `GenerationParams.duration = -1` (ACE-Step 1.5 at the pinned commit `ca1e85fe`, `acestep/inference.py`: "If <0 or None, model chooses automatically"; the 5 Hz LM writes a duration into its chain-of-thought metadata, which then sizes the DiT's output; ACE-Step bounds it to its `DURATION_MIN`..`DURATION_MAX`, 10 to 600 s). The backend also carries the shim's own **estimate**, about 4 s per lyric line that is not a `[section]` tag plus 10 s, within 30 to 240 s, and 60 s for an instrumental: it is passed instead when `AceStepBackend.AUTO_BY_ENGINE` is off (the fallback if a pinned ACE-Step stops choosing well), and reported when an output cannot be measured. Either way each output's `duration_s` is the **real** length of the file.
 - `seed` null means random. The agent always sends a concrete seed (it draws one when the person gave none) so it can record it; variation `i` uses `seed + i`.
 - `sample_path` is an absolute path inside `MUSIC_WORK_DIR` (the shim refuses any other path, `400`); `sample_mode` is required when `sample_path` is set and must be null otherwise.
 - `output_dir` must be inside `MUSIC_WORK_DIR` and must not exist yet; the shim creates it and writes `out-<i>.wav` there.
-- Format: **WAV, 48 kHz, stereo, 16-bit PCM** (measured, #505); the shim may add MP3 later, announced by `mime`. A `same_song` output is as long as the sample, whatever `duration_s` says.
+- Format: **WAV, 48 kHz, stereo, 16-bit PCM** (measured, #505); the shim may add MP3 later, announced by `mime`. A `same_song` output is as long as the sample, whatever `duration_s` says (also for Auto: ACE-Step locks a cover to its source).
 - The queue holds at most `MUSIC_MAX_QUEUE` tasks (running plus queued); the next is `429`. One task runs at a time.
 - `/health` `error` carries a short English reason for the agent's logs (for example `out of graphics memory`); it never carries lyrics.
 - The ACE-Step call itself sits in **one** module, `engines/acestep/localai_music_shim/backend.py`, behind an interface with a fake backend for tests (it writes a short tone of the requested length). The real backend uses ACE-Step's Python API (`acestep.inference.generate_music`), loads with both CPU offloads (a 12 GB card needs them, #505), and cancels at the next progress call (a few seconds).
@@ -181,7 +182,7 @@ Routes, auth and status codes: [agent.md](agent.md) §3.8.35 and §3.8.36 (autho
 |---|---|---|
 | `lyrics` | UTF-8 text, ≤ 8 KiB; section tags such as `[verse]`, `[chorus]`, `[bridge]` are passed as written; may be empty for an instrumental | `""` |
 | `tags` | UTF-8 text, ≤ 512 bytes: the style, comma-separated words (`folk, acoustic guitar, warm`) | `""` |
-| `duration_s` | integer 10 to 240 | 60 |
+| `duration_s` | integer 10 to 240; left out (or empty, or `auto`) is **Auto** (#571): the engine picks the length from the lyrics and the tags, and the song's `duration_s` is what it chose | Auto |
 | `language` | two-letter code of the lyrics (`en`, `es`, ...); the shim refuses a language the model does not sing (`LAI-SVC-154`) | `en` |
 | `seed` | integer 0 to 2147483647 | random |
 | `variations` | integer 1 to 4 | 1 |
@@ -194,13 +195,13 @@ Lyrics and tags cannot both be empty (`LAI-SVC-154`). A field out of range, an u
 ### 3.7 Local UI (`/music/`)
 The page of the agent's embedded UI (agent.md §3.11), built in `packages/ui` and used by the node UI and the desktop's Music window ([desktop.md](desktop.md)). English and Spanish. State first (ADR-0009):
 1. **State line.** "Music is ready", "Music is starting (about a minute)", or "This computer is set for Coding. **Switch to Music**" (the button activates the `music` workload, agent.md §3.8.34). When music is not installed: `LAI-SVC-150` with **Install what's missing**. In survival mode: "Music is off in survival mode."
-2. **Make a song.** Lyrics (a text area with a hint showing `[verse]` and `[chorus]`), Style (tags), Length (slider, 10 s to 4 min), Language, How many versions (1 to 4). **Add a sample** (optional) with two choices, **Sounds like this** and **Same song, my lyrics**, and a "How closely" slider (strength) under **More options**, with the seed. **Make the song** button.
+2. **Make a song.** Lyrics (a text area with a hint showing `[verse]` and `[chorus]`), Style (tags), Length (**Auto**, the default, or **Set the length** with the seconds, 10 to 240; #571), Language, How many versions (1 to 4). **Add a sample** (optional) with two choices, **Sounds like this** and **Same song, my lyrics**, and a "How closely" slider (strength) under **More options**, with the seed. **Make the song** button.
 3. **Progress.** One bar per request (`music.progress`), with **Cancel**.
 4. **My songs.** Newest first: title, length, date, a play control (`<audio>` over `/api/v1/music/songs/{id}/audio`), **Download**, **Delete** (asks for confirmation, and the desktop asks for the admin PIN, as for deleting a model). Songs made from the cloud are marked "from ai.marin.cr".
 
 The page loads no network asset (AGENTS.md rule 3).
 
-**Labels** (English / Spanish; the runbook [12](../runbooks/12-make-music-and-switch-workloads.md) quotes them, so a change here changes it too): **Switch to Music** / **Cambiar a Música**; Lyrics / Letra; Style / Estilo; Length / Duración; Language / Idioma; How many versions / Cuántas versiones; **Add a sample** / **Agregar una muestra**; **Sounds like this** / **Suena como esto**; **Same song, my lyrics** / **La misma canción, mi letra**; More options / Más opciones; How closely / Qué tan parecido; **Make the song** / **Hacer la canción**; Requests / Solicitudes; **Cancel** / **Cancelar**; My songs / Mis canciones; **Download** / **Descargar**; **Delete** / **Borrar**; "Music is ready" / "La música está lista"; "Music is starting (about a minute)" / "La música está iniciando (cerca de un minuto)". The workload switcher box is "What this computer does" / "Lo que hace esta computadora"; the `aictl` menu entry is "Switch what this computer does" / "Cambiar lo que hace esta computadora".
+**Labels** (English / Spanish; the runbook [12](../runbooks/12-make-music-and-switch-workloads.md) quotes them, so a change here changes it too): **Switch to Music** / **Cambiar a Música**; Lyrics / Letra; Style / Estilo; Length / Duración, with **Auto** / **Automática** (the default; "Length: Auto" / "Duración: Automática", #571) and **Set the length** / **Elegir la duración** (then "Length in seconds" / "Duración en segundos"); Language / Idioma; How many versions / Cuántas versiones; **Add a sample** / **Agregar una muestra**; **Sounds like this** / **Suena como esto**; **Same song, my lyrics** / **La misma canción, mi letra**; More options / Más opciones; How closely / Qué tan parecido; **Make the song** / **Hacer la canción**; Requests / Solicitudes; **Cancel** / **Cancelar**; My songs / Mis canciones; **Download** / **Descargar**; **Delete** / **Borrar**; "Music is ready" / "La música está lista"; "Music is starting (about a minute)" / "La música está iniciando (cerca de un minuto)". The workload switcher box is "What this computer does" / "Lo que hace esta computadora"; the `aictl` menu entry is "Switch what this computer does" / "Cambiar lo que hace esta computadora".
 
 **The cloud page's labels (#568)** (`https://ai.marin.cr/music`, [cloud-app.md](cloud-app.md) §3.11; the local page keeps the labels above until it adopts them): Title / Título; **Suggest a title** / **Sugerir un título**; "Suggested by the AI. You can change it." / "Sugerido por la IA. Puede cambiarlo."; "Made from your words. You can change it." / "Hecho con sus palabras. Puede cambiarlo."; Describe your song / Describa su canción (replaces Style); Lyrics / Letra with **Use my lyrics** / **Usar mi letra**, **Write lyrics for me** / **Escribir la letra por mí**, **No vocals (instrumental)** / **Sin voz (instrumental)**; Your lyrics / Su letra; **Write the lyrics** / **Escribir la letra**; "The song is made without singing." / "La canción se hace sin canto."; My prompts / Mis indicaciones; **New prompt** / **Nueva indicación**; **Open** / **Abrir**; **Save** / **Guardar**; **Save as new** / **Guardar como nueva**; **Remove sample** / **Quitar la muestra**; **Delete** / **Eliminar**; "Delete this prompt?" / "¿Eliminar esta indicación?"; "prompt deleted" / "indicación eliminada"; **Make the song** / **Crear la canción**; "Untitled song" / "Canción sin título". With the AI off: "Write lyrics for me is off: the AI is turned off on this cloud. An administrator can turn it on, or write your own lyrics." / "Escribir la letra por mí está apagado: la IA está apagada en esta nube. Un administrador puede encenderla, o escriba su propia letra."
 
@@ -219,7 +220,7 @@ The `acestep` engine adapter (llama-router.md §4.15) owns the engine's life: wr
 
 ### 4.4 Generating a song
 For each operation, in order:
-1. **Disk guard.** Free space on the filesystem of `/var/lib/localai/music` minus the expected size of the songs (`duration_s × variations × 192000` bytes for 48 kHz 16-bit stereo WAV, the format measured in #505) must stay at or above the profile's `storage.min_free_bytes` ([catalog.md](catalog.md) §4). Otherwise `507 LAI-SVC-155` before anything is written; checked again before each song is moved into the store.
+1. **Disk guard.** Free space on the filesystem of `/var/lib/localai/music` minus the expected size of the songs (`duration_s × variations × 192000` bytes for 48 kHz 16-bit stereo WAV, the format measured in #505; an Auto song counts as 240 s, the cap, #571) must stay at or above the profile's `storage.min_free_bytes` ([catalog.md](catalog.md) §4). Otherwise `507 LAI-SVC-155` before anything is written; checked again before each song is moved into the store.
 2. **Work directory.** `/var/lib/localai/music/work/<task-id>/` (localai 0750). The sample, if any, is written there as `sample.<ext>` (the agent counts its bytes while streaming the upload and stops at 20 MiB, `413 LAI-SVC-154`).
 3. **Submit** `POST /v1/tasks`. `429` from the shim (it should not happen, the agent's queue is the same size) is retried after 2 s, five times, then `LAI-SVC-153`. `400` is `LAI-SVC-154` with the shim's reason in `details.reason`.
 4. **Follow** `GET /v1/tasks/{id}` every 1 s; publish `music.progress {op_id, state, progress, song_ids}` at most once per second. `failed` → `LAI-SVC-152` (`details.engine_error`); the engine crashing (unit exits, `/health` gone) → `LAI-SVC-152`; `cancelled` → `LAI-SVC-158`.
@@ -241,11 +242,12 @@ For each operation, in order:
 ```json
 {"id": "…", "created_at": "2026-11-14T18:20:05Z", "title": "Walking home by the river",
  "lyrics": "[verse]\nWalking home by the river…", "tags": "folk, acoustic guitar, warm", "language": "en",
- "duration_s": 60.1, "model_id": "acestep-v15-turbo", "seed": 1234, "variation": 0,
+ "duration_s": 60.1, "requested_duration_s": 60, "model_id": "acestep-v15-turbo", "seed": 1234, "variation": 0,
  "mime": "audio/wav", "size_bytes": 11534380, "sha256": "<64 hex>",
  "sample": {"mode": "sounds_like", "strength": 0.5, "sha256": "<64 hex>", "size_bytes": 1048576} ,
  "origin": "local", "cloud_request_id": null, "op_id": "op_…"}
 ```
+- `duration_s` is the real length of the file; `requested_duration_s` is what was asked, and `null` for an Auto song (#571), whose length the engine chose.
 - The song id is chosen by the agent, sortable by time, and matches `^[A-Za-z0-9_-]{8,64}$`; clients treat it as opaque.
 - **Retention: a song is kept until a person deletes it.** Nothing expires, sync never touches the store, and the store is not part of the ark drive. `DELETE /music/songs/{id}` (admin, agent.md §3.8.36) removes the directory.
 - The sample itself is **not kept**: only its hash and size are recorded. The person's audio stays only as long as the song needs it.
@@ -263,6 +265,8 @@ The cloud side ([cloud-app.md](cloud-app.md) §3.7, §3.9) stores the sample in 
  "sample_mode": "sounds_like", "strength": 0.5,
  "results": [{"put_url": "https://<signed PUT>"}, {"put_url": "https://<signed PUT>"}]}
 ```
+`duration_s` is optional (#571): the cloud **leaves it out** for Auto (strict decoding refuses `null`, as Zod's `.optional()` does), and does so only for a node whose capabilities list `music.auto_duration` ([agent.md](agent.md) §4.8.2); an older node is sent `duration_s: 60` and the cloud page says so ([cloud-app.md](cloud-app.md) §3.7).
+
 On the node (`internal/music` command handler, agent.md §4.8.6):
 1. Validate the payload with the limits of §3.6; `results` must have exactly `variations` entries and every URL must be `https`. Invalid → `LAI-CLD-058`.
 2. If there is a `sample`: download it through `netx` (the agent's only outbound path) into the work directory, at most `size_bytes` and 20 MiB, and check its sha256. Any failure (network, status, size, hash) → `LAI-SVC-156`; nothing is generated.

@@ -90,9 +90,9 @@ The song is made on the node. You can ask for it on the node itself (the **Music
 
     - **What you should see:** the text in the box. Short is better: a few verses and a chorus.
     - **If it doesn't work:** `LAI-SVC-154` with "lyrics too long": the limit is about 8,000 letters; remove some verses.
-13. Type a **Style**, for example `folk, acoustic guitar, warm, female voice`. Choose the **Length** (for example 1:00), the **Language** of the lyrics, and **How many versions**: choose **3** or **4**, then keep the one you like best.
-    - **What you should see:** your choices in the form.
-    - **If it doesn't work:** the length goes from 10 seconds to 4 minutes; the slider does not go further.
+13. Type a **Style**, for example `folk, acoustic guitar, warm, female voice`. Leave **Length** on **Auto**: the music model picks the length from your lyrics and the style (more lyrics make a longer song). To choose it yourself, press **Set the length** and type the seconds (for example `60` for 1:00). Then choose the **Language** of the lyrics and **How many versions**: choose **3** or **4**, then keep the one you like best.
+    - **What you should see:** your choices in the form, with "Length: Auto" unless you set one. When the song is ready, the list shows the length the model chose.
+    - **If it doesn't work:** a set length goes from 10 to 240 seconds (4 minutes); `LAI-SVC-154` with "duration_s" means the number is outside that range. On the website, the note "This computer needs an update to pick the length by itself; using 1 minute" means that computer runs an older Local AI: the song is made at 1 minute. Update that computer ([runbook 10, Part 4](10-lab-operations.md#part-4-updating-agents)) to get Auto there.
 14. Optional: press **Add a sample** and choose an audio file (WAV, MP3, FLAC or Ogg). Use **15 to 30 seconds** of audio you have the rights to. Then choose:
     - **Sounds like this**: a new song in the style of the sample.
     - **Same song, my lyrics**: the sample's melody, sung with your lyrics.
@@ -256,9 +256,9 @@ La canción se hace en el nodo. Puede pedirla en el nodo mismo (la página **Mú
 
     - **Lo que debería ver:** el texto en el cuadro. Corto es mejor: unas estrofas y un coro.
     - **Si no funciona:** `LAI-SVC-154` con "letra muy larga": el límite es de unas 8000 letras; quite algunas estrofas.
-13. Escriba un **Estilo**, por ejemplo `bolero, guitarra, voz suave`. Elija la **Duración** (por ejemplo 1:00), el **Idioma** de la letra y **Cuántas versiones**: elija **3** o **4** y quédese con la que más le guste.
-    - **Lo que debería ver:** sus opciones en el formulario.
-    - **Si no funciona:** la duración va de 10 segundos a 4 minutos; el control no va más allá.
+13. Escriba un **Estilo**, por ejemplo `bolero, guitarra, voz suave`. Deje la **Duración** en **Automática**: el modelo de música elige la duración según su letra y el estilo (más letra hace una canción más larga). Para elegirla usted, presione **Elegir la duración** y escriba los segundos (por ejemplo `60` para 1:00). Luego elija el **Idioma** de la letra y **Cuántas versiones**: elija **3** o **4** y quédese con la que más le guste.
+    - **Lo que debería ver:** sus opciones en el formulario, con "Duración: Automática" si no eligió una. Cuando la canción está lista, la lista muestra la duración que eligió el modelo.
+    - **Si no funciona:** una duración elegida va de 10 a 240 segundos (4 minutos); `LAI-SVC-154` con "duration_s" significa que el número está fuera de ese rango. En el sitio web, la nota "Esta computadora necesita una actualización para elegir la duración por sí sola; se usa 1 minuto" significa que esa computadora tiene un Local AI más antiguo: la canción se hace de 1 minuto. Actualice esa computadora ([runbook 10, Part 4](10-lab-operations.md#part-4-updating-agents)) para tener la duración automática allí.
 14. Opcional: presione **Agregar una muestra** y elija un archivo de audio (WAV, MP3, FLAC u Ogg). Use **15 a 30 segundos** de audio sobre el que tenga derechos. Luego elija:
     - **Suena como esto**: una canción nueva con el estilo de la muestra.
     - **La misma canción, mi letra**: la melodía de la muestra, cantada con su letra.

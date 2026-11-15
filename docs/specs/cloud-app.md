@@ -858,7 +858,7 @@ export const COMMANDS = {
       request_id: z.string().uuid(),
       lyrics: z.string().max(8192),      // bytes checked again on the node (UTF-8, ≤ 8 KiB)
       tags: z.string().max(512),
-      duration_s: z.number().int().min(10).max(240),
+      duration_s: z.number().int().min(10).max(240).optional(),   // #571: left out = Auto, only for a node that lists music.auto_duration
       language: z.string().regex(/^[a-z]{2}$/),
       seed: z.number().int().min(0).max(2147483647).optional(),
       variations: z.number().int().min(1).max(4),
