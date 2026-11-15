@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"os"
+	"strconv"
 
 	"github.com/marinoscar/local-ai/agent/internal/cloud"
 
@@ -33,9 +35,24 @@ func (d *Daemon) newMusicAdapter() (*acestep.Adapter, error) {
 		Env:       env.Write,
 		EnvBase:   func() acestep.Env { return acestep.Env{Port: d.c.Config.Get().Ports.Music} },
 		Installed: d.musicRuntime().Installed,
-		// GPUHeld is not wired yet: the stop waits for the unit only (TODO(#505): per-unit VRAM from
-		// the hardware sampler's process list).
-		Logger: d.log,
+		GPUHeld:   d.musicGPUHeld,
+		Logger:    d.log,
+	})
+}
+
+// musicGPUHeld is the graphics memory the processes of localai-music.service hold now: a fresh
+// in-process GPU read (not the cached snapshot, so a stop sees the memory freed), attributed by
+// /proc/<pid>/cgroup (#588). Unknown without a sampler or when processes cannot be attributed.
+func (d *Daemon) musicGPUHeld(ctx context.Context) (int64, bool) {
+	if d.c.Hardware == nil {
+		return 0, false
+	}
+	gpus, err := d.c.Hardware.SampleGPUs(ctx)
+	if err != nil {
+		return 0, false
+	}
+	return hardware.UnitVRAMMiB(gpus, acestep.UnitName, func(pid int) ([]byte, error) {
+		return os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cgroup")
 	})
 }
 

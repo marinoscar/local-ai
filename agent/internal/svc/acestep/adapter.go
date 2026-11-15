@@ -131,8 +131,9 @@ type Options struct {
 	EnvBase func() Env
 	// Installed is nil when the runtime is installed; default: the runtime's interpreter exists.
 	Installed func() error
-	// GPUHeld, when set, reports the graphics memory the unit's processes still hold (and whether it
+	// GPUHeld, when set, reports the graphics memory the unit's processes hold now (and whether it
 	// could be measured). A stop waits until it is 0; without it the stop waits for the unit only.
+	// Resident reports it when it is more than the shim's own figure.
 	GPUHeld func(ctx context.Context) (mib int64, known bool)
 	// Poll is the cadence of the waits; StopTimeout bounds the wait for the unit to stop, FreeTimeout
 	// the wait for its graphics memory afterwards (polled every FreePoll).
@@ -298,6 +299,14 @@ func (a *Adapter) Resident(ctx context.Context) ([]router.EngineModel, error) {
 	em := router.EngineModel{ID: model, Ready: herr == nil && h.Status == HealthReady}
 	if herr == nil && h.VRAMMiB != nil && *h.VRAMMiB > 0 {
 		em.VRAMMiB = *h.VRAMMiB
+	}
+	// The shim's figure is taken once, at load; PyTorch's cache grows with the first songs. The
+	// memory the unit's processes hold now is what G_others must leave out (llama-router.md section
+	// 4.3.1, #588), so the larger of the two counts.
+	if a.opt.GPUHeld != nil {
+		if held, known := a.opt.GPUHeld(ctx); known && held > em.VRAMMiB {
+			em.VRAMMiB = held
+		}
 	}
 	a.mu.Lock()
 	a.st.ModelID = model
