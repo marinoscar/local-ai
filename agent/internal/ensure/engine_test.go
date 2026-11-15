@@ -8,7 +8,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 )
 
-// engine.acestep (E11, #511): the music runtime from the kit's wheel bundle.
+// engine.acestep (E11, #511): the music runtime from the kit's wheelhouse.
 
 // The fakes' engine parts live here so the E11 additions stay in one file.
 var (
@@ -33,7 +33,7 @@ func (k *fakeKit) Engine(context.Context, string, string) (Source, string, error
 		return Source{}, "", o.err
 	}
 	s := k.src0()
-	s.File, s.SHA256 = s.KitDir+"/engines/acestep/"+o.version+"/acestep-"+o.version+"-cuda.tar.zst", "sum"
+	s.File, s.SHA256 = s.KitDir+"/engines/acestep/"+o.version, "sum"
 	return s, o.version, nil
 }
 

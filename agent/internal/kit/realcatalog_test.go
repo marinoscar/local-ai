@@ -40,6 +40,7 @@ var realKitDirs = map[string]string{
 	"kit-piper":                          "kit/tools/piper",
 	"kit-debs-resolute-amd64":            "kit/debs/resolute-amd64",
 	"kit-nvidia-resolute-amd64-595-open": "kit/nvidia/resolute-amd64-595-open",
+	"kit-engine-acestep-cuda":            "kit/engines/acestep",
 	"kit-ubuntu-iso-26.04":               "kit/iso",
 }
 
@@ -59,11 +60,11 @@ func TestRealCatalogKitItemsPerProfile(t *testing.T) {
 		want    []string
 	}{
 		{"small-8gb", internalInfo("small-8gb"), plan.NodeInfo{Backend: "cuda", Arch: "amd64", Codename: "resolute"}, with("kit-nvidia-resolute-amd64-595-open")},
-		{"cuda-12gb", internalInfo("cuda-12gb"), plan.NodeInfo{Backend: "cuda", Arch: "amd64", Codename: "resolute"}, with("kit-nvidia-resolute-amd64-595-open")},
+		{"cuda-12gb", internalInfo("cuda-12gb"), plan.NodeInfo{Backend: "cuda", Arch: "amd64", Codename: "resolute"}, with("kit-nvidia-resolute-amd64-595-open", "kit-engine-acestep-cuda")},
 		{"max-128gb", internalInfo("max-128gb"), plan.NodeInfo{Backend: "vulkan", Arch: "amd64", Codename: "resolute"}, with()},
 		{"cpu-only", internalInfo("cpu-only"), plan.NodeInfo{Backend: "cpu", Arch: "amd64", Codename: "resolute"}, with()},
 		{"ark-drive-full", driveInfo(), plan.NodeInfo{Backend: "cuda", Arch: "amd64", Codename: "resolute"},
-			with("kit-local-ai-repo", "kit-nvidia-resolute-amd64-595-open", "kit-ubuntu-iso-26.04")},
+			with("kit-local-ai-repo", "kit-nvidia-resolute-amd64-595-open", "kit-ubuntu-iso-26.04", "kit-engine-acestep-cuda")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.profile, func(t *testing.T) {

@@ -91,7 +91,7 @@ func (p ProductResolver) log() *slog.Logger {
 // RegisterProducer registers a producer as the engine-facing resolver of its source type, with the
 // behaviour of each type: git_mirror may be newer than planned and is not copied between roots,
 // repo_docs asks for the part of its item (the docs tree for the docs item, the catalog for the kit
-// catalog item), apt_closure is plain.
+// catalog item), apt_closure and pip_wheelhouse are plain.
 func RegisterProducer(r *ItemResolvers, sourceType string, p resolve.Producer) error {
 	pr := ProductResolver{Producer: p}
 	switch sourceType {
@@ -104,7 +104,7 @@ func RegisterProducer(r *ItemResolvers, sourceType string, p resolve.Producer) e
 			}
 			return resolve.PartNameDocs
 		}
-	case "apt_closure":
+	case "apt_closure", "pip_wheelhouse":
 	default:
 		return fmt.Errorf("run: %q is not a source type with a producer", sourceType)
 	}

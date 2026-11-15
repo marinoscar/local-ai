@@ -55,7 +55,7 @@ Choose **one** of the four ways below. They all do the same thing.
    - **If it doesn't work:** if the page asks you to sign in, type the code shown by `aictl ui-code` (see [02-chat-and-api-keys.md](02-chat-and-api-keys.md)). If the page does not load at all, see [07-troubleshooting.md](07-troubleshooting.md#music-or-switching-doesnt-work).
 7. Press **Switch to Music**.
    - **What you should see:** "Music is starting (about a minute)", then "Music is ready".
-   - **If it doesn't work:** `LAI-SVC-150`: the music program is missing; press **Install what's missing**. `LAI-SVC-159`: the graphics driver is too old for music; run the doctor (Part 4).
+   - **If it doesn't work:** `LAI-SVC-150`: the music program is missing; press **Install what's missing**. If that says the kit does not have it (`LAI-KIT-040`), connect the computer to the internet, run `aictl ark sync --item kit-engine-acestep-cuda --wait` (it downloads about 4.5 GB, and continues where it stopped if the connection drops), then press **Install what's missing** again. `LAI-SVC-159`: the graphics driver is too old for music; run the doctor (Part 4).
 
 ### From the terminal menu (nothing to type but `aictl`)
 
@@ -188,7 +188,7 @@ Elija **una** de las cuatro formas. Todas hacen lo mismo.
    - **Si no funciona:** si la página pide iniciar sesión, escriba el código que muestra `aictl ui-code` (vea [02-chat-and-api-keys.md](02-chat-and-api-keys.md)). Si la página no carga, vea [07-troubleshooting.md](07-troubleshooting.md#music-or-switching-doesnt-work).
 7. Presione **Cambiar a Música**.
    - **Lo que debería ver:** "La música está iniciando (cerca de un minuto)" y luego "La música está lista".
-   - **Si no funciona:** `LAI-SVC-150`: falta el programa de música; presione **Instalar lo que falta**. `LAI-SVC-159`: el controlador gráfico es muy viejo para la música; use el doctor (Parte 4).
+   - **Si no funciona:** `LAI-SVC-150`: falta el programa de música; presione **Instalar lo que falta**. Si dice que el kit no lo tiene (`LAI-KIT-040`), conecte la computadora a internet, ejecute `aictl ark sync --item kit-engine-acestep-cuda --wait` (descarga unos 4,5 GB y continúa donde quedó si se corta la conexión) y presione **Instalar lo que falta** otra vez. `LAI-SVC-159`: el controlador gráfico es muy viejo para la música; use el doctor (Parte 4).
 
 ### Desde el menú de la terminal (solo hay que escribir `aictl`)
 

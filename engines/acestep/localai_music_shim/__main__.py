@@ -13,14 +13,26 @@ from .server import make_server
 from .tasks import TaskManager
 
 
-def self_test() -> int:
+def self_test(env: dict[str, str] | None = None) -> int:
     """--self-test (music.md section 3.1): import every module the engine needs, with no GPU work and no
-    network, so the offline install can refuse a runtime that cannot start. The ACE-Step import itself
-    is checked by the real backend when it is present (TODO(#505))."""
+    network, so the offline install can refuse a runtime that cannot start. With the real engine (the
+    default, MUSIC_BACKEND unset or acestep) that includes ACE-Step's API and torch, exactly as the backend
+    imports them; MUSIC_BACKEND=fake checks the shim's own modules only (tests, CI)."""
     import importlib
+    import os
 
     for mod in ("localai_music_shim.backend", "localai_music_shim.config", "localai_music_shim.server", "localai_music_shim.tasks"):
         importlib.import_module(mod)
+    backend = (os.environ if env is None else env).get("MUSIC_BACKEND", "acestep").strip() or "acestep"
+    if backend != "fake":
+        from .backend import _import_acestep
+
+        try:
+            _import_acestep()
+            importlib.import_module("torch")
+        except Exception as exc:  # noqa: BLE001 - any import failure means the runtime cannot start
+            print(f"self-test failed: the engine cannot be imported: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 1
     print("self-test ok")
     return 0
 

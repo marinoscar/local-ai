@@ -21,7 +21,7 @@ var (
 var kindTypes = map[string][]string{
 	"kiwix": {"kiwix"},
 	"maps":  {"pmtiles_extract", "url", "github_release"},
-	"kit":   {"git_mirror", "apt_closure", "url", "github_release", "repo_docs"},
+	"kit":   {"git_mirror", "apt_closure", "url", "github_release", "repo_docs", "pip_wheelhouse"},
 	"docs":  {"repo_docs"},
 }
 
@@ -34,6 +34,7 @@ var sourceFields = map[string][]string{
 	"git_mirror":      {"url", "also_tarball_of"},
 	"apt_closure":     {"codename", "arch", "packages", "extra_repos"},
 	"repo_docs":       {},
+	"pip_wheelhouse":  {"version", "lock", "sha256", "files", "indexes", "builds"},
 }
 
 // optionalFieldKeys are the keys whose misuse is LAI-CAT-016 rather than a plain schema problem.
@@ -138,6 +139,8 @@ func (s *lintState) lintSource(p string, it *ContentItem) {
 		}
 	case "apt_closure":
 		s.lintAPT(sp, src)
+	case "pip_wheelhouse":
+		s.lintWheelhouse(p, it)
 	}
 }
 

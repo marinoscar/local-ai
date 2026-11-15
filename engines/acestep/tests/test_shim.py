@@ -258,6 +258,31 @@ class SelfTestTests(unittest.TestCase):
     """--self-test is what the offline install runs before it moves current (music.md section 3.1)."""
 
     def test_self_test_passes_without_a_gpu(self) -> None:
+        from unittest import mock
+
         from localai_music_shim.__main__ import main
 
-        self.assertEqual(main(["--self-test"]), 0)
+        with mock.patch.dict(os.environ, {"MUSIC_BACKEND": "fake"}):
+            self.assertEqual(main(["--self-test"]), 0)
+
+    def test_self_test_imports_the_engine(self) -> None:
+        """With the real engine the self-test imports ACE-Step and torch: a runtime without them fails."""
+        import sys
+        import types
+        from unittest import mock
+
+        from localai_music_shim.__main__ import self_test
+
+        with mock.patch.dict(sys.modules, {"acestep": None}):
+            self.assertEqual(self_test({}), 1)
+        fake = {
+            "acestep": types.ModuleType("acestep"),
+            "acestep.constants": types.SimpleNamespace(VALID_LANGUAGES=["en"]),
+            "acestep.handler": types.SimpleNamespace(AceStepHandler=object),
+            "acestep.inference": types.SimpleNamespace(GenerationConfig=object, GenerationParams=object, generate_music=print),
+            "acestep.llm_inference": types.SimpleNamespace(LLMHandler=object),
+            "loguru": types.SimpleNamespace(logger=None),
+            "torch": types.ModuleType("torch"),
+        }
+        with mock.patch.dict(sys.modules, fake):
+            self.assertEqual(self_test({"MUSIC_BACKEND": "acestep"}), 0)

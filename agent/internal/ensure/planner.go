@@ -195,7 +195,7 @@ func (p *Planner) toolStep(ctx context.Context, id, tool, item string) (Step, er
 
 // engineStep is the music runtime (engine.acestep): ok when the runtime in use is the kit's version
 // for this backend (or the kit has none and some runtime is in use), pending when the kit has a
-// verified bundle that is not installed, blocked otherwise.
+// verified wheelhouse that is not installed, blocked otherwise.
 func (p *Planner) engineStep(ctx context.Context, backend string) (Step, error) {
 	st := Step{ID: IDEngineAcestep, Kind: KindEngine, Target: "acestep", Item: "kit-engine-acestep-" + backend}
 	installed := p.Machine.EngineVersion("acestep", backend)

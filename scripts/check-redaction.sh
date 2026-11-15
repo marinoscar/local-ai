@@ -43,6 +43,10 @@ skip='^(scripts/check-redaction\.sh|\.gitleaks\.toml|agent/vendor/.*)$'
 catalog_pins='^catalog/(ark|models)\.yaml$'
 cloud_locks='^apps/cloud/(apps/api/prisma/platform\.lock|infra/platform-infra\.lock\.json)$'   # generated lock files: sha256 digests of public files
 lockfiles='(^|/)package-lock\.json$'   # npm `deprecated` text is third-party prose (may carry an author's email)
+# The hashed pip locks of the Python engines (issue #511, scripts/release/lock-acestep.sh) are sha256 digests of public
+# wheels. In exactly those files a 64-hex value is allowed after `--hash=sha256:` and as the digest of a
+# `# repo-tree-sha256: <path> <sha256>` line; a bare 64-hex string, a token, an IP or an email there is still a leak.
+pip_locks='^engines/[a-z0-9_-]+/requirements-[a-z0-9]+\.lock$'
 
 # Directory of must-fail fixtures: skipped in tree/staged scans, but only when the
 # marker file is present, and only for this one directory (a stray marker elsewhere
@@ -97,6 +101,9 @@ for f in "${files[@]}"; do
   if [[ "$f" =~ $lockfiles ]]; then
     # Neutralise only the value of `"deprecated":` lines (line numbers are preserved).
     sed -E -i 's/^([[:space:]]*"deprecated":).*/\1 "<third-party text>"/' "$tmp"
+  fi
+  if [[ "$f" =~ $pip_locks ]]; then
+    sed -E -i 's/(--hash=sha256:)[0-9a-fA-F]{64}/\1<pin>/g; s/^(# repo-tree-sha256: [^ ]+ )[0-9a-fA-F]{64}$/\1<pin>/' "$tmp"
   fi
   if [[ "$f" =~ $cloud_locks ]]; then
     # A quoted 64-hex value in the cloud app's generated lock files is a public digest, not a key.

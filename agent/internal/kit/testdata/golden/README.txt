@@ -53,6 +53,8 @@ prebuilt/    Ready-made llama.cpp and whisper.cpp builds from the computers.
              none yet (a computer adds its own after it builds)
 iso/         The Ubuntu install image, to make a new install USB stick.
              not here (only the AI-ARK drive keeps this)
+engines/     The music engine: Python and its wheels, to install offline.
+             not here (only music computers and the AI-ARK drive keep it)
 config/      Backups of each computer's settings. Never deleted by the agent.
 
 NEEDS ATTENTION

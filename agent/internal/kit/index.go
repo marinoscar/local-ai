@@ -360,6 +360,8 @@ func (ix Index) Readme() []byte {
 			line("%-12s here (%d %s, %s)", "", p.Items, plural(p.Items, "item", "items"), HumanBytes(p.TotalBytes))
 		} else if desc.driveOnly {
 			line("%-12s not here (only the AI-ARK drive keeps this)", "")
+		} else if desc.absent != "" {
+			line("%-12s %s", "", desc.absent)
 		} else {
 			line("%-12s NOT HERE YET", "")
 		}
@@ -388,6 +390,8 @@ func (ix Index) Readme() []byte {
 type partDesc struct {
 	what      string
 	driveOnly bool
+	// absent replaces "NOT HERE YET" for a part only some computers keep.
+	absent string
 }
 
 var partText = map[string]partDesc{
@@ -404,6 +408,7 @@ var partText = map[string]partDesc{
 	PartCuda:       {what: "Optional smaller CUDA compiler files."},
 	PartPrebuilt:   {what: "Ready-made llama.cpp and whisper.cpp builds from the computers."},
 	PartISO:        {what: "The Ubuntu install image, to make a new install USB stick.", driveOnly: true},
+	PartEngines:    {what: "The music engine: Python and its wheels, to install offline.", absent: "not here (only music computers and the AI-ARK drive keep it)"},
 }
 
 // wrapList writes "<label>a, b, c" wrapped at 78 characters, continuation lines indented by three.

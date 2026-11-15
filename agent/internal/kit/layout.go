@@ -28,12 +28,14 @@ const (
 	PartCuda       = "cuda"
 	PartPrebuilt   = "prebuilt"
 	PartISO        = "iso"
+	// PartEngines holds the offline install sets of the Python engines (E11): engines/<engine>/<version>/.
+	PartEngines = "engines"
 )
 
 // Parts lists every part in the order of the layout of rebuild-kit.md section 3.1.
 var Parts = []string{
 	PartCatalog, PartInstallers, PartBin, PartSrc, PartGit, PartToolchains, PartTools,
-	PartDesktop, PartDebs, PartNvidia, PartCuda, PartPrebuilt, PartISO,
+	PartDesktop, PartDebs, PartNvidia, PartCuda, PartPrebuilt, PartISO, PartEngines,
 }
 
 // ValidPart reports whether name is one of Parts.
@@ -105,6 +107,7 @@ var fixed = map[string]Layout{
 //	kit-nvidia-<codename>-<arch>-<branch>  nvidia/<codename>-<arch>-<branch>/
 //	kit-cuda-redist-<ver>-<arch>           cuda/<ver>-<arch>/
 //	kit-ubuntu-iso-<ver>                   iso/
+//	pip_wheelhouse (kit-engine-<engine>-<backend>)  engines/<engine>/  (one folder per runtime version below it)
 //
 // An item that is not a kit item, an unknown kit id and any id, codename, arch, branch or mirror
 // name that would not be one plain path element is ErrNoLayout.
@@ -152,6 +155,12 @@ func LayoutOf(it catalog.ContentItem) (Layout, error) {
 			return fail("the id must be kit-cuda-redist-<ver>-<arch>")
 		}
 		return Layout{Dir: path.Join(PartCuda, rest), Part: PartCuda}, nil
+	case src.Type == "pip_wheelhouse":
+		engine, _, ok := catalog.WheelhouseItem(it.ID)
+		if !ok {
+			return fail("the id must be kit-engine-<engine>-<backend>")
+		}
+		return Layout{Dir: path.Join(PartEngines, engine), Part: PartEngines}, nil
 	case strings.HasPrefix(it.ID, "kit-ubuntu-iso-") && src.Type == "url":
 		if it.ID == "kit-ubuntu-iso-" {
 			return fail("the id must be kit-ubuntu-iso-<ver>")
