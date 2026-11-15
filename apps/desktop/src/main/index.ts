@@ -342,7 +342,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
   cloudSession.onChange(() => tray?.refresh());
   // What the tray needs from the window manager: show the main window, open Chat, Library or Maps.
   // In survival the main window comes back full screen (a tray click, a notification click).
-  const control: WindowControl = { showMain: () => survival.bringForward(), openWindow: (which) => void windows.openChild(which) };
+  const control: WindowControl = { showMain: () => survival.bringForward(), openWindow: (which) => windows.showCompanion(which) };
   // DSK-08: the native PIN window (leaving survival from the tray, Rotate key) and the API key (copy, connection info).
   const pin = new PinService({
     api: createPinApi(client),
@@ -485,7 +485,7 @@ export async function bootstrap(ctx: BootContext): Promise<void> {
     log,
   };
   const version = app.getVersion();
-  const open = (name: Parameters<WindowManager['openChild']>[0]): void => void windows.openChild(name);
+  const open = (name: Parameters<WindowManager['showCompanion']>[0]): void => windows.showCompanion(name);
   // Registered before the first await: the top bar's first `status()` call must find its handler.
   registerHandlers(
     ipcMain,

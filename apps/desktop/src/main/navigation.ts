@@ -152,7 +152,8 @@ export function decidePermission(query: PermissionQuery): boolean {
   }
   if (query.permission === 'media') {
     const kinds = query.mediaTypes ?? [];
-    if (url.origin !== AGENT_ORIGIN || query.view === 'music' || underPrefix(url.pathname, 'music')) return false;
+    // Music never records, also on the Portal's Music screen in the main window (issue #581).
+    if (url.origin !== AGENT_ORIGIN || query.view === 'music' || underPrefix(url.pathname, 'music') || underPrefix(url.pathname, 'portal/music')) return false;
     return kinds.length > 0 && kinds.every((kind) => kind === 'audio');
   }
   return false;
@@ -203,7 +204,8 @@ export function hardenedWebPreferences(isPackaged: boolean): WebPreferences {
 
 /** What windows.ts plugs in (`wireNavigationHooks`). The defaults do nothing, so a blocked link is simply blocked. */
 export interface NavigationHooks {
-  openChild(name: ChildName): void;
+  /** Shows that companion in the main window (issue #581); `url` is the link that asked for it, when there was one. */
+  openChild(name: ChildName, url?: string): void;
   openExternal(url: string): void;
   /** Content view only: tell the top bar to show INTERNET_OFF_MESSAGE. */
   contentBlocked(contents: WebContents, url: string): void;
@@ -238,7 +240,7 @@ export function applyNavigation(contents: WebContents, view: View, url: string, 
     return kind === 'open' ? { prevent: true, loadInstead: url } : { prevent: false };
   }
   if (kind !== 'redirect') {
-    if (decision.startsWith('open-child:')) hooks.openChild(decision.slice('open-child:'.length) as ChildName);
+    if (decision.startsWith('open-child:')) hooks.openChild(decision.slice('open-child:'.length) as ChildName, rewriteAgentUrl(url) ?? url);
     else if (decision === 'open-external') hooks.openExternal(parse(url)?.href ?? url);
     else if (view === 'content') hooks.contentBlocked(contents, url);
   }
@@ -262,7 +264,13 @@ export function installWebContentsHardening(app: Pick<App, 'on'>, options: Harde
       if (result.prevent) event.preventDefault();
       if (result.loadInstead) void contents.loadURL(result.loadInstead).catch(() => undefined);
     });
-    contents.on('will-redirect', (event, url) => {
+    contents.on('will-redirect', (event, url, _isInPlace, isMainFrame) => {
+      // A redirect inside the reader iframe (kiwix: /library/content/<book> to its main page) follows the frame rule,
+      // as will-frame-navigate does; the open-child rule is for the main frame only (issue #581).
+      if (isMainFrame === false) {
+        if (decideFrame(viewOf(contents), url, options.getState()) === 'block') event.preventDefault();
+        return;
+      }
       const result = applyNavigation(contents, viewOf(contents), url, options.getState(), 'redirect');
       if (result.prevent) event.preventDefault();
       if (result.loadInstead) void contents.loadURL(result.loadInstead).catch(() => undefined);

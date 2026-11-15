@@ -1,11 +1,11 @@
 // Issue #515: the top bar's Music button and the Music window, against the fake agent with no internet at all.
-// The button follows `GET /api/v1/music/status` (404 and `installed: false` say "not installed"); the window opens once
-// at /music/, stays inside /music/, gets no microphone, and saves a song only through a "Save as" dialog.
+// The button follows `GET /api/v1/music/status` (404 and `installed: false` say "not installed"); Music shows in the
+// main window at /portal/music (issue #581), gets no microphone, and saves a song through a "Save as" dialog.
 import { expect, test } from '@playwright/test';
 import { type FakeAgent, newFakeToken, startFakeAgent } from '../fixtures/fake-agent';
 import { type Launched, childUrls, evaluateIn, isAgentUrl, isTopBar, launch, pollIn, waitForContents } from './helpers';
 
-const MUSIC = 'http://127.0.0.1:7070/music/';
+const MUSIC = 'http://127.0.0.1:7070/portal/music';
 let agent: FakeAgent;
 let run: Launched;
 
@@ -48,38 +48,26 @@ test('installed: false says the same; installed: true (after a sync finished) en
   expect(await evaluateIn<string | null>(run.app, bar.id, "document.querySelector('[data-testid=open-music]').getAttribute('aria-disabled')")).toBeNull();
 });
 
-test('the Music button opens one window at /music/; a second press focuses it', async () => {
+test('the Music button shows Music in the main window; no second window opens (issue #581)', async () => {
   const bar = await waitForContents(run.app, isTopBar);
   await evaluateIn(run.app, bar.id, "document.querySelector('[data-testid=open-music]').click()");
   const music = await waitForContents(run.app, (url) => url === MUSIC);
   await pollIn(run.app, music.id, "document.body.innerText.includes('/music/')");
   await evaluateIn(run.app, bar.id, "document.querySelector('[data-testid=open-music]').click()");
   await new Promise((r) => setTimeout(r, 500));
-  expect(await childUrls(run.app)).toEqual([MUSIC]);
-  // No preload: the agent's page needs no bridge.
-  expect(await evaluateIn<string>(run.app, music.id, 'JSON.stringify([typeof window.localaiDesktop, typeof window.localaiDesktopHost])')).toBe('["undefined","undefined"]');
+  expect(await childUrls(run.app)).toEqual([]);
   // The sample picker is a plain file input: present and usable without any extra permission.
   expect(await evaluateIn<string>(run.app, music.id, "document.getElementById('sample').type")).toBe('file');
 });
 
-test('inside the Music window, leaving /music/ is blocked silently', async () => {
-  const music = await waitForContents(run.app, (url) => url === MUSIC);
-  for (const target of ['/chat/', '/', '/portal', 'https://example.com/']) {
-    await evaluateIn(run.app, music.id, `location.href = ${JSON.stringify(target)}`);
-    await new Promise((r) => setTimeout(r, 400));
-    expect(await evaluateIn<string>(run.app, music.id, 'location.href')).toBe(MUSIC);
-  }
-  expect(await childUrls(run.app)).toEqual([MUSIC]);
-});
-
-test('the Music window gets no microphone', async () => {
+test('the Music screen gets no microphone', async () => {
   const music = await waitForContents(run.app, (url) => url === MUSIC);
   // The permission handler answers for this window; the page sees the microphone as not granted.
   const permission = await evaluateIn<string>(run.app, music.id, "navigator.permissions.query({ name: 'microphone' }).then((s) => s.state, () => 'error')");
   expect(permission).not.toBe('granted');
 });
 
-test('a song from the Music window asks where to save it (the "Save as" options), and nothing else is saved', async () => {
+test('a song from the Music screen asks where to save it (the "Save as" options), and nothing else is saved', async () => {
   const music = await waitForContents(run.app, (url) => url === MUSIC);
   // A second listener (after the app's) records what the app set and cancels before any dialog shows.
   await run.app.evaluate(({ session }) => {

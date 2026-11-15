@@ -32,6 +32,27 @@ export const CHILD_WINDOWS: Readonly<Record<ChildWindowName, { path: string; wid
   music: { path: '/music/', width: 1100, height: 820, title: { en: 'Local AI: Music', es: 'Local AI: Música' } },
 };
 
+/**
+ * Where a companion shows in the main window (issue #581): the Portal's own screen, so the Portal header with Home and
+ * Back stays on screen and nothing opens a second window. A link to a page inside a companion (a book, an article)
+ * opens in the Portal reader, coming back to that companion's screen.
+ */
+export function companionPath(name: ChildWindowName, url?: string): string {
+  const screen = `/portal/${name}`;
+  if (name === 'music' || url === undefined) return screen;
+  let parsed: URL;
+  try {
+    parsed = new URL(url, AGENT_ORIGIN);
+  } catch {
+    return screen;
+  }
+  if (parsed.origin !== AGENT_ORIGIN) return screen;
+  const root = `/${name}`;
+  if (parsed.pathname === root || parsed.pathname === `${root}/`) return screen;
+  const src = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  return `/portal/read?src=${encodeURIComponent(src)}&back=${encodeURIComponent(screen)}`;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Bounds
 // ---------------------------------------------------------------------------------------------------------------------
@@ -260,8 +281,12 @@ export interface WindowManager extends ContentHost {
   /** Runs after the tab, the Lab availability or the local content changed. */
   onChange(listener: () => void): () => void;
 
+  // Companions
+  /** Shows Chat, Library, Maps or Music in the main window (the Portal screen, see companionPath). */
+  showCompanion(name: ChildWindowName, url?: string): void;
+
   // Child windows
-  /** Opens the window, or focuses it when it is already open (one each). */
+  /** Opens the window, or focuses it when it is already open (one each). Not used by the app since issue #581. */
   openChild(name: ChildWindowName): ChildWindowLike;
   childWindow(name: ChildWindowName): ChildWindowLike | null;
   closeChildren(): void;
@@ -461,6 +486,12 @@ class Manager implements WindowManager {
   onChange(listener: () => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  // -- companions -------------------------------------------------------------------------------------------------
+
+  showCompanion(name: ChildWindowName, url?: string): void {
+    void this.showAgentUi(companionPath(name, url));
   }
 
   // -- child windows ----------------------------------------------------------------------------------------------
@@ -686,11 +717,11 @@ export interface NavigationWiring {
   connected(): boolean;
 }
 
-/** Links to `/chat/`, `/library/`, `/maps/` open their window; a blocked link tells the top bar; the cloud opens in the browser when connected. */
-export function wireNavigationHooks(windows: Pick<WindowManager, 'openChild' | 'sendToTopBar'>, deps: NavigationWiring): void {
+/** Links to `/chat/`, `/library/`, `/maps/`, `/music/` show that companion in the main window (issue #581); a blocked link tells the top bar; the cloud opens in the browser when connected. */
+export function wireNavigationHooks(windows: Pick<WindowManager, 'showCompanion' | 'sendToTopBar'>, deps: NavigationWiring): void {
   setNavigationHooks({
-    openChild: (name) => {
-      windows.openChild(name);
+    openChild: (name, url) => {
+      windows.showCompanion(name, url);
     },
     openExternal: (url) => {
       if (deps.connected() && isCloudUrl(url)) deps.openExternal(url);

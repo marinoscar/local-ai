@@ -106,11 +106,13 @@ const SONG_AUDIO = /^\/api\/v1\/music\/songs\/[A-Za-z0-9_-]{1,128}\/audio$/;
 export type DownloadDecision = 'ask' | 'cancel';
 
 /**
- * Which downloads may start. Only the Music window downloads, and only a song: the agent's song audio route, or a `blob:`
+ * Which downloads may start. The Music window downloads only a song: the agent's song audio route, or a `blob:`
  * the Music page made from it (same agent origin). Every other view keeps Electron's behaviour except that this handler
  * also cancels a download from the Music window that is not a song.
  */
 export function decideDownload(view: View, raw: string): DownloadDecision | 'default' {
+  // The Portal's Music screen shows in the main window (issue #581): a song from there gets the same "Save as".
+  if (view === 'content') return isSongUrl(raw) ? 'ask' : 'default';
   if (view !== 'music') return 'default';
   let url: URL;
   try {
@@ -124,6 +126,15 @@ export function decideDownload(view: View, raw: string): DownloadDecision | 'def
   }
   if (url.origin !== AGENT_ORIGIN || url.username !== '' || url.password !== '') return 'cancel';
   return SONG_AUDIO.test(url.pathname) ? 'ask' : 'cancel';
+}
+
+function isSongUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return url.origin === AGENT_ORIGIN && url.username === '' && url.password === '' && SONG_AUDIO.test(url.pathname);
+  } catch {
+    return false;
+  }
 }
 
 const AUDIO_EXTENSIONS = ['wav', 'mp3', 'flac', 'ogg'] as const;

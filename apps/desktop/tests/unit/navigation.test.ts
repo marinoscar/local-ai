@@ -285,6 +285,9 @@ describe('decidePermission', () => {
     };
     expect(ask('media', { requestingUrl: 'http://127.0.0.1:7070/portal', mediaTypes: ['audio'] })).toBe(true);
     expect(ask('media', { requestingUrl: 'http://127.0.0.1:7070/portal', mediaTypes: ['audio', 'video'] })).toBe(false);
+    // Music never records, in its window or on the Portal's Music screen (issue #581).
+    expect(ask('media', { requestingUrl: 'http://127.0.0.1:7070/portal/music', mediaTypes: ['audio'] })).toBe(false);
+    expect(ask('media', { requestingUrl: 'http://127.0.0.1:7070/portal/musical', mediaTypes: ['audio'] })).toBe(true);
     expect(ask('clipboard-sanitized-write', { requestingUrl: 'localai://app/topbar/' })).toBe(true);
     expect(ask('notifications', { requestingUrl: 'localai://app/topbar/' })).toBe(false);
     expect(ask('geolocation', {})).toBe(false);
@@ -366,7 +369,7 @@ describe('applyNavigation and the web-contents hooks', () => {
     registerView(fake.contents as never, 'content');
     hooks.openChild.mockClear();
     expect(fake.open('http://127.0.0.1:7070/maps/')).toEqual({ action: 'deny' });
-    expect(hooks.openChild).toHaveBeenCalledWith('maps');
+    expect(hooks.openChild).toHaveBeenCalledWith('maps', 'http://127.0.0.1:7070/maps/');
     expect(fake.open('https://example.com/')).toEqual({ action: 'deny' });
     expect(hooks.contentBlocked).toHaveBeenCalled();
     expect(fake.open('http://127.0.0.1:7070/docs/')).toEqual({ action: 'deny' });
@@ -388,7 +391,7 @@ describe('applyNavigation and the web-contents hooks', () => {
     expect(hooks.openExternal).toHaveBeenCalledWith('https://ai.marin.cr/lab');
   });
 
-  it('will-navigate: allowed places pass; localhost is rewritten; a child link opens the child window; the rest is cancelled', () => {
+  it('will-navigate: allowed places pass; localhost is rewritten; a companion link shows the companion; the rest is cancelled', () => {
     const fake = boot();
     registerView(fake.contents as never, 'content');
     expect(navigate(fake, 'http://127.0.0.1:7070/docs/').preventDefault).not.toHaveBeenCalled();
@@ -397,7 +400,9 @@ describe('applyNavigation and the web-contents hooks', () => {
     expect(fake.loaded.at(-1)).toBe('http://127.0.0.1:7070/docs/');
     hooks.openChild.mockClear();
     expect(navigate(fake, 'http://127.0.0.1:7070/library/').preventDefault).toHaveBeenCalled();
-    expect(hooks.openChild).toHaveBeenCalledWith('library');
+    expect(hooks.openChild).toHaveBeenCalledWith('library', 'http://127.0.0.1:7070/library/');
+    expect(navigate(fake, 'http://localhost:7070/library/content/wiki/A/Water').preventDefault).toHaveBeenCalled();
+    expect(hooks.openChild).toHaveBeenLastCalledWith('library', 'http://127.0.0.1:7070/library/content/wiki/A/Water');
     for (const url of ['https://example.com/', 'javascript:alert(1)', 'file:///etc/passwd', 'data:text/html,x']) {
       expect(navigate(fake, url).preventDefault, url).toHaveBeenCalled();
     }
@@ -416,6 +421,22 @@ describe('applyNavigation and the web-contents hooks', () => {
     registerView(connected.contents as never, 'content');
     expect(navigate(connected, 'https://ai.marin.cr/', 'will-redirect').preventDefault).toHaveBeenCalled();
     expect(hooks.openExternal).not.toHaveBeenCalled();
+  });
+
+  it('will-redirect inside the reader iframe follows the frame rule: kiwix redirects to a book page load (issue #581)', () => {
+    const fake = boot();
+    registerView(fake.contents as never, 'content');
+    hooks.openChild.mockClear();
+    const sub = (url: string) => {
+      const event = { preventDefault: vi.fn(), url, isMainFrame: false };
+      (fake.handlers['will-redirect'] as unknown as (e: unknown, u: string, inPlace: boolean, main: boolean) => void)(event, url, false, false);
+      return event;
+    };
+    expect(sub('http://127.0.0.1:7070/library/content/wikipedia_en_all/A/Main_Page').preventDefault).not.toHaveBeenCalled();
+    expect(sub('http://127.0.0.1:7070/maps/catalog.json').preventDefault).not.toHaveBeenCalled();
+    expect(sub('https://example.com/').preventDefault).toHaveBeenCalled();
+    expect(sub('file:///etc/passwd').preventDefault).toHaveBeenCalled();
+    expect(hooks.openChild).not.toHaveBeenCalled();
   });
 
   it('a child window blocks silently', () => {
