@@ -39,10 +39,23 @@ export const MUSIC_MAX_PER_HOUR_PER_USER = 30;
 
 /** The multipart body: the form fields and one file. Fields are capped above the lyrics limit so an overlong field is seen, not cut. */
 export const MUSIC_MULTIPART_FIELD_MAX_BYTES = 2 * MUSIC_LYRICS_MAX_BYTES;
-export const MUSIC_MULTIPART_MAX_FIELDS = 16;
+export const MUSIC_MULTIPART_MAX_FIELDS = 24;
 
-/** The title the library shows: the first non-empty lyric line (without `[verse]`-style tags), else the tags. */
-export const MUSIC_TITLE_MAX_CHARS = 120;
+/** A song's title (typed, generated or suggested, #568): at most 80 characters. */
+export const MUSIC_TITLE_MAX_CHARS = 80;
+
+/**
+ * "Describe your song" (#568): at most 500 characters. It is sent to the node as the command's `tags`, whose limit is
+ * the agent's 512 UTF-8 bytes (`MUSIC_TAGS_MAX_BYTES`), so the description must fit BOTH: 500 characters and 512 bytes.
+ * The agent's limit is deliberately not raised: nodes already in the field (and offline ones) would refuse a longer one.
+ */
+export const MUSIC_DESCRIPTION_MAX_CHARS = 500;
+
+/** What "No vocals" sends as the lyrics: the shim's instrumental form (spike #505). */
+export const MUSIC_INSTRUMENTAL_LYRICS = '[Instrumental]';
+
+/** Per page of the prompt history. */
+export const MUSIC_PROMPTS_PAGE_SIZE_MAX = 50;
 
 /** The default strength per mode (E11 contract section 3): 1.0 for the same song, 0.5 for "sounds like". */
 export const MUSIC_DEFAULT_STRENGTH = { same_song: 1.0, sounds_like: 0.5 } as const;

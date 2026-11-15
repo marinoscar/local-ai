@@ -28,7 +28,10 @@ import {
 import type { Prisma } from '@prisma/client';
 
 /** The app's categories: the Danger Zone rows, and what a scope selects. */
-export const APP_USER_DATA_CATEGORIES: readonly UserDataCategoryDef[] = [];
+export const APP_USER_DATA_CATEGORIES: readonly UserDataCategoryDef[] = [
+  // #568: a person's saved music prompts (title, description, lyrics, settings). Their songs belong to the lab library.
+  { id: 'music', label: 'Music prompts', description: 'Your saved song prompts: titles, descriptions, lyrics and settings. The songs stay in the library.', content: true, order: 35 },
+];
 
 /** One keep-or-delete decision per user-owned model. */
 export const APP_USER_DATA_MODELS: readonly UserDataModelHint<Prisma.ModelName>[] = [
@@ -37,6 +40,8 @@ export const APP_USER_DATA_MODELS: readonly UserDataModelHint<Prisma.ModelName>[
   { model: 'LocalaiCatalogVersion', keep: 'Lab model catalog: a deployment-wide version history.' },
   { model: 'LocalaiCommand', keep: 'Lab command history: an audit view of what was asked of a node.' },
   { model: 'LocalaiMusicRequest', keep: 'Lab music library: the songs of a request belong to the lab and stay when the person who asked leaves.' },
+  // A user's own music prompts (#568): deleted with the user; the songs made from them stay (prompt_id becomes NULL).
+  { model: 'LocalaiMusicPrompt', category: 'music' },
   // A user's own gateway keys (`lai_...`): deleted with the user's credentials; the usage history that names them stays (key_id becomes NULL).
   { model: 'LocalaiGatewayKey', category: 'credentials' },
 ];

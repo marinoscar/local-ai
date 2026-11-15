@@ -1,6 +1,8 @@
 // Test fixtures of the music page: the API's shapes (`apps/api/src/localai/music/music.views.ts`), placeholder names only.
 import type { CommandView } from '../api/types';
-import type { LibrarySong, MusicNode, MusicRequest, Page, WorkloadItem } from './musicApi';
+import type { LibrarySong, MusicNode, MusicPrompt, MusicPromptSummary, MusicRequest, Page, WorkloadItem } from './musicApi';
+
+export const PROMPT_ID = 'b0000000-0000-4000-8000-000000000001';
 
 export const WORKLOADS: WorkloadItem[] = [
   { name: 'coding', label: { en: 'Coding', es: 'Programación' }, fits: true, missing: [] },
@@ -30,6 +32,8 @@ export function musicRequest(partial: Partial<MusicRequest> = {}): MusicRequest 
     stage: 'queued',
     title: 'Walking to the river',
     tags: 'folk',
+    promptId: PROMPT_ID,
+    lyricsMode: 'mine',
     lyricsBytes: 40,
     durationS: 60,
     language: 'en',
@@ -58,6 +62,7 @@ export function librarySong(partial: Partial<LibrarySong> = {}): LibrarySong {
     durationS: 61,
     readyAt: '2026-11-14T12:02:00.000Z',
     requestId: '5d1c0b7e-2f43-4a51-9a0e-7b6c1d2e3f40',
+    promptId: PROMPT_ID,
     nodeId: 'ai-n2',
     nodeName: 'Studio laptop',
     title: 'Morning light',
@@ -68,6 +73,36 @@ export function librarySong(partial: Partial<LibrarySong> = {}): LibrarySong {
     requestedByMe: true,
     ...partial,
   };
+}
+
+export function musicPrompt(partial: Partial<MusicPrompt> = {}): MusicPrompt {
+  return {
+    id: PROMPT_ID,
+    title: 'Harbour Lights',
+    description: 'a slow ballad about the sea, soft piano, warm voice',
+    lyricsMode: 'mine',
+    hasSample: false,
+    songCount: 2,
+    lastUsedAt: '2026-11-14T12:00:00.000Z',
+    createdAt: '2026-11-13T12:00:00.000Z',
+    updatedAt: '2026-11-14T12:00:00.000Z',
+    lyrics: '[verse]\nPerson A walks by the harbour',
+    durationS: 90,
+    language: 'en',
+    seed: null,
+    variations: 2,
+    sampleMime: null,
+    sampleBytes: null,
+    sampleMode: null,
+    strength: null,
+    ...partial,
+  };
+}
+
+/** The list form of a prompt (no lyrics or settings). */
+export function promptSummary(prompt: MusicPrompt): MusicPromptSummary {
+  const { id, title, description, lyricsMode, hasSample, songCount, lastUsedAt, createdAt, updatedAt } = prompt;
+  return { id, title, description, lyricsMode, hasSample, songCount, lastUsedAt, createdAt, updatedAt };
 }
 
 export const page = <T,>(items: T[]): Page<T> => ({ items, page: 1, pageSize: 20, total: items.length, totalPages: items.length ? 1 : 0 });

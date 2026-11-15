@@ -1,4 +1,5 @@
-// The song library across every node (docs/specs/cloud-app.md section 3.11, #514): newest first, play in the browser,
+// The song library across every node (docs/specs/cloud-app.md section 3.11, #514): newest first, each song with its
+// title (and "prompt deleted" once its saved prompt is gone, #568: the song stays), play in the browser,
 // download, and delete the cloud copy (asks first; needs `localai_music:delete`). The browser's `<audio>` cannot send
 // the Authorization header, so Play and Download ask the cloud for a 5-minute signed URL first.
 //
@@ -69,7 +70,9 @@ export function SongLibrary({ page, loading, canDelete, onChanged }: SongLibrary
               {song.index > 0 ? ` (${song.index + 1})` : ''}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-              {[song.nodeName, formatDuration(song.durationS), new Date(song.createdAt).toLocaleDateString()].filter(Boolean).join(' · ')}
+              {[song.nodeName, formatDuration(song.durationS), new Date(song.createdAt).toLocaleDateString(), song.promptId === null ? t('prompt deleted', 'indicación eliminada') : null]
+                .filter(Boolean)
+                .join(' · ')}
             </Typography>
             {playing?.id === song.id ? (
               <Box component="audio" controls autoPlay src={playing.url} sx={{ width: '100%', mt: 1 }} aria-label={`${t('Play', 'Reproducir')} ${song.title}`} />

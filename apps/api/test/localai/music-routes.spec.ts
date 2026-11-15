@@ -3,7 +3,8 @@
 // sink and event bus; the in-memory command and music tables; a fake object store. This proves the RBAC matrix, the
 // multipart limits with their doctor codes, the enqueue (params, signed URLs, sha256), the status transitions from the
 // command, the library, the audio redirect, the delete confirmation, the audit rows and that no lyrics reach a log
-// line. The SQL itself is `music.db.spec.ts`.
+// line. Also the prompt history and titles of #568 (owner checks, make again, save as new, delete keeps the songs, the
+// AI helpers on, off and failing through a fake `MUSIC_AI`). The SQL itself is `music.db.spec.ts`.
 import { createHash } from 'node:crypto';
 import fastifyCookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
@@ -21,6 +22,7 @@ import { COMMAND_SETTLED_CHANNEL, LOCALAI_CLOCK } from '../../src/localai/comman
 import { LOCALAI_COMMAND_NOTIFIER } from '../../src/localai/commands/command-notifier';
 import { COMMANDS } from '../../src/localai/contracts/commands';
 import { ClaimService } from '../../src/localai/commands/claim.service';
+import { MUSIC_AI, type MusicAiAsk, type MusicAiAvailability } from '../../src/localai/music/music-ai';
 import { MUSIC_PENDING_URL } from '../../src/localai/music/music-limits';
 import { MUSIC_OBJECT_STORE, MusicStorageNotConfigured, type MusicObjectStore } from '../../src/localai/music/music-store';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -77,6 +79,21 @@ class FakeStore implements MusicObjectStore {
 }
 const objects = new FakeStore();
 
+/** The cloud's AI as the music helpers see it: off, on (answers `answer`) or failing. */
+const ai = {
+  state: 'off' as 'off' | 'on' | 'error',
+  answer: '',
+  asked: [] as MusicAiAsk[],
+  async availability(): Promise<MusicAiAvailability> {
+    return ai.state === 'off' ? { available: false, reason: 'ai_off' } : { available: true, reason: null };
+  },
+  async ask(_userId: string, ask: MusicAiAsk): Promise<string> {
+    ai.asked.push(ask);
+    if (ai.state === 'error') throw Object.assign(new Error('the provider said Person B harbour'), { code: 'AI_PROVIDER_ERROR' });
+    return ai.answer;
+  },
+};
+
 describe('Local AI music routes over HTTP', () => {
   let app: NestFastifyApplication;
   let jwt: JwtService;
@@ -99,6 +116,8 @@ describe('Local AI music routes over HTTP', () => {
       .useValue({ commandFailed: jest.fn().mockResolvedValue(undefined) })
       .overrideProvider(MUSIC_OBJECT_STORE)
       .useValue(objects)
+      .overrideProvider(MUSIC_AI)
+      .useValue(ai)
       .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie, { secret: 'test-secret' });
@@ -130,6 +149,9 @@ describe('Local AI music routes over HTTP', () => {
     objects.calls.length = 0;
     objects.failWith = null;
     objects.scheme = 'https://';
+    ai.state = 'off';
+    ai.answer = '';
+    ai.asked.length = 0;
     clock.set(new Date('2026-11-14T12:00:00.000Z'));
     node = { id: NODE_ROW, nodeId: 'ai-n2', displayName: 'Node ai-n2', phase: 'enrolled', mode: 'online', lastState: { workloads: WORKLOADS } };
     prismaMock.localaiNode.findUnique.mockImplementation(async ({ where }: { where: { nodeId?: string } }) => (where.nodeId === 'ai-n2' ? node : null));
@@ -143,6 +165,9 @@ describe('Local AI music routes over HTTP', () => {
     }
     for (const method of ['findUnique', 'findMany', 'count', 'updateMany', 'deleteMany'] as const) {
       prismaMock.localaiMusicSong[method].mockImplementation((music.localaiMusicSong as any)[method]);
+    }
+    for (const method of ['create', 'findUnique', 'findMany', 'count', 'update', 'updateMany', 'deleteMany'] as const) {
+      prismaMock.localaiMusicPrompt[method].mockImplementation((music.localaiMusicPrompt as any)[method]);
     }
     prismaMock.auditEvent.create.mockResolvedValue({});
     prismaMock.auditEvent.findFirst.mockResolvedValue(null);
@@ -329,7 +354,7 @@ describe('Local AI music routes over HTTP', () => {
         nodeId: 'ai-n2',
         status: 'queued',
         stage: 'queued',
-        title: 'Person A walks to the river at dawn',
+        title: 'Person A Walks To The River At Dawn',
         tags: 'folk, warm',
         durationS: 90,
         language: 'es',
@@ -406,7 +431,7 @@ describe('Local AI music routes over HTTP', () => {
 
       const library = (await send('GET', '/songs', token('admin'))).json().data;
       expect(library.total).toBe(2);
-      expect(library.items[0]).toMatchObject({ nodeId: 'ai-n2', title: 'Person A walks to the river at dawn', status: 'ready', requestedByMe: false });
+      expect(library.items[0]).toMatchObject({ nodeId: 'ai-n2', title: 'Person A Walks To The River At Dawn', status: 'ready', requestedByMe: false });
       expect((await send('GET', '/songs?nodeId=ai-n9', token('admin'))).json().data.total).toBe(0);
       expect((await send('GET', '/songs?mine=true', token('admin'))).json().data.total).toBe(0);
       expect((await send('GET', '/songs', contributor.accessToken)).json().data.total).toBe(2);
@@ -499,8 +524,9 @@ describe('Local AI music routes over HTTP', () => {
       expect((await send('GET', '/songs/not-a-uuid/audio', contributor)).statusCode).toBe(404);
     });
 
-    it('DELETE needs the typed confirmation; it removes the object, the row and, for the last song, the sample; audited', async () => {
-      const { request, song } = await readySong(token('contributor'));
+    it('DELETE needs the typed confirmation; it removes the object and the row; the sample stays while its prompt holds it; audited', async () => {
+      const owner = registerMockUser(jwt, 'contributor');
+      const { request, song } = await readySong(owner.accessToken);
       const admin = token('admin');
       expect((await send('DELETE', `/songs/${song.id}`, admin, {})).statusCode).toBe(400);
       expect((await send('DELETE', `/songs/${song.id}`, admin, { confirm: 'yes' })).statusCode).toBe(400);
@@ -509,10 +535,308 @@ describe('Local AI music routes over HTTP', () => {
       const deleted = await send('DELETE', `/songs/${song.id}`, admin, { confirm: song.id });
       expect(deleted.statusCode).toBe(200);
       expect(deleted.json().data).toEqual({ id: song.id, deleted: true });
-      expect(objects.calls).toEqual(expect.arrayContaining([`delete localai-music/songs/${request.id}/0`, `delete localai-music/samples/${request.id}.wav`]));
+      expect(objects.calls).toContain(`delete localai-music/songs/${request.id}/0`);
+      // The saved prompt still references the sample ("make again" reuses it), so the object stays.
+      expect(objects.calls).not.toContain(`delete localai-music/samples/${request.id}.wav`);
       expect(music.songs).toHaveLength(0);
       expect(audits('localai.music.song_deleted')).toEqual([expect.objectContaining({ targetType: 'localai_music_song', targetId: song.id, meta: expect.objectContaining({ nodeId: 'ai-n2', requestId: request.id }) })]);
       expect((await send('GET', '/songs', admin)).json().data.total).toBe(0);
+
+      // Deleting the prompt then deletes the sample: no request and no prompt references it any more.
+      const promptId = request.promptId as string;
+      expect((await send('DELETE', `/prompts/${promptId}`, owner.accessToken, { confirm: promptId })).statusCode).toBe(200);
+      expect(objects.calls).toContain(`delete localai-music/samples/${request.id}.wav`);
+    });
+  });
+
+  describe('the prompt history and titles (#568)', () => {
+    const DESCRIPTION = 'a slow ballad about Person A and the sea, soft piano, warm voice';
+    const form = (extra: Record<string, string> = {}) => ({ nodeId: 'ai-n2', description: DESCRIPTION, lyrics_mode: 'mine', lyrics: LYRICS, ...extra });
+    const patch = (accessToken: string, url: string, payload: unknown) =>
+      app.inject({ method: 'PATCH', url: `/api/localai/music${url}`, headers: auth(accessToken), payload: payload as never });
+
+    it('every prompt and helper route needs a session and localai_music:use', async () => {
+      const ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2';
+      const routes: Array<['GET' | 'POST' | 'DELETE' | 'PATCH', string, unknown]> = [
+        ['GET', '/prompts', undefined],
+        ['POST', '/prompts', { description: DESCRIPTION }],
+        ['GET', `/prompts/${ID}`, undefined],
+        ['PATCH', `/prompts/${ID}`, { title: 'x' }],
+        ['DELETE', `/prompts/${ID}`, { confirm: ID }],
+        ['POST', `/prompts/${ID}/make`, { nodeId: 'ai-n2' }],
+        ['GET', '/assist', undefined],
+        ['POST', '/title-suggestion', { description: DESCRIPTION }],
+        ['POST', '/lyrics-suggestion', { description: DESCRIPTION }],
+      ];
+      const viewer = token('viewer');
+      for (const [method, url, payload] of routes) {
+        const anonymous = await app.inject({ method, url: `/api/localai/music${url}`, payload: payload as never });
+        const forbidden = await app.inject({ method, url: `/api/localai/music${url}`, headers: auth(viewer), payload: payload as never });
+        expect([method, url, anonymous.statusCode, forbidden.statusCode]).toEqual([method, url, 401, 403]);
+      }
+      expect(music.prompts).toHaveLength(0);
+      expect(ai.asked).toHaveLength(0);
+    });
+
+    it('making a song saves a prompt; the request keeps the title and settings it used when the prompt is edited later', async () => {
+      const owner = registerMockUser(jwt, 'contributor');
+      const created = (await submit(owner.accessToken, form({ title: 'Harbour Song', variations: '2' }), sample())).json().data;
+      expect(created).toMatchObject({ title: 'Harbour Song', tags: DESCRIPTION, lyricsMode: 'mine', promptId: expect.any(String), variations: 2 });
+      expect(music.songs.map((song) => song.title)).toEqual(['Harbour Song', 'Harbour Song']);
+
+      const list = (await send('GET', '/prompts', owner.accessToken)).json().data;
+      expect(list.total).toBe(1);
+      expect(list.items[0]).toMatchObject({ id: created.promptId, title: 'Harbour Song', description: DESCRIPTION, lyricsMode: 'mine', hasSample: true, songCount: 0 });
+      expect(list.items[0]).not.toHaveProperty('lyrics');
+      const one = (await send('GET', `/prompts/${created.promptId}`, owner.accessToken)).json().data;
+      expect(one).toMatchObject({ lyrics: LYRICS, variations: 2, durationS: 60, sampleMime: 'audio/wav' });
+      expect(JSON.stringify(one)).not.toMatch(/localai-music\//);
+
+      const edited = await patch(owner.accessToken, `/prompts/${created.promptId}`, { title: 'New Name', lyrics: '[verse]\nOther words', variations: 1 });
+      expect(edited.statusCode).toBe(200);
+      expect(edited.json().data).toMatchObject({ title: 'New Name', lyrics: '[verse]\nOther words', variations: 1 });
+      const past = (await send('GET', `/requests/${created.id}`, owner.accessToken)).json().data;
+      expect(past).toMatchObject({ title: 'Harbour Song', variations: 2, tags: DESCRIPTION });
+      expect(past.lyrics).toBe(LYRICS);
+      expect(music.songs.map((song) => song.title)).toEqual(['Harbour Song', 'Harbour Song']);
+
+      // An empty title is generated again from the prompt's (new) lyrics.
+      expect((await patch(owner.accessToken, `/prompts/${created.promptId}`, { title: '' })).json().data.title).toBe('Other Words');
+      expect(audits('localai.music.prompt_created')).toEqual([expect.objectContaining({ targetType: 'localai_music_prompt', targetId: created.promptId })]);
+      expect(JSON.stringify(audits('localai.music.prompt_updated'))).not.toMatch(/Other words|New Name|Person A|ballad/);
+    });
+
+    it('an empty title is generated: the first lyric line, else the description, else "Untitled song" in the page\'s language', async () => {
+      const contributor = registerMockUser(jwt, 'contributor');
+      expect((await submit(contributor.accessToken, form())).json().data.title).toBe('Person A Walks To The River At Dawn');
+      const instrumental = (await submit(contributor.accessToken, form({ lyrics_mode: 'instrumental' }))).json().data;
+      expect(instrumental.title).toBe('A Slow Ballad About Person A And The Sea');
+      // An older client with only section tags and no description: the fallback, in Spanish for a Spanish page.
+      const other = registerMockUser(jwt, 'contributor');
+      expect((await submit(other.accessToken, { nodeId: 'ai-n2', lyrics: '[verse]', ui_language: 'es' })).json().data.title).toBe('Canción sin título');
+    });
+
+    it('"No vocals" sends [Instrumental] and keeps the typed lyrics on the prompt; a description is required; its limit is the contract\'s', async () => {
+      const contributor = registerMockUser(jwt, 'contributor');
+      const created = (await submit(contributor.accessToken, form({ lyrics_mode: 'instrumental', lyrics: 'for later' }))).json().data;
+      const params = COMMANDS['localai.music.generate'].params.parse(musicCommands()[0].params);
+      expect(params.lyrics).toBe('[Instrumental]');
+      expect(params.tags).toBe(DESCRIPTION);
+      expect((await send('GET', `/prompts/${created.promptId}`, contributor.accessToken)).json().data).toMatchObject({ lyricsMode: 'instrumental', lyrics: 'for later' });
+
+      const refusal = async (fields: Record<string, string>, reason: string) => {
+        const response = await submit(contributor.accessToken, fields);
+        expect([response.statusCode, response.json().details.code, response.json().details.reason]).toEqual([400, 'LAI-SVC-154', reason]);
+      };
+      await refusal({ nodeId: 'ai-n2', lyrics_mode: 'mine', lyrics: LYRICS }, 'description_required');
+      await refusal(form({ lyrics: '  ' }), 'lyrics_required');
+      await refusal(form({ lyrics: '', lyrics_mode: 'ai' }), 'lyrics_required');
+      await refusal(form({ tags: 'other' }), 'description_and_tags');
+      await refusal(form({ description: 'x'.repeat(501) }), 'invalid_input');
+      // 500 characters but over the 512 bytes the node takes as `tags`: refused before anything is queued.
+      await refusal(form({ description: 'ñ'.repeat(300) }), 'invalid_input');
+      expect(musicCommands()).toHaveLength(1);
+      // At the limit, the command contract takes it (tags <= 512).
+      expect((await submit(contributor.accessToken, form({ description: 'd'.repeat(500) }))).statusCode).toBe(201);
+      expect(COMMANDS['localai.music.generate'].params.parse(musicCommands()[1].params).tags).toHaveLength(500);
+    });
+
+    it('make again: reuses the stored sample (no new upload), applies overrides, leaves the prompt as it is', async () => {
+      const owner = registerMockUser(jwt, 'contributor');
+      const bytes = wavBytes(9000);
+      const first = (await submit(owner.accessToken, form({ title: 'Again' }), sample(bytes))).json().data;
+      const puts = objects.calls.filter((call) => call.startsWith('put ')).length;
+
+      const again = await send('POST', `/prompts/${first.promptId}/make`, owner.accessToken, { nodeId: 'ai-n2', overrides: { variations: 3, seed: 5 } });
+      expect(again.statusCode).toBe(201);
+      expect(again.json().data).toMatchObject({ title: 'Again', promptId: first.promptId, variations: 3, seed: 5, hasSample: true, sampleMode: 'sounds_like' });
+      expect(objects.calls.filter((call) => call.startsWith('put ')).length).toBe(puts);
+      const [, second] = musicCommands();
+      const params = COMMANDS['localai.music.generate'].params.parse(second.params);
+      expect(params).toMatchObject({ lyrics: LYRICS, tags: DESCRIPTION, variations: 3, seed: 5 });
+      expect(params.sample?.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+      // The claim signs the FIRST request's stored sample for the second request.
+      clock.advance(1000);
+      const jobs = (await app.get(ClaimService).claim(NODE_ROW, { types: ['music.generate'], waitMs: 0, limit: 2 } as never)).jobs;
+      const signed = jobs.map((job: any) => COMMANDS['localai.music.generate'].params.parse(job.params).sample?.url);
+      expect(signed.every((url: string | undefined) => url?.includes(`localai-music/samples/${first.id}.wav`))).toBe(true);
+      const prompt = (await send('GET', `/prompts/${first.promptId}`, owner.accessToken)).json().data;
+      expect(prompt).toMatchObject({ variations: 1, seed: null });
+
+      // Someone else's prompt cannot be made, read, changed or deleted (404); an admin may delete it but not read it.
+      const stranger = token('contributor');
+      expect((await send('POST', `/prompts/${first.promptId}/make`, stranger, { nodeId: 'ai-n2' })).statusCode).toBe(404);
+      expect((await send('GET', `/prompts/${first.promptId}`, stranger)).statusCode).toBe(404);
+      expect((await patch(stranger, `/prompts/${first.promptId}`, { title: 'Mine now' })).statusCode).toBe(404);
+      expect((await send('DELETE', `/prompts/${first.promptId}`, stranger, { confirm: first.promptId })).statusCode).toBe(404);
+      expect((await submit(stranger, form({ promptId: first.promptId }))).statusCode).toBe(404);
+      expect((await send('GET', `/prompts/${first.promptId}`, token('admin'))).statusCode).toBe(404);
+      expect((await send('GET', '/prompts', token('admin'))).json().data.total).toBe(0);
+      expect((await send('POST', `/prompts/${first.promptId}/make`, owner.accessToken, { nodeId: 'ai-n2', overrides: { lyrics: 'x' } })).statusCode).toBe(400);
+    });
+
+    it('POST /requests with promptId saves the sent fields into that prompt and reuses or removes its sample', async () => {
+      const owner = registerMockUser(jwt, 'contributor');
+      const first = (await submit(owner.accessToken, form({ title: 'One' }), sample())).json().data;
+      const second = (await submit(owner.accessToken, form({ promptId: first.promptId, title: 'Two', lyrics: '[verse]\nNew line' }))).json().data;
+      expect(second).toMatchObject({ promptId: first.promptId, title: 'Two', hasSample: true });
+      expect((await send('GET', `/prompts/${first.promptId}`, owner.accessToken)).json().data).toMatchObject({ title: 'Two', lyrics: '[verse]\nNew line', hasSample: true });
+      expect((await send('GET', '/prompts', owner.accessToken)).json().data.total).toBe(1);
+
+      const third = (await submit(owner.accessToken, form({ promptId: first.promptId, remove_sample: 'true' }))).json().data;
+      expect(third.hasSample).toBe(false);
+      expect((await send('GET', `/prompts/${first.promptId}`, owner.accessToken)).json().data.hasSample).toBe(false);
+      // The two earlier requests still reference the sample, so its object stays.
+      expect(objects.calls).not.toContain(`delete localai-music/samples/${first.id}.wav`);
+    });
+
+    it('save as new copies the sample reference; delete asks for the id, keeps the songs ("prompt deleted") and the shared sample', async () => {
+      const owner = registerMockUser(jwt, 'contributor');
+      const made = (await submit(owner.accessToken, form({ title: 'Original' }), sample())).json().data;
+      await settle(musicCommands().at(-1)!.id, 'succeeded', { result: { songs: [{ index: 0, sha256: 'd'.repeat(64), size_bytes: 10, mime: 'audio/wav', duration_s: 30 }] } });
+      expect((await send('GET', '/prompts', owner.accessToken)).json().data.items[0].songCount).toBe(1);
+
+      const copy = await send('POST', '/prompts', owner.accessToken, { description: DESCRIPTION, lyrics: LYRICS, lyricsMode: 'mine', copySampleFrom: made.promptId, sampleMode: 'same_song' });
+      expect(copy.statusCode).toBe(201);
+      expect(copy.json().data).toMatchObject({ title: 'Person A Walks To The River At Dawn', hasSample: true, sampleMode: 'same_song', songCount: 0 });
+      expect((await send('POST', '/prompts', token('contributor'), { description: DESCRIPTION, copySampleFrom: made.promptId })).statusCode).toBe(404);
+      expect((await send('POST', '/prompts', owner.accessToken, { lyrics: LYRICS })).statusCode).toBe(400);
+      expect((await send('POST', '/prompts', owner.accessToken, { description: DESCRIPTION, ownerId: 'x' })).statusCode).toBe(400);
+
+      expect((await send('DELETE', `/prompts/${made.promptId}`, owner.accessToken, {})).statusCode).toBe(400);
+      expect((await send('DELETE', `/prompts/${made.promptId}`, owner.accessToken, { confirm: 'yes' })).statusCode).toBe(400);
+      const deleted = await send('DELETE', `/prompts/${made.promptId}`, owner.accessToken, { confirm: made.promptId });
+      expect([deleted.statusCode, deleted.json().data]).toEqual([200, { id: made.promptId, deleted: true }]);
+      const library = (await send('GET', '/songs', owner.accessToken)).json().data;
+      expect(library.items).toEqual([expect.objectContaining({ requestId: made.id, title: 'Original', promptId: null })]);
+      expect((await send('GET', `/requests/${made.id}`, owner.accessToken)).json().data).toMatchObject({ title: 'Original', promptId: null });
+      expect(objects.calls).not.toContain(`delete localai-music/samples/${made.id}.wav`);
+      const [row] = audits('localai.music.prompt_deleted');
+      expect(row).toMatchObject({ targetType: 'localai_music_prompt', targetId: made.promptId, meta: { songsKept: 1 } });
+      expect(JSON.stringify(row)).not.toMatch(/Original|ballad|Person A/);
+
+      // An admin (localai_music:delete) may delete another person's prompt; the copy goes and, with it, the sample's
+      // last prompt reference (the request still holds it, so the object stays).
+      const copyId = copy.json().data.id as string;
+      expect((await send('DELETE', `/prompts/${copyId}`, token('admin'), { confirm: copyId })).statusCode).toBe(200);
+      expect(music.prompts).toHaveLength(0);
+    });
+
+    it('lists newest used first, paged; a bad query is 400', async () => {
+      const owner = registerMockUser(jwt, 'contributor');
+      for (const title of ['First', 'Second', 'Third']) {
+        clock.advance(1000);
+        await send('POST', '/prompts', owner.accessToken, { title, description: DESCRIPTION, lyricsMode: 'instrumental' });
+      }
+      clock.advance(1000);
+      const first = music.prompts.find((row) => row.title === 'First')!;
+      expect((await send('POST', `/prompts/${first.id}/make`, owner.accessToken, { nodeId: 'ai-n2' })).statusCode).toBe(201);
+      const page = (await send('GET', '/prompts?pageSize=2', owner.accessToken)).json().data;
+      expect([page.total, page.totalPages, page.items.map((item: any) => item.title)]).toEqual([3, 2, ['First', 'Third']]);
+      expect((await send('GET', '/prompts?pageSize=500', owner.accessToken)).statusCode).toBe(400);
+      expect((await send('GET', '/prompts?owner=x', owner.accessToken)).statusCode).toBe(400);
+
+      // A draft saved without lyrics in "Use my lyrics" mode cannot be made until it has some.
+      const draft = (await send('POST', '/prompts', owner.accessToken, { description: DESCRIPTION, lyricsMode: 'mine' })).json().data;
+      const refused = await send('POST', `/prompts/${draft.id}/make`, owner.accessToken, { nodeId: 'ai-n2' });
+      expect([refused.statusCode, refused.json().details.reason]).toEqual([400, 'lyrics_required']);
+    });
+
+    describe('Suggest a title and Write lyrics for me', () => {
+      const run = async <T>(fn: () => Promise<T>) => {
+        const restoreLogger = enableNestLogging();
+        const output = captureOutput();
+        try {
+          return { result: await fn(), logs: () => output.text() };
+        } finally {
+          output.restore();
+          restoreLogger();
+        }
+      };
+      const SECRET_LINE = 'Person B keeps a secret by the harbour';
+
+      it('AI off: the generated title, source "generated"; lyrics are 409 with a reason and a fix; assist says off', async () => {
+        ai.state = 'off';
+        const contributor = token('contributor');
+        expect((await send('GET', '/assist', contributor)).json().data).toEqual({ ai: { available: false, reason: 'ai_off' } });
+        const title = await send('POST', '/title-suggestion', contributor, { lyrics: `[verse]\n${SECRET_LINE}`, description: DESCRIPTION });
+        expect([title.statusCode, title.json().data]).toEqual([200, { title: 'Person B Keeps A Secret By The Harbour', source: 'generated' }]);
+        expect((await send('POST', '/title-suggestion', contributor, { lyrics: 'ignored', lyricsMode: 'instrumental', description: 'calm piano, rain' })).json().data.title).toBe('Calm Piano');
+        const lyrics = await send('POST', '/lyrics-suggestion', contributor, { description: DESCRIPTION, language: 'es' });
+        expect([lyrics.statusCode, lyrics.json().details.reason]).toEqual([409, 'ai_off']);
+        expect(lyrics.json().message).toMatch(/write your own lyrics/);
+        expect(ai.asked).toHaveLength(0);
+      });
+
+      it('AI on: the model\'s title (source "ai") and lyrics, with no key, description or lyrics in a log line', async () => {
+        ai.state = 'on';
+        const contributor = token('contributor');
+        expect((await send('GET', '/assist', contributor)).json().data).toEqual({ ai: { available: true, reason: null } });
+        ai.answer = '"Harbour Secrets"\nA title about...';
+        const title = await run(() => send('POST', '/title-suggestion', contributor, { lyrics: `[verse]\n${SECRET_LINE}`, description: DESCRIPTION, language: 'es' }));
+        expect(title.result.json().data).toEqual({ title: 'Harbour Secrets', source: 'ai' });
+        expect(ai.asked[0].input).toContain(SECRET_LINE);
+        expect(ai.asked[0].instructions).toContain('Spanish');
+
+        ai.answer = '```\n[verse]\nThe sea is wide\n[chorus]\nSing it slow\n```';
+        const lyrics = await run(() => send('POST', '/lyrics-suggestion', contributor, { description: DESCRIPTION, language: 'en', title: 'Harbour' }));
+        expect([lyrics.result.statusCode, lyrics.result.json().data]).toEqual([200, { lyrics: '[verse]\nThe sea is wide\n[chorus]\nSing it slow', source: 'ai' }]);
+        expect(ai.asked[1].input).toContain('Title: Harbour');
+        for (const logs of [title.logs(), lyrics.logs()]) {
+          expect(logs).toContain('music');
+          expect(logs).not.toMatch(/Person B|harbour|Harbour|ballad|The sea is wide|Sing it slow/);
+        }
+        // Lyrics longer than the node takes are cut to 8 KiB, at a line.
+        ai.answer = Array.from({ length: 2000 }, (_, i) => `line ${i}`).join('\n');
+        const long = (await send('POST', '/lyrics-suggestion', contributor, { description: DESCRIPTION })).json().data.lyrics as string;
+        expect(new TextEncoder().encode(long).length).toBeLessThanOrEqual(8192);
+        expect(long.endsWith('\n')).toBe(false);
+      });
+
+      it('AI erroring: the title falls back to the generated one; lyrics are 502; nothing of the text is logged', async () => {
+        ai.state = 'error';
+        const contributor = token('contributor');
+        const title = await run(() => send('POST', '/title-suggestion', contributor, { lyrics: `[verse]\n${SECRET_LINE}`, description: DESCRIPTION }));
+        expect(title.result.json().data).toEqual({ title: 'Person B Keeps A Secret By The Harbour', source: 'generated' });
+        const lyrics = await run(() => send('POST', '/lyrics-suggestion', contributor, { description: DESCRIPTION }));
+        expect([lyrics.result.statusCode, lyrics.result.json().details.reason]).toEqual([502, 'ai_failed']);
+        for (const logs of [title.logs(), lyrics.logs()]) {
+          expect(logs).toContain('AI_PROVIDER_ERROR');
+          expect(logs).not.toMatch(/Person B|harbour|ballad|provider said/);
+        }
+        // An empty answer is treated the same.
+        ai.state = 'on';
+        ai.answer = '   ';
+        expect((await send('POST', '/title-suggestion', contributor, { description: DESCRIPTION })).json().data.source).toBe('generated');
+        expect((await send('POST', '/lyrics-suggestion', contributor, { description: DESCRIPTION })).statusCode).toBe(502);
+      });
+
+      it('validates the bodies: a description is needed for lyrics; limits and unknown fields are 400', async () => {
+        ai.state = 'on';
+        const contributor = token('contributor');
+        expect((await send('POST', '/lyrics-suggestion', contributor, { description: '  ' })).statusCode).toBe(400);
+        expect((await send('POST', '/lyrics-suggestion', contributor, { description: 'x'.repeat(501) })).statusCode).toBe(400);
+        expect((await send('POST', '/title-suggestion', contributor, { description: DESCRIPTION, model: 'gpt' })).statusCode).toBe(400);
+        expect((await send('POST', '/title-suggestion', contributor, { lyrics: 'a'.repeat(8193) })).statusCode).toBe(400);
+        expect(ai.asked).toHaveLength(0);
+      });
+    });
+
+    it('no lyrics or description reach a log line across save, edit, make again and delete', async () => {
+      const restoreLogger = enableNestLogging();
+      const output = captureOutput();
+      try {
+        const owner = registerMockUser(jwt, 'contributor');
+        const made = (await submit(owner.accessToken, form({ title: 'Quiet Title' }), sample())).json().data;
+        await patch(owner.accessToken, `/prompts/${made.promptId}`, { lyrics: '[verse]\nOrg Alpha hums', description: 'secret style words' });
+        await send('POST', `/prompts/${made.promptId}/make`, owner.accessToken, { nodeId: 'ai-n2' });
+        await send('DELETE', `/prompts/${made.promptId}`, owner.accessToken, { confirm: made.promptId });
+      } finally {
+        output.restore();
+        restoreLogger();
+      }
+      expect(output.text()).toContain('queued');
+      expect(output.text()).not.toMatch(/Person A|Org Alpha|ballad|secret style|Quiet Title|river/);
     });
   });
 

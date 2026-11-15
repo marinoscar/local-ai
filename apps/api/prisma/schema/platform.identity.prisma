@@ -119,6 +119,7 @@ model User {
 
   // composed from app:localai-music.prisma
   localaiMusicRequests LocalaiMusicRequest[] @relation("LocalaiMusicRequestedBy")
+  localaiMusicPrompts  LocalaiMusicPrompt[]  @relation("LocalaiMusicPromptOwner")
 
   // composed from app:localai.prisma
   localaiNodesCreated    LocalaiNode[]           @relation("LocalaiNodeCreatedBy")
