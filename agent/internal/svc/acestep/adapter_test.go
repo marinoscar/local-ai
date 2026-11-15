@@ -191,6 +191,28 @@ func TestStartWritesTheEnvAndWaitsForReady(t *testing.T) {
 	}
 }
 
+// #588: the shim says 5100 MiB at load; after songs PyTorch's cache holds more. The measured
+// memory of the unit's processes is what the router must take out of G_others.
+func TestResidentReportsTheMeasuredMemoryWhenItGrew(t *testing.T) {
+	r := newRig(t)
+	if err := r.a.Start(context.Background(), startReq("music-a")); err != nil {
+		t.Fatal(err)
+	}
+	r.held = 6058
+	got, err := r.a.Resident(context.Background())
+	if err != nil || len(got) != 1 || got[0].VRAMMiB != 6058 {
+		t.Fatalf("resident: %+v, %v", got, err)
+	}
+	if s := r.a.Status(); s.VRAMMiB != 6058 {
+		t.Fatalf("status: %+v", s)
+	}
+	// A smaller measure (the card is shared with a process the cgroup misses) never lowers it.
+	r.held = 4000
+	if got, _ := r.a.Resident(context.Background()); got[0].VRAMMiB != 5100 {
+		t.Fatalf("smaller measure: %+v", got)
+	}
+}
+
 func TestStartFailures(t *testing.T) {
 	cases := []struct {
 		name  string
