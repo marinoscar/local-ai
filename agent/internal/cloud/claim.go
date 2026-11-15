@@ -253,20 +253,44 @@ func (c *Claimer) Stop(ctx context.Context) error {
 	return c.drain(ctx)
 }
 
-// drain waits for the unsettled commands and fails the ones that outlive goingOfflineWait.
+// drain waits for the unsettled commands and fails the ones that outlive goingOfflineWait, then waits
+// for the settles in progress. A command counts as settled from the moment its settle starts, before
+// the result is sent and inflight.json is rewritten, so returning at "nothing unsettled" could leave
+// that last write running after Stop.
 func (c *Claimer) drain(ctx context.Context) error {
-	pending := c.unsettled()
-	if len(pending) == 0 {
-		return nil
+	if pending := c.unsettled(); len(pending) > 0 {
+		t := c.clk.NewTimer(goingOfflineWait)
+		defer t.Stop()
+	wait:
+		for _, j := range pending {
+			select {
+			case <-j.done:
+			case <-t.C():
+				c.failGoingOffline(ctx)
+				break wait
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
 	}
-	t := c.clk.NewTimer(goingOfflineWait)
-	defer t.Stop()
-	for _, j := range pending {
+	return c.waitSettling(ctx)
+}
+
+// waitSettling blocks until every command whose own run has started settling has finished that settle
+// (the result sent and inflight.json rewritten), or ctx ends. A handler still running, or the follow-up
+// work of a settled command (mode.offline), is not waited for.
+func (c *Claimer) waitSettling(ctx context.Context) error {
+	c.mu.Lock()
+	settling := make([]*jobRun, 0, len(c.jobs))
+	for _, j := range c.jobs {
+		if j.settlingByRun() {
+			settling = append(settling, j)
+		}
+	}
+	c.mu.Unlock()
+	for _, j := range settling {
 		select {
-		case <-j.done:
-		case <-t.C():
-			c.failGoingOffline(ctx)
-			return nil
+		case <-j.settleWork:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
