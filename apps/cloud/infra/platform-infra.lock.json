@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0-next.21",
+  "version": "0.1.0-next.30",
   "identity": {
     "cliName": "laictl",
     "envPrefix": "LAICTL_",
@@ -16,7 +16,7 @@
         "infra/compose/devdb.compose.yml": "3eb626711e6a4cd68178fe09ed8449c10c9c862782f1797891ad2a61bf9f6441",
         "infra/compose/prod.compose.yml": "027ca7b6c38af5c056a465d849af205528f78a3c2ebc6a57b7a8534877125e6a",
         "infra/compose/vps.compose.yml": "99a7123e854d35483c8e7d5de790fc97d91cc103a52fa82510594937043b2181",
-        "infra/compose/worker.compose.yml": "6f88fa2d80057364d96c31bb54734e5135efc249da6b2dec77fe5692c37ce2fc",
+        "infra/compose/worker.compose.yml": "268b0b0329dec1e983d6900e636803cec81722a71c0dafce4ba641ca4cbe83cf",
         "infra/compose/worker.build.compose.yml": "8675ce8b0dfb5e8de057d9fed224bea918abfebf6c856d8c643156baf28c27d8",
         "infra/compose/test.compose.yml": "73c60af69bf2c3aec1f50a989a37996584c4d21d6a23e8afaf6ad74136f0560f",
         "infra/compose/postgres-init/10-application-role.sh": "a7ea0ac5bdd7fa7537a3653e9e0c92fa8ca512718b1a7de60832666552dfb1f0"
@@ -38,7 +38,7 @@
     "env": {
       "files": {
         "infra/compose/.env.example": "43d7d09171fcf75af8948cfbd437249b398876814d0d3af9ea26a7d3441e5478",
-        "infra/compose/.env.worker.example": "84d8ab757eacd1b4a4b1a713ca30d0da089443aa9d656b7164c11c29e4b48caf"
+        "infra/compose/.env.worker.example": "1ab580ac016ca0544ae84bacbb6e0664e0714ad72809eef098c61b75adf269a1"
       }
     },
     "telemetry": {
