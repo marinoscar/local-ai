@@ -98,6 +98,11 @@ type Deps struct {
 	// SongsDir and WorkDir default to the canonical paths.
 	SongsDir string
 	WorkDir  string
+	// Own hands a path the service created to the user the engine runs as (localai, overview.md section
+	// 3.2): the music folder, songs/ and work/, each task's folder and sample, each song's folder and
+	// meta.json. The agent runs as root and localai-music.service as localai, which must enter the music
+	// folder and write into its task folder (#562). nil does nothing (tests, a non-root agent).
+	Own func(path string) error
 	// MinFreeBytes is the profile's storage.min_free_bytes (0 when unknown).
 	MinFreeBytes func() int64
 	// FreeBytes returns the free space of the filesystem holding path; default statfs. A negative
@@ -181,12 +186,21 @@ func New(d Deps) (*Service, error) {
 	if log == nil {
 		log = slog.Default()
 	}
+	if d.Own == nil {
+		d.Own = func(string) error { return nil }
+	}
 	for _, dir := range []string{d.SongsDir, d.WorkDir} {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return nil, fmt.Errorf("music: %w", err)
 		}
 	}
-	s := &Service{d: d, store: Store{Dir: d.SongsDir}, log: log.With("component", "music"), ops: map[string]*op{}}
+	// The music folder above songs/ and work/ (the unit's working directory), then the two.
+	for _, dir := range []string{filepath.Dir(d.SongsDir), filepath.Dir(d.WorkDir), d.SongsDir, d.WorkDir} {
+		if err := d.Own(dir); err != nil {
+			return nil, fmt.Errorf("music: give %s to the engine's user: %w", dir, err)
+		}
+	}
+	s := &Service{d: d, store: Store{Dir: d.SongsDir, Own: d.Own}, log: log.With("component", "music"), ops: map[string]*op{}}
 	s.ctx, s.stop = context.WithCancel(context.Background())
 	s.store.Sweep()
 	s.sweepWork()
@@ -494,9 +508,17 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Accepted, 
 		s.drop(o)
 		return Accepted{}, err
 	}
+	if err := s.d.Own(o.workDir); err != nil { // the engine writes its output in it
+		s.drop(o)
+		return Accepted{}, err
+	}
 	if sample != "" {
 		dst := filepath.Join(o.workDir, "sample."+info.Format.Ext)
 		if err := os.Rename(sample, dst); err != nil {
+			s.drop(o)
+			return Accepted{}, err
+		}
+		if err := s.d.Own(dst); err != nil { // the engine reads it
 			s.drop(o)
 			return Accepted{}, err
 		}

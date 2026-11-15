@@ -8,11 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/marinoscar/local-ai/agent/internal/doctor"
 	"github.com/marinoscar/local-ai/agent/internal/events"
 	"github.com/marinoscar/local-ai/agent/internal/music"
+	"github.com/marinoscar/local-ai/agent/internal/music/fake"
 )
 
 func TestGenerateRequests(t *testing.T) {
@@ -428,5 +430,54 @@ func TestTitle(t *testing.T) {
 		if got := music.Title(c.lyrics, c.tags); got != c.want {
 			t.Errorf("Title(%q, %q) = %q, want %q", c.lyrics, c.tags, got, c.want)
 		}
+	}
+}
+
+// The agent runs as root and the engine as localai: everything the engine must enter, read or write, and
+// every song the service stores, is handed to the engine's user (#562).
+func TestWhatTheEngineUsesIsHandedToItsUser(t *testing.T) {
+	var mu sync.Mutex
+	var owned []string
+	r := newRig(t, func(d *music.Deps) {
+		d.Own = func(p string) error {
+			mu.Lock()
+			defer mu.Unlock()
+			owned = append(owned, p)
+			return nil
+		}
+	})
+	r.shim.AutoComplete = true
+	rec := r.generate(form{fields: baseFields(map[string]string{"variations": "1"}), sample: wavBytes(5)})
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var acc music.Accepted
+	if err := json.Unmarshal(rec.Body.Bytes(), &acc); err != nil {
+		t.Fatal(err)
+	}
+	if v := r.waitOp(acc.OpID); v.State != music.StateDone {
+		t.Fatalf("op = %+v", v)
+	}
+	mu.Lock()
+	got := strings.Join(owned, "\n")
+	mu.Unlock()
+	for _, want := range []string{
+		filepath.Dir(r.songs) + "\n", r.songs + "\n", r.work + "\n", // the music folder, songs/ and work/
+		filepath.Join(r.work, acc.OpID) + "\n",        // the task folder the engine writes into
+		filepath.Join(r.work, acc.OpID, "sample.wav"), // the sample it reads
+		"meta.json", "audio.wav", // the stored song
+	} {
+		if !strings.Contains(got+"\n", want) {
+			t.Errorf("%q was not handed over; handed over:\n%s", want, got)
+		}
+	}
+}
+
+func TestAServiceWhoseFoldersCannotBeHandedOverIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	_, err := music.New(music.Deps{Shim: fake.New(), SongsDir: filepath.Join(dir, "songs"), WorkDir: filepath.Join(dir, "work"),
+		Own: func(string) error { return os.ErrPermission }})
+	if err == nil {
+		t.Fatal("the service started with folders the engine cannot use")
 	}
 }
