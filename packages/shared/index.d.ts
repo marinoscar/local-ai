@@ -38,3 +38,5 @@ export declare function resolveSliceIds(
 ): readonly SliceId[];
 /** The slices this app mounts: `slices.json` `enabled`, validated, in mount order. */
 export declare const ENABLED_SLICES: readonly SliceId[];
+/** The manifests that carry the app's release version (`versioned-manifests.json`); never the CLI's. */
+export declare const VERSIONED_MANIFESTS: readonly string[];

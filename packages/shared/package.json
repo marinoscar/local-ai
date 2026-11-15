@@ -12,12 +12,14 @@
       "default": "./index.js"
     },
     "./identity.json": "./identity.json",
-    "./slices.json": "./slices.json"
+    "./slices.json": "./slices.json",
+    "./versioned-manifests.json": "./versioned-manifests.json"
   },
   "files": [
     "index.js",
     "index.d.ts",
     "identity.json",
-    "slices.json"
+    "slices.json",
+    "versioned-manifests.json"
   ]
 }

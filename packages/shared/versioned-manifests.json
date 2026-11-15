@@ -1,0 +1,4 @@
+{
+  "$comment": "The app's release version lives in these manifests. `laictl deploy update` bumps them on every deploy (apps/cli/src/app.ts deploy.versionedManifests) and scripts/cloud-deploy-branch.sh carries the deployed version forward when it republishes deploy/cloud. apps/cli is NOT here: the CLI keeps its own version, bumped by hand with every CLI change (AGENTS.md, Versions).",
+  "manifests": ["apps/api/package.json", "apps/web/package.json", "packages/shared/package.json"]
+}
