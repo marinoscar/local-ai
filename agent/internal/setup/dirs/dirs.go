@@ -65,7 +65,7 @@ func Table() []Spec {
 		Spec{"/etc/localai/catalog", "root", "localai", 0o750},
 		Spec{Home, "localai", "localai", 0o750},
 	)
-	for _, n := range []string{"sync", "drill", "cloud", "kiwix", "llama-cache"} {
+	for _, n := range []string{"sync", "drill", "cloud", "kiwix", "llama-cache", "music", "music/songs", "music/work"} {
 		t = append(t, Spec{Home + "/" + n, "localai", "localai", 0o750})
 	}
 	for _, n := range []string{"install", "build", "update", "migration"} {

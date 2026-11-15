@@ -108,6 +108,15 @@ type SongList struct {
 // Store is the song directory.
 type Store struct {
 	Dir string
+	// Own hands each song's folder and meta.json to the engine's user (Deps.Own); nil does nothing.
+	Own func(path string) error
+}
+
+func (s Store) own(p string) error {
+	if s.Own == nil {
+		return nil
+	}
+	return s.Own(p)
 }
 
 func (s Store) dir(id string) string { return filepath.Join(s.Dir, id) }
@@ -162,6 +171,11 @@ func (s Store) Add(src string, ext string, meta Meta) (Meta, error) {
 	}
 	if err := writeFileSync(filepath.Join(tmp, metaFile), raw, 0o640); err != nil {
 		return Meta{}, err
+	}
+	for _, p := range []string{tmp, dst, filepath.Join(tmp, metaFile)} {
+		if err := s.own(p); err != nil {
+			return Meta{}, err
+		}
 	}
 	if err := os.Rename(tmp, s.dir(meta.ID)); err != nil {
 		return Meta{}, err

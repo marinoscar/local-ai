@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/marinoscar/local-ai/agent/internal/music"
 )
@@ -25,6 +26,7 @@ func (d *Daemon) buildMusic() {
 		SongsDir:  c.Paths.Join(music.DefaultSongsDir),
 		WorkDir:   c.Paths.Join(music.DefaultWorkDir),
 		Installed: func() bool { return d.musicRuntime().Installed() == nil },
+		Own:       d.ownByLocalAI,
 		MinFreeBytes: func() int64 {
 			if p := d.profile(); p != nil {
 				return p.Storage.MinFreeBytes
@@ -42,6 +44,19 @@ func (d *Daemon) buildMusic() {
 	}
 	d.music = svc
 	d.closers = append(d.closers, closeFunc(func() error { svc.Close(); return nil }))
+}
+
+// ownByLocalAI gives path to the localai user, the user of localai-music.service (#562). An agent that
+// is not root, or a machine with no localai user (tests, a dev run), changes nothing.
+func (d *Daemon) ownByLocalAI(path string) error {
+	if os.Geteuid() != 0 {
+		return nil
+	}
+	uid, gid, ok := d.env.LookupLocalAI()
+	if !ok {
+		return nil
+	}
+	return os.Lchown(path, uid, gid)
 }
 
 // closeFunc adapts a function to io.Closer.
