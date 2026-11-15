@@ -189,9 +189,12 @@ export class MusicPromptsService {
     return replaced;
   }
 
-  /** "Make again": the prompt was used now (it moves to the top of the history). */
-  async touch(id: string): Promise<void> {
-    await this.prisma.localaiMusicPrompt.updateMany({ where: { id }, data: { lastUsedAt: this.clock.now() } });
+  /**
+   * "Make again": the prompt was used now (it moves to the top of the history). `lyrics`: the lyrics the AI wrote for
+   * an Automatic prompt with none (#570), kept so the owner sees, edits and remakes them.
+   */
+  async touch(id: string, lyrics?: string): Promise<void> {
+    await this.prisma.localaiMusicPrompt.updateMany({ where: { id }, data: { lastUsedAt: this.clock.now(), ...(lyrics !== undefined ? { lyrics } : {}) } });
   }
 
   /**

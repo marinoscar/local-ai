@@ -34,8 +34,12 @@ const numberField = (min: number, max: number) =>
     .transform(Number)
     .pipe(z.number().min(min).max(max));
 
-/** The three lyrics modes of the form (#568): the person's own, written by the AI, or none (instrumental). */
-export const MusicLyricsMode = z.enum(['mine', 'ai', 'instrumental']);
+/**
+ * The lyrics modes of the form (#568, #570): `auto` (the default: the box's lyrics if any, else the AI writes them at
+ * "Make song" time when music AI is available, else no vocals), the person's own, written by the AI now ("Write
+ * lyrics now", in the box to edit first), or none (instrumental).
+ */
+export const MusicLyricsMode = z.enum(['auto', 'mine', 'ai', 'instrumental']);
 export type MusicLyricsMode = z.infer<typeof MusicLyricsMode>;
 
 /** The language of the page, for the "Untitled song" fallback title. */
@@ -191,6 +195,11 @@ export interface MusicSettings {
   lyricsStored: string;
   /** What the node gets: `[Instrumental]` for "No vocals". */
   lyricsSent: string;
+  /**
+   * Automatic mode with empty lyrics (#570): the service asks the AI for lyrics at "Make song" time (and then sends and
+   * stores them), or keeps the no-vocals `lyricsSent` when music AI is not available.
+   */
+  autoLyrics: boolean;
 }
 
 /** Why the cross-field rules refused the form; the 400's `reason`. */
@@ -207,9 +216,10 @@ export interface MusicSettingsInput {
 }
 
 /**
- * The cross-field rules (#568). With `lyrics_mode` (the current page): a description is required, and "mine" and
- * "ai" need lyrics; "instrumental" sends `[Instrumental]`. Without it (an older client): lyrics or tags, not both
- * empty, and the mode is derived. An empty title is generated.
+ * The cross-field rules (#568, #570). With `lyrics_mode` (the current page): a description is required; "mine" and
+ * "ai" need lyrics; "instrumental" sends `[Instrumental]`; "auto" sends the lyrics when there are some, and otherwise
+ * is marked `autoLyrics` (provisionally no vocals: the service asks the AI). Without a mode (an older client): lyrics
+ * or tags, not both empty, and the mode is derived. An empty title is generated.
  */
 export function musicSettingsOf(fields: MusicSettingsInput): MusicSettings | MusicSettingsRefusal {
   if (fields.description !== undefined && fields.tags !== undefined && fields.tags !== fields.description) return 'description_and_tags';
@@ -217,11 +227,14 @@ export function musicSettingsOf(fields: MusicSettingsInput): MusicSettings | Mus
   const ui = fields.ui_language ?? 'en';
   let lyricsMode: MusicLyricsMode;
   let lyricsSent: string;
+  let autoLyrics = false;
   if (fields.lyrics_mode !== undefined) {
     if (description.trim() === '') return 'description_required';
     lyricsMode = fields.lyrics_mode;
-    if (lyricsMode !== 'instrumental' && fields.lyrics.trim() === '') return 'lyrics_required';
-    lyricsSent = lyricsMode === 'instrumental' ? MUSIC_INSTRUMENTAL_LYRICS : fields.lyrics;
+    const empty = fields.lyrics.trim() === '';
+    if ((lyricsMode === 'mine' || lyricsMode === 'ai') && empty) return 'lyrics_required';
+    autoLyrics = lyricsMode === 'auto' && empty;
+    lyricsSent = lyricsMode === 'instrumental' || autoLyrics ? MUSIC_INSTRUMENTAL_LYRICS : fields.lyrics;
   } else {
     if (fields.lyrics.trim() === '' && description.trim() === '') return 'lyrics_or_tags_required';
     lyricsMode = fields.lyrics.trim() === '' ? 'instrumental' : 'mine';
@@ -229,7 +242,7 @@ export function musicSettingsOf(fields: MusicSettingsInput): MusicSettings | Mus
   }
   const typed = fields.title?.trim() ?? '';
   const title = typed !== '' ? typed : generatedTitle(lyricsMode === 'instrumental' ? '' : fields.lyrics, description, ui);
-  return { title, description, lyricsMode, lyricsStored: fields.lyrics, lyricsSent };
+  return { title, description, lyricsMode, lyricsStored: fields.lyrics, lyricsSent, autoLyrics };
 }
 
 /** The strength the node gets: the person's value, else the mode's default; none without a sample. */
