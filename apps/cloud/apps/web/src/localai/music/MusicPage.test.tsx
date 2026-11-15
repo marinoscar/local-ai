@@ -1,7 +1,8 @@
 // The music page over a mocked API (MSW, the real HTTP client): the node states, the switch to Music, the form and its
 // limits, the multipart it sends, the progress line (queued -> generating -> done), an error with its doctor code,
 // the library (play, download, delete with confirmation), what a person without a permission does not see, Spanish,
-// and axe.
+// and axe. #568: My prompts (open, edit and save, save as new, make again, delete with confirmation that the songs
+// stay), the title (typed, "Suggest a title" with AI on and off), "Describe your song" and the three lyrics modes.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
@@ -10,8 +11,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { runAxe } from '../../__tests__/axe';
 import { LanguageProvider, type Lang } from '../../i18n/LanguageProvider';
 import { MusicPage } from './MusicPage';
-import { librarySong, musicNode, musicRequest, page, workloadCommand } from './musicFixture';
-import type { LibrarySong, MusicNode, MusicRequest } from './musicApi';
+import { PROMPT_ID, librarySong, musicNode, musicPrompt, musicRequest, page, promptSummary, workloadCommand } from './musicFixture';
+import type { LibrarySong, MusicAssist, MusicNode, MusicPrompt, MusicRequest } from './musicApi';
 
 let permissions: string[] = [];
 vi.mock('@marinoscar/platform-web/identity/headless', () => ({
@@ -50,6 +51,12 @@ async function readMultipart(request: Request): Promise<FormData> {
 let postAnswer: () => Response = () => HttpResponse.json({ data: musicRequest() }, { status: 201 });
 let deleted: Array<{ id: string; body: unknown }> = [];
 let commandReads: unknown[] = [];
+let prompts: MusicPrompt[] = [];
+let assist: MusicAssist = { ai: { available: false, reason: 'ai_off' } };
+let promptWrites: Array<{ method: string; id?: string; body: unknown }> = [];
+let titleAnswer: { title: string; source: 'ai' | 'generated' } = { title: 'Walking To The River', source: 'generated' };
+let titleAsked: unknown[] = [];
+let lyricsAnswer: () => Response = () => HttpResponse.json({ data: { lyrics: '[verse]\nThe sea is wide', source: 'ai' } });
 
 const server = setupServer(
   http.get('/api/localai/music/nodes', () => HttpResponse.json({ data: nodes })),
@@ -70,6 +77,36 @@ const server = setupServer(
     songs = songs.filter((song) => song.id !== params.id);
     return HttpResponse.json({ data: { id: params.id, deleted: true } });
   }),
+  http.get('/api/localai/music/prompts', () => HttpResponse.json({ data: page(prompts.map(promptSummary)) })),
+  http.get('/api/localai/music/prompts/:id', ({ params }) => {
+    const found = prompts.find((prompt) => prompt.id === params.id);
+    return found ? HttpResponse.json({ data: found }) : HttpResponse.json({ statusCode: 404, message: 'No such prompt' }, { status: 404 });
+  }),
+  http.post('/api/localai/music/prompts', async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    promptWrites.push({ method: 'POST', body });
+    const created = musicPrompt({ ...(body as Partial<MusicPrompt>), id: 'b0000000-0000-4000-8000-000000000002', title: (body.title as string) || 'Generated Title', songCount: 0, hasSample: body.copySampleFrom !== undefined });
+    prompts = [created, ...prompts];
+    return HttpResponse.json({ data: created }, { status: 201 });
+  }),
+  http.patch('/api/localai/music/prompts/:id', async ({ request, params }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    promptWrites.push({ method: 'PATCH', id: String(params.id), body });
+    prompts = prompts.map((prompt) => (prompt.id === params.id ? { ...prompt, ...(body as Partial<MusicPrompt>), ...(body.removeSample ? { hasSample: false } : {}) } : prompt));
+    return HttpResponse.json({ data: prompts.find((prompt) => prompt.id === params.id) });
+  }),
+  http.delete('/api/localai/music/prompts/:id', async ({ request, params }) => {
+    promptWrites.push({ method: 'DELETE', id: String(params.id), body: await request.json() });
+    prompts = prompts.filter((prompt) => prompt.id !== params.id);
+    songs = songs.map((song) => (song.promptId === params.id ? { ...song, promptId: null } : song));
+    return HttpResponse.json({ data: { id: params.id, deleted: true } });
+  }),
+  http.get('/api/localai/music/assist', () => HttpResponse.json({ data: assist })),
+  http.post('/api/localai/music/title-suggestion', async ({ request }) => {
+    titleAsked.push(await request.json());
+    return HttpResponse.json({ data: titleAnswer });
+  }),
+  http.post('/api/localai/music/lyrics-suggestion', () => lyricsAnswer()),
   http.post('/api/localai/nodes/:nodeId/workloads/:name/activate', () => HttpResponse.json({ data: workloadCommand() }, { status: 201 })),
   http.get('/api/localai/commands/:id', () => HttpResponse.json({ data: commandReads.length > 1 ? commandReads.shift() : commandReads[0] })),
 );
@@ -86,6 +123,12 @@ beforeEach(() => {
   deleted = [];
   commandReads = [];
   postAnswer = () => HttpResponse.json({ data: musicRequest() }, { status: 201 });
+  prompts = [];
+  assist = { ai: { available: false, reason: 'ai_off' } };
+  promptWrites = [];
+  titleAnswer = { title: 'Walking To The River', source: 'generated' };
+  titleAsked = [];
+  lyricsAnswer = () => HttpResponse.json({ data: { lyrics: '[verse]\nThe sea is wide', source: 'ai' } });
 });
 afterEach(() => {
   cleanup();
@@ -102,7 +145,10 @@ function renderPage(lang: Lang = 'en') {
   );
 }
 
-const lyricsBox = () => screen.getByRole('textbox', { name: 'Lyrics' });
+const lyricsBox = () => screen.getByRole('textbox', { name: 'Your lyrics' });
+const descriptionBox = () => screen.getByRole('textbox', { name: /Describe your song/ });
+const titleBox = () => screen.getByRole('textbox', { name: 'Title' });
+const fields = (form: FormData) => Object.fromEntries([...form.entries()].filter(([key]) => key !== 'sample'));
 
 describe('the node picker, state first', () => {
   it('shows every computer with its music state in words, and chooses the first ready one', async () => {
@@ -158,24 +204,27 @@ describe('the node picker, state first', () => {
 });
 
 describe('the form', () => {
-  it('sends the multipart fields of the contract, with the sample and its mode, and shows the request', async () => {
+  it('sends the multipart fields of the contract, with the description, the title, the sample and its mode, and shows the request', async () => {
     requestReads = [musicRequest({ status: 'queued', stage: 'queued' })];
     renderPage();
     await screen.findByTestId('next-action');
+    fireEvent.change(titleBox(), { target: { value: 'River Song' } });
+    fireEvent.change(descriptionBox(), { target: { value: 'folk, acoustic guitar' } });
     fireEvent.change(lyricsBox(), { target: { value: '[verse]\nWalking to the river' } });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Style' }), { target: { value: 'folk' } });
     const file = new File([new Uint8Array([82, 73, 70, 70])], 'hum.wav', { type: 'audio/wav' });
     fireEvent.change(screen.getByLabelText(/Sample \(optional\)/), { target: { files: [file] } });
     fireEvent.click(screen.getByRole('radio', { name: 'Same song, my lyrics' }));
     fireEvent.click(screen.getByRole('button', { name: 'Make the song' }));
 
     await waitFor(() => expect(posted).not.toBeNull());
-    const form = posted!;
     // A form encodes line breaks as CRLF (as a browser does); the API's title reader takes both.
-    expect(Object.fromEntries([...form.entries()].filter(([key]) => key !== 'sample'))).toEqual({
+    expect(fields(posted!)).toEqual({
       nodeId: 'ai-n2',
+      title: 'River Song',
+      description: 'folk, acoustic guitar',
+      lyrics_mode: 'mine',
       lyrics: '[verse]\r\nWalking to the river',
-      tags: 'folk',
+      ui_language: 'en',
       duration_s: '60',
       language: 'en',
       variations: '1',
@@ -183,15 +232,26 @@ describe('the form', () => {
     });
     // The file travels as the `sample` part (readMultipart records only that it is there; the API's handling of the
     // bytes is proven in its own route and db tests).
-    expect(form.has('sample')).toBe(true);
+    expect(posted!.has('sample')).toBe(true);
     expect(await screen.findByTestId('request-stage')).toHaveTextContent('Waiting for Studio laptop');
   });
 
-  it('checks the limits before sending: lyrics over 8 KB, and a song needs lyrics or a style', async () => {
+  it('checks the limits before sending: a description is needed, at most 500 characters; lyrics at most 8 KB', async () => {
     renderPage();
     await screen.findByTestId('next-action');
     const make = screen.getByRole('button', { name: 'Make the song' });
     expect(make).toBeDisabled();
+    fireEvent.change(lyricsBox(), { target: { value: 'Short song' } });
+    expect(make).toBeDisabled();
+    expect(screen.getByTestId('form-missing')).toHaveTextContent('Describe your song.');
+    fireEvent.change(descriptionBox(), { target: { value: 'x'.repeat(501) } });
+    expect(screen.getByText('The description is too long (500 characters at most).')).toBeInTheDocument();
+    expect(make).toBeDisabled();
+    // 300 accented letters are 300 characters but 600 bytes: over what the computer takes.
+    fireEvent.change(descriptionBox(), { target: { value: 'ñ'.repeat(300) } });
+    expect(screen.getByText(/too long for the computer/)).toBeInTheDocument();
+    fireEvent.change(descriptionBox(), { target: { value: 'a calm song' } });
+    expect(screen.getByText('11 / 500 characters. Say the style, the instruments, the voice and the mood.')).toBeInTheDocument();
     fireEvent.change(lyricsBox(), { target: { value: 'é'.repeat(4097) } });
     expect(screen.getByText('The lyrics are too long (8 KB at most).')).toBeInTheDocument();
     expect(make).toBeDisabled();
@@ -200,13 +260,180 @@ describe('the form', () => {
     expect(posted).toBeNull();
   });
 
+  it('"No vocals" needs no lyrics and sends the instrumental mode', async () => {
+    renderPage();
+    await screen.findByTestId('next-action');
+    fireEvent.change(descriptionBox(), { target: { value: 'ambient piano, rain' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'No vocals (instrumental)' }));
+    expect(screen.queryByRole('textbox', { name: 'Your lyrics' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Make the song' }));
+    await waitFor(() => expect(posted).not.toBeNull());
+    expect(fields(posted!)).toMatchObject({ lyrics_mode: 'instrumental', description: 'ambient piano, rain', title: '' });
+  });
+
   it('a refusal shows its doctor code (429 LAI-SVC-153)', async () => {
     postAnswer = () => HttpResponse.json({ statusCode: 429, message: 'You already have songs waiting. Wait for one to finish, then try again.', details: { code: 'LAI-SVC-153' } }, { status: 429 });
     renderPage();
     await screen.findByTestId('next-action');
+    fireEvent.change(descriptionBox(), { target: { value: 'a song' } });
     fireEvent.change(lyricsBox(), { target: { value: 'A song' } });
     fireEvent.click(screen.getByRole('button', { name: 'Make the song' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/songs waiting.*\(LAI-SVC-153\)/);
+  });
+});
+
+describe('titles and the AI helpers (#568)', () => {
+  it('AI off: "Suggest a title" gives the title made from the words; "Write lyrics for me" is disabled with the reason and the fix', async () => {
+    renderPage();
+    await screen.findByTestId('next-action');
+    expect(await screen.findByTestId('ai-off-reason')).toHaveTextContent('the AI is turned off on this cloud. An administrator can turn it on, or write your own lyrics.');
+    expect(screen.getByRole('radio', { name: 'Write lyrics for me' })).toBeDisabled();
+    fireEvent.change(descriptionBox(), { target: { value: 'folk' } });
+    fireEvent.change(lyricsBox(), { target: { value: 'walking to the river' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest a title' }));
+    await waitFor(() => expect(titleBox()).toHaveValue('Walking To The River'));
+    expect(screen.getByText('Made from your words. You can change it.')).toBeInTheDocument();
+    expect(titleAsked).toEqual([{ lyrics: 'walking to the river', description: 'folk', lyricsMode: 'mine', language: 'en', uiLanguage: 'en' }]);
+  });
+
+  it('no AI model for the person: the reason says how to fix it', async () => {
+    assist = { ai: { available: false, reason: 'no_model' } };
+    renderPage();
+    expect(await screen.findByText(/no AI model is set up for you\. Add an AI key in Settings, or write your own lyrics\./)).toBeInTheDocument();
+  });
+
+  it('AI on: the model\'s title, and "Write lyrics for me" fills the editable lyrics box', async () => {
+    assist = { ai: { available: true, reason: null } };
+    titleAnswer = { title: 'Harbour Secrets', source: 'ai' };
+    renderPage();
+    await screen.findByTestId('next-action');
+    const aiMode = await screen.findByRole('radio', { name: 'Write lyrics for me' });
+    await waitFor(() => expect(aiMode).toBeEnabled());
+    expect(screen.queryByTestId('ai-off-reason')).toBeNull();
+    fireEvent.change(descriptionBox(), { target: { value: 'a slow ballad about the sea' } });
+    fireEvent.click(aiMode);
+    fireEvent.click(screen.getByRole('button', { name: 'Write the lyrics' }));
+    await waitFor(() => expect(lyricsBox()).toHaveValue('[verse]\nThe sea is wide'));
+    expect(screen.getByText(/Read and change them before you make the song/)).toBeInTheDocument();
+    fireEvent.change(lyricsBox(), { target: { value: '[verse]\nThe sea is wide and mine' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest a title' }));
+    await waitFor(() => expect(titleBox()).toHaveValue('Harbour Secrets'));
+    expect(screen.getByText('Suggested by the AI. You can change it.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Make the song' }));
+    await waitFor(() => expect(posted).not.toBeNull());
+    expect(fields(posted!)).toMatchObject({ lyrics_mode: 'ai', lyrics: '[verse]\r\nThe sea is wide and mine', title: 'Harbour Secrets' });
+  });
+
+  it('AI failing: the lyrics refusal is shown and the box stays as it was', async () => {
+    assist = { ai: { available: true, reason: null } };
+    lyricsAnswer = () => HttpResponse.json({ statusCode: 502, message: 'The AI could not write lyrics this time. Try again, or write your own lyrics.', details: { reason: 'ai_failed' } }, { status: 502 });
+    renderPage();
+    await screen.findByTestId('next-action');
+    const aiMode = await screen.findByRole('radio', { name: 'Write lyrics for me' });
+    await waitFor(() => expect(aiMode).toBeEnabled());
+    fireEvent.change(descriptionBox(), { target: { value: 'a slow ballad' } });
+    fireEvent.click(aiMode);
+    fireEvent.click(screen.getByRole('button', { name: 'Write the lyrics' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The AI could not write lyrics this time.');
+    expect(lyricsBox()).toHaveValue('');
+  });
+});
+
+describe('My prompts (#568)', () => {
+  it('lists the saved prompts with title, description, last used and songs; Open loads one into the form', async () => {
+    prompts = [musicPrompt(), musicPrompt({ id: 'b0000000-0000-4000-8000-000000000003', title: 'Quiet Night', songCount: 1, description: 'lofi beat' })];
+    renderPage();
+    const item = await screen.findByTestId(`prompt-${PROMPT_ID}`);
+    expect(item).toHaveTextContent('Harbour Lights');
+    expect(item).toHaveTextContent('a slow ballad about the sea');
+    expect(item).toHaveTextContent(/Last used .* · 2 songs/);
+    expect(screen.getByTestId('prompt-b0000000-0000-4000-8000-000000000003')).toHaveTextContent('1 song');
+    fireEvent.click(within(item).getByRole('button', { name: 'Open Harbour Lights' }));
+    await waitFor(() => expect(titleBox()).toHaveValue('Harbour Lights'));
+    expect(descriptionBox()).toHaveValue('a slow ballad about the sea, soft piano, warm voice');
+    expect(lyricsBox()).toHaveValue('[verse]\nPerson A walks by the harbour');
+    expect(screen.getByRole('heading', { name: 'Prompt: Harbour Lights' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save as new' })).toBeInTheDocument();
+  });
+
+  it('Save changes the loaded prompt; Save as new makes a copy with its saved sample; New prompt empties the form', async () => {
+    prompts = [musicPrompt({ hasSample: true, sampleMime: 'audio/wav', sampleBytes: 1_200_000, sampleMode: 'sounds_like' })];
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Harbour Lights' }));
+    await waitFor(() => expect(titleBox()).toHaveValue('Harbour Lights'));
+    expect(screen.getByTestId('saved-sample')).toHaveTextContent('This prompt has a saved sample (1.2 MB)');
+    fireEvent.change(titleBox(), { target: { value: 'Harbour Lights Two' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(promptWrites).toHaveLength(1));
+    expect(promptWrites[0]).toMatchObject({ method: 'PATCH', id: PROMPT_ID, body: { title: 'Harbour Lights Two', description: 'a slow ballad about the sea, soft piano, warm voice', lyricsMode: 'mine', variations: 2, durationS: 90, sampleMode: 'sounds_like', uiLanguage: 'en' } });
+    expect(await screen.findByTestId(`prompt-${PROMPT_ID}`)).toHaveTextContent('Harbour Lights Two');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save as new' }));
+    await waitFor(() => expect(promptWrites).toHaveLength(2));
+    expect(promptWrites[1]).toMatchObject({ method: 'POST', body: { title: 'Harbour Lights Two', copySampleFrom: PROMPT_ID } });
+    await waitFor(() => expect(within(screen.getByTestId('prompt-b0000000-0000-4000-8000-000000000002')).getByRole('button', { name: 'Open now Harbour Lights Two' })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'New prompt' }));
+    await waitFor(() => expect(titleBox()).toHaveValue(''));
+    expect(descriptionBox()).toHaveValue('');
+    expect(screen.queryByRole('button', { name: 'Save as new' })).toBeNull();
+  });
+
+  it('Remove sample on a loaded prompt: Save sends removeSample; Make the song sends remove_sample', async () => {
+    prompts = [musicPrompt({ hasSample: true, sampleMime: 'audio/wav', sampleBytes: 5000 })];
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Harbour Lights' }));
+    await screen.findByTestId('saved-sample');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove sample' }));
+    expect(screen.queryByTestId('saved-sample')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Make the song' }));
+    await waitFor(() => expect(posted).not.toBeNull());
+    expect(fields(posted!)).toMatchObject({ promptId: PROMPT_ID, remove_sample: 'true' });
+    expect(fields(posted!)).not.toHaveProperty('sample_mode');
+  });
+
+  it('Make the song from a loaded prompt sends its id and keeps using its saved sample', async () => {
+    prompts = [musicPrompt({ hasSample: true, sampleMime: 'audio/wav', sampleBytes: 5000, sampleMode: 'same_song' })];
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Harbour Lights' }));
+    await screen.findByTestId('saved-sample');
+    fireEvent.click(screen.getByRole('button', { name: 'Make the song' }));
+    await waitFor(() => expect(posted).not.toBeNull());
+    expect(fields(posted!)).toMatchObject({ promptId: PROMPT_ID, title: 'Harbour Lights', sample_mode: 'same_song', variations: '2', duration_s: '90' });
+    expect(posted!.has('sample')).toBe(false);
+    expect(posted!.has('remove_sample')).toBe(false);
+  });
+
+  it('Delete asks first and says the songs are kept; the songs show "prompt deleted" afterwards', async () => {
+    prompts = [musicPrompt()];
+    songs = [librarySong({ title: 'Harbour Lights' })];
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Harbour Lights' }));
+    await waitFor(() => expect(titleBox()).toHaveValue('Harbour Lights'));
+    fireEvent.click(within(screen.getByRole('form', { name: 'Prompt: Harbour Lights' })).getByRole('button', { name: 'Delete' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('"Harbour Lights" is removed from My prompts. Its 2 songs stay in the library.');
+    expect(promptWrites).toEqual([]);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(promptWrites).toEqual([{ method: 'DELETE', id: PROMPT_ID, body: { confirm: PROMPT_ID } }]));
+    await waitFor(() => expect(screen.queryByTestId(`prompt-${PROMPT_ID}`)).toBeNull());
+    expect(titleBox()).toHaveValue('');
+    await waitFor(() => expect(screen.getByTestId(`song-${songs[0].id}`)).toHaveTextContent('prompt deleted'));
+  });
+
+  it('after a new song is made, its prompt is open in the form', async () => {
+    prompts = [];
+    postAnswer = () => {
+      prompts = [musicPrompt({ title: 'Made Now', songCount: 0 })];
+      return HttpResponse.json({ data: musicRequest({ promptId: PROMPT_ID }) }, { status: 201 });
+    };
+    renderPage();
+    await screen.findByTestId('next-action');
+    fireEvent.change(descriptionBox(), { target: { value: 'folk' } });
+    fireEvent.change(lyricsBox(), { target: { value: 'la la' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Make the song' }));
+    expect(await screen.findByRole('heading', { name: 'Prompt: Made Now' })).toBeInTheDocument();
+    expect(await screen.findByTestId(`prompt-${PROMPT_ID}`)).toHaveTextContent('Made Now');
   });
 });
 
@@ -279,10 +506,17 @@ describe('language and accessibility', () => {
     expect(screen.getByTestId('readiness-ai-n2')).toHaveTextContent('Puede cargar música');
     expect(screen.getByRole('button', { name: 'Cambiar Studio laptop a Música' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Crear la canción' })).toBeDisabled();
+    expect(screen.getByRole('heading', { name: 'Mis indicaciones' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nueva indicación' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /Describa su canción/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sugerir un título' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Sin voz (instrumental)' })).toBeInTheDocument();
+    expect(await screen.findByTestId('ai-off-reason')).toHaveTextContent('la IA está apagada en esta nube');
   });
 
   it('has no axe violations', async () => {
     songs = [librarySong()];
+    prompts = [musicPrompt()];
     const { container } = renderPage();
     await screen.findByRole('button', { name: 'Play Morning light' });
     let results: Awaited<ReturnType<typeof runAxe>> | undefined;

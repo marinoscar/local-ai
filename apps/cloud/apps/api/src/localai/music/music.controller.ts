@@ -48,7 +48,7 @@ export class MusicController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary:
-      'Make music on a node: multipart fields nodeId, lyrics (<= 8 KiB), tags (<= 512 B), duration_s (10-240), language, seed, variations (1-4), sample_mode, strength, and an optional file `sample` (wav/mp3/flac/ogg, <= 20 MiB). 201 with the request. 400/413/415 LAI-SVC-154, 429 LAI-SVC-153, 404 unknown node, 409 LAI-CLD-035, 422 LAI-CLD-034, 503 storage not set up',
+      'Make music on a node: multipart fields nodeId, description (<= 500 characters and 512 B; an older client sends tags), lyrics_mode (mine|ai|instrumental; instrumental sends [Instrumental]), lyrics (<= 8 KiB), title (<= 80 characters; empty: generated), ui_language, promptId (save into and make from that saved prompt; without it a new prompt is saved), remove_sample, duration_s (10-240), language, seed, variations (1-4), sample_mode, strength, and an optional file `sample` (wav/mp3/flac/ogg, <= 20 MiB). 201 with the request. 400/413/415 LAI-SVC-154, 429 LAI-SVC-153, 404 unknown node or prompt, 409 LAI-CLD-035, 422 LAI-CLD-034, 503 storage not set up',
   })
   async create(
     @Req() request: unknown,
@@ -60,7 +60,6 @@ export class MusicController {
     const form = await readMusicForm(request);
     const parsed = MusicRequestFieldsSchema.safeParse(form.fields);
     if (!parsed.success) throw musicInputRejected(parsed.error);
-    if (form.sample === null && (parsed.data.sample_mode !== undefined || parsed.data.strength !== undefined)) throw musicInputRejected(null, 'sample_settings_without_sample');
     const view = await this.music.create(parsed.data, form.sample, requesterOf(user), sourceOf(credential, client));
     void reply.status(201);
     return view;

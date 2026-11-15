@@ -224,6 +224,10 @@ describe('describeAudit: the E11 music and workload actions', () => {
     });
     expect(describeAudit(row('localai.music.song_deleted', 'localai_music_song', 's1', { nodeId: 'ai-n2' })).summary).toBe('Deleted a song made on ai-n2');
     expect(describeAudit(row('localai.music.request_cancelled', 'localai_music_request', 'r1', {})).summary).toBe('Music request cancelled');
+    // #568: the saved prompts, with no text from the prompt even if a row carried some.
+    expect(describeAudit(row('localai.music.prompt_created', 'localai_music_prompt', 'p1', { title: 'Person A song' }))).toMatchObject({ summary: 'Music prompt saved', link: '/music' });
+    expect(describeAudit(row('localai.music.prompt_updated', 'localai_music_prompt', 'p1', {})).summary).toBe('Music prompt changed');
+    expect(describeAudit(row('localai.music.prompt_deleted', 'localai_music_prompt', 'p1', { songsKept: 2 })).summary).toBe('Music prompt deleted (its songs are kept)');
     expect(describeAudit(row('localai.workload.requested', 'localai_node', 'ai-n2', { name: 'music' }))).toEqual({
       summary: 'Switch to music requested on ai-n2',
       link: '/lab/nodes/ai-n2',

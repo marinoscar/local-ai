@@ -2,10 +2,11 @@
 // registries (`platform/registrations.ts` registers it beside `app.ownership.ts`).
 //
 // The lab is one deployment-wide control plane: none of these tables carries an `org_id` and none has
-// row-level security. Every model is therefore `system`, except the gateway key, and the only link to a
-// person is an ACTOR column (who created, requested or approved), registered below so the
-// `userOwnedData` suite can prove each `onDelete` agrees with the purge policy. Gateway keys
-// (`localai_gateway_keys`) are the one user-owned model (kind `user`): their registration is
+// row-level security. Every model is therefore `system`, except the gateway key and the music prompt, and the only
+// link to a person is an ACTOR column (who created, requested or approved), registered below so the
+// `userOwnedData` suite can prove each `onDelete` agrees with the purge policy. A person's music prompts
+// (`localai_music_prompts`, #568) are user-owned (kind `user`, deleted with the user). Gateway keys
+// (`localai_gateway_keys`) are the other user-owned model (kind `user`): their registration is
 // `gateway/gateway.user-data.ts`, spread into `LOCALAI_USER_OWNED_MODELS` below. The three other gateway tables
 // (usage, daily usage, model policies) are deployment-wide `system` data.
 import type { ModelOwnershipDef, UserOwnedModelDef } from '@marinoscar/platform-api/core';
@@ -26,6 +27,7 @@ type LocalaiModelName = Extract<
   | 'LocalaiModelPolicy'
   | 'LocalaiMusicRequest'
   | 'LocalaiMusicSong'
+  | 'LocalaiMusicPrompt'
 >;
 
 export const LOCALAI_MODEL_OWNERSHIP: readonly ModelOwnershipDef<LocalaiModelName>[] = [
@@ -85,6 +87,11 @@ export const LOCALAI_MODEL_OWNERSHIP: readonly ModelOwnershipDef<LocalaiModelNam
     kind: 'system',
     rationale: 'One song of a music request in the lab-wide library; it follows its request and has no owner column.',
   },
+  {
+    model: 'LocalaiMusicPrompt',
+    kind: 'user',
+    rationale: "A person's own saved music prompt (title, description, lyrics, settings): read by its owner only, deleted with them (#568).",
+  },
 ];
 
 export const LOCALAI_USER_OWNED_MODELS: readonly UserOwnedModelDef<LocalaiModelName>[] = [
@@ -115,6 +122,15 @@ export const LOCALAI_USER_OWNED_MODELS: readonly UserOwnedModelDef<LocalaiModelN
     purge: 'detach',
     export: 'exclude',
     rationale: 'A request in the lab music library; it records who asked and outlives that user (SetNull). The lyrics are never stored in it.',
+  },
+  {
+    model: 'LocalaiMusicPrompt',
+    ownerField: 'ownerId',
+    purge: 'delete',
+    export: 'include',
+    exportOmit: ['ownerId', 'sampleKey', 'sampleSha256'],
+    rationale:
+      "A person's own music prompt: deleted with the user (Cascade); its songs stay in the lab library (prompt_id becomes NULL). The export carries the title, description, lyrics and settings, never the storage key of the sample.",
   },
   ...GATEWAY_USER_OWNED_MODELS,
 ];

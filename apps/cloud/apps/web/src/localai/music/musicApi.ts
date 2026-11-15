@@ -1,4 +1,4 @@
-// The music routes of the cloud (docs/specs/cloud-app.md section 3.9, #513) and the workload switch. The page never
+// The music routes of the cloud (docs/specs/cloud-app.md section 3.9, #513, #568) and the workload switch. The page never
 // talks to a node: it asks the cloud, which queues a command the node pulls. Shapes mirror
 // `apps/api/src/localai/music/music.views.ts`.
 import { api } from '../../api';
@@ -7,6 +7,8 @@ import type { CommandView } from '../api/types';
 export type MusicReadiness = 'ready' | 'can_load' | 'too_little_vram' | 'offline' | 'no_music';
 export type MusicStage = 'queued' | 'generating' | 'done' | 'failed' | 'expired' | 'cancelled';
 export type SampleMode = 'sounds_like' | 'same_song';
+/** How the song gets its words (#568): the person's own, written by the cloud's AI, or none (an instrumental). */
+export type LyricsMode = 'mine' | 'ai' | 'instrumental';
 
 export interface WorkloadItem {
   name: string;
@@ -44,6 +46,9 @@ export interface MusicRequest {
   stage: MusicStage;
   title: string;
   tags: string;
+  /** The saved prompt it was made from; null once that prompt is deleted. */
+  promptId: string | null;
+  lyricsMode: LyricsMode | null;
   lyricsBytes: number;
   durationS: number;
   language: string;
@@ -63,6 +68,8 @@ export interface MusicRequest {
 
 export interface LibrarySong extends MusicSong {
   requestId: string;
+  /** Null when the prompt it was made from was deleted (the song stays). */
+  promptId: string | null;
   nodeId: string;
   nodeName: string;
   title: string;
@@ -81,16 +88,71 @@ export interface Page<T> {
   totalPages: number;
 }
 
+/** One saved prompt in the history (#568): no lyrics (they come with the single prompt). */
+export interface MusicPromptSummary {
+  id: string;
+  title: string;
+  description: string;
+  lyricsMode: LyricsMode;
+  hasSample: boolean;
+  songCount: number;
+  lastUsedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One saved prompt, everything the form loads. */
+export interface MusicPrompt extends MusicPromptSummary {
+  lyrics: string;
+  durationS: number;
+  language: string;
+  seed: number | null;
+  variations: number;
+  sampleMime: string | null;
+  sampleBytes: number | null;
+  sampleMode: SampleMode | null;
+  strength: number | null;
+}
+
+/** What the form saves as a prompt (`POST /prompts`, `PATCH /prompts/:id`). */
+export interface MusicPromptInput {
+  title: string;
+  description: string;
+  lyricsMode: LyricsMode;
+  lyrics: string;
+  durationS: number;
+  language: string;
+  seed: number | null;
+  variations: number;
+  sampleMode?: SampleMode | null;
+  strength?: number | null;
+  uiLanguage: 'en' | 'es';
+}
+
+/** Whether the AI helpers work for this person now (`GET /assist`). */
+export interface MusicAssist {
+  ai: { available: true; reason: null } | { available: false; reason: 'ai_off' | 'no_model' };
+}
+
 /** What the form sends (the multipart field names of `POST /api/localai/music/requests`). */
 export interface MusicRequestInput {
   nodeId: string;
+  title: string;
+  description: string;
+  lyricsMode: LyricsMode;
   lyrics: string;
-  tags: string;
+  uiLanguage: 'en' | 'es';
+  /** Save into (and make from) this saved prompt; without it the cloud saves a new one. */
+  promptId?: string;
+  /** Do not reuse the saved prompt's sample (and drop it from the prompt). */
+  removeSample?: boolean;
   durationS: number;
   language: string;
   variations: number;
   seed?: number;
   sample?: File;
+  /** The saved prompt's sample is used (no new file): the sample settings are sent too. */
+  keepsSavedSample?: boolean;
   sampleMode?: SampleMode;
   strength?: number;
 }
@@ -98,6 +160,10 @@ export interface MusicRequestInput {
 /** The limits the API enforces (LAI-SVC-154), checked here first so a person sees them before uploading. */
 export const LYRICS_MAX_BYTES = 8 * 1024;
 export const TAGS_MAX_BYTES = 512;
+/** "Describe your song": 500 characters, and the node's 512 bytes (it is sent as the command's tags). */
+export const DESCRIPTION_MAX_CHARS = 500;
+export const TITLE_MAX_CHARS = 80;
+export const charCount = (text: string): number => [...text].length;
 export const SAMPLE_MAX_BYTES = 20 * 1024 * 1024;
 export const utf8Bytes = (text: string): number => new TextEncoder().encode(text).length;
 
@@ -108,17 +174,22 @@ export const listMusicNodes = (): Promise<MusicNode[]> => api.get<MusicNode[]>(`
 export function createMusicRequest(input: MusicRequestInput): Promise<MusicRequest> {
   const form = new FormData();
   form.append('nodeId', input.nodeId);
+  form.append('title', input.title);
+  form.append('description', input.description);
+  form.append('lyrics_mode', input.lyricsMode);
   form.append('lyrics', input.lyrics);
-  form.append('tags', input.tags);
+  form.append('ui_language', input.uiLanguage);
+  if (input.promptId) form.append('promptId', input.promptId);
+  if (input.removeSample) form.append('remove_sample', 'true');
   form.append('duration_s', String(input.durationS));
   form.append('language', input.language);
   form.append('variations', String(input.variations));
   if (input.seed !== undefined) form.append('seed', String(input.seed));
-  if (input.sample) {
+  if (input.sample || input.keepsSavedSample) {
     if (input.sampleMode) form.append('sample_mode', input.sampleMode);
     if (input.strength !== undefined) form.append('strength', String(input.strength));
-    form.append('sample', input.sample, input.sample.name);
   }
+  if (input.sample) form.append('sample', input.sample, input.sample.name);
   return api.postFormData<MusicRequest>(`${music}/requests`, form);
 }
 
@@ -134,6 +205,22 @@ export const songAudioUrl = (id: string, download = false): Promise<{ url: strin
 /** Deletes the cloud copy (the node keeps its own). The typed confirmation is the song's id, sent by the dialog. */
 export const deleteSong = (id: string): Promise<{ id: string; deleted: true }> =>
   api.delete<{ id: string; deleted: true }>(`${music}/songs/${encodeURIComponent(id)}`, { body: JSON.stringify({ confirm: id }) });
+
+// --- the prompt history and the writing helpers (#568) ------------------------------------------------------------
+
+export const listPrompts = (page = 1, pageSize = 20): Promise<Page<MusicPromptSummary>> => api.get<Page<MusicPromptSummary>>(`${music}/prompts?page=${page}&pageSize=${pageSize}`);
+export const getPrompt = (id: string): Promise<MusicPrompt> => api.get<MusicPrompt>(`${music}/prompts/${encodeURIComponent(id)}`);
+export const createPrompt = (input: MusicPromptInput & { copySampleFrom?: string }): Promise<MusicPrompt> => api.post<MusicPrompt>(`${music}/prompts`, input);
+export const updatePrompt = (id: string, input: Partial<MusicPromptInput> & { removeSample?: true }): Promise<MusicPrompt> =>
+  api.patch<MusicPrompt>(`${music}/prompts/${encodeURIComponent(id)}`, input);
+/** Deletes a saved prompt; its songs stay. The typed confirmation is the prompt's id, sent by the dialog. */
+export const deletePrompt = (id: string): Promise<{ id: string; deleted: true }> =>
+  api.delete<{ id: string; deleted: true }>(`${music}/prompts/${encodeURIComponent(id)}`, { body: JSON.stringify({ confirm: id }) });
+export const getAssist = (): Promise<MusicAssist> => api.get<MusicAssist>(`${music}/assist`);
+export const suggestTitle = (input: { lyrics: string; description: string; lyricsMode: LyricsMode; language: string; uiLanguage: 'en' | 'es' }): Promise<{ title: string; source: 'ai' | 'generated' }> =>
+  api.post<{ title: string; source: 'ai' | 'generated' }>(`${music}/title-suggestion`, input);
+export const suggestLyrics = (input: { description: string; language: string; title?: string }): Promise<{ lyrics: string; source: 'ai' }> =>
+  api.post<{ lyrics: string; source: 'ai' }>(`${music}/lyrics-suggestion`, input);
 
 /** Queues `localai.workload.activate`; the answer is the command, polled at `GET /api/localai/commands/:id`. */
 export const activateWorkload = (nodeId: string, name: string): Promise<CommandView> =>

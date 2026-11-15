@@ -13,7 +13,15 @@ import {
   AUDIT_GATEWAY_KEY_UPDATED,
   AUDIT_GATEWAY_POLICY_UPDATED,
 } from '../gateway/gateway.audit';
-import { AUDIT_MUSIC_REQUEST_CANCELLED, AUDIT_MUSIC_REQUESTED, AUDIT_MUSIC_SONG_DELETED, AUDIT_WORKLOAD_REQUESTED } from '../music/music-audit';
+import {
+  AUDIT_MUSIC_PROMPT_CREATED,
+  AUDIT_MUSIC_PROMPT_DELETED,
+  AUDIT_MUSIC_PROMPT_UPDATED,
+  AUDIT_MUSIC_REQUEST_CANCELLED,
+  AUDIT_MUSIC_REQUESTED,
+  AUDIT_MUSIC_SONG_DELETED,
+  AUDIT_WORKLOAD_REQUESTED,
+} from '../music/music-audit';
 import { VPS_AUDIT_ACTIONS } from '../vps/vps.constants';
 
 export interface AuditGroup {
@@ -84,6 +92,9 @@ export const KNOWN_AUDIT_ACTIONS: readonly AuditActionDef[] = [
   { action: AUDIT_MUSIC_REQUESTED, label: 'Music requested' },
   { action: AUDIT_MUSIC_REQUEST_CANCELLED, label: 'Music request cancelled' },
   { action: AUDIT_MUSIC_SONG_DELETED, label: 'Song deleted' },
+  { action: AUDIT_MUSIC_PROMPT_CREATED, label: 'Music prompt saved' },
+  { action: AUDIT_MUSIC_PROMPT_UPDATED, label: 'Music prompt changed' },
+  { action: AUDIT_MUSIC_PROMPT_DELETED, label: 'Music prompt deleted' },
   { action: AUDIT_WORKLOAD_REQUESTED, label: 'Workload switch requested' },
 ];
 
@@ -104,4 +115,4 @@ export const AUDIT_TARGET_COMMAND = 'localai_command';
 export const AUDIT_TARGET_CATALOG = 'localai_catalog';
 export const AUDIT_TARGET_ALERT = 'localai_alert';
 export const AUDIT_TARGET_VPS = 'localai_vps';
-export { AUDIT_TARGET_MUSIC_REQUEST, AUDIT_TARGET_MUSIC_SONG } from '../music/music-audit';
+export { AUDIT_TARGET_MUSIC_PROMPT, AUDIT_TARGET_MUSIC_REQUEST, AUDIT_TARGET_MUSIC_SONG } from '../music/music-audit';

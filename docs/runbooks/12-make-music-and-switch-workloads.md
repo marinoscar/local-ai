@@ -8,12 +8,13 @@ Use this when you want a node to **make music** from your lyrics, or to switch a
 > - Deleting a song needs the **admin PIN** on the node or in the desktop app.
 > - **Time:** switching to Music takes about 1 minute (the music engine itself starts in about 20 seconds); a 1-minute song takes about 20 seconds on a 12 GB graphics card.
 
-> 🛠 Verify when implemented (Epic E11: #509 workloads, #510 music API, #512 local page, #514 website page, #515 desktop app).
+> 🛠 Verify when implemented (Epic E11: #509 workloads, #510 music API, #512 local page, #514 website page, #515 desktop app, #568 website prompts and titles).
 
 **Words used on this page**
 - **Workload:** what the computer is set up to do right now, for example **Coding**, **Chat and photos** or **Music**. The graphics card has room for only one big job at a time, so choosing **Music** stops the coding AI, and choosing **Coding** stops the music maker.
 - **Lyrics:** the words of the song. Parts of the song are marked with tags in square brackets, such as `[verse]` and `[chorus]`.
-- **Style:** a few words that describe the sound, for example `folk, acoustic guitar, warm`.
+- **Style:** a few words that describe the sound, for example `folk, acoustic guitar, warm`. On the website this box is called **Describe your song**, and you may write a whole sentence.
+- **Prompt:** on the website, everything you typed for a song (title, description, lyrics, settings and sample). The website keeps your prompts under **My prompts**, so you can open one again, change it, make it again or delete it (Part 5).
 - **Sample:** a short piece of audio you add so the song follows it. **Sounds like this** borrows its style. **Same song, my lyrics** keeps its melody and sings your words over it.
 - **Version:** the computer can make up to 4 different songs from the same lyrics at once.
 
@@ -74,7 +75,7 @@ Choose **one** of the four ways below. They all do the same thing.
 The song is made on the node. You can ask for it on the node itself (the **Music** page, the desktop app's **Music** button) or from the website (`https://ai.marin.cr/music`). The steps are the same; the differences are noted.
 
 11. Open the **Music** page: in the desktop app press **Music** in the top bar; on the node's browser go to `http://127.0.0.1:7070/music/`; on the website open `https://ai.marin.cr/music` and choose the node at the top right.
-    - **What you should see:** the first line says "Music is ready" (on the website: the node shows `Music ✔`), and a form with **Lyrics**, **Style**, **Length**, **Language**, **How many versions**.
+    - **What you should see:** the first line says "Music is ready" (on the website: the node shows `Music ✔`), and a form with **Lyrics**, **Style**, **Length**, **Language**, **How many versions**. On the website the form starts with **Title** and **Describe your song**, and under **Lyrics** you choose **Use my lyrics**, **Write lyrics for me** or **No vocals (instrumental)** (Part 5).
     - **If it doesn't work:** `LAI-SVC-151` means music is not running on that computer: press **Switch to Music** (Part 1).
 12. Type your lyrics in **Lyrics**. Put each part under a tag. An invented example:
 
@@ -103,7 +104,7 @@ The song is made on the node. You can ask for it on the node itself (the **Music
     - **What you should see:** a progress bar under **Requests** (on the website: "running"), then the new songs at the top of **My songs**. A 1-minute song takes about 20 seconds on a 12 GB graphics card, a little more on the website.
     - **If it doesn't work:** `LAI-SVC-153`: four songs are already waiting; wait for one to finish. `LAI-SVC-155`: the disk is almost full; delete old songs (step 18). `LAI-SVC-152`: the music program stopped in the middle; press **Switch to Music** again and retry. On the website also `LAI-SVC-156` (the sample did not reach the node: send it again) and `LAI-SVC-157` (the song could not be sent back; it is kept on the node). To stop a song, press **Cancel**; it shows `LAI-SVC-158`, which is not an error.
 16. Press **▶** on a song to listen.
-    - **What you should see:** the song plays. The title is the first line of your lyrics.
+    - **What you should see:** the song plays. The title is the first line of your lyrics (on the website: the **Title** you typed, or one made from your words).
     - **If it doesn't work:** turn up the computer's volume; try another version of the song.
 17. Press **Download** to save the song.
     - **What you should see:** a `.wav` file in your **Downloads** folder (in the desktop app: in your **Music** or **Downloads** folder).
@@ -129,6 +130,38 @@ The song is made on the node. You can ask for it on the node itself (the **Music
     - **What you should see:** the last lines the music program wrote, with times. They never contain your lyrics.
     - **If it doesn't work:** send the last 20 lines and the code to the lab owner.
 
+## Part 5. On the website: your prompts and song titles
+
+The website (`https://ai.marin.cr/music`) keeps every prompt you make a song from under **My prompts**. A song keeps the title and settings it was made with, even if you change or delete its prompt later.
+
+21. Write the song's words for the website. In **Describe your song**, write the song in plain words, for example `a slow ballad about the sea, soft piano, warm voice, 80 bpm` (at most 500 characters). Under **Lyrics**, choose one:
+    - **Use my lyrics**: type or paste your lyrics in **Your lyrics**.
+    - **Write lyrics for me**: press **Write the lyrics**. The AI writes lyrics from your description and puts them in **Your lyrics**. Read them and change what you want.
+    - **No vocals (instrumental)**: the song is made without singing.
+    - **What you should see:** the counter under **Describe your song** (for example `60 / 500 characters`), and your lyrics in the box, or the line "The song is made without singing."
+    - **If it doesn't work:** if **Write lyrics for me** is grey, the line under it says why: the AI is turned off on this cloud, or no AI model is set up for you. Ask the lab owner to turn the AI on, or choose **Use my lyrics** and write them yourself. "The description is too long for the computer" means it has many accented letters or symbols: shorten it a little.
+22. Give the song a title. Type it in **Title** (at most 80 characters), or press **Suggest a title**. Or leave it empty.
+    - **What you should see:** a title in the box, with "Suggested by the AI" or "Made from your words" under it. If you leave it empty, the song gets the first line of your lyrics, or the first words of your description, or "Untitled song".
+    - **If it doesn't work:** **Suggest a title** always gives a title; when the AI is off it makes one from your words. Change it if you don't like it.
+23. Press **Make the song** (Part 2, step 15).
+    - **What you should see:** the song under **Requests**, and your prompt at the top of **My prompts**, open in the form.
+    - **If it doesn't work:** see step 15.
+24. To use an old prompt again, find it under **My prompts** (each one shows its title, its description, when you last used it and how many songs it made) and press **Open**.
+    - **What you should see:** the form filled with that prompt, its title at the top ("Prompt: …"), and the buttons **Save**, **Save as new** and **Delete**. If it has a saved sample, the line "This prompt has a saved sample" is shown.
+    - **If it doesn't work:** press **Try again** next to "Could not load your prompts", or reload the page.
+25. Change what you want, then choose:
+    - **Save**: keeps the changes in this prompt. Songs you already made do not change.
+    - **Save as new**: keeps the changes as a new prompt, and the old one stays as it was (with the same sample).
+    - **Make the song**: makes a song now and saves what you typed into this prompt. The saved sample is used again; press **Remove sample** first if you do not want it.
+    - **What you should see:** "Saved.", or the new song under **Requests**. The prompt moves to the top of **My prompts**.
+    - **If it doesn't work:** an error with a code: see step 15 and Part 4.
+26. To start from nothing, press **New prompt**.
+    - **What you should see:** an empty form titled "New song".
+    - **If it doesn't work:** reload the page.
+27. To delete a prompt, open it and press **Delete**, then **Delete** again in the box that asks.
+    - **What you should see:** the box says the songs stay in the library. The prompt leaves **My prompts**; its songs stay under **Songs**, marked "prompt deleted".
+    - **If it doesn't work:** an error says why; try again. Deleting a prompt never deletes a song. To delete a song, use step 18.
+
 ---
 
 # 12. Hacer una canción, y cambiar lo que hace una computadora
@@ -141,12 +174,13 @@ Use esta página cuando quiera que un nodo **haga música** con su letra, o para
 > - Borrar una canción pide el **PIN de administrador** en el nodo o en la app de escritorio.
 > - **Tiempo:** cambiar a Música toma alrededor de 1 minuto (el motor de música arranca en unos 20 segundos); una canción de 1 minuto toma unos 20 segundos con una tarjeta gráfica de 12 GB.
 
-> 🛠 Verify when implemented (Epic E11: #509, #510, #512, #514, #515).
+> 🛠 Verify when implemented (Epic E11: #509, #510, #512, #514, #515, #568).
 
 **Palabras de esta página**
 - **Tarea (workload):** lo que la computadora está preparada para hacer ahora, por ejemplo **Programación**, **Conversar y fotos** o **Música**. La tarjeta gráfica tiene espacio para un solo trabajo grande a la vez: al elegir **Música** se detiene la IA de programación, y al elegir **Programación** se detiene la música.
 - **Letra:** las palabras de la canción. Las partes se marcan con etiquetas entre corchetes, como `[verse]` (estrofa) y `[chorus]` (coro).
-- **Estilo:** unas palabras que describen el sonido, por ejemplo `folk, guitarra acústica, cálido`.
+- **Estilo:** unas palabras que describen el sonido, por ejemplo `folk, guitarra acústica, cálido`. En el sitio web este cuadro se llama **Describa su canción**, y puede escribir una frase completa.
+- **Indicación:** en el sitio web, todo lo que escribió para una canción (título, descripción, letra, opciones y muestra). El sitio guarda sus indicaciones en **Mis indicaciones**, para abrirlas otra vez, cambiarlas, volver a usarlas o eliminarlas (Parte 5).
 - **Muestra:** un pedazo corto de audio que usted agrega para que la canción lo siga. **Suena como esto** toma su estilo. **La misma canción, mi letra** mantiene su melodía y canta su letra encima.
 - **Versión:** la computadora puede hacer hasta 4 canciones distintas con la misma letra a la vez.
 
@@ -207,7 +241,7 @@ Elija **una** de las cuatro formas. Todas hacen lo mismo.
 La canción se hace en el nodo. Puede pedirla en el nodo mismo (la página **Música**, el botón **Música** de la app de escritorio) o desde el sitio web (`https://ai.marin.cr/music`). Los pasos son los mismos; se indican las diferencias.
 
 11. Abra la página **Música**: en la app de escritorio presione **Música** en la barra de arriba; en el navegador del nodo vaya a `http://127.0.0.1:7070/music/`; en el sitio web abra `https://ai.marin.cr/music` y elija el nodo arriba a la derecha.
-    - **Lo que debería ver:** la primera línea dice "La música está lista" (en el sitio web: el nodo muestra `Música ✔`) y un formulario con **Letra**, **Estilo**, **Duración**, **Idioma**, **Cuántas versiones**.
+    - **Lo que debería ver:** la primera línea dice "La música está lista" (en el sitio web: el nodo muestra `Música ✔`) y un formulario con **Letra**, **Estilo**, **Duración**, **Idioma**, **Cuántas versiones**. En el sitio web el formulario empieza con **Título** y **Describa su canción**, y en **Letra** elige **Usar mi letra**, **Escribir la letra por mí** o **Sin voz (instrumental)** (Parte 5).
     - **Si no funciona:** `LAI-SVC-151` significa que la música no está corriendo en esa computadora: presione **Cambiar a Música** (Parte 1).
 12. Escriba la letra en **Letra**. Ponga cada parte bajo una etiqueta. Un ejemplo inventado:
 
@@ -236,7 +270,7 @@ La canción se hace en el nodo. Puede pedirla en el nodo mismo (la página **Mú
     - **Lo que debería ver:** una barra de progreso en **Solicitudes** (en el sitio web: "en curso") y luego las canciones nuevas arriba en **Mis canciones**. Una canción de 1 minuto toma unos 20 segundos con una tarjeta gráfica de 12 GB, un poco más en el sitio web.
     - **Si no funciona:** `LAI-SVC-153`: ya hay cuatro canciones esperando; espere a que termine una. `LAI-SVC-155`: el disco está casi lleno; borre canciones viejas (paso 18). `LAI-SVC-152`: el programa de música se detuvo a la mitad; presione **Cambiar a Música** otra vez y reintente. En el sitio web también `LAI-SVC-156` (la muestra no llegó al nodo: envíela otra vez) y `LAI-SVC-157` (la canción no se pudo devolver; queda en el nodo). Para detener una canción presione **Cancelar**; muestra `LAI-SVC-158`, que no es un error.
 16. Presione **▶** en una canción para escucharla.
-    - **Lo que debería ver:** la canción suena. El título es la primera línea de su letra.
+    - **Lo que debería ver:** la canción suena. El título es la primera línea de su letra (en el sitio web: el **Título** que escribió, o uno hecho con sus palabras).
     - **Si no funciona:** suba el volumen de la computadora; pruebe otra versión.
 17. Presione **Descargar** para guardar la canción.
     - **Lo que debería ver:** un archivo `.wav` en su carpeta **Descargas** (en la app de escritorio: en su carpeta **Música** o **Descargas**).
@@ -261,3 +295,35 @@ La canción se hace en el nodo. Puede pedirla en el nodo mismo (la página **Mú
 20. Si el programa de música sigue fallando, lea su registro: `aictl logs --unit music`.
     - **Lo que debería ver:** las últimas líneas que escribió el programa de música, con la hora. Nunca contienen su letra.
     - **Si no funciona:** envíe las últimas 20 líneas y el código al dueño del laboratorio.
+
+## Parte 5. En el sitio web: sus indicaciones y los títulos
+
+El sitio web (`https://ai.marin.cr/music`) guarda en **Mis indicaciones** cada indicación con la que crea una canción. Una canción conserva el título y las opciones con que se hizo, aunque después cambie o elimine su indicación.
+
+21. Escriba las palabras de la canción para el sitio web. En **Describa su canción**, describa la canción con palabras sencillas, por ejemplo `una balada lenta sobre el mar, piano suave, voz cálida, 80 bpm` (500 caracteres como máximo). En **Letra**, elija una:
+    - **Usar mi letra**: escriba o pegue su letra en **Su letra**.
+    - **Escribir la letra por mí**: presione **Escribir la letra**. La IA escribe una letra con su descripción y la pone en **Su letra**. Léala y cambie lo que quiera.
+    - **Sin voz (instrumental)**: la canción se hace sin canto.
+    - **Lo que debería ver:** el contador bajo **Describa su canción** (por ejemplo `60 / 500 caracteres`), y su letra en el cuadro, o la línea "La canción se hace sin canto."
+    - **Si no funciona:** si **Escribir la letra por mí** está gris, la línea de abajo dice por qué: la IA está apagada en esta nube, o no hay un modelo de IA para usted. Pida al dueño del laboratorio que encienda la IA, o elija **Usar mi letra** y escríbala usted. "La descripción es demasiado larga para la computadora" quiere decir que tiene muchas letras con tilde o símbolos: acórtela un poco.
+22. Póngale un título a la canción. Escríbalo en **Título** (80 caracteres como máximo), o presione **Sugerir un título**. O déjelo vacío.
+    - **Lo que debería ver:** un título en el cuadro, con "Sugerido por la IA" o "Hecho con sus palabras" debajo. Si lo deja vacío, la canción recibe la primera línea de su letra, o las primeras palabras de su descripción, o "Canción sin título".
+    - **Si no funciona:** **Sugerir un título** siempre da un título; con la IA apagada lo hace con sus palabras. Cámbielo si no le gusta.
+23. Presione **Crear la canción** (Parte 2, paso 15).
+    - **Lo que debería ver:** la canción en **Solicitudes**, y su indicación arriba en **Mis indicaciones**, abierta en el formulario.
+    - **Si no funciona:** vea el paso 15.
+24. Para usar otra vez una indicación vieja, búsquela en **Mis indicaciones** (cada una muestra su título, su descripción, cuándo la usó por última vez y cuántas canciones hizo) y presione **Abrir**.
+    - **Lo que debería ver:** el formulario lleno con esa indicación, su título arriba ("Indicación: …") y los botones **Guardar**, **Guardar como nueva** y **Eliminar**. Si tiene una muestra guardada, se ve la línea "Esta indicación tiene una muestra guardada".
+    - **Si no funciona:** presione **Intentar otra vez** junto a "No se pudieron cargar sus indicaciones", o recargue la página.
+25. Cambie lo que quiera y luego elija:
+    - **Guardar**: guarda los cambios en esta indicación. Las canciones que ya hizo no cambian.
+    - **Guardar como nueva**: guarda los cambios como una indicación nueva, y la vieja queda como estaba (con la misma muestra).
+    - **Crear la canción**: crea una canción ahora y guarda lo que escribió en esta indicación. La muestra guardada se usa otra vez; presione antes **Quitar la muestra** si no la quiere.
+    - **Lo que debería ver:** "Guardado.", o la canción nueva en **Solicitudes**. La indicación sube al primer lugar de **Mis indicaciones**.
+    - **Si no funciona:** un error con un código: vea el paso 15 y la Parte 4.
+26. Para empezar de cero, presione **Nueva indicación**.
+    - **Lo que debería ver:** un formulario vacío con el título "Canción nueva".
+    - **Si no funciona:** recargue la página.
+27. Para eliminar una indicación, ábrala, presione **Eliminar** y luego **Eliminar** otra vez en el cuadro que pregunta.
+    - **Lo que debería ver:** el cuadro dice que las canciones se quedan en la biblioteca. La indicación sale de **Mis indicaciones**; sus canciones se quedan en **Canciones**, marcadas "indicación eliminada".
+    - **Si no funciona:** un error dice por qué; intente otra vez. Eliminar una indicación nunca borra una canción. Para borrar una canción, use el paso 18.
