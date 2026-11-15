@@ -6,10 +6,10 @@ name: cloud-deploy-tooling
 on:
   push:
     branches: [main]
-    paths: ['scripts/cloud-deploy-branch.sh', 'scripts/cloud-dns.sh', 'scripts/templates/**', 'scripts/check-redaction.sh', 'scripts/tests/test-cloud-deploy-branch.sh', 'scripts/tests/test-cloud-dns.sh', 'apps/cloud/**', 'packages/ui/**', '.github/workflows/cloud-deploy-branch.yml', '.github/workflows/cloud-deploy-tooling.yml']
+    paths: ['scripts/cloud-deploy-branch.sh', 'scripts/carry-deploy-version.mjs', 'scripts/check-cli-version-bump.sh', 'scripts/cloud-dns.sh', 'scripts/templates/**', 'scripts/check-redaction.sh', 'scripts/tests/test-cloud-deploy-branch.sh', 'scripts/tests/test-cloud-dns.sh', 'apps/cloud/**', 'packages/ui/**', '.github/workflows/cloud-deploy-branch.yml', '.github/workflows/cloud-deploy-tooling.yml']
   pull_request:
     branches: [main]
-    paths: ['scripts/cloud-deploy-branch.sh', 'scripts/cloud-dns.sh', 'scripts/templates/**', 'scripts/check-redaction.sh', 'scripts/tests/test-cloud-deploy-branch.sh', 'scripts/tests/test-cloud-dns.sh', 'apps/cloud/**', 'packages/ui/**', '.github/workflows/cloud-deploy-branch.yml', '.github/workflows/cloud-deploy-tooling.yml']
+    paths: ['scripts/cloud-deploy-branch.sh', 'scripts/carry-deploy-version.mjs', 'scripts/check-cli-version-bump.sh', 'scripts/cloud-dns.sh', 'scripts/templates/**', 'scripts/check-redaction.sh', 'scripts/tests/test-cloud-deploy-branch.sh', 'scripts/tests/test-cloud-dns.sh', 'apps/cloud/**', 'packages/ui/**', '.github/workflows/cloud-deploy-branch.yml', '.github/workflows/cloud-deploy-tooling.yml']
 
 permissions:
   contents: read

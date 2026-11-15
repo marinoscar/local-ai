@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-import { APP_NAME, CLI_NAME, REPO_SLUG } from '@app/shared';
+import { APP_NAME, CLI_NAME, REPO_SLUG, VERSIONED_MANIFESTS } from '@app/shared';
 import type { CreateCliOptions } from '@marinoscar/platform-cli';
 
 import { vpsExecutors } from './localai/vps-publish.executor.js';
@@ -30,4 +30,8 @@ export const APP_CLI_OPTIONS: CreateCliOptions = {
   // The OpenAI-compatible gateway (docs/specs/gateway.md section 3.1): the edge vhost must not buffer /v1/ nor cut a
   // streamed completion at 60 s. 1800 s matches the gateway's own total timeout (nginx gateway.conf).
   proxy: { streamPaths: [{ path: '/v1/', timeoutSeconds: 1800 }] },
+  // Every `deploy update` bumps the APP's version (api, web, shared), never the CLI's: the CLI keeps its own version,
+  // bumped with each CLI change (AGENTS.md, Versions; checked in CI). scripts/cloud-deploy-branch.sh carries the
+  // deployed version forward when CI republishes deploy/cloud, so a bump is never reset by the next publish (#574).
+  deploy: { versionedManifests: VERSIONED_MANIFESTS },
 };

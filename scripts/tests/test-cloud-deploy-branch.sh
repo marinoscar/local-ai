@@ -22,6 +22,26 @@ export HOME="$w/home"; mkdir -p "$HOME"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 export GIT_AUTHOR_NAME="Person A" GIT_AUTHOR_EMAIL="person.a@example.test" GIT_COMMITTER_NAME="Person A" GIT_COMMITTER_EMAIL="person.a@example.test"
 
+# setver <app-dir> <version>: the three versioned manifests and their lockfile entries, in npm's layout.
+setver() {
+  local a="$1" v="$2"
+  printf '{\n  "name": "@app/shared",\n  "version": "%s"\n}\n' "$v" >"$a/packages/shared/package.json"
+  printf '{\n  "name": "api",\n  "version": "%s"\n}\n' "$v" >"$a/apps/api/package.json"
+  printf '{\n  "name": "web",\n  "version": "%s"\n}\n' "$v" >"$a/apps/web/package.json"
+  printf '{\n  "name": "local-ai",\n  "packages": {\n    "apps/api": {\n      "version": "%s"\n    },\n    "apps/web": {\n      "version": "%s"\n    },\n    "packages/shared": {\n      "version": "%s"\n    }\n  }\n}\n' "$v" "$v" "$v" >"$a/package-lock.json"
+}
+# deploy_bump <bare> <version>: what `laictl deploy update` does on the server: a chore(release) commit pushed onto
+# deploy/cloud that changes only the versions.
+deploy_bump() {
+  local c="$w/server-$2"
+  git clone -q -b deploy/cloud "$1" "$c"
+  setver "$c" "$2"
+  git -C "$c" commit -q -am "chore(release): $2"
+  git -C "$c" push -q origin HEAD:refs/heads/deploy/cloud
+}
+branch_ver() { git -C "$1" show "deploy/cloud:$2" | sed -n 's/^  "version": "\(.*\)"$/\1/p'; }
+lock_ver() { git -C "$1" show deploy/cloud:package-lock.json | grep -A1 "\"$2\": {" | sed -n 's/^      "version": "\(.*\)"$/\1/p'; }
+
 # newsrc <dir> <bare-remote>: a source repository with a miniature apps/cloud, a symlinked packages/localai-ui and the
 # real tooling scripts, cloned from / pushing to the bare remote.
 newsrc() {
@@ -31,14 +51,14 @@ newsrc() {
   git -C "$d" remote add origin "$bare"
   mkdir -p "$d/scripts" "$d/packages/ui/src" "$d/apps/cloud/apps/api" "$d/apps/cloud/apps/web" \
            "$d/apps/cloud/packages/shared" "$d/apps/cloud/infra/compose" "$d/apps/cloud/node_modules/dep"
-  cp "$REAL/scripts/cloud-deploy-branch.sh" "$REAL/scripts/check-redaction.sh" "$d/scripts/"
+  cp "$REAL/scripts/cloud-deploy-branch.sh" "$REAL/scripts/check-redaction.sh" "$REAL/scripts/carry-deploy-version.mjs" "$d/scripts/"
   printf '{"name":"@localai/ui","version":"0.0.0"}\n' >"$d/packages/ui/package.json"
   printf 'export const a = 1;\n' >"$d/packages/ui/src/index.ts"
   ln -s ../../../packages/ui "$d/apps/cloud/packages/localai-ui"
   printf '{"name":"local-ai"}\n' >"$d/apps/cloud/package.json"
-  printf '{"name":"@app/shared"}\n' >"$d/apps/cloud/packages/shared/package.json"
-  printf '{"name":"api"}\n' >"$d/apps/cloud/apps/api/package.json"
-  printf '{"name":"web"}\n' >"$d/apps/cloud/apps/web/package.json"
+  setver "$d/apps/cloud" 0.1.0
+  printf '{"manifests":["apps/api/package.json","apps/web/package.json","packages/shared/package.json"]}\n' \
+    >"$d/apps/cloud/packages/shared/versioned-manifests.json"
   printf 'FROM scratch\nCOPY package.json ./\nCOPY apps/api ./apps/api/\nCOPY packages/localai-ui/package.json ./packages/localai-ui/\nCOPY --from=build /x /y\n' >"$d/apps/cloud/apps/api/Dockerfile"
   printf 'FROM scratch\nCOPY --chown=1:1 apps/web ./apps/web\nCOPY packages/localai-ui ./packages/localai-ui/\n' >"$d/apps/cloud/apps/web/Dockerfile"
   printf 'APP_URL=https://ai.example.test\n' >"$d/apps/cloud/infra/compose/.env.example"
@@ -132,6 +152,24 @@ t "a refused push fails the job" 1 "" "$src/$SCRIPT_REL" publish
 ok "the branch tip did not move after the refused push" "$([[ "$(git -C "$bare" rev-parse deploy/cloud)" == "$tip2" ]] && echo 0 || echo 1)"
 rm "$bare/hooks/pre-receive"
 
+echo "== publish: the deployed version is carried forward (#574)"
+deploy_bump "$bare" 0.1.1
+bumped="$(git -C "$bare" rev-parse deploy/cloud)"
+git -C "$src" checkout -q --detach HEAD~2   # src 1, older than src 2 the branch was last built from
+t "an older source is still skipped when a deploy bump sits on the tip" 0 "newer source" "$src/$SCRIPT_REL" publish
+git -C "$src" checkout -q main
+printf 'export const a = 4;\n' >"$src/packages/ui/src/index.ts"; git -C "$src" commit -q -am "src 4"
+t "a publish after a deploy bump fast-forwards" 0 "carried the deployed version 0.1.1" "$src/$SCRIPT_REL" publish
+ok "the bump commit is kept in the history" "$(git -C "$bare" merge-base --is-ancestor "$bumped" deploy/cloud && echo 0 || echo 1)"
+ok "the new code is on the branch" "$([[ "$(git -C "$bare" show deploy/cloud:packages/localai-ui/src/index.ts)" == 'export const a = 4;' ]] && echo 0 || echo 1)"
+ok "every manifest keeps the deployed version" "$([[ "$(branch_ver "$bare" apps/api/package.json)$(branch_ver "$bare" apps/web/package.json)$(branch_ver "$bare" packages/shared/package.json)" == 0.1.10.1.10.1.1 ]] && echo 0 || echo 1)"
+ok "the lockfile entries keep the deployed version" "$([[ "$(lock_ver "$bare" apps/api)$(lock_ver "$bare" packages/shared)" == 0.1.10.1.1 ]] && echo 0 || echo 1)"
+t "an unchanged source after the carry makes no commit" 0 "already up to date" "$src/$SCRIPT_REL" publish
+setver "$src/apps/cloud" 0.2.0; git -C "$src" commit -q -am "src 5: a deliberate bump on main"
+t "a higher version on main wins" 0 "is not below the deployed" "$src/$SCRIPT_REL" publish
+ok "the branch carries main's 0.2.0" "$([[ "$(branch_ver "$bare" apps/web/package.json)" == 0.2.0 ]] && echo 0 || echo 1)"
+tip2="$(git -C "$bare" rev-parse deploy/cloud)"
+
 echo "== publish: scratch branch and --no-push"
 t "deploy/cloud-test can be written" 0 "pushed deploy/cloud-test" "$src/$SCRIPT_REL" publish --branch deploy/cloud-test
 ok "deploy/cloud-test exists and deploy/cloud is untouched" "$([[ "$(git -C "$bare" rev-parse deploy/cloud)" == "$tip2" ]] && git -C "$bare" rev-parse -q --verify deploy/cloud-test >/dev/null && echo 0 || echo 1)"
@@ -144,7 +182,9 @@ rm -rf "$w/real"
 t "the real tree builds flat, redacted, with every Dockerfile COPY source present" 0 "deploy tree built" "$REAL/scripts/cloud-deploy-branch.sh" build --out "$w/real"
 ok "the real tree has no symlink" "$([[ -z "$(find "$w/real" -type l)" ]] && echo 0 || echo 1)"
 ok "the real tree has the shared UI package as a real directory" "$([[ -f "$w/real/packages/localai-ui/package.json" && ! -L "$w/real/packages/localai-ui" ]] && echo 0 || echo 1)"
-ok "the web image copies what its type check imports (lab fixture)" "$(grep -q 'apps/api/test/fixtures/localai' "$w/real/apps/web/Dockerfile" && [[ -f "$w/real/apps/api/test/fixtures/localai/lab-3-nodes.json" ]] && echo 0 || echo 1)"
+ok "the web image build type-checks only the shipped sources (#574)" "$(grep -q '"build": "tsc -p tsconfig.build.json' "$w/real/apps/web/package.json" && grep -q '"files": \["src/main.tsx"' "$w/real/apps/web/tsconfig.build.json" && echo 0 || echo 1)"
+ok "the web image copies no test fixture" "$(grep -q 'test/fixtures' "$w/real/apps/web/Dockerfile" && echo 1 || echo 0)"
+ok "the real tree lists its versioned manifests, without the CLI" "$(node -e 'const l=require(process.argv[1]).manifests; process.exit(l.length===3 && !l.includes("apps/cli/package.json") ? 0 : 1)' "$w/real/packages/shared/versioned-manifests.json" && echo 0 || echo 1)"
 
 echo
 echo "cloud-deploy-branch: $pass passed, $failn failed"

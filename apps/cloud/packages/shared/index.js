@@ -61,3 +61,10 @@ exports.resolveSliceIds = resolveSliceIds;
 
 /** The ids in `slices.json` `enabled`, validated, in mount order. */
 exports.ENABLED_SLICES = Object.freeze(resolveSliceIds(manifest.enabled));
+
+/**
+ * The manifests that carry the app's release version, bumped together by every
+ * `laictl deploy update` (versioned-manifests.json). The CLI's own manifest is
+ * not one of them: the CLI is versioned by hand with each CLI change.
+ */
+exports.VERSIONED_MANIFESTS = Object.freeze([...require('./versioned-manifests.json').manifests]);
