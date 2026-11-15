@@ -255,6 +255,10 @@ func TestWatcherUnanswering(t *testing.T) {
 			r.active(tc.unit)
 			r.start(t)
 			eventually(t, "first probe", func() bool { return r.prober.count(tc.service) >= 1 })
+			// The prober counts a probe before the watcher records its answer. A probe of our own at the
+			// same instant dates the first failure at 0 s whichever records first; without it a CheckNow at
+			// 50 s could record the failure first and date it 50 s (issue #555).
+			r.w.CheckNow(context.Background(), tc.service)
 
 			// The first minute after a start only counts as starting, and raises nothing.
 			r.clock.Advance(50 * time.Second)
@@ -265,6 +269,8 @@ func TestWatcherUnanswering(t *testing.T) {
 			// Past the grace period the failure is first degraded, then, a minute after it began, down with a code.
 			r.clock.Advance(15 * time.Second) // 65 s since the start, 65 s since the first failure
 			r.w.CheckNow(context.Background(), tc.service)
+			// The ticker's probe at the same instant may own the raise and send it just after (#555).
+			eventually(t, "the alert", func() bool { raised, _ := r.alerts.snapshot(); return len(raised) >= 1 })
 			raised, _ := r.alerts.snapshot()
 			if len(raised) != 1 || raised[0] != tc.code+" "+tc.service {
 				t.Fatalf("raised = %v, want [%s %s]", raised, tc.code, tc.service)
@@ -285,6 +291,7 @@ func TestWatcherUnanswering(t *testing.T) {
 			// It answers again: the alert is withdrawn.
 			r.prober.set(tc.service, nil)
 			r.w.CheckNow(context.Background(), tc.service)
+			eventually(t, "the clear", func() bool { _, cleared := r.alerts.snapshot(); return len(cleared) >= 1 })
 			_, cleared := r.alerts.snapshot()
 			if len(cleared) != 1 || cleared[0] != tc.code+" "+tc.service {
 				t.Fatalf("cleared = %v", cleared)
