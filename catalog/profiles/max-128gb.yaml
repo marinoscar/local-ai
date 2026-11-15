@@ -36,12 +36,13 @@ include:
     - survival-food
     - survival-post-disaster
     - ifixit-en
-    - osm-central-america
+    - osm-us-south-central
     - map-assets
-    - places-central-america
+    - places-us
     - wikipedia-es-nopic
     - wikipedia-en-maxi
     # tier 2
+    - osm-us
     - wikimed-es
     - mdwiki-en
     - stackexchange-diy

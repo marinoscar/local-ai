@@ -106,7 +106,7 @@ When the computer is in Survival mode, the **Local AI** app fills the whole scre
 ### First aid (press F)
 16. On the home screen, press **F**, or click a button in the **FIRST AID** row (CPR, Choking, Severe bleeding, Burns, Broken bone, Snake bite, **More …**).
    - **What you should see:** the article opens at once.
-   - **This is not a doctor.** If any phone works, call the emergency number shown on the screen (911 in Costa Rica). Act first, read later.
+   - **This is not a doctor.** If any phone works, call the emergency number shown on the screen (911 in the United States). Act first, read later.
    - **If it doesn't work:** "The medical book is not installed": plug in the AI-ARK drive, or use Library search.
 
 ### Button 5: Maps
@@ -527,7 +527,7 @@ Cuando la computadora está en modo supervivencia, la app **Local AI** llena tod
 ### Primeros auxilios (presione F)
 16. En la pantalla de inicio, presione **F**, o haga clic en un botón de la fila **PRIMEROS AUXILIOS** (RCP, Atragantamiento, Sangrado grave, Quemaduras, Hueso roto, Mordedura de serpiente, **Más …**).
    - **Lo que debería ver:** el artículo se abre de inmediato.
-   - **Esto no es un médico.** Si algún teléfono funciona, llame al número de emergencias que aparece en pantalla (911 en Costa Rica). Actúe primero, lea después.
+   - **Esto no es un médico.** Si algún teléfono funciona, llame al número de emergencias que aparece en pantalla (911 en Estados Unidos). Actúe primero, lea después.
    - **Si no funciona:** "El libro de medicina no está instalado": conecte el disco AI-ARK, o use la búsqueda de la Biblioteca.
 
 ### Botón 5: Mapas

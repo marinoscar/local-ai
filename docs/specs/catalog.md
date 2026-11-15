@@ -320,7 +320,7 @@ Every Kiwix `book` below was checked on 2026-11-03 against the Kiwix OPDS catalo
 | `survival-first-aid`, `survival-water`, `survival-food` | `zimgit-medicine_en`, `zimgit-water_en`, `zimgit-food-preparation_en` | the zimgit survival collections (PDF libraries) |
 | `survival-post-disaster` | `zimgit-post-disaster_en` | superset of the three above plus shelter, foraging, hunting, knots and nuclear threats |
 | `ifixit-en` | `ifixit_en_all` | repair guides |
-| `osm-central-america`, `places-central-america` | `pmtiles_extract`, GeoNames `url` | see Maps |
+| `osm-us-south-central`, `places-us` | `pmtiles_extract`, GeoNames `url` | see Maps (`osm-us` is tier 2; the Central America items are tier 2, ark drive only) |
 | `wikipedia-en-nopic` | `wikipedia_en_all_nopic` | small-8gb, cpu-only, ark-drive-full |
 | `wikipedia-es-nopic` | `wikipedia_es_all_nopic` | |
 | `wikipedia-en-maxi` | `wikipedia_en_all_maxi` | cuda-12gb, max-128gb, ark-drive-full |
@@ -338,8 +338,11 @@ Every Kiwix `book` below was checked on 2026-11-03 against the Kiwix OPDS catalo
 
 **Sizes and refresh.** `expected_size_bytes` is the OPDS size rounded up to two significant digits after 3 % growth, only for planning; sync uses the real size. `osm-central-america` keeps the 2.5 GB of the issue; `osm-north-america` (`maxzoom: 13`, 15 GB) is an estimate that the first `aictl ark sync --dry-run` replaces with the `pmtiles extract --dry-run` figure. `places-central-america` is about 3.6 MB of GeoNames files (`expected_size_bytes: 5000000`). Static books (the zimgit collections, Gutenberg, LibreTexts, Khan, TED) refresh yearly, Wikipedia and Wikibooks every 90 days, the rest every 180 days.
 
-Maps:
-- `osm-central-america` (tier 1, all profiles)
+Maps (issue #586: the node profiles default to the United States):
+- `osm-us-south-central` (tier 1, all profiles): Texas, Oklahoma, Louisiana, Arkansas and New Mexico at full street detail (`maxzoom: 15`, bbox `[-109.1, 25.8, -88.8, 37.1]`, 2.3 GB measured with `pmtiles extract --dry-run` on build 20261115)
+- `osm-us` (tier 2, all profiles): the contiguous United States, roads and towns (`maxzoom: 13`, bbox `[-125.0, 24.4, -66.9, 49.5]`, 4.3 GB measured)
+- `places-us` (tier 1, all profiles): GeoNames `US.zip` (71 MB), the place search
+- `osm-central-america`, `places-central-america` (tier 2, ark drive only)
 - `osm-north-america` (tier 3, ark drive only)
 - `map-assets` (tier 1, all profiles; see above)
 
@@ -368,7 +371,7 @@ storage:
 include:
   models: [qwen3.5-9b-q4km, <small-vlm-id>, <tiny-fallback-id>, <embedding-id>, whisper-small, piper-en-medium, piper-es-medium]
   content: [docs-bundle, wikimed-en, survival-first-aid, survival-water, survival-food, survival-post-disaster, ifixit-en,
-            osm-central-america, places-central-america, wikipedia-en-nopic, wikipedia-es-nopic,
+            osm-us-south-central, osm-us, places-us, wikipedia-en-nopic, wikipedia-es-nopic,
             wikimed-es, wikibooks-en, ...,                      # tier 2, see catalog/profiles/small-8gb.yaml
             kit-llama-cpp, kit-debs-resolute-amd64, kit-nvidia-resolute-amd64-595-open,
             kit-agent-binaries, kit-agent-source, kit-go-toolchain, kit-whisper-cpp, kit-kiwix-tools, kit-pmtiles, kit-piper,

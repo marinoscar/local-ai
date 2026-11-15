@@ -2032,7 +2032,7 @@ var table = []Code{
 		ID:       SVC032,
 		Severity: Warning,
 		Title:    Msg{EN: "Place search isn't installed", ES: "La búsqueda de lugares no está instalada"},
-		Fix:      Msg{EN: "Import `places-central-america`: `aictl ark import --item places-central-america`.", ES: "Importe `places-central-america`: `aictl ark import --item places-central-america`."},
+		Fix:      Msg{EN: "Import `places-us`: `aictl ark import --item places-us`.", ES: "Importe `places-us`: `aictl ark import --item places-us`."},
 		Action:   "ark.import",
 	},
 	{

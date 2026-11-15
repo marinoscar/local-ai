@@ -180,7 +180,7 @@ func (d *Daemon) build(ctx context.Context) error {
 	d.buildMusic()
 	d.maps = maps.New(d.mapsDeps(metrics))
 	d.maps.SetGPS(lazyGPS{d})
-	d.places = &places.Manager{Copies: d.c.ArkIndex, Log: d.log}
+	d.places = &places.Manager{Copies: d.c.ArkIndex, Log: d.log, Items: d.placesItems}
 	d.maps.SetPlaces(d.places)
 	sup, err := health.New(health.Options{
 		Manager: c.Systemd, Publisher: c.Bus, Mode: d.modeName, Metrics: metrics, Clock: clock, Logger: log,

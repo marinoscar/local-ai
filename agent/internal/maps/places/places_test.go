@@ -536,3 +536,45 @@ func TestRegisterValidator(t *testing.T) {
 		t.Errorf("another item: %v", err)
 	}
 }
+
+// TestManagerItems: the index follows the profile's places items (issue #586): the first one with a
+// copy is served, a better one that arrives later replaces it, and the plausibility row count is given
+// only for the item the serving index was built from.
+func TestManagerItems(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	zip1 := writeZip(t, dir, "CR", crRows())
+	cs := copies{}
+	m := &Manager{Copies: cs, Items: func() []string { return []string{"places-us", "places-central-america"} }}
+	if m.Source() != "places-us" {
+		t.Errorf("before any build the source is the first candidate, got %s", m.Source())
+	}
+	cs["places-central-america"] = ark.Copy{Dir: dir, Files: []string{zip1}, Manifest: manifest.Manifest{Version: "v1"}}
+	m.Rebuild(ctx)
+	if m.State() != StateReady || m.Source() != "places-central-america" {
+		t.Fatalf("the second candidate serves while the first is missing: %s %s", m.State(), m.Source())
+	}
+	if m.RowsOf("places-central-america") != len(crRows()) || m.RowsOf("places-us") != 0 {
+		t.Errorf("RowsOf: %d %d", m.RowsOf("places-central-america"), m.RowsOf("places-us"))
+	}
+	builds := 0
+	m.BuildFn = func(ctx context.Context, zips []string) (*Index, error) { builds++; return Build(ctx, zips) }
+	cs["places-us"] = ark.Copy{Dir: dir, Files: []string{zip1}, Manifest: manifest.Manifest{Version: "v1"}}
+	m.Rebuild(ctx)
+	if builds != 1 || m.Source() != "places-us" {
+		t.Errorf("the first candidate takes over once installed (same dir and version, other item): builds %d, %s", builds, m.Source())
+	}
+	if m.RowsOf("places-central-america") != 0 || m.RowsOf("places-us") != len(crRows()) {
+		t.Errorf("RowsOf after the switch")
+	}
+	delete(cs, "places-us")
+	delete(cs, "places-central-america")
+	m.Rebuild(ctx)
+	if m.State() != StateAbsent || m.RowsOf("places-us") != 0 {
+		t.Errorf("none installed: %s", m.State())
+	}
+	// No Items (or an empty list) falls back to Item, then DefaultItem.
+	if (&Manager{Items: func() []string { return nil }}).Source() != DefaultItem {
+		t.Errorf("default source")
+	}
+}
