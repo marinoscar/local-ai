@@ -1,4 +1,4 @@
-# GENERATED from @marinoscar/platform-infra@0.1.0-next.30 (telemetry) — do not edit; extend through infra/otel/app-collector.yaml or a compose overlay
+# GENERATED from @marinoscar/platform-infra@0.1.0-next.31 (telemetry) — do not edit; extend through infra/otel/app-collector.yaml or a compose overlay
 # Source of truth: @marinoscar/platform-infra/telemetry/compose/vps.telemetry.compose.yml; re-materialise with `npx platform-infra sync`
 # =============================================================================
 # Docker Compose - VPS Overrides for the Telemetry Stack

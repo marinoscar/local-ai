@@ -213,10 +213,48 @@ model Notification {
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  // NO `updatedAt`. The only mutation this row ever undergoes is being marked
-  // read, and `readAt` already timestamps that with more precision than an
-  // `updatedAt` would carry. A second, redundant answer to "when did this
-  // change?" is a second thing to keep consistent for no reader.
+  // ---------------------------------------------------------------------------
+  // STATE and COUNTED rows (issue #1077) — all additive and nullable/defaulted,
+  // so every existing row and the plain `notify()` insert are unchanged.
+  // ---------------------------------------------------------------------------
+  //
+  // `notify()` appends one row per call. Two producers cannot live with that:
+  // a STATE notification ("N items await review") is ONE live row per
+  // (user, scope, event) refreshed in place, and a COUNTED event ("N uploads
+  // finished") folds repeated occurrences into ONE row whose `data.count`
+  // grows. These columns carry them:
+  //
+  //   data        the producer's payload; STATE and COUNTED rows always write
+  //               it (`count`, and `countAtRead` once read). NULL for a plain
+  //               `notify()` row.
+  //   scopeId     an optional scope the row belongs to (a group, an
+  //               organization, a workspace), so one user can hold one live
+  //               STATE row per scope. NOT authorization: the producer decides
+  //               the recipients.
+  //   dismissedAt "stop showing me this", distinct from `readAt` ("I saw it").
+  //               A dismissed row leaves the list and the unread count; the
+  //               retention sweep removes it by age.
+  //   updatedAt   the rolling-window anchor of a COUNTED row and the refresh
+  //               time of a STATE row. Raw SQL does not run Prisma's
+  //               `@updatedAt`, so every raw UPDATE sets it explicitly.
+  //   dedupKey    the fold key of a STATE or COUNTED row (NULL for a plain
+  //               `notify()` row, which is how the retention sweep tells them
+  //               apart); see the raw-SQL partial unique index below.
+  data        Json?
+  scopeId     String?   @map("scope_id") @db.Uuid
+  dismissedAt DateTime? @map("dismissed_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  dedupKey    String?   @map("dedup_key")
+
+  // RAW-SQL INDEX, intentional schema drift (packages/platform-db/raw-sql-indexes.json):
+  //   notifications_live_dedup_uniq_idx
+  //     UNIQUE (user_id, dedup_key) WHERE dismissed_at IS NULL AND dedup_key IS NOT NULL
+  // At most one LIVE foldable row per (user, dedup key). The DATABASE decides a
+  // race, not a find-then-insert. A COUNTED row whose window closed is retired
+  // by rewriting its `dedup_key` to `retired:<id>` (it stays in the inbox, and
+  // still reads as a folded row to the retention sweep), which frees the key
+  // for the next row. Prisma cannot express a partial unique index: never
+  // replace it with `@@unique` or a `findFirst` pre-check.
 
   // Relations
   //
@@ -244,6 +282,8 @@ model Notification {
   // The retention sweep (`notifications.inbox.purge`, #681): "oldest first,
   // older than the cutoff" across every user, which neither index above serves.
   @@index([createdAt])
+  // The retention sweep's dismissed pass (issue #1077): "dismissed longer ago than the cutoff".
+  @@index([dismissedAt])
   @@map("notifications")
 }
 

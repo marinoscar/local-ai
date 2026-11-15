@@ -1,5 +1,5 @@
 #!/bin/sh
-# GENERATED from @marinoscar/platform-infra@0.1.0-next.30 (compose) — do not edit; extend through an infra/compose/app.*.compose.yml overlay
+# GENERATED from @marinoscar/platform-infra@0.1.0-next.31 (compose) — do not edit; extend through an infra/compose/app.*.compose.yml overlay
 # Source of truth: @marinoscar/platform-infra/compose/postgres-init/10-application-role.sh; re-materialise with `npx platform-infra sync`
 # =============================================================================
 # Creates the ORDINARY role the application connects as (issue #725 PP-6.5)
