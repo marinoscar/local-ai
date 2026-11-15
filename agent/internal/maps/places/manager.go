@@ -11,8 +11,8 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/ark"
 )
 
-// DefaultItem is the catalog item the index is built from.
-const DefaultItem = "places-central-america"
+// DefaultItem is the catalog item the index is built from when the node's profile names none.
+const DefaultItem = "places-us"
 
 // State is the state of the place index as the routes report it.
 type State string
@@ -31,8 +31,11 @@ const (
 // Manager owns the index of one places item: it builds it from the item's best copy and swaps the
 // finished index in with one atomic pointer store, so a search never sees a half-built index.
 type Manager struct {
-	// Item is the catalog item id; default DefaultItem.
+	// Item is the catalog item id when Items is nil; default DefaultItem.
 	Item string
+	// Items lists the places items the node wants, best first (the profile's places-* items, issue
+	// #586). The index is built from the first one that has a copy. Nil or empty means Item.
+	Items func() []string
 	// Copies finds the best copy of the item (the ark index).
 	Copies ark.CopyFinder
 	Log    *slog.Logger
@@ -42,16 +45,27 @@ type Manager struct {
 	cur   atomic.Pointer[Index]
 	state atomic.Value // State
 	built atomic.Pointer[builtFrom]
-	mu    sync.Mutex // serialises Rebuild
+	src   atomic.Value // string: the item the serving index was built from
+	mu    sync.Mutex   // serialises Rebuild
 }
 
-type builtFrom struct{ dir, version string }
+type builtFrom struct{ item, dir, version string }
 
 func (m *Manager) item() string {
 	if m.Item == "" {
 		return DefaultItem
 	}
 	return m.Item
+}
+
+// candidates are the items to try, best first.
+func (m *Manager) candidates() []string {
+	if m.Items != nil {
+		if ids := m.Items(); len(ids) > 0 {
+			return ids
+		}
+	}
+	return []string{m.item()}
 }
 
 func (m *Manager) log() *slog.Logger {
@@ -73,8 +87,23 @@ func (m *Manager) State() State {
 // Index returns the serving index, nil when there is none.
 func (m *Manager) Index() *Index { return m.cur.Load() }
 
-// Source is the catalog item id the index comes from.
-func (m *Manager) Source() string { return m.item() }
+// Source is the catalog item id the serving index comes from; before any index is built it is the
+// first candidate.
+func (m *Manager) Source() string {
+	if s, ok := m.src.Load().(string); ok && s != "" {
+		return s
+	}
+	return m.candidates()[0]
+}
+
+// RowsOf is the row count behind the serving index when it was built from itemID, else 0: the
+// plausibility check of a places item compares only with that same item's previous version.
+func (m *Manager) RowsOf(itemID string) int {
+	if s, ok := m.src.Load().(string); ok && s == itemID {
+		return m.Rows()
+	}
+	return 0
+}
 
 // Rows is the total row count of the dumps behind the serving index (0 with none); the plausibility
 // check of the next version compares with it.
@@ -88,17 +117,24 @@ func (m *Manager) Rebuild(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var cp ark.Copy
+	itemID := ""
 	err := ark.ErrNotPresent
 	if m.Copies != nil {
-		cp, err = m.Copies.BestCopy(m.item())
+		for _, id := range m.candidates() {
+			if cp, err = m.Copies.BestCopy(id); err == nil {
+				itemID = id
+				break
+			}
+		}
 	}
 	if err != nil {
 		m.cur.Store(nil)
 		m.built.Store(nil)
+		m.src.Store("")
 		m.state.Store(StateAbsent)
 		return
 	}
-	from := &builtFrom{dir: cp.Dir, version: cp.Manifest.Version}
+	from := &builtFrom{item: itemID, dir: cp.Dir, version: cp.Manifest.Version}
 	if b := m.built.Load(); b != nil && *b == *from && m.cur.Load() != nil {
 		return
 	}
@@ -120,7 +156,7 @@ func (m *Manager) Rebuild(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		m.log().Warn("the place index could not be built", "item", m.item(), "error", err.Error())
+		m.log().Warn("the place index could not be built", "item", itemID, "error", err.Error())
 		if m.cur.Load() == nil {
 			m.state.Store(StateFailed)
 		}
@@ -128,6 +164,7 @@ func (m *Manager) Rebuild(ctx context.Context) {
 	}
 	m.cur.Store(ix)
 	m.built.Store(from)
+	m.src.Store(itemID)
 	m.state.Store(StateReady)
-	m.log().Info("the place index is ready", "item", m.item(), "places", ix.Len())
+	m.log().Info("the place index is ready", "item", itemID, "places", ix.Len())
 }

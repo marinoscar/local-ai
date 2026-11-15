@@ -35,7 +35,7 @@ Non-goals:
 | **Voice** | A Piper model: `<voice>.onnx` + `<voice>.onnx.json`, one catalog model with `engine: piper` |
 | **Map** | One verified `pmtiles` file (`maps/<content-id>/*.pmtiles`) |
 | **Map assets** | `maps/assets/` from the `map-assets` item: `fonts/<fontstack>/<range>.pbf` and `sprites/v4/<flavor>{.json,.png,@2x.json,@2x.png}` |
-| **Place index** | An in-memory search index built from the GeoNames per-country dumps (item `places-central-america`) |
+| **Place index** | An in-memory search index built from the GeoNames per-country dumps (the profile's `places-*` item; `places-us` by default, issue #586) |
 
 ## 3. Interfaces
 
@@ -462,8 +462,8 @@ Bounds, zooms and center come from the pmtiles v3 header (the first 127 bytes: m
 
 #### 4.4.4 Offline place search
 Feasible offline with GeoNames, so it is in scope (not a limitation).
-- **Data:** catalog item `places-central-america` (`kind: maps`, tier 1, source `url`, multiple files `https://download.geonames.org/export/dump/{CR,PA,NI,HN,SV,GT,BZ}.zip`, `version_policy: latest`, `checksum: computed`, `trust: tofu`, `refresh_days: 180`). GeoNames is CC BY 4.0; attribution is shown in the viewer. The fields are defined in [catalog.md](catalog.md) §3 (example item there). A larger `places-north-america` item can exist for the drive.
-- **Plausibility check** at sync (in place of a pinned hash): every zip opens, each TSV row has 19 tab-separated columns, ≥ 99 % of rows parse, and the row count is at least 50 % of the previous version's. It is registered as the **content validator** for item `places-central-america` (and any `places-*` item) through the ark-sync `verifying` extension point ([ark-sync.md](ark-sync.md) §4.5); a failed validation is a verify failure → quarantine (`LAI-SYN-020`).
+- **Data:** the node's profile names its place items; the index is built from the **first `places-*` item of the profile's `include.content` that is installed** (`places.Manager.Items`, issue #586; with none in the profile, `places-us`). Every node profile names `places-us` (tier 1, `https://download.geonames.org/export/dump/US.zip`: about 1.25 million places kept, about 120 MB of memory, a 5 s build); `places-central-america` (tier 2, files `{CR,PA,NI,HN,SV,GT,BZ}.zip`) stays on the ark drive. Both are `kind: maps`, source `url`, `version_policy: latest`, `checksum: computed`, `trust: tofu`, `refresh_days: 180`. GeoNames is CC BY 4.0; attribution is shown in the viewer. The fields are defined in [catalog.md](catalog.md) §3 (example item there). A larger `places-north-america` item can exist for the drive.
+- **Plausibility check** at sync (in place of a pinned hash): every zip opens, each TSV row has 19 tab-separated columns, ≥ 99 % of rows parse, and the row count is at least 50 % of the previous version's **of the same item** (only the item the serving index was built from has a previous count; another `places-*` item is not compared with it, issue #586). It is registered as the **content validator** for every `places-*` item through the ark-sync `verifying` extension point ([ark-sync.md](ark-sync.md) §4.5); a failed validation is a verify failure → quarantine (`LAI-SYN-020`).
 - **Index (in agent memory)**, built at agent start and on `sync.item_done` from the zip files directly (Go `archive/zip`, no extraction to disk), keeping:
   - feature class `P` (populated places) and `A` (`ADM1`, `ADM2`),
   - and these codes: `HSP`, `HSPC`, `HSPD` (hospitals and clinics), `SCH`, `CH`, `PP` (police), `AIRP`, `PRT`, `SPNG`, `WLL`, `RSV`, `LK`, `STM` (water), `MT`, `VLC`, `PK`, `PRK`, `BDG`, `RDJCT`.
@@ -662,7 +662,7 @@ Shown in the desktop and the Portal, so both languages are given. Range 100–14
 | LAI-SVC-024 | info | The text was too long to read aloud at once | Nothing to do: the app reads it in parts. | Nada que hacer: la aplicación lo lee por partes. |
 | LAI-SVC-030 | warning | No offline map is installed | Plug in the ark drive and run `aictl ark import`. | Conecte el disco del arca y ejecute `aictl ark import`. |
 | LAI-SVC-031 | warning | Map labels (fonts) are missing | Import `map-assets` from the drive: `aictl ark import --item map-assets`. | Importe `map-assets` desde el disco: `aictl ark import --item map-assets`. |
-| LAI-SVC-032 | warning | Place search isn't installed | Import `places-central-america`: `aictl ark import --item places-central-america`. | Importe `places-central-america`: `aictl ark import --item places-central-america`. |
+| LAI-SVC-032 | warning | Place search isn't installed | Import `places-us`: `aictl ark import --item places-us`. | Importe `places-us`: `aictl ark import --item places-us`. |
 | LAI-SVC-033 | info | The GPS isn't sending a position | Move near a window or outside, or set your position by hand on the map. | Acérquese a una ventana o salga, o marque su posición a mano en el mapa. |
 | LAI-SVC-034 | error | A map file is damaged | Run `aictl ark verify --item <map id>`. | Ejecute `aictl ark verify --item <id del mapa>`. |
 | LAI-SVC-040 | warning | No model that understands photos can run here | Install a vision model that fits (`aictl models --loadable`). | Instale un modelo de visión que quepa (`aictl models --loadable`). |

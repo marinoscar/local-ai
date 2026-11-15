@@ -57,11 +57,12 @@ func (s *arkStack) registerLibrarySources(vals *item.Validators) error {
 		return err
 	}
 	// The GeoNames dumps have no pinned hash: their content is checked instead, against the rows of the
-	// version in use (companion-services.md section 4.4.4).
-	return places.RegisterValidator(vals, func(string) int {
+	// version in use of the same item (companion-services.md section 4.4.4; issue #586: another places
+	// item is not compared with the serving index).
+	return places.RegisterValidator(vals, func(itemID string) int {
 		if d.places == nil {
 			return 0
 		}
-		return d.places.Rows()
+		return d.places.RowsOf(itemID)
 	})
 }

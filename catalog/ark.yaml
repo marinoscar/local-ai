@@ -490,12 +490,44 @@ content:
     expected_size_bytes: 3700000000
     refresh_days: 180
 
+  - id: osm-us-south-central
+    kind: maps
+    display_name: "Offline map: Texas and nearby states"
+    summary: "Streets, towns, rivers and roads of Texas, Oklahoma, Louisiana, Arkansas and New Mexico. Works without internet."
+    summary_es: "Calles, pueblos, ríos y caminos de Texas, Oklahoma, Luisiana, Arkansas y Nuevo México. Funciona sin internet."
+    survival_tier: 1
+    license: "ODbL 1.0"
+    source:
+      type: pmtiles_extract
+      planet_url_pattern: "https://build.protomaps.com/{date}.pmtiles"
+      bbox: [-109.1, 25.8, -88.8, 37.1]
+      maxzoom: 15
+      checksum: computed
+    expected_size_bytes: 2500000000
+    refresh_days: 180
+
+  - id: osm-us
+    kind: maps
+    display_name: "Offline map: United States"
+    summary: "Roads, towns and rivers of the whole contiguous United States, less detailed than the state map. Works without internet."
+    summary_es: "Caminos, pueblos y ríos de todo Estados Unidos continental, con menos detalle que el mapa del estado. Funciona sin internet."
+    survival_tier: 2
+    license: "ODbL 1.0"
+    source:
+      type: pmtiles_extract
+      planet_url_pattern: "https://build.protomaps.com/{date}.pmtiles"
+      bbox: [-125.0, 24.4, -66.9, 49.5]
+      maxzoom: 13
+      checksum: computed
+    expected_size_bytes: 4600000000
+    refresh_days: 180
+
   - id: osm-central-america
     kind: maps
     display_name: "Offline map: Costa Rica and Central America"
     summary: "Streets, towns, rivers and roads. Works without internet."
     summary_es: "Calles, pueblos, ríos y caminos. Funciona sin internet."
-    survival_tier: 1
+    survival_tier: 2
     license: "ODbL 1.0"
     source:
       type: pmtiles_extract
@@ -525,12 +557,29 @@ content:
     expected_size_bytes: 6143438
     refresh_days: 365
 
+  - id: places-us
+    kind: maps
+    display_name: "Place names: United States"
+    summary: "Search towns, hospitals, rivers and landmarks by name, and find the nearest ones, offline."
+    summary_es: "Busque pueblos, hospitales, ríos y lugares por su nombre, y encuentre los más cercanos, sin internet."
+    survival_tier: 1
+    license: "CC BY 4.0"
+    source:
+      type: url
+      files:
+        - {url: "https://download.geonames.org/export/dump/US.zip", sha256: null}
+      version_policy: latest
+      checksum: computed
+      trust: tofu
+    expected_size_bytes: 75000000
+    refresh_days: 180
+
   - id: places-central-america
     kind: maps
     display_name: "Place names: Central America"
     summary: "Search towns, villages, rivers and landmarks by name, offline."
     summary_es: "Busque pueblos, ríos y lugares por su nombre, sin internet."
-    survival_tier: 1
+    survival_tier: 2
     license: "CC BY 4.0"
     source:
       type: url

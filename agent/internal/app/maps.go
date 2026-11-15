@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/marinoscar/local-ai/agent/internal/maps"
+	"github.com/marinoscar/local-ai/agent/internal/maps/places"
 	"github.com/marinoscar/local-ai/agent/internal/svc/health"
 )
 
@@ -37,6 +38,23 @@ func (d *Daemon) mapItems() []maps.MapItem {
 			continue
 		}
 		out = append(out, maps.MapItem{ID: it.ID, DisplayName: it.DisplayName, Tier: it.Tier(), InProfile: inProfile[it.ID]})
+	}
+	return out
+}
+
+// placesItems are the place index items the node's profile includes, in profile order (issue #586);
+// the place index is built from the first one that is installed. None: the index uses
+// places.DefaultItem.
+func (d *Daemon) placesItems() []string {
+	p := d.profile()
+	if p == nil {
+		return nil
+	}
+	var out []string
+	for _, id := range p.Include.Content {
+		if places.IsPlacesItem(id) {
+			out = append(out, id)
+		}
 	}
 	return out
 }

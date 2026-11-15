@@ -192,7 +192,7 @@ A node installs what is missing from the rebuild kit **by itself** after every s
 
 - `LAI-SVC-030` (no map): plug in the drive and `aictl ark import --wait`.
 - `LAI-SVC-031` (no labels): `aictl ark import --item map-assets --wait`.
-- `LAI-SVC-032` (no place search): `aictl ark import --item places-central-america --wait`.
+- `LAI-SVC-032` (no place search): `aictl ark import --item places-us --wait`.
 - `LAI-SVC-033` (GPS silent): move near a window, or set your position by hand (right-click the map → **I am here**).
 - `LAI-SVC-034` (a map file is damaged): `aictl ark verify --item <map-id> --wait`.
 

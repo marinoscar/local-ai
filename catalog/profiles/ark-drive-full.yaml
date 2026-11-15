@@ -36,8 +36,11 @@ include:
     - survival-food
     - survival-post-disaster
     - ifixit-en
+    - osm-us-south-central
+    - osm-us
     - osm-central-america
     - map-assets
+    - places-us
     - places-central-america
     - wikipedia-en-nopic
     - wikipedia-es-nopic

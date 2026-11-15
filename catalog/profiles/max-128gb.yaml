@@ -36,9 +36,10 @@ include:
     - survival-food
     - survival-post-disaster
     - ifixit-en
-    - osm-central-america
+    - osm-us-south-central
+    - osm-us
     - map-assets
-    - places-central-america
+    - places-us
     - wikipedia-es-nopic
     - wikipedia-en-maxi
     # tier 2

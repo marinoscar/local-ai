@@ -398,7 +398,7 @@ Every action is something a Portal session may already do, so a button never nee
 | LAI-SVC-024 | info | The text was too long to read aloud at once | Nothing to do: the app reads it in parts. |
 | LAI-SVC-030 | warning | No offline map is installed | Plug in the ark drive and run `aictl ark import`. |
 | LAI-SVC-031 | warning | Map labels (fonts) are missing | Import `map-assets` from the drive: `aictl ark import --item map-assets`. |
-| LAI-SVC-032 | warning | Place search isn't installed | Import `places-central-america`: `aictl ark import --item places-central-america`. |
+| LAI-SVC-032 | warning | Place search isn't installed | Import `places-us`: `aictl ark import --item places-us`. |
 | LAI-SVC-033 | info | The GPS isn't sending a position | Move near a window or outside, or set your position by hand on the map. |
 | LAI-SVC-034 | error | A map file is damaged | Run `aictl ark verify --item <map id>`. |
 | LAI-SVC-040 | warning | No model that understands photos can run here | Install a vision model that fits (`aictl models --loadable`). |
