@@ -1,4 +1,4 @@
-# GENERATED from @marinoscar/platform-infra@0.1.0-next.21 (compose) — do not edit; extend through an infra/compose/app.*.compose.yml overlay
+# GENERATED from @marinoscar/platform-infra@0.1.0-next.30 (compose) — do not edit; extend through an infra/compose/app.*.compose.yml overlay
 # Source of truth: @marinoscar/platform-infra/compose/worker.compose.yml; re-materialise with `npx platform-infra sync`
 # =============================================================================
 # Worker node fleet  (issue #278, epic #254)
@@ -79,6 +79,8 @@ services:
       LAICTL_MEMORY_WATCHDOG: ${LAICTL_MEMORY_WATCHDOG:-}
       LAICTL_MEMORY_THRESHOLD: ${LAICTL_MEMORY_THRESHOLD:-}
       LAICTL_HEAP_SNAPSHOTS: ${LAICTL_HEAP_SNAPSHOTS:-}
+      LAICTL_NATIVE_THREADS: ${LAICTL_NATIVE_THREADS:-}
+      LAICTL_MODELS_DIR: ${LAICTL_MODELS_DIR:-}
 
     volumes:
       # State survives a restart, so a replica re-attaches to its node row

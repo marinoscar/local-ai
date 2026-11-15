@@ -1,4 +1,4 @@
-# GENERATED from @marinoscar/platform-infra@0.1.0-next.21 (compose) — do not edit; extend through an infra/compose/app.*.compose.yml overlay
+# GENERATED from @marinoscar/platform-infra@0.1.0-next.30 (compose) — do not edit; extend through an infra/compose/app.*.compose.yml overlay
 # Source of truth: @marinoscar/platform-infra/compose/prod.compose.yml; re-materialise with `npx platform-infra sync`
 # =============================================================================
 # Docker Compose - Production Overrides
