@@ -35,6 +35,61 @@ models:
     client_hints:
       max_output_tokens: 8192
       reasoning: true
+  - id: qwen3.6-35b-a3b-vl-q4km
+    display_name: "Qwen 3.6 35B A3B (fast, text and screens)"
+    summary: "Fast model for browser agents and chat. Reads screenshots and uses tools. Needs a 128 GB unified-memory computer."
+    summary_es: "Modelo rápido para agentes de navegador y chat. Lee capturas y usa herramientas. Necesita 128 GB unificados."
+    engine: llama
+    roles: [chat, reasoning, vision, coder]
+    languages: [en, es, multi]
+    license: apache-2.0
+    survival_tier: 1
+    source:
+      type: huggingface
+      repo: ggml-org/Qwen3.6-35B-A3B-GGUF
+      revision: 7878dc9a905c7c9379e5e8d6a1aa9affdd6839c5
+    files:
+      - kind: weights
+        name: Qwen3.6-35B-A3B-Q4_K_M.gguf
+        url: null
+        size_bytes: 20419565568
+        sha256: "671e47e0ec53c665d048b98c3ecbfd5236b5ca9c3e02ed19fc8f81f7b85140c7"
+      - kind: mmproj
+        name: mmproj-Qwen3.6-35B-A3B-BF16.gguf
+        url: null
+        size_bytes: 902822144
+        sha256: "360c746ddf38fb67c06f83a0a88742492aa231e59e335cd980e6302f59ea6089"
+      - kind: draft
+        name: mtp-Qwen3.6-35B-A3B-Q4_0.gguf
+        url: null
+        size_bytes: 1060038432
+        sha256: "606fca331adcbfbdadc107512ce6a7161e84e1646ba0e0018256426f6296877f"
+    requirements:
+      backends: [vulkan]
+      # Measured on ai-n1 (Radeon 8060S, Vulkan, llama.cpp f3586e66b) loaded at ctx 131072 with mmproj and MTP:
+      # 23570 MiB GTT + 1860 MiB VRAM = 25430 MiB, plus 10 % (#603).
+      min_vram_mib: 27973
+      min_ram_mib: 32768
+      min_disk_bytes: 22382426144
+    llama:
+      ctx: 131072
+      n_gpu_layers: 99
+      flash_attn: "auto"
+      parallel: 1
+      # MTP: 62 -> 72-106 tok/s on ai-n1 with the mmproj loaded; n_max 3 had the best average (#603).
+      speculative:
+        type: draft-mtp
+        n_max: 3
+        draft_file_kind: draft
+        draft_ngl: all
+      mmproj_file_kind: mmproj
+      chat_template: null
+      # Qwen's non-thinking sampling; clients may override per request.
+      extra_args: ["--cache-ram", "16384", "--temp", "0.7", "--top-p", "0.8", "--top-k", "20", "--min-p", "0.0"]
+      env: {}
+    client_hints:
+      max_output_tokens: 16384
+      reasoning: true
   - id: qwen3.5-9b-q4km
     display_name: "Qwen 3.5 9B"
     summary: "Fast general assistant. Good for chat, writing and simple code."
@@ -337,6 +392,61 @@ models:
     client_hints:
       max_output_tokens: 16384
       reasoning: false
+  - id: qwen3.8-27b-q6k
+    display_name: "Qwen 3.8 27B (text and screens)"
+    summary: "Main model for browser agents. Reads screenshots and web pages, uses tools. Needs a 128 GB unified-memory computer."
+    summary_es: "Modelo principal para agentes de navegador. Lee capturas y páginas web, usa herramientas. Necesita 128 GB unificados."
+    engine: llama
+    roles: [chat, reasoning, vision, coder]
+    languages: [en, es, multi]
+    license: apache-2.0
+    survival_tier: 2
+    source:
+      type: huggingface
+      repo: unsloth/Qwen3.8-27B-GGUF
+      revision: 4af51b3542f775b0a8e4b310bfb3f17e01c306c9
+    files:
+      - kind: weights
+        name: Qwen3.8-27B-UD-Q6_K.gguf
+        url: null
+        size_bytes: 21980441504
+        sha256: "6cac55f876015d6d4b94b1656d23f79f424ac9b583652aedf0633dba116576a8"
+      - kind: mmproj
+        name: mmproj-F16.gguf
+        url: null
+        size_bytes: 927607488
+        sha256: "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
+      - kind: draft
+        name: MTP/mtp-Qwen3.8-27B-Q4_0.gguf
+        url: null
+        size_bytes: 1369590656
+        sha256: "50d9ce5a6da381bbcfb31061cf73df94a90e6faf8efeddee379a9cb8f1501c6e"
+    requirements:
+      backends: [vulkan]
+      # Measured on ai-n1 (Radeon 8060S, Vulkan, llama.cpp f3586e66b) with aictl bench at ctx 131072: 29.9 GB of
+      # VRAM + GTT, plus 10 % (#598).
+      min_vram_mib: 33640
+      min_ram_mib: 65536
+      min_disk_bytes: 24277639648
+    llama:
+      ctx: 131072
+      n_gpu_layers: 99
+      flash_attn: "auto"
+      parallel: 1
+      # MTP speculative decoding: 10 -> 20-27 tok/s on ai-n1 with the mmproj loaded; n_max 3 beat 2 and 4 (#601).
+      speculative:
+        type: draft-mtp
+        n_max: 3
+        draft_file_kind: draft
+        draft_ngl: all
+      mmproj_file_kind: mmproj
+      chat_template: null
+      # Qwen's thinking-mode sampling (model card); clients may override per request.
+      extra_args: ["--cache-ram", "16384", "--temp", "1.0", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0"]
+      env: {}
+    client_hints:
+      max_output_tokens: 16384
+      reasoning: true
   - id: acestep-v15-turbo
     display_name: "ACE-Step 1.5 Turbo"
     summary: "Makes songs from lyrics and a style, with an optional sample. Needs a 12 GB NVIDIA graphics card."
