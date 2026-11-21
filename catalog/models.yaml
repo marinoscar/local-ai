@@ -447,6 +447,77 @@ models:
     client_hints:
       max_output_tokens: 16384
       reasoning: true
+  - id: qwen3.8-flash-next-iq4xs
+    display_name: "Qwen 3.8 Flash-Next (smart, text and screens)"
+    summary: "Large, careful model for hard browser tasks. Reads screenshots. Slower. Needs 128 GB and a raised GPU memory limit."
+    summary_es: "Modelo grande y cuidadoso para tareas difíciles del navegador. Lee capturas. Más lento. Necesita 128 GB."
+    engine: llama
+    roles: [chat, reasoning, vision, coder]
+    languages: [en, es, multi]
+    license: custom:https://huggingface.co/Qwen/Qwen3.8-Flash-Next/blob/main/LICENSE
+    survival_tier: 3
+    source:
+      type: huggingface
+      repo: unsloth/Qwen3.8-Flash-Next-GGUF
+      revision: f5d175de2cf7f720d45d6064019a81fcf056e986
+    files:
+      - kind: weights
+        name: UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00004.gguf
+        url: null
+        size_bytes: 10946618
+        sha256: "93ff23a08e5cd7501f24fa16f5b415d5807d0175e04edd3ed6a7a41b601a4eef"
+      - kind: weights
+        name: UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00002-of-00004.gguf
+        url: null
+        size_bytes: 49604491008
+        sha256: "13d5dc8b93d039e4cfade5a9af7037f10c97f7ec4e53f75bd2e9ae34aae54aeb"
+      - kind: weights
+        name: UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00003-of-00004.gguf
+        url: null
+        size_bytes: 15256783680
+        sha256: "f6b9b5934908a2043732269dd740155d0f921d0763a1dcdd3452246311651f87"
+      - kind: weights
+        name: UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00004-of-00004.gguf
+        url: null
+        size_bytes: 28800138432
+        sha256: "5de8b5dbf89409acc39468decafd4a4a95b13c29d88a14b0356107897829ec36"
+      - kind: mmproj
+        name: mmproj-F16.gguf
+        url: null
+        size_bytes: 904004000
+        sha256: "1f7b7f0b984cf065c604360c29c8098362ed61b290db0ff12c6f360bb1a8a980"
+      - kind: draft
+        name: MTP/mtp-Qwen3.8-Flash-Next-Q4_K_M.gguf
+        url: null
+        size_bytes: 2786204800
+        sha256: "8087dbb39fc73f79ac069b1debe4069a44b73ada900c8bd761569d43a5a90231"
+    requirements:
+      backends: [vulkan]
+      # Measured on ai-n1 (Radeon 8060S, Vulkan, llama.cpp f3586e66b, GTT limit 100 GiB) loaded at ctx 131072 with
+      # mmproj and MTP: 69587 MiB GTT + 2000 MiB VRAM = 71587 MiB, plus 10 % (#608). The 28.8 GB engram table stays in
+      # system RAM (override-tensor), so the node also needs that much free RAM; a node with the default
+      # half-of-RAM GTT limit (62 GB) cannot load it (#604).
+      min_vram_mib: 78746
+      min_ram_mib: 112640
+      min_disk_bytes: 97362568538
+    llama:
+      ctx: 131072
+      n_gpu_layers: 99
+      flash_attn: "auto"
+      parallel: 1
+      # MTP: 28.5 -> 35-54 tok/s on ai-n1 with the mmproj loaded (#604).
+      speculative:
+        type: draft-mtp
+        n_max: 3
+        draft_file_kind: draft
+        draft_ngl: all
+      mmproj_file_kind: mmproj
+      chat_template: null
+      extra_args: ["--override-tensor", "per_layer_token_embd=CPU", "--cache-ram", "8192", "--temp", "0.7", "--top-p", "0.8", "--top-k", "20", "--min-p", "0.0"]
+      env: {}
+    client_hints:
+      max_output_tokens: 16384
+      reasoning: true
   - id: acestep-v15-turbo
     display_name: "ACE-Step 1.5 Turbo"
     summary: "Makes songs from lyrics and a style, with an optional sample. Needs a 12 GB NVIDIA graphics card."

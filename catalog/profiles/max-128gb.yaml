@@ -14,7 +14,7 @@ storage:
   budget_bytes: 900000000000
   min_free_bytes: 100000000000
 include:
-  models: [qwen3-coder-next-q4km, qwen3.8-27b-q6k, qwen3.6-35b-a3b-vl-q4km, whisper-large-v3-turbo, piper-en-medium, piper-es-medium, qwen3.5-4b-q4km, embeddinggemma-300m-q8]
+  models: [qwen3-coder-next-q4km, qwen3.8-27b-q6k, qwen3.8-flash-next-iq4xs, qwen3.6-35b-a3b-vl-q4km, whisper-large-v3-turbo, piper-en-medium, piper-es-medium, qwen3.5-4b-q4km, embeddinggemma-300m-q8]
   content:
     # tier 1
     - docs-bundle
@@ -88,6 +88,9 @@ workloads:
   browser-precise:
     label: {en: "Browser agent (precise)", es: "Agente de navegador (preciso)"}
     models: [qwen3.8-27b-q6k]
+  browser-smart:
+    label: {en: "Browser agent (smart)", es: "Agente de navegador (inteligente)"}
+    models: [qwen3.8-flash-next-iq4xs]
   chat:
     label: {en: "Chat", es: "Conversación"}
     models: [qwen3.6-35b-a3b-vl-q4km, qwen3.5-4b-q4km]
