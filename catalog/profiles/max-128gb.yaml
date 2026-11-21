@@ -82,6 +82,9 @@ workloads:
   coding:
     label: {en: "Coding", es: "Programación"}
     models: [qwen3-coder-next-q4km, embeddinggemma-300m-q8]
+  browser:
+    label: {en: "Browser agent", es: "Agente de navegador"}
+    models: [qwen3.8-27b-q6k]
   chat:
     label: {en: "Chat", es: "Conversación"}
     models: [qwen3.6-35b-a3b-q4km, qwen3.5-4b-q4km]
