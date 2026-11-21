@@ -14,7 +14,7 @@ storage:
   budget_bytes: 900000000000
   min_free_bytes: 100000000000
 include:
-  models: [qwen3-coder-next-q4km, qwen3.8-27b-q6k, qwen3.6-35b-a3b-q4km, whisper-large-v3-turbo, piper-en-medium, piper-es-medium, qwen3.5-4b-q4km, embeddinggemma-300m-q8]
+  models: [qwen3-coder-next-q4km, qwen3.8-27b-q6k, qwen3.6-35b-a3b-vl-q4km, whisper-large-v3-turbo, piper-en-medium, piper-es-medium, qwen3.5-4b-q4km, embeddinggemma-300m-q8]
   content:
     # tier 1
     - docs-bundle
@@ -73,8 +73,8 @@ include:
     - gutenberg-es-all
 default_model: qwen3-coder-next-q4km
 survival:
-  models: [qwen3.6-35b-a3b-q4km]
-  default_model: qwen3.6-35b-a3b-q4km
+  models: [qwen3.6-35b-a3b-vl-q4km]
+  default_model: qwen3.6-35b-a3b-vl-q4km
   require_services: [kiwix, whisper]
   portal_language: auto
 # Named model sets a person switches between with one action (catalog.md section 4, "Workloads").
@@ -84,10 +84,13 @@ workloads:
     models: [qwen3-coder-next-q4km, embeddinggemma-300m-q8]
   browser:
     label: {en: "Browser agent", es: "Agente de navegador"}
+    models: [qwen3.6-35b-a3b-vl-q4km]
+  browser-precise:
+    label: {en: "Browser agent (precise)", es: "Agente de navegador (preciso)"}
     models: [qwen3.8-27b-q6k]
   chat:
     label: {en: "Chat", es: "Conversación"}
-    models: [qwen3.6-35b-a3b-q4km, qwen3.5-4b-q4km]
+    models: [qwen3.6-35b-a3b-vl-q4km, qwen3.5-4b-q4km]
   speech:
     label: {en: "Speech", es: "Voz"}
     models: [qwen3.5-4b-q4km]
