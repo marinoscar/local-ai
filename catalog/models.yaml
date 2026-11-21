@@ -363,8 +363,9 @@ models:
         sha256: "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
     requirements:
       backends: [vulkan]
-      # ESTIMATE until aictl bench (#598): weights 20962 + mmproj 885 + f16 KV at ctx 131072 8192 + compute ~2000 MiB, plus 10 %.
-      min_vram_mib: 35243
+      # Measured on ai-n1 (Radeon 8060S, Vulkan, llama.cpp f3586e66b) with aictl bench at ctx 131072: 29.9 GB of
+      # VRAM + GTT, plus 10 % (#598).
+      min_vram_mib: 33640
       min_ram_mib: 65536
       min_disk_bytes: 22908048992
     llama:
