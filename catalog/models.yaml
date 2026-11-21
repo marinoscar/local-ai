@@ -337,6 +337,49 @@ models:
     client_hints:
       max_output_tokens: 16384
       reasoning: false
+  - id: qwen3.8-27b-q6k
+    display_name: "Qwen 3.8 27B (text and screens)"
+    summary: "Main model for browser agents. Reads screenshots and web pages, uses tools. Needs a 128 GB unified-memory computer."
+    summary_es: "Modelo principal para agentes de navegador. Lee capturas y páginas web, usa herramientas. Necesita 128 GB unificados."
+    engine: llama
+    roles: [chat, reasoning, vision, coder]
+    languages: [en, es, multi]
+    license: apache-2.0
+    survival_tier: 2
+    source:
+      type: huggingface
+      repo: unsloth/Qwen3.8-27B-GGUF
+      revision: 4af51b3542f775b0a8e4b310bfb3f17e01c306c9
+    files:
+      - kind: weights
+        name: Qwen3.8-27B-UD-Q6_K.gguf
+        url: null
+        size_bytes: 21980441504
+        sha256: "6cac55f876015d6d4b94b1656d23f79f424ac9b583652aedf0633dba116576a8"
+      - kind: mmproj
+        name: mmproj-F16.gguf
+        url: null
+        size_bytes: 927607488
+        sha256: "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
+    requirements:
+      backends: [vulkan]
+      # ESTIMATE until aictl bench (#598): weights 20962 + mmproj 885 + f16 KV at ctx 131072 8192 + compute ~2000 MiB, plus 10 %.
+      min_vram_mib: 35243
+      min_ram_mib: 65536
+      min_disk_bytes: 22908048992
+    llama:
+      ctx: 131072
+      n_gpu_layers: 99
+      flash_attn: "auto"
+      parallel: 1
+      mmproj_file_kind: mmproj
+      chat_template: null
+      # Qwen's thinking-mode sampling (model card); clients may override per request.
+      extra_args: ["--cache-ram", "16384", "--temp", "1.0", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0"]
+      env: {}
+    client_hints:
+      max_output_tokens: 16384
+      reasoning: true
   - id: acestep-v15-turbo
     display_name: "ACE-Step 1.5 Turbo"
     summary: "Makes songs from lyrics and a style, with an optional sample. Needs a 12 GB NVIDIA graphics card."
