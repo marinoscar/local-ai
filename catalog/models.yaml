@@ -361,18 +361,29 @@ models:
         url: null
         size_bytes: 927607488
         sha256: "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
+      - kind: draft
+        name: MTP/mtp-Qwen3.8-27B-Q4_0.gguf
+        url: null
+        size_bytes: 1369590656
+        sha256: "50d9ce5a6da381bbcfb31061cf73df94a90e6faf8efeddee379a9cb8f1501c6e"
     requirements:
       backends: [vulkan]
       # Measured on ai-n1 (Radeon 8060S, Vulkan, llama.cpp f3586e66b) with aictl bench at ctx 131072: 29.9 GB of
       # VRAM + GTT, plus 10 % (#598).
       min_vram_mib: 33640
       min_ram_mib: 65536
-      min_disk_bytes: 22908048992
+      min_disk_bytes: 24277639648
     llama:
       ctx: 131072
       n_gpu_layers: 99
       flash_attn: "auto"
       parallel: 1
+      # MTP speculative decoding: 10 -> 20-27 tok/s on ai-n1 with the mmproj loaded; n_max 3 beat 2 and 4 (#601).
+      speculative:
+        type: draft-mtp
+        n_max: 3
+        draft_file_kind: draft
+        draft_ngl: all
       mmproj_file_kind: mmproj
       chat_template: null
       # Qwen's thinking-mode sampling (model card); clients may override per request.
