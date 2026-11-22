@@ -162,8 +162,10 @@ func exactly(rs residentSet, w Workload, kept map[string]bool) bool {
 
 // workloadFit checks that every model of the set may load here and that the set fits together, with
 // an empty keep-set (plus the survival models in survival mode). missing lists the models with no
-// verified copy; err is the refusal (LAI-LLM-051, 043 or 008).
-func (o *Orchestrator) workloadFit(in Inputs, w Workload, engineMiB int64) (missing []string, err *OpError) {
+// verified copy; err is the refusal (LAI-LLM-051, 043 or 008). resident are the models loaded now
+// (any engine): the RAM they hold is credited back, because activating the set unloads every one
+// that is not in it, and those that are in it are counted once through their requirements (#610).
+func (o *Orchestrator) workloadFit(in Inputs, w Workload, engineMiB int64, resident []string) (missing []string, err *OpError) {
 	var members []Loaded
 	llamaMax := in.modelsMax()
 	if in.Llama.Mode == LlamaModeSingle {
@@ -221,7 +223,7 @@ func (o *Orchestrator) workloadFit(in Inputs, w Workload, engineMiB int64) (miss
 		// workload replaces whatever is loaded, so it is taken out, as the load path does (#566).
 		env := in.Fit.withoutEngines(engineMiB)
 		env.ModelsMax = 1 << 10 // the count rule is checked above, per engine
-		if s := env.DynamicFit(Candidate{ID: last.ID, Engine: last.Engine, Requirements: last.Requirements}, keep, nil); s.GPU || s.RAM {
+		if s := env.DynamicFit(Candidate{ID: last.ID, Engine: last.Engine, Requirements: last.Requirements}, keep, residentLoads(in, resident)); s.GPU || s.RAM {
 			noFit = append(noFit, w.Models...)
 		}
 	}
@@ -230,6 +232,19 @@ func (o *Orchestrator) workloadFit(in Inputs, w Workload, engineMiB int64) (miss
 			map[string]any{"name": w.Name, "models": dedupe(noFit)}, nil)
 	}
 	return nil, nil
+}
+
+// residentLoads are the resident models with a catalog entry, as the "evicted" side of the dynamic
+// fit: on unified memory the available RAM a sample reports already excludes what they hold, so their
+// requirement is added back to the room (llama-router.md section 4.3.3, #610).
+func residentLoads(in Inputs, ids []string) []Loaded {
+	var out []Loaded
+	for _, id := range ids {
+		if m, ok := findModel(in.Catalog, id); ok {
+			out = append(out, Loaded{ID: id, Engine: m.Engine, Requirements: m.Requirements})
+		}
+	}
+	return out
 }
 
 // ---- GET /workloads --------------------------------------------------------------------------
@@ -261,7 +276,7 @@ func (o *Orchestrator) Workloads(ctx context.Context) WorkloadsView {
 	var v WorkloadsView
 	_, engMiB := o.engineResidents(ctx, in, st)
 	for _, w := range in.Workloads {
-		missing, ferr := o.workloadFit(in, w, engMiB)
+		missing, ferr := o.workloadFit(in, w, engMiB, rs.ids)
 		wv := WorkloadView{Name: w.Name, Label: w.Label, Models: append([]string{}, w.Models...), Fits: ferr == nil,
 			Missing: append([]string{}, missing...), Active: err == nil && exactly(rs, w, kept)}
 		if wv.Active && st.Workloads != nil && st.Workloads.Active == w.Name {
@@ -333,7 +348,9 @@ func (o *Orchestrator) ActivateWorkload(ctx context.Context, req WorkloadRequest
 		return fail("", errSingleWorkload(w.Name))
 	}
 	_, engMiB := o.engineResidents(ctx, in, o.opt.State.Snapshot())
-	if _, ferr := o.workloadFit(in, w, engMiB); ferr != nil {
+	// A router that does not answer leaves rs empty: the fit is then as strict as before (#610).
+	rs, _ := o.residents(ctx, in)
+	if _, ferr := o.workloadFit(in, w, engMiB, rs.ids); ferr != nil {
 		return fail("", ferr)
 	}
 	if err := o.opt.Router.Health(ctx); err != nil {

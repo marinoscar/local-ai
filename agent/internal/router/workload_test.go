@@ -9,6 +9,7 @@ import (
 	"github.com/marinoscar/local-ai/agent/internal/audit"
 	"github.com/marinoscar/local-ai/agent/internal/catalog"
 	"github.com/marinoscar/local-ai/agent/internal/config"
+	"github.com/marinoscar/local-ai/agent/internal/router/fake"
 )
 
 // Workloads (E11, #509; llama-router.md section 4.16) on the music rig: ai-n3, 8 GB, models_max 1.
@@ -276,4 +277,83 @@ func TestWorkloadsFitWhileTheMusicEngineHoldsTheCard(t *testing.T) {
 	}
 	eqStrings(t, "engine calls", e.log(), []string{"stop music-l"})
 	eqStrings(t, "llama loaded", r.loadedNow(), []string{"m-b"})
+}
+
+// unifiedSwitchRig is ai-n1 after #604: a unified-memory node (GTT 100 GiB, 124 GB RAM) whose
+// samples report RAM available net of what the loaded models hold. "fast" is loaded and holds about
+// 29 GB, so the sample says 95,000 MiB are free.
+func unifiedSwitchRig(t *testing.T) *orRig {
+	t.Helper()
+	r := newOrRig(t, func(c *orCfg) {
+		c.env.Unified = true
+		c.env.GTotalMiB = 102400
+		c.env.GOthersMiB = 0
+		c.env.RTotalMiB = 124123
+		c.env.RAvailMiB = 95000
+		c.env.ModelsMax = 3
+		c.profile.Router.ModelsMax = 3
+		c.extra = []catalog.Model{
+			llamaModel("fast", nil, 27973, 32768, nil, nil),
+			llamaModel("smart", nil, 78746, 112640, nil, nil),
+		}
+		c.profile.Include.Models = append(c.profile.Include.Models, "fast", "smart")
+		c.workloads = []Workload{
+			{Name: "browser", Label: lbl("Browser agent", "Agente de navegador"), Models: []string{"fast"}},
+			{Name: "browser-smart", Label: lbl("Browser agent (smart)", "Agente de navegador (inteligente)"), Models: []string{"smart"}},
+		}
+	})
+	r.f.Add(fake.Model{ID: "fast"})
+	r.f.Add(fake.Model{ID: "smart"})
+	r.load("fast")
+	return r
+}
+
+// #610: the RAM a loaded model holds is room for the workload that replaces it.
+func TestWorkloadFitCreditsTheRAMOfTheModelsItUnloads(t *testing.T) {
+	r := unifiedSwitchRig(t)
+	for _, w := range r.o.Workloads(bg).Workloads {
+		if !w.Fits {
+			t.Errorf("%s fits = false with fast loaded; the switch unloads fast, so its RAM is room", w.Name)
+		}
+	}
+	res, err := activate(r, "browser-smart", false)
+	if err != nil {
+		t.Fatalf("switching fast -> smart: %v", err)
+	}
+	eqStrings(t, "unloaded", res.Unloaded, []string{"fast"})
+	if r.f.Status("smart") != fake.Loaded || r.f.Status("fast") == fake.Loaded {
+		t.Errorf("router: smart=%v fast=%v, want smart loaded and fast not", r.f.Status("smart"), r.f.Status("fast"))
+	}
+}
+
+// #610: with the big model loaded, its own workload must not read "does not fit" because the RAM
+// it holds is missing from the sample (ai-n1: smart loaded, about 12 GB left).
+func TestLoadedBigWorkloadStillFits(t *testing.T) {
+	r := newOrRig(t, func(c *orCfg) {
+		c.env.Unified, c.env.GTotalMiB, c.env.RTotalMiB, c.env.RAvailMiB = true, 102400, 124123, 12000
+		c.extra = []catalog.Model{llamaModel("smart", nil, 78746, 112640, nil, nil)}
+		c.profile.Include.Models = append(c.profile.Include.Models, "smart")
+		c.workloads = []Workload{{Name: "browser-smart", Label: lbl("Smart", "Inteligente"), Models: []string{"smart"}}}
+	})
+	r.f.Add(fake.Model{ID: "smart"})
+	r.load("smart")
+	for _, w := range r.o.Workloads(bg).Workloads {
+		if w.Name == "browser-smart" && !w.Fits {
+			t.Error("browser-smart fits = false while its own model is the one holding the RAM")
+		}
+	}
+}
+
+// The credit is only what is loaded: with nothing loaded and too little RAM, a big set still does not fit.
+func TestWorkloadFitStillRefusesWhenTheRAMIsReallyShort(t *testing.T) {
+	r := newOrRig(t, func(c *orCfg) {
+		c.env.Unified, c.env.GTotalMiB, c.env.RTotalMiB, c.env.RAvailMiB = true, 102400, 124123, 60000
+		c.extra = []catalog.Model{llamaModel("smart", nil, 78746, 112640, nil, nil)}
+		c.profile.Include.Models = append(c.profile.Include.Models, "smart")
+		c.workloads = []Workload{{Name: "browser-smart", Label: lbl("Smart", "Inteligente"), Models: []string{"smart"}}}
+	})
+	r.f.Add(fake.Model{ID: "smart"})
+	if _, err := activate(r, "browser-smart", false); err == nil || !strings.Contains(err.Error(), string(CodeWorkloadNoFit)) {
+		t.Fatalf("err = %v, want %s", err, CodeWorkloadNoFit)
+	}
 }
